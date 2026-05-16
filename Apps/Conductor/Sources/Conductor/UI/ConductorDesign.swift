@@ -1,0 +1,271 @@
+import AppKit
+import SwiftUI
+
+enum ConductorTokens {
+    enum Palette {
+        static let window = Color(red: 0.933, green: 0.949, blue: 0.969)
+        static let canvas = Color(red: 0.933, green: 0.949, blue: 0.969)
+        static let floatingPanelFallback = Color.white.opacity(0.62)
+        static let floatingPanelStrong = Color.white.opacity(0.82)
+        static let terminalRaised = Color(red: 0.024, green: 0.035, blue: 0.052)
+        static let terminalChrome = Color(red: 0.047, green: 0.071, blue: 0.106)
+        static let terminalChromeSelected = Color(red: 0.925, green: 0.949, blue: 0.984)
+        static let terminalText = Color(red: 0.894, green: 0.918, blue: 0.953)
+        static let terminalTextMuted = Color(red: 0.494, green: 0.537, blue: 0.612)
+        static let splitGutter = Color(red: 0.063, green: 0.090, blue: 0.125)
+
+        static let textPrimary = Color(red: 0.110, green: 0.130, blue: 0.170)
+        static let textSecondary = Color(red: 0.405, green: 0.443, blue: 0.505)
+        static let textTertiary = Color(red: 0.604, green: 0.631, blue: 0.678)
+
+        static let selectedFill = Color.black.opacity(0.055)
+        static let inactiveFill = Color.white.opacity(0.58)
+        static let subtleFill = Color.white.opacity(0.36)
+        static let hoverFill = Color.black.opacity(0.040)
+
+        static let strokeSubtle = Color.black.opacity(0.075)
+        static let strokeMedium = Color.black.opacity(0.120)
+        static let strokeOnDark = Color.white.opacity(0.12)
+        static let warmAccent = Color(red: 0.850, green: 0.470, blue: 0.020)
+    }
+
+    enum Radius {
+        static let sidebar: CGFloat = 18
+        static let controlGroup: CGFloat = 13
+        static let control: CGFloat = 9
+        static let workspaceTab: CGFloat = 12
+        static let terminalPane: CGFloat = 12
+        static let terminalTab: CGFloat = 7
+        static let row: CGFloat = 10
+    }
+
+    enum Space {
+        static let shellX: CGFloat = 8
+        static let shellTop: CGFloat = 8
+        static let shellBottom: CGFloat = 8
+        static let shellGap: CGFloat = 8
+        static let sidebarWidth: CGFloat = 230
+        static let sidebarCollapsedWidth: CGFloat = 48
+        static let sidebarX: CGFloat = 8
+        static let sidebarTop: CGFloat = 0
+        static let sidebarBottom: CGFloat = 0
+        static let toolbarHeight: CGFloat = 34
+        static let toolbarX: CGFloat = 0
+        static let toolbarGap: CGFloat = 5
+        static let terminalInset: CGFloat = 0
+        static let splitGutter: CGFloat = 3
+        static let statusHeight: CGFloat = 18
+    }
+
+    enum Typography {
+        static let appTitle = Font.system(size: 13.5, weight: .bold)
+        static let appSubtitle = Font.system(size: 11)
+        static let section = Font.system(size: 10, weight: .semibold)
+        static let row = Font.system(size: 12, weight: .medium)
+        static let rowSelected = Font.system(size: 12, weight: .semibold)
+        static let toolbar = Font.system(size: 11, weight: .bold)
+        static let workspaceTab = Font.system(size: 11.5, weight: .semibold)
+        static let workspaceTabSelected = Font.system(size: 11.5, weight: .bold)
+        static let terminalTab = Font.system(size: 10.5, weight: .medium)
+        static let terminalTabSelected = Font.system(size: 10.5, weight: .semibold)
+        static let status = Font.system(size: 10.5, weight: .medium)
+    }
+
+    enum Shadow {
+        static let panelOpacity = 0.130
+        static let panelRadius: CGFloat = 22
+        static let panelY: CGFloat = 12
+        static let controlOpacity = 0.080
+        static let controlRadius: CGFloat = 8
+        static let controlY: CGFloat = 2
+        static let selectedOpacity = 0.160
+        static let selectedRadius: CGFloat = 7
+        static let selectedY: CGFloat = 3
+    }
+}
+
+enum ConductorDesign {
+    static let windowBackground = ConductorTokens.Palette.window
+    static let canvasBackground = ConductorTokens.Palette.canvas
+    static let sidebarBackground = ConductorTokens.Palette.floatingPanelFallback
+    static let sidebarBackgroundStrong = ConductorTokens.Palette.floatingPanelStrong
+    static let sidebarStroke = ConductorTokens.Palette.strokeSubtle
+    static let toolbarStroke = ConductorTokens.Palette.strokeSubtle
+    static let selectedFill = ConductorTokens.Palette.selectedFill
+    static let inactiveFill = ConductorTokens.Palette.inactiveFill
+    static let subtleFill = ConductorTokens.Palette.subtleFill
+    static let hoverFill = ConductorTokens.Palette.hoverFill
+    static let primaryText = ConductorTokens.Palette.textPrimary
+    static let secondaryText = ConductorTokens.Palette.textSecondary
+    static let tertiaryText = ConductorTokens.Palette.textTertiary
+    static let terminalChrome = ConductorTokens.Palette.terminalChrome
+    static let terminalChromeSelected = ConductorTokens.Palette.terminalChromeSelected
+    static let terminalText = ConductorTokens.Palette.terminalText
+    static let terminalTextMuted = ConductorTokens.Palette.terminalTextMuted
+    static let divider = ConductorTokens.Palette.strokeMedium
+    static let splitGutter = ConductorTokens.Palette.splitGutter
+    static let warmAccent = ConductorTokens.Palette.warmAccent
+
+    static let shellHorizontalPadding = ConductorTokens.Space.shellX
+    static let shellTopPadding = ConductorTokens.Space.shellTop
+    static let shellBottomPadding = ConductorTokens.Space.shellBottom
+    static let shellGap = ConductorTokens.Space.shellGap
+    static let sidebarWidth = ConductorTokens.Space.sidebarWidth
+    static let sidebarCollapsedWidth = ConductorTokens.Space.sidebarCollapsedWidth
+    static let sidebarCornerRadius = ConductorTokens.Radius.sidebar
+    static let toolbarHeight = ConductorTokens.Space.toolbarHeight
+    static let statusBarHeight = ConductorTokens.Space.statusHeight
+    static let terminalCanvasInset = ConductorTokens.Space.terminalInset
+
+    static func shadow(_ opacity: Double = 0.10, radius: CGFloat = 16, y: CGFloat = 8) -> Color {
+        Color.black.opacity(opacity)
+    }
+}
+
+struct ConductorIconButton: View {
+    let systemImage: String
+    let help: String
+    var title: String? = nil
+    var disabled = false
+    var active = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: title == nil ? 0 : 5) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 10.5, weight: .semibold))
+                if let title {
+                    Text(title)
+                        .font(ConductorTokens.Typography.toolbar)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+            .foregroundStyle(active ? Color.white : ConductorDesign.terminalText)
+            .padding(.horizontal, title == nil ? 0 : 7)
+            .frame(width: title == nil ? 22 : nil, height: 20)
+            .background(active ? Color.accentColor.opacity(0.74) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
+            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.38 : 1)
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(2)
+        .help(help)
+    }
+}
+
+struct ConductorPillGroup<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        HStack(spacing: 2) {
+            content
+        }
+        .padding(2)
+        .background(Color.white.opacity(0.040))
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup)
+                .stroke(ConductorTokens.Palette.strokeOnDark.opacity(0.70), lineWidth: 1)
+        }
+        .shadow(
+            color: ConductorDesign.shadow(ConductorTokens.Shadow.controlOpacity),
+            radius: ConductorTokens.Shadow.controlRadius,
+            y: ConductorTokens.Shadow.controlY
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(2)
+    }
+}
+
+struct RenameTextField: NSViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+    var font: NSFont
+    var textColor: NSColor
+    var onCommit: () -> Void
+    var onCancel: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onCommit: onCommit, onCancel: onCancel)
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField()
+        field.isBordered = false
+        field.isBezeled = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.placeholderString = placeholder
+        field.font = font
+        field.textColor = textColor
+        field.delegate = context.coordinator
+        field.lineBreakMode = .byTruncatingTail
+        field.usesSingleLineMode = true
+        field.cell?.wraps = false
+        field.cell?.isScrollable = true
+        DispatchQueue.main.async {
+            field.window?.makeFirstResponder(field)
+            field.currentEditor()?.selectAll(nil)
+        }
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        if field.stringValue != text {
+            field.stringValue = text
+        }
+        field.placeholderString = placeholder
+        field.font = font
+        field.textColor = textColor
+        context.coordinator.text = $text
+        context.coordinator.onCommit = onCommit
+        context.coordinator.onCancel = onCancel
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var text: Binding<String>
+        var onCommit: () -> Void
+        var onCancel: () -> Void
+        private var handledEndEditing = false
+
+        init(text: Binding<String>, onCommit: @escaping () -> Void, onCancel: @escaping () -> Void) {
+            self.text = text
+            self.onCommit = onCommit
+            self.onCancel = onCancel
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            text.wrappedValue = field.stringValue
+        }
+
+        func controlTextDidEndEditing(_ notification: Notification) {
+            guard !handledEndEditing else { return }
+            handledEndEditing = true
+            onCommit()
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            switch commandSelector {
+            case #selector(NSResponder.insertNewline(_:)):
+                handledEndEditing = true
+                text.wrappedValue = textView.string
+                onCommit()
+                control.window?.makeFirstResponder(nil)
+                return true
+            case #selector(NSResponder.cancelOperation(_:)):
+                handledEndEditing = true
+                onCancel()
+                control.window?.makeFirstResponder(nil)
+                return true
+            default:
+                return false
+            }
+        }
+    }
+}

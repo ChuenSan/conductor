@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conductor UI V6 - Compact Workbench</title>
+  <style>
+    :root {
+      --window: #f2f4f7;
+      --rail: #eef1f5;
+      --rail-active: #171b24;
+      --ink: #181d27;
+      --muted: #667085;
+      --quiet: #98a2b3;
+      --line: rgba(20, 26, 36, .11);
+      --line-strong: rgba(20, 26, 36, .18);
+      --blue: #1478ff;
+      --violet: #6e59ff;
+      --green: #20a06b;
+      --amber: #c77813;
+      --term: #07090d;
+      --term-top: #0e131c;
+      --term-tab: #151b26;
+      --term-text: #dde4ee;
+      --term-muted: #7a8496;
+      --split: #dfe4ec;
+      --shadow-window: 0 28px 78px rgba(15, 23, 42, .23);
+      --shadow-small: 0 5px 16px rgba(15, 23, 42, .10);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #e9edf3;
+      color: var(--ink);
+    }
+
+    .window {
+      width: 1540px;
+      height: 930px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 20px;
+      border: 1px solid rgba(0,0,0,.15);
+      background: var(--window);
+      box-shadow: var(--shadow-window);
+    }
+
+    .traffic {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      padding: 4px 0 10px;
+    }
+
+    .sidebar-toggle:checked ~ .shell .traffic {
+      justify-content: flex-start;
+      padding-left: 4px;
+    }
+
+    .traffic i {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.10);
+    }
+
+    .red { background: #ff5f57; }
+    .yellow { background: #ffbd2e; }
+    .green { background: #28c840; }
+
+    .shell {
+      position: absolute;
+      inset: 6px;
+      display: grid;
+      grid-template-columns: 68px minmax(0, 1fr);
+      gap: 6px;
+      min-width: 0;
+      min-height: 0;
+      transition: grid-template-columns 160ms ease;
+    }
+
+    .sidebar-toggle {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .sidebar-toggle:checked ~ .shell {
+      grid-template-columns: 224px minmax(0, 1fr);
+    }
+
+    .rail {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      justify-items: center;
+      padding: 7px 5px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.70);
+      background: linear-gradient(180deg, rgba(255,255,255,.70), rgba(255,255,255,.40));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.72);
+      overflow: hidden;
+      transition: padding 160ms ease;
+    }
+
+    .sidebar-toggle:checked ~ .shell .rail {
+      justify-items: stretch;
+      padding: 8px;
+    }
+
+    .rail-head {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      min-width: 0;
+    }
+
+    .sidebar-toggle:checked ~ .shell .rail-head {
+      justify-content: flex-end;
+    }
+
+    .sidebar-toggle:not(:checked) ~ .shell .rail-head {
+      justify-content: center;
+    }
+
+    .rail-button {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+    }
+
+    .rail-toggle {
+      display: grid;
+      width: 32px;
+      height: 28px;
+      place-items: center;
+      border-radius: 9px;
+      color: var(--muted);
+      background: rgba(24,29,39,.055);
+      font-size: 12px;
+      font-weight: 800;
+      cursor: default;
+    }
+
+    .sidebar-toggle:checked ~ .shell .rail-toggle {
+      width: 24px;
+      height: 24px;
+      border-radius: 8px;
+    }
+
+    .rail-toggle .collapse { display: none; }
+
+    .sidebar-toggle:checked ~ .shell .rail-toggle .expand { display: none; }
+
+    .sidebar-toggle:checked ~ .shell .rail-toggle .collapse { display: block; }
+
+    .rail-stack,
+    .rail-bottom {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .rail-stack { padding-top: 12px; }
+
+    .rail-button {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 740;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sidebar-toggle:checked ~ .shell .rail-stack,
+    .sidebar-toggle:checked ~ .shell .rail-bottom {
+      align-items: stretch;
+    }
+
+    .sidebar-toggle:checked ~ .shell .rail-stack {
+      padding-top: 16px;
+      gap: 4px;
+    }
+
+    .sidebar-toggle:checked ~ .shell .rail-button {
+      width: 100%;
+      height: 30px;
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+      justify-items: start;
+      gap: 8px;
+      padding: 0 7px;
+      font-size: 12px;
+      border-radius: 9px;
+    }
+
+    .rail-button .label,
+    .rail-button .meta {
+      display: none;
+    }
+
+    .sidebar-toggle:checked ~ .shell .rail-button .label,
+    .sidebar-toggle:checked ~ .shell .rail-button .meta {
+      display: block;
+    }
+
+    .rail-button .label {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .rail-button .meta {
+      color: var(--quiet);
+      font-size: 10px;
+      font-weight: 760;
+    }
+
+    .rail-button.active {
+      color: #fff;
+      background: var(--rail-active);
+      box-shadow: var(--shadow-small);
+    }
+
+    .rail-button.active::before {
+      content: "";
+      position: absolute;
+      left: -6px;
+      width: 2px;
+      height: 18px;
+      border-radius: 2px;
+      background: var(--blue);
+    }
+
+    .sidebar-toggle:checked ~ .shell .rail-button.active::before {
+      left: 0;
+    }
+
+    .rail-details {
+      display: none;
+      padding-top: 10px;
+    }
+
+    .sidebar-toggle:checked ~ .shell .rail-details {
+      display: block;
+    }
+
+    .detail-section {
+      color: var(--quiet);
+      font-size: 10px;
+      font-weight: 800;
+      padding: 12px 7px 6px;
+    }
+
+    .detail-card {
+      padding: 8px 9px;
+      margin: 0 1px;
+      border-radius: 11px;
+      border: 1px solid rgba(20,26,36,.08);
+      background: rgba(255,255,255,.46);
+    }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 10.5px;
+      line-height: 1.9;
+      font-weight: 640;
+    }
+
+    .metric-row strong {
+      color: var(--ink);
+      font-size: 10.5px;
+      font-weight: 800;
+    }
+
+    .workbench {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 32px minmax(0,1fr) 17px;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 1px solid rgba(0,0,0,.62);
+      background: var(--term);
+      box-shadow: 0 15px 36px rgba(10, 15, 24, .24);
+    }
+
+    .topbar {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 6px;
+      border-bottom: 1px solid rgba(255,255,255,.075);
+      background: #0b1018;
+    }
+
+    .workspace-tabs {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      overflow: hidden;
+    }
+
+    .workspace-tab {
+      width: 124px;
+      height: 22px;
+      display: grid;
+      grid-template-columns: 14px minmax(0,1fr) 18px 14px;
+      align-items: center;
+      gap: 5px;
+      padding: 0 5px;
+      border-radius: 6px;
+      color: #8590a3;
+      background: transparent;
+      border: 1px solid transparent;
+      font-size: 11px;
+      font-weight: 720;
+    }
+
+    .workspace-tab.active {
+      color: #151a23;
+      background: #e5ebf4;
+      border-color: rgba(255,255,255,.64);
+    }
+
+    .workspace-tab .label {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .badge {
+      height: 16px;
+      min-width: 18px;
+      display: grid;
+      place-items: center;
+      padding: 0 5px;
+      border-radius: 7px;
+      background: rgba(148,163,184,.16);
+      color: inherit;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .close {
+      width: 14px;
+      height: 14px;
+      display: grid;
+      place-items: center;
+      opacity: .55;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .action {
+      height: 22px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 7px;
+      border-radius: 6px;
+      color: #9ba5b7;
+      background: transparent;
+      border: 1px solid transparent;
+      font-size: 11px;
+      font-weight: 720;
+      white-space: nowrap;
+    }
+
+    .action.icon {
+      width: 22px;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .action.primary {
+      color: #d8e2f2;
+      background: rgba(255,255,255,.055);
+      border-color: rgba(255,255,255,.060);
+    }
+
+    .stage {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) 4px minmax(0, .92fr);
+      background: var(--split);
+    }
+
+    .pane {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 25px minmax(0,1fr);
+      background: var(--term);
+    }
+
+    .pane.focused {
+      box-shadow: inset 0 0 0 1px rgba(110,89,255,.62);
+      z-index: 1;
+    }
+
+    .pane-column {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 1fr 4px 1fr;
+    }
+
+    .pane-bar {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0,1fr) 24px 42px 22px;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 4px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      background: #101722;
+    }
+
+    .terminal-tabs {
+      min-width: 0;
+      display: flex;
+      gap: 3px;
+      overflow: hidden;
+    }
+
+    .terminal-tab {
+      width: 98px;
+      height: 20px;
+      display: grid;
+      grid-template-columns: 13px minmax(0,1fr) 13px;
+      align-items: center;
+      gap: 4px;
+      padding: 0 5px;
+      border-radius: 6px;
+      color: var(--term-muted);
+      background: rgba(255,255,255,.035);
+      font: 680 10px ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .terminal-tab.active {
+      color: #111827;
+      background: #e9eef7;
+    }
+
+    .terminal-tab .name {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .pane-tool {
+      height: 20px;
+      display: grid;
+      place-items: center;
+      color: var(--term-muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .current {
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border-radius: 8px;
+      color: var(--term-text);
+      background: rgba(110,89,255,.15);
+      font-size: 10px;
+      font-weight: 780;
+    }
+
+    .current i {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--violet);
+    }
+
+    .splitter {
+      background: var(--split);
+      box-shadow: inset 1px 0 0 rgba(255,255,255,.72), inset -1px 0 0 rgba(0,0,0,.055);
+    }
+
+    .splitter.row {
+      width: 100%;
+      height: 4px;
+    }
+
+    .terminal {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      padding: 8px 10px;
+      overflow: hidden;
+      color: var(--term-text);
+      background: var(--term);
+      font: 15px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .blue { color: #7eafff; font-weight: 760; }
+    .green { color: #73dc98; }
+    .amber { color: #ecb165; font-weight: 760; }
+    .muted { color: var(--term-muted); }
+    .prompt { color: #7eafff; font-weight: 900; }
+
+    .cursor {
+      display: inline-block;
+      width: 9px;
+      height: 19px;
+      margin-left: 4px;
+      transform: translateY(4px);
+      background: #e2e9f4;
+    }
+
+    .time {
+      position: absolute;
+      top: 74px;
+      right: 12px;
+      color: rgba(157,147,190,.88);
+      font-size: 13px;
+    }
+
+    .statusbar {
+      height: 17px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 7px;
+      color: #8f99aa;
+      background: #edf1f6;
+      font-size: 10px;
+      font-weight: 680;
+    }
+
+    .statusbar div {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .statusbar span {
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .peek {
+      position: absolute;
+      right: 12px;
+      bottom: 28px;
+      width: 268px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.60);
+      background: rgba(238,241,246,.86);
+      box-shadow: 0 10px 28px rgba(10,15,24,.18);
+      overflow: hidden;
+    }
+
+    .peek-title {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 9px;
+      border-bottom: 1px solid rgba(20,26,36,.08);
+      color: var(--ink);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .peek-row {
+      height: 36px;
+      display: grid;
+      grid-template-columns: 7px minmax(0,1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 0 9px;
+      color: var(--muted);
+      font-size: 10.5px;
+      font-weight: 580;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .peek-row strong {
+      display: block;
+      color: var(--ink);
+      font-size: 11px;
+      margin-bottom: 1px;
+    }
+
+    .peek-row time {
+      color: var(--quiet);
+      font-size: 10px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main class="window" aria-label="Conductor compact workbench design">
+    <input class="sidebar-toggle" id="sidebar-toggle" type="checkbox" />
+
+    <section class="shell">
+      <nav class="rail">
+        <div class="traffic"><i class="red"></i><i class="yellow"></i><i class="green"></i></div>
+        <div class="rail-head">
+          <label class="rail-toggle" for="sidebar-toggle"><span class="expand">▤</span><span class="collapse">‹</span></label>
+        </div>
+        <div class="rail-stack">
+          <div class="rail-button active"><span>▦</span><span class="label">正式开发</span><span class="meta">3</span></div>
+          <div class="rail-button"><span>▦</span><span class="label">工作区 2</span><span class="meta">1</span></div>
+          <div class="rail-button"><span>▦</span><span class="label">自动化巡检</span><span class="meta">2</span></div>
+          <div class="rail-button"><span>⌘</span><span class="label">命令面板</span><span class="meta">K</span></div>
+          <div class="rail-button"><span>◦</span><span class="label">通知</span><span class="meta">1</span></div>
+          <div class="rail-button"><span>AI</span><span class="label">智能命名</span><span class="meta"></span></div>
+          <div class="rail-details">
+            <div class="detail-section">状态</div>
+            <div class="detail-card">
+              <div class="metric-row"><span>分屏</span><strong>3</strong></div>
+              <div class="metric-row"><span>终端</span><strong>5</strong></div>
+              <div class="metric-row"><span>未读</span><strong>1</strong></div>
+              <div class="metric-row"><span>当前</span><strong>agent-run</strong></div>
+            </div>
+            <div class="detail-section">快捷操作</div>
+            <div class="rail-button"><span>▣</span><span class="label">新开终端</span><span class="meta">⌘T</span></div>
+            <div class="rail-button"><span>＋</span><span class="label">新标签</span><span class="meta">⇧⌘T</span></div>
+            <div class="rail-button"><span>▥</span><span class="label">向右分屏</span><span class="meta">⌘D</span></div>
+            <div class="rail-button"><span>▤</span><span class="label">向下分屏</span><span class="meta">⇧⌘D</span></div>
+          </div>
+        </div>
+        <div class="rail-bottom">
+          <div class="rail-button"><span>◐</span><span class="label">Codex Dark</span><span class="meta"></span></div>
+          <div class="rail-button"><span>⚙</span><span class="label">设置</span><span class="meta"></span></div>
+        </div>
+      </nav>
+
+      <section class="workbench">
+        <header class="topbar">
+          <div class="workspace-tabs">
+            <div class="workspace-tab">
+              <span>▦</span><span class="label">正式开发</span><span class="badge">3</span><span class="close">×</span>
+            </div>
+            <div class="workspace-tab active">
+              <span>▦</span><span class="label">工作区 2</span><span class="badge">1</span><span class="close">×</span>
+            </div>
+            <div class="workspace-tab">
+              <span>▦</span><span class="label">自动化巡检</span><span class="badge">2</span><span class="close">×</span>
+            </div>
+          </div>
+          <div class="actions">
+            <div class="action primary">＋ 工作区</div>
+            <div class="action">▣ 新终端</div>
+            <div class="action">＋ 新标签</div>
+            <div class="action">▥ 右分屏</div>
+            <div class="action">▤ 下分屏</div>
+            <div class="action icon">◦</div>
+            <div class="action">··· 命令</div>
+          </div>
+        </header>
+
+        <section class="stage">
+          <article class="pane">
+            <div class="pane-bar">
+              <div class="terminal-tabs">
+                <div class="terminal-tab active"><span>▸</span><span class="name">codex-build</span><span>×</span></div>
+                <div class="terminal-tab"><span>▸</span><span class="name">server</span><span>×</span></div>
+                <div class="terminal-tab"><span>▸</span><span class="name">logs</span><span>×</span></div>
+              </div>
+              <div class="pane-tool">＋</div>
+              <div></div>
+              <div class="pane-tool">×</div>
+            </div>
+            <div class="terminal">
+              <div>Last login: Sun May 17 00:56:08 on ttys001</div>
+              <br />
+              <div><span class="blue">~/Desktop/conductor</span> <span class="muted">main</span></div>
+              <div><span class="prompt">❯</span> swift build<span class="cursor"></span></div>
+              <br />
+              <div class="green">Build complete! (0.82s)</div>
+              <div class="muted">GhosttyKit surface attached · 152x47 cells</div>
+              <div class="time">00:58</div>
+            </div>
+          </article>
+
+          <div class="splitter"></div>
+
+          <section class="pane-column">
+            <article class="pane focused">
+              <div class="pane-bar">
+                <div class="terminal-tabs">
+                  <div class="terminal-tab active"><span>▸</span><span class="name">agent-run</span><span>×</span></div>
+                  <div class="terminal-tab"><span>▸</span><span class="name">cmux-ref</span><span>×</span></div>
+                </div>
+                <div class="pane-tool">＋</div>
+                <div class="current"><i></i>当前</div>
+                <div class="pane-tool">×</div>
+              </div>
+              <div class="terminal">
+                <div><span class="amber">codex</span> checking cmux action bridge...</div>
+                <div><span class="green">✓</span> tab identity stable</div>
+                <div><span class="green">✓</span> hover chrome stable</div>
+                <div><span class="green">✓</span> terminal output isolated</div>
+                <br />
+                <div><span class="prompt">❯</span> ./Scripts/check-conductor.sh<span class="cursor"></span></div>
+                <div class="time">00:58</div>
+              </div>
+            </article>
+
+            <div class="splitter row"></div>
+
+            <article class="pane">
+              <div class="pane-bar">
+                <div class="terminal-tabs">
+                  <div class="terminal-tab active"><span>▸</span><span class="name">zsh</span><span>×</span></div>
+                </div>
+                <div class="pane-tool">＋</div>
+                <div></div>
+                <div class="pane-tool">×</div>
+              </div>
+              <div class="terminal">
+                <div><span class="blue">~</span></div>
+                <div><span class="prompt">❯</span> pnpm dev</div>
+                <div class="muted">listening on localhost:5173</div>
+                <div class="time">00:57</div>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <footer class="statusbar">
+          <div>
+            <span>▥ 3 分屏</span>
+            <span>▸ 5 终端</span>
+            <span>⌖ agent-run</span>
+            <span>main</span>
+          </div>
+          <div>
+            <span>◦ 1 通知</span>
+            <span>GhosttyKit 5</span>
+          </div>
+        </footer>
+      </section>
+    </section>
+
+    <aside class="peek">
+      <div class="peek-title"><span>Activity</span><span>⌘K</span></div>
+      <div class="peek-row">
+        <span class="dot"></span>
+        <span><strong>Codex finished</strong>check-conductor 已通过</span>
+        <time>now</time>
+      </div>
+      <div class="peek-row">
+        <span class="dot" style="background:var(--amber)"></span>
+        <span><strong>cmux ref</strong>split action bridge 可复用</span>
+        <time>2m</time>
+      </div>
+    </aside>
+  </main>
+</body>
+</html>

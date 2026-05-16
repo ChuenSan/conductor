@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conductor UI V3</title>
+  <style>
+    :root {
+      --window: #f5f6f8;
+      --panel: rgba(255,255,255,.76);
+      --panel-strong: rgba(255,255,255,.9);
+      --stroke: rgba(27,32,42,.10);
+      --stroke-strong: rgba(27,32,42,.17);
+      --text: #1c212b;
+      --muted: #687181;
+      --faint: #9aa1ad;
+      --blue: #0a7cff;
+      --violet: #7b61ff;
+      --amber: #d97805;
+      --green: #1f9d66;
+      --terminal: #080a0d;
+      --term-text: #d9dee8;
+      --term-muted: #747d92;
+      --gutter: #e8ebf0;
+      --shadow-panel: 0 22px 60px rgba(18,23,34,.13), 0 1px 1px rgba(18,23,34,.06);
+      --shadow-control: 0 8px 22px rgba(18,23,34,.08), 0 1px 1px rgba(18,23,34,.05);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 18% 16%, rgba(10,124,255,.13), transparent 25%),
+        radial-gradient(circle at 85% 10%, rgba(123,97,255,.1), transparent 23%),
+        linear-gradient(135deg, #fbfbfc, #edf0f5);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    .window {
+      width: min(1500px, calc(100vw - 34px));
+      height: min(930px, calc(100vh - 34px));
+      min-height: 720px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 22px;
+      border: 1px solid rgba(0,0,0,.12);
+      background: rgba(245,246,248,.82);
+      box-shadow: 0 34px 100px rgba(17,23,34,.22), inset 0 1px 0 rgba(255,255,255,.9);
+      backdrop-filter: blur(32px) saturate(1.22);
+    }
+
+    .traffic {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      display: flex;
+      gap: 8px;
+      z-index: 10;
+    }
+
+    .traffic i {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+    }
+
+    .red { background: #ff5f57; }
+    .yellow { background: #ffbd2e; }
+    .green { background: #28c840; }
+
+    .layout {
+      position: absolute;
+      inset: 48px 10px 10px 10px;
+      display: grid;
+      grid-template-columns: 214px 1fr;
+      gap: 10px;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .sidebar {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid var(--stroke);
+      background: linear-gradient(180deg, rgba(255,255,255,.82), rgba(255,255,255,.60));
+      box-shadow: var(--shadow-panel);
+      backdrop-filter: blur(26px) saturate(1.35);
+    }
+
+    .brand {
+      display: grid;
+      grid-template-columns: 34px 1fr 26px;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 12px 10px;
+    }
+
+    .logo {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      color: white;
+      background: linear-gradient(145deg, #1d5cff, #7b61ff 55%, #f0a15d);
+      font-size: 15px;
+      font-weight: 800;
+      box-shadow: 0 10px 24px rgba(10,124,255,.25);
+    }
+
+    .brand h1 { margin: 0; font-size: 13.5px; line-height: 1.05; font-weight: 760; }
+    .brand p { margin: 4px 0 0; color: var(--faint); font-size: 11px; font-weight: 560; }
+
+    .collapse {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      background: rgba(0,0,0,.035);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .section {
+      height: 27px;
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      padding: 0 12px 6px;
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 760;
+    }
+
+    .row {
+      height: 32px;
+      display: grid;
+      grid-template-columns: 20px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      margin: 0 8px 3px;
+      padding: 0 8px;
+      border-radius: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 680;
+    }
+
+    .row.active {
+      color: var(--text);
+      background: rgba(255,255,255,.88);
+      box-shadow: inset 0 0 0 1px rgba(10,124,255,.14);
+    }
+
+    .icon {
+      width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      color: var(--faint);
+      font-size: 12px;
+    }
+
+    .row.active .icon { color: white; background: var(--blue); }
+
+    .badge {
+      min-width: 18px;
+      height: 18px;
+      display: grid;
+      place-items: center;
+      padding: 0 5px;
+      border-radius: 7px;
+      background: rgba(0,0,0,.045);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 760;
+    }
+
+    .card {
+      margin: 8px;
+      padding: 10px;
+      border-radius: 14px;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.56);
+    }
+
+    .card-title {
+      display: flex;
+      justify-content: space-between;
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 760;
+      margin-bottom: 8px;
+    }
+
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.9;
+    }
+
+    .metric strong { color: var(--text); font-size: 11.5px; }
+
+    .command {
+      height: 29px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 0 8px 2px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .command i {
+      width: 21px;
+      color: var(--faint);
+      text-align: center;
+      font-style: normal;
+    }
+
+    .side-footer {
+      margin-top: auto;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--stroke);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 680;
+    }
+
+    .main {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 32px 1fr 14px;
+      gap: 5px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .workspaces {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .workspace {
+      height: 28px;
+      min-width: 104px;
+      max-width: 190px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      border-radius: 12px;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.60);
+      box-shadow: var(--shadow-control);
+      backdrop-filter: blur(18px) saturate(1.30);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 690;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .workspace.active {
+      color: var(--text);
+      background: var(--panel-strong);
+      border-color: rgba(10,124,255,.30);
+      box-shadow: 0 0 0 3px rgba(10,124,255,.08), var(--shadow-control);
+    }
+
+    .ws-icon {
+      width: 17px;
+      height: 17px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 6px;
+      background: var(--blue);
+      color: white;
+      font-size: 10px;
+    }
+
+    .workspace .name { overflow: hidden; text-overflow: ellipsis; }
+    .workspace .count { margin-left: auto; color: var(--faint); }
+
+    .actions {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .group {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      gap: 1px;
+      padding: 2px;
+      border-radius: 13px;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.70);
+      box-shadow: var(--shadow-control);
+      backdrop-filter: blur(18px) saturate(1.30);
+    }
+
+    .action {
+      height: 24px;
+      min-width: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 0 8px;
+      border-radius: 9px;
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 730;
+      white-space: nowrap;
+    }
+
+    .action.hot { color: #075cbd; background: rgba(10,124,255,.10); }
+
+    .terminal-stage {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1.12fr 4px .88fr;
+      overflow: hidden;
+      border-radius: 12px;
+      border: 1px solid rgba(0,0,0,.10);
+      background: var(--gutter);
+      box-shadow: 0 10px 28px rgba(18,23,34,.10);
+    }
+
+    .left-stack {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 1fr 4px .68fr;
+      background: var(--gutter);
+    }
+
+    .bottom-split {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 4px 1fr 4px 1fr;
+      background: var(--gutter);
+    }
+
+    .pane {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(255,255,255,.015), transparent 80px), var(--terminal);
+    }
+
+    .pane.focus {
+      box-shadow: inset 0 0 0 1px var(--violet), inset 0 0 0 2px rgba(123,97,255,.10);
+      z-index: 2;
+    }
+
+    .pane-tabs {
+      position: absolute;
+      z-index: 4;
+      top: 5px;
+      left: 6px;
+      right: 6px;
+      height: 23px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--term-muted);
+      font-size: 10.5px;
+      font-weight: 650;
+    }
+
+    .tab {
+      height: 21px;
+      max-width: 140px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px;
+      border-radius: 7px;
+      color: rgba(216,222,233,.68);
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.05);
+      white-space: nowrap;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+    }
+
+    .tab.active {
+      color: #1d222b;
+      background: rgba(255,255,255,.82);
+      border-color: rgba(255,255,255,.55);
+      box-shadow: 0 7px 18px rgba(0,0,0,.16);
+    }
+
+    .tab .name { overflow: hidden; text-overflow: ellipsis; }
+
+    .pane-tools {
+      margin-left: auto;
+      display: flex;
+      gap: 5px;
+    }
+
+    .pane-tools span {
+      width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      background: rgba(255,255,255,.035);
+      color: rgba(216,222,233,.48);
+    }
+
+    .terminal {
+      position: absolute;
+      inset: 36px 0 0;
+      padding: 0 10px;
+      overflow: hidden;
+      color: var(--term-text);
+      font: 15.5px/1.36 "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    .prompt { color: #8bb5ff; font-weight: 700; }
+    .muted-terminal { color: var(--term-muted); }
+
+    .cursor {
+      display: inline-block;
+      width: .62em;
+      height: 1.08em;
+      margin-left: 3px;
+      vertical-align: -2px;
+      background: #e7edf7;
+    }
+
+    .clock {
+      position: absolute;
+      right: 14px;
+      top: 86px;
+      color: #777095;
+      font: 15px/1 "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding: 0 5px;
+      color: var(--faint);
+      font-size: 10.5px;
+      font-weight: 680;
+      white-space: nowrap;
+    }
+
+    .status span:last-child { margin-left: auto; }
+
+    .utility {
+      position: absolute;
+      z-index: 20;
+      right: 18px;
+      bottom: 34px;
+      width: 322px;
+      overflow: hidden;
+      border-radius: 17px;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.80);
+      box-shadow: var(--shadow-panel);
+      backdrop-filter: blur(28px) saturate(1.35);
+    }
+
+    .utility-head {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--stroke);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .notice {
+      display: grid;
+      grid-template-columns: 8px 1fr auto;
+      gap: 10px;
+      padding: 11px 12px;
+      border-bottom: 1px solid rgba(24,29,38,.06);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .notice b { display: block; margin-bottom: 3px; color: var(--text); font-size: 11.5px; }
+    .notice-dot { width: 7px; height: 7px; margin-top: 4px; border-radius: 50%; background: var(--violet); }
+
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 58px 1fr; gap: 8px; }
+      .brand { grid-template-columns: 34px; justify-content: center; }
+      .brand div:not(.logo), .collapse, .section, .row span:not(.icon), .card, .command span, .side-footer span:last-child { display: none; }
+      .row { grid-template-columns: 20px; width: 38px; padding: 0 9px; }
+      .action .label { display: none; }
+      .workspace:not(.active) { display: none; }
+      .utility { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <div class="traffic"><i class="red"></i><i class="yellow"></i><i class="green"></i></div>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo">›_</div>
+          <div><h1>Conductor</h1><p>终端工作区</p></div>
+          <div class="collapse">⌘</div>
+        </div>
+
+        <div class="section"><span>工作区</span><span>＋</span></div>
+        <div class="row active"><span class="icon">▦</span><span>正式开发</span><span class="badge">5</span></div>
+        <div class="row"><span class="icon">▥</span><span>cmux 研究</span><span class="badge">2</span></div>
+        <div class="row"><span class="icon">✓</span><span>验证备份</span><span class="badge">1</span></div>
+
+        <div class="card">
+          <div class="card-title"><span>当前状态</span><span>live</span></div>
+          <div class="metric"><span>分屏</span><strong>5</strong></div>
+          <div class="metric"><span>终端</span><strong>5</strong></div>
+          <div class="metric"><span>通知</span><strong>2</strong></div>
+          <div class="metric"><span>当前</span><strong>zsh 5</strong></div>
+        </div>
+
+        <div class="section"><span>命令</span></div>
+        <div class="command"><i>▣</i><span>新开终端</span></div>
+        <div class="command"><i>＋</i><span>新建标签</span></div>
+        <div class="command"><i>▥</i><span>向右分屏</span></div>
+        <div class="command"><i>▤</i><span>向下分屏</span></div>
+        <div class="command"><i>AI</i><span>Agent 通知</span></div>
+        <div class="command"><i>✎</i><span>重命名</span></div>
+
+        <div class="side-footer"><span>◉ Codex Dark</span><span>GhosttyKit</span></div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="workspaces">
+            <div class="workspace active"><span class="ws-icon">›_</span><span class="name">正式开发</span><span class="count">5 / 5</span></div>
+            <div class="workspace"><span class="ws-icon" style="background:#8d95a3">▥</span><span class="name">cmux 研究</span><span class="count">2</span></div>
+            <div class="workspace"><span class="ws-icon" style="background:#1f9d66">✓</span><span class="name">验证备份</span><span class="count">1</span></div>
+            <div class="workspace" style="min-width:34px;width:34px;padding:0;justify-content:center">＋</div>
+          </div>
+
+          <div class="actions">
+            <div class="group"><div class="action hot">▣ <span class="label">新终端</span></div><div class="action">＋ <span class="label">新标签</span></div></div>
+            <div class="group"><div class="action">▥ <span class="label">右分屏</span></div><div class="action">▤ <span class="label">下分屏</span></div><div class="action">⌘ <span class="label">命令</span></div><div class="action hot">● 2</div></div>
+          </div>
+        </header>
+
+        <section class="terminal-stage">
+          <div class="left-stack">
+            <article class="pane">
+              <div class="pane-tabs"><div class="tab active"><span>▻</span><span class="name">uchihasasuke</span><span>×</span></div><div class="pane-tools"><span>＋</span><span>▥</span><span>×</span></div></div>
+              <div class="terminal">Last login: Sat May 16 17:34:08 on ttys001<br><br><span class="prompt">~/Desktop/conductor</span><br><span class="prompt">❯</span><span class="cursor"></span></div>
+              <div class="clock">17:34</div>
+            </article>
+            <div></div>
+            <div class="bottom-split">
+              <article class="pane"><div class="pane-tabs"><div class="tab active"><span>▻</span><span class="name">zsh 3</span><span>×</span></div></div><div class="terminal">Last login: Sat May 16 17:33:51<br><br><span class="prompt">~</span><br><span class="prompt">❯</span><span class="cursor"></span></div></article>
+              <div></div>
+              <article class="pane"><div class="pane-tabs"><div class="tab active"><span>▻</span><span class="name">build</span><span>×</span></div></div><div class="terminal">Last login: Sat May 16 17:33:55<br><br><span class="prompt">~/conductor</span><br><span class="prompt">❯</span> swift build<br><span class="muted-terminal">Build complete.</span></div></article>
+              <div></div>
+              <article class="pane focus"><div class="pane-tabs"><div class="tab active"><span>▻</span><span class="name">zsh 5</span><span>×</span></div><div class="pane-tools"><span style="color:#9b8cff">●</span></div></div><div class="terminal">Last login: Sat May 16 17:34:01<br><br><span class="prompt">~</span><br><span class="prompt">❯</span><span class="cursor"></span></div></article>
+            </div>
+          </div>
+          <div></div>
+          <article class="pane">
+            <div class="pane-tabs"><div class="tab active"><span>▻</span><span class="name">codex-agent</span><span>×</span></div><div class="tab"><span>▻</span><span class="name">logs</span><span>×</span></div><div class="pane-tools"><span>＋</span><span>▤</span></div></div>
+            <div class="terminal">Last login: Sat May 16 17:34:06 on ttys002<br><br><span class="prompt">~/Desktop/conductor</span><br><span class="prompt">❯</span> ./Scripts/check-conductor.sh<br><span class="muted-terminal">swift build</span><br><span class="muted-terminal">ConductorModelCheck passed</span><br><br><span class="prompt">❯</span><span class="cursor"></span></div>
+            <div class="clock">17:34</div>
+          </article>
+        </section>
+
+        <footer class="status"><span>▥ 5 panes</span><span>▻ 5 terminals</span><span>◎ zsh 5 focused</span><span>GhosttyKit surface</span></footer>
+      </main>
+    </div>
+
+    <aside class="utility">
+      <div class="utility-head"><span>通知 / Agent</span><span>全部已读</span></div>
+      <div class="notice"><span class="notice-dot"></span><div><b>Codex 完成检查</b>正式开发 / codex-agent：构建和模型检查已通过。</div><span>1m</span></div>
+      <div class="notice"><span class="notice-dot" style="background:var(--amber)"></span><div><b>zsh 5 等待输入</b>输出停止，当前 pane 可能需要你接管。</div><span>4m</span></div>
+    </aside>
+  </div>
+</body>
+</html>

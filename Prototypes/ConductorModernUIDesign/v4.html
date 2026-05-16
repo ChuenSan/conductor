@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conductor UI V4</title>
+  <style>
+    :root {
+      --window: #f3f5f8;
+      --panel: rgba(255, 255, 255, .74);
+      --panel-strong: rgba(255, 255, 255, .88);
+      --ink: #161b25;
+      --muted: #667085;
+      --soft: #9aa3b2;
+      --line: rgba(20, 26, 38, .10);
+      --line-strong: rgba(20, 26, 38, .16);
+      --blue: #0a7cff;
+      --violet: #6757ff;
+      --green: #26a269;
+      --amber: #d98318;
+      --terminal: #070a0f;
+      --terminal-2: #090d14;
+      --terminal-top: #101522;
+      --terminal-text: #dfe5f1;
+      --terminal-muted: #768097;
+      --shadow-window: 0 32px 90px rgba(14, 21, 34, .24);
+      --shadow-panel: 0 18px 46px rgba(23, 30, 44, .13), inset 0 1px 0 rgba(255,255,255,.80);
+      --shadow-control: 0 7px 18px rgba(23, 30, 44, .08), inset 0 1px 0 rgba(255,255,255,.65);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      color: var(--ink);
+      background:
+        linear-gradient(145deg, #fbfcfd 0%, #eef2f7 42%, #f8f9fb 100%);
+    }
+
+    .window {
+      width: 1540px;
+      height: 930px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 22px;
+      border: 1px solid rgba(0,0,0,.14);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.68), rgba(246,248,251,.84)),
+        var(--window);
+      box-shadow: var(--shadow-window);
+    }
+
+    .traffic {
+      position: absolute;
+      top: 16px;
+      left: 18px;
+      display: flex;
+      gap: 8px;
+      z-index: 20;
+    }
+
+    .traffic i {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.10);
+    }
+
+    .red { background: #ff5f57; }
+    .yellow { background: #ffbd2e; }
+    .green { background: #28c840; }
+
+    .shell {
+      position: absolute;
+      inset: 44px 10px 10px 10px;
+      display: grid;
+      grid-template-columns: 196px minmax(0, 1fr);
+      gap: 10px;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .sidebar {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.72);
+      background: linear-gradient(180deg, rgba(255,255,255,.86), rgba(255,255,255,.58));
+      box-shadow: var(--shadow-panel);
+      backdrop-filter: blur(26px) saturate(1.18);
+    }
+
+    .brand {
+      height: 70px;
+      display: grid;
+      grid-template-columns: 34px 1fr 24px;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px 8px;
+    }
+
+    .logo {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      color: #fff;
+      font: 760 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: linear-gradient(145deg, #0a7cff, #6757ff 54%, #d98318);
+      box-shadow: 0 10px 20px rgba(10, 124, 255, .22);
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.1;
+      font-weight: 760;
+    }
+
+    .brand p {
+      margin: 4px 0 0;
+      color: var(--soft);
+      font-size: 11px;
+      font-weight: 560;
+    }
+
+    .mini-button {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: rgba(26, 34, 49, .055);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .section {
+      height: 25px;
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      padding: 0 12px 5px;
+      color: var(--soft);
+      font-size: 10px;
+      font-weight: 760;
+    }
+
+    .row {
+      height: 31px;
+      display: grid;
+      grid-template-columns: 18px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      margin: 0 8px 3px;
+      padding: 0 8px;
+      border-radius: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 680;
+    }
+
+    .row.active {
+      color: var(--ink);
+      background: rgba(255,255,255,.92);
+      box-shadow: inset 0 0 0 1px rgba(10,124,255,.13);
+    }
+
+    .icon {
+      width: 18px;
+      height: 18px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      color: var(--soft);
+      font-size: 12px;
+    }
+
+    .active .icon {
+      color: #fff;
+      background: var(--blue);
+    }
+
+    .count {
+      min-width: 17px;
+      height: 17px;
+      display: grid;
+      place-items: center;
+      padding: 0 5px;
+      border-radius: 7px;
+      color: var(--muted);
+      background: rgba(22, 27, 37, .055);
+      font-size: 10px;
+      font-weight: 760;
+    }
+
+    .status-card {
+      margin: 9px 8px 8px;
+      padding: 9px 10px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.56);
+    }
+
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--soft);
+      font-size: 10.5px;
+      line-height: 1.9;
+      font-weight: 620;
+    }
+
+    .metric strong {
+      color: var(--ink);
+      font-size: 11px;
+      font-weight: 760;
+    }
+
+    .nav-action {
+      height: 29px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 8px 3px;
+      padding: 0 9px;
+      border-radius: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 680;
+    }
+
+    .nav-action.dim { opacity: .38; }
+
+    .bottom {
+      margin-top: auto;
+      padding: 10px 12px 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid rgba(26, 34, 49, .07);
+      color: var(--muted);
+      font-size: 11.5px;
+      font-weight: 720;
+    }
+
+    .main {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 34px minmax(0, 1fr) 18px;
+      gap: 6px;
+    }
+
+    .topbar {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .workspace-tabs {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .workspace-tab {
+      height: 29px;
+      min-width: 128px;
+      max-width: 176px;
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) 18px 16px;
+      align-items: center;
+      gap: 7px;
+      padding: 0 7px;
+      border-radius: 12px;
+      border: 1px solid rgba(22, 27, 37, .075);
+      background: rgba(255,255,255,.62);
+      box-shadow: var(--shadow-control);
+      color: var(--ink);
+      font-size: 12.5px;
+      font-weight: 760;
+    }
+
+    .workspace-tab.active {
+      border-color: rgba(10,124,255,.34);
+      background: rgba(255,255,255,.92);
+      box-shadow: 0 0 0 2px rgba(10,124,255,.08), var(--shadow-control);
+    }
+
+    .workspace-tab .title {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .workspace-tab .close {
+      width: 16px;
+      height: 16px;
+      display: grid;
+      place-items: center;
+      color: var(--soft);
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .pill {
+      height: 29px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.76);
+      box-shadow: var(--shadow-control);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .pill.icon-only {
+      width: 29px;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .terminal-stage {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1.12fr 4px .88fr;
+      border-radius: 13px;
+      overflow: hidden;
+      border: 1px solid rgba(5, 9, 16, .80);
+      background: var(--terminal);
+      box-shadow:
+        0 14px 36px rgba(10, 14, 22, .24),
+        0 0 0 1px rgba(255,255,255,.05) inset;
+    }
+
+    .pane {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 27px minmax(0, 1fr);
+      background: var(--terminal);
+    }
+
+    .pane.focused {
+      box-shadow: inset 0 0 0 1px rgba(103, 87, 255, .58);
+      z-index: 1;
+    }
+
+    .pane-stack {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 1fr 4px 1fr;
+    }
+
+    .pane-bar {
+      height: 27px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 28px 48px 26px;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 5px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      background: linear-gradient(180deg, rgba(22, 28, 42, .98), rgba(13, 18, 29, .98));
+    }
+
+    .terminal-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .terminal-tab {
+      height: 21px;
+      width: 100px;
+      display: grid;
+      grid-template-columns: 14px minmax(0, 1fr) 14px;
+      align-items: center;
+      gap: 5px;
+      padding: 0 6px;
+      border-radius: 7px;
+      color: var(--terminal-muted);
+      font: 680 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .terminal-tab.active {
+      color: #19202b;
+      background: rgba(244,246,252,.90);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.58);
+    }
+
+    .terminal-tab span {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .tab-close {
+      width: 14px;
+      height: 14px;
+      display: grid;
+      place-items: center;
+      opacity: .62;
+      font-size: 12px;
+    }
+
+    .pane-plus, .pane-split, .pane-close {
+      display: grid;
+      place-items: center;
+      height: 20px;
+      color: var(--terminal-muted);
+      font-size: 13px;
+      font-weight: 760;
+    }
+
+    .current {
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border-radius: 9px;
+      color: var(--terminal-text);
+      background: rgba(103, 87, 255, .15);
+      font-size: 10px;
+      font-weight: 760;
+    }
+
+    .current i {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--violet);
+    }
+
+    .terminal {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      padding: 9px 10px;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.012), transparent 42%),
+        var(--terminal);
+      color: var(--terminal-text);
+      font: 15px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .terminal .muted { color: var(--terminal-muted); }
+    .terminal .blue { color: #78a8ff; font-weight: 760; }
+    .terminal .green { color: #7ee0a6; }
+    .terminal .amber { color: #f0b269; }
+
+    .prompt {
+      color: #78a8ff;
+      font-weight: 760;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 9px;
+      height: 19px;
+      margin-left: 4px;
+      transform: translateY(4px);
+      background: #dfe5f1;
+    }
+
+    .time {
+      position: absolute;
+      top: 78px;
+      right: 13px;
+      color: rgba(157, 148, 190, .88);
+      font-size: 13px;
+    }
+
+    .splitter {
+      background: #e8ecf3;
+      box-shadow: inset 1px 0 0 rgba(255,255,255,.7), inset -1px 0 0 rgba(0,0,0,.055);
+    }
+
+    .splitter.horizontal {
+      width: 100%;
+      height: 4px;
+      background: #e8ecf3;
+    }
+
+    .statusbar {
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--soft);
+      font-size: 10.5px;
+      font-weight: 660;
+      padding: 0 2px;
+    }
+
+    .status-left, .status-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .status-left span, .status-right span {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .notice {
+      position: absolute;
+      right: 18px;
+      bottom: 34px;
+      width: 280px;
+      padding: 11px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.62);
+      background: rgba(255,255,255,.78);
+      box-shadow: 0 18px 42px rgba(20, 28, 42, .17);
+      backdrop-filter: blur(24px) saturate(1.2);
+    }
+
+    .notice h3 {
+      margin: 0 0 6px;
+      font-size: 12.5px;
+      font-weight: 760;
+    }
+
+    .notice p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+      font-weight: 560;
+    }
+  </style>
+</head>
+<body>
+  <main class="window" aria-label="Conductor modern UI mockup">
+    <div class="traffic"><i class="red"></i><i class="yellow"></i><i class="green"></i></div>
+
+    <section class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo">&gt;_</div>
+          <div>
+            <h1>Conductor</h1>
+            <p>Terminal Workspace</p>
+          </div>
+          <div class="mini-button">▥</div>
+        </div>
+
+        <div class="section"><span>工作区</span><span>＋</span></div>
+        <div class="row active"><span class="icon">▦</span><span>正式开发</span><span class="count">3</span></div>
+        <div class="row"><span class="icon">▦</span><span>工作区 2</span><span class="count">1</span></div>
+        <div class="row"><span class="icon">▦</span><span>实验</span><span class="count">2</span></div>
+
+        <div class="section"><span>状态</span></div>
+        <div class="status-card">
+          <div class="metric"><span>分屏</span><strong>3</strong></div>
+          <div class="metric"><span>终端</span><strong>5</strong></div>
+          <div class="metric"><span>未读通知</span><strong>1</strong></div>
+          <div class="metric"><span>当前</span><strong>codex-build</strong></div>
+        </div>
+
+        <div class="section"><span>创建</span></div>
+        <div class="nav-action"><span>▣</span><span>新开终端</span></div>
+        <div class="nav-action"><span>＋</span><span>新标签</span></div>
+
+        <div class="section"><span>布局</span></div>
+        <div class="nav-action"><span>▥</span><span>向右分屏</span></div>
+        <div class="nav-action"><span>▤</span><span>向下分屏</span></div>
+        <div class="nav-action dim"><span>▦</span><span>均分分屏</span></div>
+
+        <div class="section"><span>整理</span></div>
+        <div class="nav-action"><span>⌘</span><span>命令面板</span></div>
+        <div class="nav-action"><span>◦</span><span>通知 1</span></div>
+        <div class="nav-action"><span>AI</span><span>重命名工作区</span></div>
+        <div class="nav-action"><span>◇</span><span>重命名标签</span></div>
+
+        <div class="bottom"><span>◉ Codex Dark</span><span>⌘K</span></div>
+      </aside>
+
+      <section class="main">
+        <header class="topbar">
+          <div class="workspace-tabs">
+            <div class="workspace-tab">
+              <span class="icon">▦</span><span class="title">正式开发</span><span class="count">3</span><span class="close">×</span>
+            </div>
+            <div class="workspace-tab active">
+              <span class="icon">▦</span><span class="title">工作区 2</span><span class="count">1</span><span class="close">×</span>
+            </div>
+            <div class="workspace-tab">
+              <span class="icon">▦</span><span class="title">实验</span><span class="count">2</span><span class="close">×</span>
+            </div>
+          </div>
+          <div class="actions">
+            <div class="pill">＋ 工作区</div>
+            <div class="pill">▣ 新终端</div>
+            <div class="pill">＋ 新标签</div>
+            <div class="pill">▥ 右分屏</div>
+            <div class="pill">▤ 下分屏</div>
+            <div class="pill icon-only">◦</div>
+            <div class="pill">··· 命令</div>
+          </div>
+        </header>
+
+        <section class="terminal-stage">
+          <article class="pane">
+            <div class="pane-bar">
+              <div class="terminal-tabs">
+                <div class="terminal-tab active"><span>▸</span><span>codex-build</span><span class="tab-close">×</span></div>
+                <div class="terminal-tab"><span>▸</span><span>server</span><span class="tab-close">×</span></div>
+              </div>
+              <div class="pane-plus">＋</div>
+              <div class="current"><i></i>当前</div>
+              <div class="pane-close">×</div>
+            </div>
+            <div class="terminal">
+              <div>Last login: Sun May 17 00:34:14 on ttys001</div>
+              <br />
+              <div><span class="blue">~/Desktop/conductor</span> <span class="muted">main</span></div>
+              <div><span class="prompt">❯</span> swift build<span class="cursor"></span></div>
+              <br />
+              <div class="green">Build complete! (0.82s)</div>
+              <div class="muted">GhosttyKit surface attached · 144x43 cells</div>
+              <div class="time">00:42</div>
+            </div>
+          </article>
+
+          <div class="splitter"></div>
+
+          <section class="pane-stack">
+            <article class="pane focused">
+              <div class="pane-bar">
+                <div class="terminal-tabs">
+                  <div class="terminal-tab active"><span>▸</span><span>agent-run</span><span class="tab-close">×</span></div>
+                  <div class="terminal-tab"><span>▸</span><span>logs</span><span class="tab-close">×</span></div>
+                </div>
+                <div class="pane-plus">＋</div>
+                <div class="current"><i></i>当前</div>
+                <div class="pane-close">×</div>
+              </div>
+              <div class="terminal">
+                <div><span class="amber">codex</span> reviewing split model...</div>
+                <div><span class="green">✓</span> tab identity stable</div>
+                <div><span class="green">✓</span> hover chrome stable</div>
+                <div><span class="green">✓</span> terminal output isolated from SwiftUI</div>
+                <br />
+                <div><span class="prompt">❯</span> ./Scripts/check-conductor.sh<span class="cursor"></span></div>
+                <div class="time">00:42</div>
+              </div>
+            </article>
+            <div class="splitter horizontal"></div>
+            <article class="pane">
+              <div class="pane-bar">
+                <div class="terminal-tabs">
+                  <div class="terminal-tab active"><span>▸</span><span>zsh</span><span class="tab-close">×</span></div>
+                </div>
+                <div class="pane-plus">＋</div>
+                <div></div>
+                <div class="pane-close">×</div>
+              </div>
+              <div class="terminal">
+                <div><span class="blue">~</span></div>
+                <div><span class="prompt">❯</span> pnpm dev</div>
+                <div class="muted">listening on localhost:5173</div>
+                <div class="time">00:41</div>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <footer class="statusbar">
+          <div class="status-left">
+            <span>▥ 3 分屏</span>
+            <span>▸ 5 终端</span>
+            <span>⌖ agent-run</span>
+            <span>main</span>
+          </div>
+          <div class="status-right">
+            <span>◦ 1 通知</span>
+            <span>GhosttyKit 5</span>
+          </div>
+        </footer>
+      </section>
+    </section>
+
+    <aside class="notice">
+      <h3>Codex finished</h3>
+      <p>agent-run 已完成检查。点击可跳转到对应终端，不改变当前焦点。</p>
+    </aside>
+  </main>
+</body>
+</html>

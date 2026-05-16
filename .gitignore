@@ -1,0 +1,14 @@
+# Local build artifacts
+**/.build/
+**/.swiftpm/
+DerivedData/
+
+# Heavy binary dependencies prepared locally by scripts
+**/Vendor/GhosttyKit.xcframework/
+
+# Local evidence archives. Keep them on disk, but do not commit them.
+Backups/
+
+# macOS filesystem metadata
+.DS_Store
+**/.DS_Store

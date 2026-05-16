@@ -1,0 +1,302 @@
+# Ghostty/libghostty Integration
+
+> Rules for using Ghostty/libghostty in this project.
+
+## Positioning
+
+Do not embed the standalone Ghostty app. For the first validation and MVP, do use GhosttyKit/libghostty's macOS surface renderer for the live terminal character area. The product UI around it remains ours.
+
+The intended split is:
+
+```text
+Our UI: SwiftUI + AppKit workspaces, tabs, splits, notifications, command palette, automation
+Our host layer: stable AppKit terminal host views, focus routing, resize routing, overlays
+GhosttyKit/libghostty: PTY, VT parsing, terminal state, scrollback, cursor, selection, glyph shaping, Metal terminal rendering
+```
+
+## cmux Reference
+
+Study `/tmp/codex-cmux-reference` when implementing this layer. The most relevant files are:
+
+- `cmux-Bridging-Header.h`
+- `ghostty.h`
+- `Sources/GhosttyTerminalView.swift`
+- `Sources/TerminalWindowPortal.swift`
+- `Sources/WorkspaceSurfaceConfig.swift`
+- `Sources/TerminalController.swift`
+
+Use cmux as an integration reference, not as a UI template. cmux uses Ghostty's macOS surface renderer, and that rendering approach is the first route to validate.
+
+Also keep the Ghostty VT API checkout available for the deferred custom-renderer path:
+
+- `/tmp/codex-ghostty-reference/include/ghostty/vt.h`
+- `/tmp/codex-ghostty-reference/include/ghostty/vt/terminal.h`
+- `/tmp/codex-ghostty-reference/include/ghostty/vt/render.h`
+- `/tmp/codex-ghostty-reference/include/ghostty/vt/screen.h`
+
+## App Runtime
+
+Using the cmux surface API route, create one app-level Ghostty runtime:
+
+- Call `ghostty_init` once.
+- Load Ghostty config through `ghostty_config_new` and default/recursive config loaders.
+- Create `ghostty_runtime_config_s`.
+- Provide callbacks for wakeups, actions, clipboard, and close requests.
+- Create the app with `ghostty_app_new`.
+- Coalesce wakeups before calling `ghostty_app_tick`.
+- Mirror macOS app active/inactive state into `ghostty_app_set_focus`.
+
+Fallback config is required for the surface route. A broken user Ghostty config should not prevent this app from launching terminals.
+
+For the deferred custom renderer path, study `libghostty-vt`:
+
+- `ghostty_terminal_new` creates terminal state.
+- `ghostty_terminal_vt_write` feeds raw PTY bytes into the terminal parser/state machine.
+- `ghostty_terminal_resize` updates cell and pixel dimensions.
+- `ghostty_render_state_new` creates render state for our renderer.
+- `ghostty_render_state_update` pulls dirty render data from the terminal.
+- `ghostty_render_state_row_iterator_*` and `ghostty_render_state_row_cells_*` expose rows/cells.
+- `ghostty_cell_get`, `ghostty_row_get`, and style/color APIs expose per-cell data.
+
+The VT headers warn that the API is incomplete and unstable. Treat this as a managed dependency risk.
+
+## Surface Runtime
+
+For the MVP surface path, create one `ghostty_surface_t` per terminal pane. Only create `ghostty_surface_t` after the AppKit view is attached to a real `NSWindow`.
+
+The owner should hold:
+
+- Workspace ID
+- Terminal ID
+- Pane ID
+- `ghostty_surface_t?`
+- Stable AppKit terminal host view
+- Lifecycle state
+- Last cell dimensions and pixel dimensions
+- Pending input queue for automation before the surface is ready
+
+For macOS surfaces:
+
+- Set `platform_tag = GHOSTTY_PLATFORM_MACOS`.
+- Set the platform `nsview` pointer to the real terminal `NSView`.
+- Set retained callback userdata that can resolve back to the surface owner.
+- Set display id, content scale, and pixel size immediately after creation.
+- Force an initial refresh after creation.
+
+## Target Rendering
+
+The terminal character area should initially be GhosttyKit/libghostty's surface renderer hosted in our stable AppKit view. It must not be a per-cell SwiftUI hierarchy.
+
+The deferred custom-renderer path may use `GhosttyRenderState` to obtain dirty rows, cells, colors, cursor state, graphemes, wide-cell state, and style IDs. That path is research material until the surface route is proven insufficient.
+
+Important render-state APIs:
+
+- `ghostty_render_state_update`
+- `ghostty_render_state_get`
+- `ghostty_render_state_get_multi`
+- `ghostty_render_state_colors_get`
+- `ghostty_render_state_row_iterator_new`
+- `ghostty_render_state_row_iterator_next`
+- `ghostty_render_state_row_get`
+- `ghostty_render_state_row_cells_new`
+- `ghostty_render_state_row_cells_next`
+- `ghostty_render_state_row_cells_get`
+- `ghostty_cell_get`
+- `ghostty_row_get`
+
+cmux's `GhosttyNSView`/`CAMetalLayer` surface path is the first implementation pattern to validate.
+
+Custom overlays are allowed and expected:
+
+- Notification ring
+- Inactive-pane overlay
+- Search UI
+- Drop target overlay
+- Flash/attention overlay
+- Keyboard/copy mode badges
+
+Overlays that must track terminal geometry should live in the same renderer/host coordinate system, not in a separate SwiftUI hierarchy that can drift during resize.
+
+## SwiftUI Bridge
+
+SwiftUI should see a stable terminal host component, not the terminal transcript or per-cell model.
+
+Start with a simple `NSViewRepresentable` only if it keeps AppKit identity stable across split and tab operations. If SwiftUI reparenting causes renderer recreation, black frames, lost focus, or geometry drift, move to a cmux-style portal:
+
+```text
+SwiftUI placeholder anchor
+-> window-level AppKit portal
+-> real custom terminal renderer view
+```
+
+Do not free terminal state or renderer resources during transient SwiftUI dismantle. Free only on actual pane close or app teardown.
+
+## Input
+
+For the MVP surface path, use Ghostty surface input APIs:
+
+- `ghostty_surface_key` for key press/release and control keys.
+- `ghostty_surface_text` for bulk text, paste, drops, and automation text.
+- `ghostty_surface_preedit` for IME marked/preedit text from AppKit.
+- `ghostty_surface_ime_point` for the input-method candidate window position.
+- `ghostty_surface_mouse_pos` for pointer movement.
+- `ghostty_surface_mouse_button` for mouse buttons.
+- `ghostty_surface_mouse_scroll` for wheel events.
+- `ghostty_surface_key_is_binding` to distinguish Ghostty-owned bindings from app/menu shortcuts before forwarding command-modified events.
+- `ghostty_surface_binding_action` for built-in terminal actions such as copy, paste, search, and scroll commands.
+
+For automation, split input into text chunks and control-key events. Newline, tab, escape, and delete should be sent as key events when terminal semantics require it.
+
+The terminal host view must participate in AppKit text input. Use `NSTextInputClient`/`interpretKeyEvents` for IME and dead-key composition, then forward committed text through Ghostty key/text APIs. Do not replace terminal line editing in Swift. Chinese/Japanese/Korean preedit belongs in AppKit plus Ghostty preedit, while shell editing remains inside Ghostty/PTY.
+
+## Action Callbacks / Events
+
+For cmux-style surface hosting, route Ghostty actions into our product model:
+
+- New tab / new window -> focused-pane terminal tab creation in our tab model
+- Move tab / goto tab -> our tab ordering and selection model
+- New split -> our split system
+- Focus split -> our focus model
+- Resize split -> our layout model
+- Toggle command palette -> our command palette state
+- Desktop notification -> our notification store
+- Bell -> our attention system
+- Config/color changes -> our theme/runtime config layer
+- Child process exit -> our panel lifecycle
+- Scrollbar/cell-size/search updates -> our terminal host metadata
+
+For the deferred custom VT path, implement equivalent app events from terminal callbacks/options and our input/control layer: title changes, bell, write-pty responses, size reports, device attributes, focus, mouse, and notifications/OSC parsing.
+
+Callbacks can arrive during teardown. They must resolve by IDs and lifecycle state before touching UI, terminal handles, or renderer resources. Do not carry native owner objects across asynchronous callback boundaries: copy stable values such as `TerminalID`, strings, counts, booleans, and directions synchronously, then resolve current model state on `MainActor`.
+
+## Scenario: Ghostty Action Bridge Contract
+
+### 1. Scope / Trigger
+
+- Trigger: Any `ghostty_action_s` emitted by `ghostty_runtime_config_s.action_cb`.
+- Scope: Translate Ghostty-owned keybindings into Conductor-owned workspace state without
+  letting terminal bindings mutate SwiftUI views directly.
+
+### 2. Signatures
+
+- Runtime delegate:
+  - `ghosttyRuntimeDidRequestNewTab(terminalID:) -> Bool`
+  - `ghosttyRuntimeDidRequestMoveTab(terminalID:amount:) -> Bool`
+  - `ghosttyRuntimeDidRequestSelectTab(terminalID:offset:last:) -> Bool`
+  - `ghosttyRuntimeDidRequestSplit(terminalID:direction:) -> Bool`
+  - `ghosttyRuntimeDidRequestFocus(terminalID:direction:) -> Bool`
+  - `ghosttyRuntimeDidRequestResize(terminalID:direction:amount:) -> Bool`
+  - `ghosttyRuntimeDidRequestEqualize(terminalID:) -> Bool`
+  - `ghosttyRuntimeDidRequestToggleZoom(terminalID:) -> Bool`
+  - `ghosttyRuntimeDidSetTitle(terminalID:title:) -> Bool`
+  - `ghosttyRuntimeDidSetWorkingDirectory(terminalID:workingDirectory:) -> Bool`
+  - `ghosttyRuntimeDidReceiveNotification(terminalID:title:body:) -> Bool`
+  - `ghosttyRuntimeDidRingBell(terminalID:) -> Bool`
+  - `ghosttyRuntimeDidUpdateProgress(terminalID:kind:progress:) -> Bool`
+  - `ghosttyRuntimeDidFinishCommand(terminalID:exitCode:durationNanoseconds:) -> Bool`
+  - `ghosttyRuntimeDidUpdateCellSize(terminalID:width:height:) -> Bool`
+  - `ghosttyRuntimeDidUpdateSearch(terminalID:active:needle:total:selected:) -> Bool`
+  - `ghosttyRuntimeDidSetReadonly(terminalID:readonly:) -> Bool`
+  - `ghosttyRuntimeDidRequestClose(terminalID:) -> Bool`
+  - `ghosttyRuntimeDidRequestCloseTabs(terminalID:scope:) -> Bool`
+  - `ghosttyRuntimeDidRequestCommandPalette(terminalID:) -> Bool`
+
+### 3. Contracts
+
+- Request identity: resolve `ghostty_target_s.target.surface` to `TerminalSurface`, then
+  use only `TerminalID` across the SwiftUI boundary.
+- Model lookup: the delegate must resolve `TerminalID -> PaneID` before mutating layout.
+- UI mutation: route through `WorkspaceState` and `ConductorWindowModel`; do not mutate
+  SwiftUI view structs or AppKit host subviews from the callback.
+- Threading: callback may be non-main; schedule model work onto `MainActor`.
+- Async payloads: do not capture `TerminalSurface`, `GhosttyAppRuntime`, or native callback
+  userdata into `Task` closures. Resolve the target synchronously and pass value payloads.
+- Return value: return `true` only for actions Conductor intentionally owns or bridges.
+
+### 4. Validation & Error Matrix
+
+- Unknown target tag -> log debug and return `false`.
+- Surface cannot resolve to `TerminalSurface` -> return `false`.
+- Terminal ID no longer exists in workspace -> return `false`.
+- Action would violate command availability -> return `false` or no-op through the model.
+- Unsupported action tag -> log debug, return `false`, and do not mutate state.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Ghostty `NEW_SPLIT` from focused terminal creates a Conductor split and focuses it.
+- Good: Ghostty `NEW_TAB` or `NEW_WINDOW` creates a new terminal tab in the source pane.
+- Good: Ghostty `MOVE_TAB` and `GOTO_TAB` operate on the source pane's tab model.
+- Good: Ghostty `CLOSE_TAB` respects this/other/right close modes.
+- Good: Ghostty `PWD`, notification, progress, command finished, search, and readonly
+  actions update compact metadata only.
+- Good: Ghostty `OPEN_URL` opens through the host OS and does not enter SwiftUI state.
+- Startup-sensitive actions such as `CELL_SIZE`, `COLOR_CHANGE`, `CONFIG_CHANGE`, and
+  `RING_BELL` require a dedicated lifecycle test before returning `true`; treating them as
+  handled during surface startup can terminate the Ghostty runtime.
+- Base: Ghostty `SET_TITLE` updates compact tab metadata only.
+- Bad: reading `terminal.id` inside an async `Task` after resolving a
+  `TerminalSurface` from `ghostty_surface_userdata`; the surface may be freed first.
+- Bad: Handling a Ghostty binding by creating/destroying SwiftUI views directly.
+
+### 6. Tests Required
+
+- Model checks for tab move, tab select, cross-pane moves, split/focus/resize, close, and
+  invalid command availability.
+- Smoke automation for creating tabs/splits, moving tabs across panes, moving a tab into
+  a new split, zooming, closing, and clean process exit.
+- Shortcut automation for `NSWindow.performKeyEquivalent` covering app shortcuts and
+  Ghostty-owned action callbacks without crashing or changing persisted user state.
+- Manual QA for Ghostty-native keybindings because actual user config may decide which
+  `ghostty_action_s` is emitted.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+Forward `Cmd-D` or `Cmd-T` exclusively through app-level shortcuts and ignore Ghostty's
+action callback. This breaks user Ghostty keybindings when `ghostty_surface_key_is_binding`
+correctly claims the event.
+
+#### Correct
+
+Let Ghostty-owned bindings reach Ghostty, then bridge resulting `ghostty_action_s` values
+back into Conductor's workspace model by terminal ID.
+
+#### Wrong
+
+```swift
+let terminal = TerminalSurface.fromGhosttySurface(target.target.surface)
+Task { @MainActor in
+    _ = actionDelegate?.ghosttyRuntimeDidRequestNewTab(terminalID: terminal.id)
+}
+```
+
+#### Correct
+
+```swift
+guard let terminalID = TerminalSurface.fromGhosttySurface(target.target.surface)?.id else { return false }
+Task { @MainActor in
+    _ = actionDelegate?.ghosttyRuntimeDidRequestNewTab(terminalID: terminalID)
+}
+```
+
+## Lifecycle Safety
+
+Always:
+
+- Deduplicate focus, size, scale, and display-id calls.
+- Validate native handle ownership before dereferencing `ghostty_surface_t` or any future `GhosttyTerminal`/`GhosttyRenderState` handles.
+- Clear the Swift pointer before async free paths can race with queued closures.
+- Retain callback userdata until native surface free completes.
+- Treat close/free as idempotent.
+
+Never:
+
+- Store raw terminal output in SwiftUI state.
+- Recreate terminal state/render state for ordinary UI changes.
+- Create Ghostty surfaces while the host view has no window.
+- Block the main thread with metadata probes or output parsing.
+
+## Product Decision
+
+Our first implementation should target a custom SwiftUI/AppKit shell plus GhosttyKit/libghostty's macOS surface renderer for the terminal character area. The deeper custom terminal renderer driven by Ghostty's VT/render-state APIs remains a future option if the surface route is too constrained or too slow for production.
