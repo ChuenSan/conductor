@@ -50,9 +50,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
     @Published private(set) var metadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
     @Published private(set) var notifications = TerminalNotificationState()
-    @Published var notificationPanelVisible = false
+    @Published var notificationPanelVisible = false {
+        didSet {
+            guard oldValue != notificationPanelVisible else { return }
+            onNotificationPanelVisibilityChange?(notificationPanelVisible)
+        }
+    }
     @Published var sidebarVisible = true
     @Published var commandPaletteVisible = false
+
+    var onNotificationPanelVisibilityChange: ((Bool) -> Void)?
 
     private let persistence = WorkspacePersistence()
     private var surfaces: [TerminalID: TerminalSurface] = [:]

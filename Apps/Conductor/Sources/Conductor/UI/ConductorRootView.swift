@@ -43,20 +43,6 @@ struct ConductorRootView: View {
                 CommandPaletteView(model: model)
             }
         }
-        .overlay(alignment: .topTrailing) {
-            if model.notificationPanelVisible {
-                NotificationPanelView(model: model)
-                    .padding(.top, ConductorDesign.shellTopPadding + ConductorDesign.toolbarHeight + 8)
-                    .padding(.trailing, ConductorDesign.shellHorizontalPadding + 8)
-            }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            if !model.notificationPanelVisible && model.notifications.snapshot.unreadCount > 0 {
-                NotificationHandle(model: model)
-                    .padding(.trailing, ConductorDesign.shellHorizontalPadding + 10)
-                    .padding(.bottom, ConductorDesign.shellBottomPadding + 26)
-            }
-        }
     }
 }
 
@@ -414,7 +400,7 @@ private struct CommandButton: View {
     }
 }
 
-private struct NotificationPanelView: View {
+struct NotificationPanelView: View {
     @ObservedObject var model: ConductorWindowModel
 
     var body: some View {
@@ -467,7 +453,7 @@ private struct NotificationPanelView: View {
                         .foregroundStyle(ConductorDesign.secondaryText)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 28)
+                .frame(maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 6) {
@@ -487,17 +473,11 @@ private struct NotificationPanelView: View {
                     }
                     .padding(8)
                 }
-                .frame(maxHeight: 360)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(width: 330)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.sidebar))
-        .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.sidebar)
-                .stroke(Color.white.opacity(0.60), lineWidth: 1)
-        }
-        .shadow(color: ConductorDesign.shadow(0.16), radius: 24, y: 12)
+        .frame(minWidth: 360, minHeight: 420)
+        .background(ConductorDesign.windowBackground)
     }
 
     private func title(for terminalID: TerminalID) -> String {
@@ -576,101 +556,6 @@ private struct NotificationRowView: View {
                 .stroke(unread ? Color.accentColor.opacity(0.16) : ConductorDesign.sidebarStroke, lineWidth: 1)
         }
         .onHover { hovering = $0 }
-    }
-}
-
-private struct NotificationHandle: View {
-    @ObservedObject var model: ConductorWindowModel
-
-    var body: some View {
-        Button {
-            model.toggleNotificationPanel()
-        } label: {
-            VStack(spacing: 8) {
-                Circle()
-                    .fill(Color.green)
-                    .frame(width: 7, height: 7)
-                Text("\(model.notifications.snapshot.unreadCount) 通知")
-                    .font(.system(size: 10, weight: .bold))
-                    .rotationEffect(.degrees(180))
-                    .fixedSize()
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 9, weight: .bold))
-            }
-            .foregroundStyle(ConductorDesign.terminalText)
-            .frame(width: 34, height: 112)
-            .background(ConductorTokens.Palette.terminalChrome.opacity(0.86))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(ConductorTokens.Palette.strokeOnDark.opacity(0.65), lineWidth: 1)
-            }
-            .shadow(color: Color.black.opacity(0.18), radius: 12, y: 5)
-        }
-        .buttonStyle(.plain)
-        .rotationEffect(.degrees(180))
-        .help("打开通知中心")
-    }
-}
-
-private struct ConductorStatusBar: View {
-    @ObservedObject var model: ConductorWindowModel
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Label("\(model.workspace.panes.count) 分屏", systemImage: "rectangle.split.2x1")
-            Label("\(model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count }) 终端", systemImage: "terminal")
-            if let pane = model.workspace.focusedPane,
-               let tab = pane.selectedTab {
-                Label(tab.title, systemImage: "scope")
-                if let directory = model.metadataByTerminalID[tab.id]?.workingDirectory ?? tab.workingDirectory {
-                    Label(URL(fileURLWithPath: directory).lastPathComponent, systemImage: "folder")
-                }
-                if let metadata = model.metadataByTerminalID[tab.id] {
-                    if metadata.unreadCount > 0 {
-                        Label("\(metadata.unreadCount)", systemImage: "bell")
-                    }
-                    if let progressKind = metadata.progressKind {
-                        Label(progressLabel(kind: progressKind, percent: metadata.progressPercent), systemImage: "chart.line.uptrend.xyaxis")
-                    }
-                    if metadata.search.active {
-                        Label(searchLabel(metadata.search), systemImage: "magnifyingglass")
-                    }
-                    if metadata.readonly {
-                        Label("readonly", systemImage: "lock")
-                    }
-                }
-            }
-            if model.workspace.isZoomed {
-                Label("zoomed", systemImage: "arrow.up.left.and.arrow.down.right")
-            }
-            Spacer()
-            Label("GhosttyKit \(model.runtimeSurfaceCount)", systemImage: "display")
-        }
-        .font(.system(size: 10))
-        .foregroundStyle(ConductorDesign.tertiaryText)
-        .padding(.horizontal, 8)
-        .frame(height: ConductorDesign.statusBarHeight)
-        .background(Color(red: 0.914, green: 0.933, blue: 0.961))
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.black.opacity(0.08))
-                .frame(height: 1)
-        }
-    }
-
-    private func progressLabel(kind: TerminalProgressKind, percent: Int?) -> String {
-        if let percent {
-            return "\(percent)%"
-        }
-        return kind.rawValue
-    }
-
-    private func searchLabel(_ search: TerminalSearchMetadata) -> String {
-        if let selected = search.selected, let total = search.total {
-            return "\(selected)/\(total)"
-        }
-        return search.needle?.isEmpty == false ? search.needle! : "search"
     }
 }
 

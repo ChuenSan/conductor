@@ -62,8 +62,23 @@ final class ConductorHostingView<Content: View>: NSHostingView<Content> {
 }
 
 @MainActor
+final class NotificationWindowDelegate: NSObject, NSWindowDelegate {
+    private let onClose: () -> Void
+
+    init(onClose: @escaping () -> Void) {
+        self.onClose = onClose
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose()
+    }
+}
+
+@MainActor
 final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var window: ConductorWindow?
+    private var notificationWindow: NSPanel?
+    private var notificationWindowDelegate: NotificationWindowDelegate?
     private let model = ConductorWindowModel()
     private var didStart = false
 
@@ -85,6 +100,9 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.titleVisibility = .hidden
         window.routeAppShortcut = { [weak self] event in
             self?.routeAppShortcut(event) ?? false
+        }
+        model.onNotificationPanelVisibilityChange = { [weak self] visible in
+            self?.setNotificationWindowVisible(visible)
         }
         GhosttyAppRuntime.shared.actionDelegate = model
         let contentContainer = NSView()
@@ -122,6 +140,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     func applicationWillTerminate(_ notification: Notification) {
         model.flushPersistence()
+        notificationWindow?.close()
         model.closeAllSurfaces()
         GhosttyAppRuntime.shared.actionDelegate = nil
     }
@@ -172,6 +191,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let viewMenuItem = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
         viewMenu.addItem(menuItem("Command Palette", "k", [], #selector(commandPaletteCommand)))
+        viewMenu.addItem(menuItem("Notifications", "", [], #selector(notificationCenterCommand)))
         viewMenu.addItem(menuItem("Reset Workspace", "", [], #selector(resetWorkspaceCommand)))
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
@@ -404,8 +424,80 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         scheduleCommand { [model] in model.toggleCommandPalette() }
     }
 
+    @objc private func notificationCenterCommand() {
+        scheduleCommand { [model] in model.toggleNotificationPanel() }
+    }
+
     @objc private func resetWorkspaceCommand() {
         scheduleCommand { [model] in model.resetWorkspace() }
+    }
+
+    private func setNotificationWindowVisible(_ visible: Bool) {
+        if visible {
+            showNotificationWindow()
+        } else {
+            notificationWindow?.orderOut(nil)
+        }
+    }
+
+    private func showNotificationWindow() {
+        if let notificationWindow {
+            notificationWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let panel = NSPanel(
+            contentRect: notificationWindowFrame(),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "通知"
+        panel.titleVisibility = .visible
+        panel.titlebarAppearsTransparent = false
+        panel.isReleasedWhenClosed = false
+        panel.isFloatingPanel = false
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        panel.minSize = NSSize(width: 360, height: 420)
+
+        let delegate = NotificationWindowDelegate { [weak self] in
+            self?.model.hideNotificationPanel()
+        }
+        panel.delegate = delegate
+        notificationWindowDelegate = delegate
+
+        let contentContainer = NSView()
+        let hostingView = ConductorHostingView(
+            rootView: NotificationPanelView(model: model)
+                .frame(minWidth: 360, minHeight: 420)
+        )
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        contentContainer.addSubview(hostingView)
+        panel.contentView = contentContainer
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: contentContainer.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor)
+        ])
+
+        notificationWindow = panel
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    private func notificationWindowFrame() -> NSRect {
+        let size = NSSize(width: 380, height: 520)
+        guard let window else {
+            return NSRect(x: 180, y: 180, width: size.width, height: size.height)
+        }
+        let frame = window.frame
+        return NSRect(
+            x: frame.maxX - size.width - 24,
+            y: max(frame.minY + 40, frame.maxY - size.height - 54),
+            width: size.width,
+            height: size.height
+        )
     }
 
     @objc private func selectNextTabCommand() {
