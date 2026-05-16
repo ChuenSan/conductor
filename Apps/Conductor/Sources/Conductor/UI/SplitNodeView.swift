@@ -246,7 +246,7 @@ private struct StableTerminalTabStrip: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal, showsIndicators: true) {
                 HStack(spacing: tabSpacing) {
                     ForEach(pane.tabs) { tab in
                         tabView(for: tab)
@@ -506,16 +506,18 @@ private struct TerminalTabButton: View {
                 .help(tab.title)
             }
 
-            Button {
-                model.closeTab(tab.id, in: paneID)
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(isSelected ? ConductorDesign.tertiaryText : ConductorDesign.terminalTextMuted)
-                    .frame(width: 12, height: 12)
+            if !editingTitle {
+                Button {
+                    model.closeTab(tab.id, in: paneID)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(isSelected ? ConductorDesign.tertiaryText : ConductorDesign.terminalTextMuted)
+                        .frame(width: 12, height: 12)
+                }
+                .buttonStyle(.plain)
+                .help("关闭标签")
             }
-            .buttonStyle(.plain)
-            .help("关闭标签")
         }
         .padding(.leading, 7)
         .padding(.trailing, 4)

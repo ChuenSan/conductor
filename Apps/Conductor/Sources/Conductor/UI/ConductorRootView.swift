@@ -753,41 +753,52 @@ private struct ConductorSidebar: View {
     }
 
     private var expandedSidebar: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 8) {
-                workspaceSection
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 8) {
+                    workspaceSection
 
-                SidebarSeparator()
+                    SidebarSeparator()
 
-                SidebarSectionTitle("状态")
-                VStack(spacing: 4) {
-                    MetricRow(title: "分屏", value: "\(model.workspace.panes.count)")
-                    MetricRow(title: "终端", value: "\(terminalCount)")
-                    MetricRow(title: "通知", value: "\(model.notifications.snapshot.unreadCount)")
-                    MetricRow(title: "当前", value: focusedTerminalTitle)
+                    SidebarSectionTitle("状态")
+                    VStack(spacing: 4) {
+                        MetricRow(title: "分屏", value: "\(model.workspace.panes.count)")
+                        MetricRow(title: "终端", value: "\(terminalCount)")
+                        MetricRow(title: "通知", value: "\(model.notifications.snapshot.unreadCount)")
+                        MetricRow(title: "当前", value: focusedTerminalTitle)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.45))
+                    .clipShape(RoundedRectangle(cornerRadius: 11))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 11)
+                            .stroke(ConductorDesign.sidebarStroke, lineWidth: 1)
+                    }
+
+                    SidebarSeparator()
+
+                    SidebarSectionTitle("快捷操作")
+                    quickActions(showsLabels: true)
+
+                    Spacer(minLength: 8)
+
+                    SidebarActionRow(icon: "paintpalette", title: model.theme.title, help: "切换终端配色") {
+                        model.theme = model.theme == .codexDark ? .flexoki : .codexDark
+                    }
+                    SidebarActionRow(icon: "gearshape", title: "设置", help: "设置") {}
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.45))
-                .clipShape(RoundedRectangle(cornerRadius: 11))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 11)
-                        .stroke(ConductorDesign.sidebarStroke, lineWidth: 1)
-                }
-
-                SidebarSeparator()
-
-                SidebarSectionTitle("快捷操作")
-                quickActions(showsLabels: true)
-
-                Spacer(minLength: 8)
-
-                SidebarActionRow(icon: "paintpalette", title: model.theme.title, help: "切换终端配色") {
-                    model.theme = model.theme == .codexDark ? .flexoki : .codexDark
-                }
-                SidebarActionRow(icon: "gearshape", title: "设置", help: "设置") {}
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .onAppear {
+                scrollSidebarSelection(proxy)
+            }
+            .onChange(of: model.workspace.id) {
+                scrollSidebarSelection(proxy)
+            }
+            .onChange(of: model.workspaces.map(\.id)) {
+                scrollSidebarSelection(proxy)
+            }
         }
         .frame(maxHeight: .infinity)
     }
@@ -798,7 +809,7 @@ private struct ConductorSidebar: View {
                 SidebarSectionTitle("工作区")
                 Spacer()
                 Button {
-                    model.newWorkspace()
+                    createWorkspaceAndRename()
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 10, weight: .semibold))
@@ -814,6 +825,7 @@ private struct ConductorSidebar: View {
             VStack(spacing: 3) {
                 ForEach(model.workspaces) { workspace in
                     workspaceRow(for: workspace)
+                        .id(workspace.id)
                 }
             }
         }
@@ -821,19 +833,31 @@ private struct ConductorSidebar: View {
 
     private var collapsedSidebar: some View {
         VStack(spacing: 6) {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 6) {
-                    ForEach(model.workspaces) { workspace in
-                        SidebarRailButton(
-                            icon: workspace.id == model.workspace.id ? "rectangle.3.group.fill" : "rectangle.3.group",
-                            selected: workspace.id == model.workspace.id,
-                            help: workspace.title
-                        ) {
-                            model.selectWorkspace(workspace.id)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(spacing: 6) {
+                        ForEach(model.workspaces) { workspace in
+                            SidebarRailButton(
+                                icon: workspace.id == model.workspace.id ? "rectangle.3.group.fill" : "rectangle.3.group",
+                                selected: workspace.id == model.workspace.id,
+                                help: workspace.title
+                            ) {
+                                model.selectWorkspace(workspace.id)
+                            }
+                            .id(workspace.id)
                         }
                     }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
+                .onAppear {
+                    scrollSidebarSelection(proxy)
+                }
+                .onChange(of: model.workspace.id) {
+                    scrollSidebarSelection(proxy)
+                }
+                .onChange(of: model.workspaces.map(\.id)) {
+                    scrollSidebarSelection(proxy)
+                }
             }
             .frame(maxHeight: .infinity)
 
@@ -951,6 +975,19 @@ private struct ConductorSidebar: View {
         guard let tab = model.workspace.focusedPane?.selectedTab else { return }
         terminalTitleDraft = tab.title
         renamingTerminalID = tab.id
+    }
+
+    private func createWorkspaceAndRename() {
+        let workspaceID = model.newWorkspace()
+        if let workspace = model.workspaces.first(where: { $0.id == workspaceID }) {
+            beginRenameWorkspace(workspace)
+        }
+    }
+
+    private func scrollSidebarSelection(_ proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.12)) {
+            proxy.scrollTo(model.workspace.id, anchor: .center)
+        }
     }
 }
 
@@ -1191,7 +1228,7 @@ private struct ConductorToolbar: View {
 
             ConductorPillGroup {
                 ConductorIconButton(systemImage: "plus", help: "新建工作区", title: "工作区") {
-                    model.newWorkspace()
+                    createWorkspaceAndRename()
                 }
             }
 
@@ -1264,6 +1301,13 @@ private struct ConductorToolbar: View {
     private func cancelWorkspaceRename() {
         editingWorkspaceID = nil
     }
+
+    private func createWorkspaceAndRename() {
+        let workspaceID = model.newWorkspace()
+        if let workspace = model.workspaces.first(where: { $0.id == workspaceID }) {
+            beginRenameWorkspace(workspace)
+        }
+    }
 }
 
 private struct WorkspaceTabStrip: View {
@@ -1280,7 +1324,7 @@ private struct WorkspaceTabStrip: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal, showsIndicators: true) {
                 HStack(spacing: WorkspaceTabMetrics.spacing) {
                     ForEach(model.workspaces) { workspace in
                         workspaceTabView(for: workspace)

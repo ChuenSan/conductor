@@ -119,11 +119,17 @@ Forbidden patterns:
 - Letting tab editing state use a different layout contract from normal state. Rename fields
   inside workspace or terminal tabs must fill the same fixed tab content area as labels do;
   do not leave `NSTextField`/`TextField` at intrinsic or minimum width inside a fixed tab.
+- Keeping close affordances active inside an inline terminal rename field. While a tab title is
+  being edited, reserve the full tab content area for the rename field and avoid adjacent close
+  controls that can be hit accidentally during text selection or IME composition.
 - Letting dense workspace or terminal tab strips free-scroll to arbitrary pixel offsets.
   Overflow handling should use native scrolling with view-aligned tab targets or another
   complete-item mechanism so the strip keeps trackpad/mouse-wheel scrolling, never rests
   with a clipped title or a lone close button at the edge, and never changes the toolbar/pane
   height when item count changes.
+- Hiding overflow affordances on scrollable navigation. Workspace, sidebar, and terminal tab
+  scroll regions should expose scroll indicators when content can overflow, and selected items
+  should be scrolled into view after creation, selection, or restoration.
 - Letting scrollable tab strips compress fixed toolbar commands. In the main toolbar, command
   groups keep their icon+label affordances and fixed horizontal size; the workspace tab strip is
   the flexible/scrollable region that absorbs narrow-window pressure.

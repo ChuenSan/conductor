@@ -344,7 +344,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspace.selectTab(terminalID, in: paneID)
     }
 
-    func newWorkspace() {
+    @discardableResult
+    func newWorkspace() -> WorkspaceID {
         let signpost = ConductorSignpost.begin("new-workspace")
         defer { ConductorSignpost.end("new-workspace", signpost) }
         syncSelectedWorkspace()
@@ -353,6 +354,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         selectedWorkspaceID = next.id
         workspace = next
         commandPaletteVisible = false
+        return next.id
     }
 
     func duplicateWorkspace(_ workspaceID: WorkspaceID) {
