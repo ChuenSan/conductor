@@ -14,7 +14,6 @@ struct ConductorRootView: View {
                 ConductorToolbar(model: model)
                 SplitNodeView(node: model.workspace.visibleRoot, model: model)
                     .background(model.theme.terminalBackground)
-                ConductorStatusBar(model: model)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(ConductorTokens.Palette.terminalRaised)
@@ -749,7 +748,7 @@ private struct ConductorSidebar: View {
             .buttonStyle(.plain)
             .help(model.sidebarVisible ? "收起侧边栏" : "展开侧边栏")
         }
-        .frame(height: 34)
+        .frame(height: 56, alignment: .bottom)
     }
 
     private var expandedSidebar: some View {
