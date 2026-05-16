@@ -809,7 +809,7 @@ private struct ConductorSidebar: View {
                 SidebarSectionTitle("工作区")
                 Spacer()
                 Button {
-                    createWorkspaceAndRename()
+                    model.newWorkspace()
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 10, weight: .semibold))
@@ -975,13 +975,6 @@ private struct ConductorSidebar: View {
         guard let tab = model.workspace.focusedPane?.selectedTab else { return }
         terminalTitleDraft = tab.title
         renamingTerminalID = tab.id
-    }
-
-    private func createWorkspaceAndRename() {
-        let workspaceID = model.newWorkspace()
-        if let workspace = model.workspaces.first(where: { $0.id == workspaceID }) {
-            beginRenameWorkspace(workspace)
-        }
     }
 
     private func scrollSidebarSelection(_ proxy: ScrollViewProxy) {
@@ -1228,7 +1221,7 @@ private struct ConductorToolbar: View {
 
             ConductorPillGroup {
                 ConductorIconButton(systemImage: "plus", help: "新建工作区", title: "工作区") {
-                    createWorkspaceAndRename()
+                    model.newWorkspace()
                 }
             }
 
@@ -1302,12 +1295,6 @@ private struct ConductorToolbar: View {
         editingWorkspaceID = nil
     }
 
-    private func createWorkspaceAndRename() {
-        let workspaceID = model.newWorkspace()
-        if let workspace = model.workspaces.first(where: { $0.id == workspaceID }) {
-            beginRenameWorkspace(workspace)
-        }
-    }
 }
 
 private struct WorkspaceTabStrip: View {
