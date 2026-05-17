@@ -212,13 +212,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspace.newTerminal(title: nextTerminalTitle(prefix: "zsh"))
     }
 
-    func newTab(in paneID: PaneID) {
-        let signpost = ConductorSignpost.begin("new-tab")
-        defer { ConductorSignpost.end("new-tab", signpost) }
-        workspace.focusPane(paneID)
-        workspace.newTab(title: nextTerminalTitle(prefix: "tab"))
-    }
-
     func splitRight() {
         let signpost = ConductorSignpost.begin("split-right")
         defer { ConductorSignpost.end("split-right", signpost) }

@@ -196,7 +196,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(menuItem("New Terminal", "t", [], #selector(newTerminalCommand)))
-        fileMenu.addItem(menuItem("New Tab", "t", [.shift], #selector(newTabCommand)))
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(menuItem("Close Tab", "w", [], #selector(closeTabCommand)))
         fileMenu.addItem(menuItem("Close Pane", "w", [.shift], #selector(closePaneCommand)))
@@ -281,13 +280,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         }
 
         switch (characters, flags.contains(.shift)) {
-        case ("t", true):
-            scheduleCommand { [model] in
-                if let paneID = model.workspace.focusedPane?.id {
-                    model.newTab(in: paneID)
-                }
-            }
-            return true
         case ("t", _):
             scheduleCommand { [model] in model.newTerminal() }
             return true
@@ -418,13 +410,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     @objc private func newTerminalCommand() {
         scheduleCommand { [model] in model.newTerminal() }
-    }
-
-    @objc private func newTabCommand() {
-        scheduleCommand { [model] in
-            guard let paneID = model.workspace.focusedPane?.id else { return }
-            model.newTab(in: paneID)
-        }
     }
 
     @objc private func closeTabCommand() {

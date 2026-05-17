@@ -264,12 +264,6 @@ private struct TerminalPaneView: View {
             .frame(minWidth: 64, maxWidth: .infinity, alignment: .leading)
             .layoutPriority(1)
 
-            PaneBarButton(systemImage: "plus", title: "新标签", showsTitle: false, help: "新标签 Cmd-Shift-T") {
-                ConductorMotion.perform(ConductorMotion.layout) {
-                    model.newTab(in: pane.id)
-                }
-            }
-
             PaneBarButton(
                 systemImage: "xmark",
                 title: "关闭",

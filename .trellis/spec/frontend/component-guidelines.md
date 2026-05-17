@@ -133,6 +133,8 @@ workspace overview, and compact status modules.
 - The top workspace toolbar should feel like a translucent command shelf, not a compressed
   black strip. Give it enough vertical room, use material plus theme tint, separate workspace
   navigation from command groups, and make action clusters read as floating capsules.
+- Terminal creation should have one primary user-facing entry. Do not expose separate "new
+  terminal" and "new tab" controls when they perform the same focused-pane action.
 - Settings and appearance panels should share the sidebar's glass language: one soft rounded
   shell, quiet internal dividers, sidebar-style category rows, and compact segmented controls.
   Use a neutral glass tint for the settings shell instead of the theme `shellPanelBackground`;

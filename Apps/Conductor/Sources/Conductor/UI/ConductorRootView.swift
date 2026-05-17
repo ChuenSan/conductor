@@ -83,7 +83,7 @@ private struct CommandPaletteView: View {
     }
 
     private var suggestedCommands: [CommandPaletteItem] {
-        let ids = ["new-tab", "split-right", "workspace-overview", "notifications", "appearance-settings"]
+        let ids = ["new-terminal", "split-right", "workspace-overview", "notifications", "appearance-settings"]
         return ids.compactMap { id in
             commands.first { $0.id == id }
         }
@@ -323,8 +323,6 @@ private struct CommandPaletteItem: Identifiable {
         switch id {
         case "new-terminal":
             "plus.rectangle.on.rectangle"
-        case "new-tab":
-            "plus"
         case "duplicate-tab", "duplicate-workspace":
             "plus.square.on.square"
         case "split-right":
@@ -391,13 +389,6 @@ private enum ConductorCommandCatalog {
             CommandPaletteItem(id: "new-terminal", section: "创建", title: "新开终端", shortcut: "Cmd-T", keywords: "terminal pane shell") {
                 run {
                     model.newTerminal()
-                }
-            },
-            CommandPaletteItem(id: "new-tab", section: "创建", title: "新标签", shortcut: "Cmd-Shift-T", keywords: "tab terminal") {
-                run {
-                    if let paneID = model.workspace.focusedPane?.id {
-                        model.newTab(in: paneID)
-                    }
                 }
             },
             CommandPaletteItem(id: "duplicate-tab", section: "创建", title: "复制当前标签", shortcut: "Duplicate", keywords: "copy tab duplicate") {
@@ -2610,12 +2601,6 @@ private struct ConductorSidebar: View {
                 finishWorkspaceRenameIfNeeded()
                 model.newTerminal()
             }
-            SidebarActionRow(icon: "plus", title: "新标签", showsTitle: showsLabels, help: "在当前分屏中新建标签 Cmd-Shift-T") {
-                finishWorkspaceRenameIfNeeded()
-                if let paneID = model.workspace.focusedPane?.id {
-                    model.newTab(in: paneID)
-                }
-            }
             SidebarActionRow(icon: "rectangle.split.2x1", title: "向右分屏", showsTitle: showsLabels, disabled: !model.canSplit, help: "向右分屏 Cmd-D") {
                 finishWorkspaceRenameIfNeeded()
                 model.splitRight()
@@ -3050,13 +3035,6 @@ private struct ConductorToolbar: View {
                     ConductorIconButton(systemImage: "plus.rectangle.on.rectangle", help: "新开终端 Cmd-T", title: "新终端") {
                         finishWorkspaceRenameIfNeeded()
                         model.newTerminal()
-                    }
-                    ConductorSegmentDivider()
-                    ConductorIconButton(systemImage: "plus", help: "新标签 Cmd-Shift-T", title: "新标签") {
-                        finishWorkspaceRenameIfNeeded()
-                        if let paneID = model.workspace.focusedPane?.id {
-                            model.newTab(in: paneID)
-                        }
                     }
                 }
 
