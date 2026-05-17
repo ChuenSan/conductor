@@ -1062,6 +1062,8 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     private func runStressAutomationIfRequested() {
         guard ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_AUTORUN"] == "1" else { return }
         let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_OUTPUT"] ?? "/tmp/conductor-stress-ok.txt"
+        let requestedCharacters = Self.positiveEnvironmentInt("CONDUCTOR_STRESS_CHARACTERS")
+        let completionDelay = TimeInterval(Self.positiveEnvironmentInt("CONDUCTOR_STRESS_WAIT_SECONDS") ?? 3)
         let originalWorkspace = model.workspace
         let originalTheme = model.theme
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [model] in
@@ -1069,21 +1071,24 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             model.workspace = WorkspaceState(title: "Stress Automation")
             model.commandPaletteVisible = false
 
-            model.newTerminal()
-            model.splitRight()
-            model.splitDown()
-            model.equalizeSplits()
+            if requestedCharacters == nil {
+                model.newTerminal()
+                model.splitRight()
+                model.splitDown()
+                model.equalizeSplits()
+            }
 
-            let command = "for i in {1..2000}; do echo conductor-stress-$i; done\n"
+            let command = Self.stressCommand(characterCount: requestedCharacters)
             for pane in model.workspace.panes.values {
                 guard let tab = pane.selectedTab else { continue }
                 model.surface(for: tab).sendText(command)
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + completionDelay) {
                 let summary = [
                     "status=ok",
                     "stress=long-output",
+                    "characters=\(requestedCharacters ?? 0)",
                     "panes=\(model.workspace.panes.count)",
                     "terminals=\(model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count })",
                     "zoomed=\(model.workspace.isZoomed)"
@@ -1101,6 +1106,35 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
                 NSApp.terminate(nil)
             }
         }
+    }
+
+    private static func positiveEnvironmentInt(_ key: String) -> Int? {
+        guard let rawValue = ProcessInfo.processInfo.environment[key],
+              let value = Int(rawValue),
+              value > 0 else {
+            return nil
+        }
+        return value
+    }
+
+    private static func stressCommand(characterCount: Int?) -> String {
+        guard let characterCount else {
+            return "for i in {1..2000}; do echo conductor-stress-$i; done\n"
+        }
+        return """
+        python3 - <<'PY'
+        import sys
+
+        remaining = \(characterCount)
+        chunk = "x" * 8192
+        while remaining > 0:
+            size = min(remaining, len(chunk))
+            sys.stdout.write(chunk[:size])
+            remaining -= size
+        sys.stdout.flush()
+        PY
+
+        """
     }
 
     private func runResizeStressAutomationIfRequested() {
