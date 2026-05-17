@@ -268,7 +268,7 @@ private struct StableTerminalTabStrip: View {
                     ForEach(pane.tabs) { tab in
                         tabView(for: tab)
                             .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .trailing)),
+                                insertion: .opacity.combined(with: .scale(scale: 0.96)),
                                 removal: .opacity.combined(with: .scale(scale: 0.90))
                             ))
                     }

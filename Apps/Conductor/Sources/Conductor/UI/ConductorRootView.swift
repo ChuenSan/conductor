@@ -1306,7 +1306,7 @@ private struct WorkspaceTabStrip: View {
                     ForEach(model.workspaces) { workspace in
                         workspaceTabView(for: workspace)
                             .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .trailing)),
+                                insertion: .opacity.combined(with: .scale(scale: 0.96)),
                                 removal: .opacity.combined(with: .scale(scale: 0.92))
                             ))
                     }

@@ -114,6 +114,9 @@ rendering into SwiftUI work or making precision interactions lag behind the poin
   changes.
 - Do not attach a layout animation to split fractions during divider drag. Animate split
   creation, close, move, or equalize, but drag updates must stay immediate.
+- Do not use directional slide transitions for workspace or terminal tab insertion. Tab strips
+  are navigation chrome, so adding or restoring many tabs should not look like the entire strip
+  is sliding in. Prefer opacity plus a tiny scale change for tab insertion/removal.
 - Use tiny transform-only feedback for hover/press; never insert or remove controls on hover.
 
 **Correct**:
