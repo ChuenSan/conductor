@@ -594,28 +594,29 @@ private struct NotificationRowView: View {
             Button {
                 ConductorMotion.perform(onOpen)
             } label: {
-                HStack(alignment: .top, spacing: 10) {
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(unread ? accentColor.opacity(0.88) : Color.clear)
-                            .frame(width: 3)
-                            .offset(x: -8)
-
-                        Image(systemName: iconName)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(accentColor)
-                            .frame(width: 30, height: 30)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(accentColor.opacity(unread ? 0.16 : 0.10))
-                            )
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.white.opacity(0.38), lineWidth: 1)
+                HStack(alignment: .top, spacing: 9) {
+                    Image(systemName: iconName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(iconColor)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9)
+                                .fill(Color.white.opacity(0.18))
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9)
+                                .stroke(Color.white.opacity(0.26), lineWidth: 1)
+                        }
+                        .overlay(alignment: .topTrailing) {
+                            if unread {
+                                Circle()
+                                    .fill(Color.accentColor)
+                                    .frame(width: 6, height: 6)
+                                    .offset(x: 2, y: -2)
                             }
-                    }
+                        }
 
-                    VStack(alignment: .leading, spacing: 7) {
+                    VStack(alignment: .leading, spacing: 6) {
                         rowTitle
                         rowBody
                         rowMetadata
@@ -632,8 +633,8 @@ private struct NotificationRowView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(hovering ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText)
-                    .frame(width: 22, height: 22)
-                    .background(Color.white.opacity(hovering ? 0.25 : 0.12))
+                    .frame(width: 20, height: 20)
+                    .background(Color.white.opacity(hovering ? 0.22 : 0.08))
                     .clipShape(Circle())
             }
             .buttonStyle(ConductorPressButtonStyle())
@@ -644,16 +645,16 @@ private struct NotificationRowView: View {
         .padding(.vertical, 10)
         .background(.regularMaterial)
         .background(rowBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 15))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay {
-            RoundedRectangle(cornerRadius: 15)
+            RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(
-                    unread ? accentColor.opacity(0.26) : Color.white.opacity(0.30),
+                    unread ? Color.accentColor.opacity(0.22) : Color.white.opacity(0.28),
                     lineWidth: 1
                 )
         }
-        .shadow(color: Color.black.opacity(hovering ? 0.10 : 0.055), radius: hovering ? 12 : 7, y: hovering ? 7 : 4)
-        .scaleEffect(hovering ? 1.004 : 1)
+        .shadow(color: Color.black.opacity(hovering ? 0.085 : 0.045), radius: hovering ? 10 : 6, y: hovering ? 6 : 3)
+        .scaleEffect(hovering ? 1.002 : 1)
         .animation(ConductorMotion.micro, value: hovering)
         .animation(ConductorMotion.emphasized, value: unread)
         .onHover { value in
@@ -666,21 +667,12 @@ private struct NotificationRowView: View {
     private var rowTitle: some View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
             Text(notification.title)
-                .font(.system(size: 12.5, weight: unread ? .bold : .semibold))
+                .font(.system(size: 12.5, weight: unread ? .semibold : .medium))
                 .foregroundStyle(ConductorDesign.primaryText)
                 .lineLimit(1)
-            if unread {
-                Text("新")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 5)
-                    .frame(height: 15)
-                    .background(accentColor)
-                    .clipShape(Capsule())
-            }
             Spacer(minLength: 6)
             Text(notification.createdAt.formatted(date: .omitted, time: .shortened))
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .monospacedDigit()
         }
@@ -701,12 +693,12 @@ private struct NotificationRowView: View {
     private var rowMetadata: some View {
         HStack(spacing: 6) {
             Label(kindLabel, systemImage: kindChipIcon)
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(accentColor)
+                .font(.system(size: 9.5, weight: .medium))
+                .foregroundStyle(ConductorDesign.tertiaryText)
                 .labelStyle(.titleAndIcon)
                 .padding(.horizontal, 6)
                 .frame(height: 18)
-                .background(accentColor.opacity(0.10))
+                .background(Color.white.opacity(0.14))
                 .clipShape(Capsule())
 
             Label(terminalTitle, systemImage: "terminal")
@@ -726,8 +718,8 @@ private struct NotificationRowView: View {
     private var rowBackground: some View {
         LinearGradient(
             colors: [
-                Color.white.opacity(hovering ? 0.38 : (unread ? 0.30 : 0.20)),
-                accentColor.opacity(unread ? 0.075 : 0.035),
+                Color.white.opacity(hovering ? 0.30 : (unread ? 0.24 : 0.18)),
+                Color.white.opacity(unread ? 0.10 : 0.055),
                 Color.black.opacity(0.025)
             ],
             startPoint: .topLeading,
@@ -738,9 +730,9 @@ private struct NotificationRowView: View {
     private var iconName: String {
         switch notification.kind {
         case .agent:
-            "sparkles"
+            "terminal"
         case .bell:
-            "bell.and.waves.left.and.right.fill"
+            "bell"
         case .notification:
             "terminal"
         }
@@ -768,14 +760,14 @@ private struct NotificationRowView: View {
         }
     }
 
-    private var accentColor: Color {
+    private var iconColor: Color {
         switch notification.kind {
         case .agent:
-            Color.accentColor
+            ConductorDesign.secondaryText
         case .bell:
             ConductorDesign.warmAccent
         case .notification:
-            Color(red: 0.100, green: 0.520, blue: 0.900)
+            ConductorDesign.secondaryText
         }
     }
 }
