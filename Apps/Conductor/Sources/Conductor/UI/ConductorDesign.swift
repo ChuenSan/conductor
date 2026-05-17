@@ -333,9 +333,12 @@ struct ConductorWindowBackdrop: View {
 
     var body: some View {
         ZStack {
+            Rectangle()
+                .fill(.regularMaterial)
             theme.windowBackdropStops[1]
+                .opacity(0.42)
             LinearGradient(
-                colors: theme.windowBackdropStops,
+                colors: theme.windowBackdropStops.map { $0.opacity(0.58) },
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -350,9 +353,9 @@ struct ConductorWindowBackdrop: View {
             )
             LinearGradient(
                 colors: [
-                    Color.white.opacity(0.42),
+                    Color.white.opacity(0.26),
                     Color.clear,
-                    Color.black.opacity(0.055)
+                    Color.black.opacity(0.035)
                 ],
                 startPoint: .top,
                 endPoint: .bottom

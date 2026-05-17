@@ -126,6 +126,9 @@ workspace overview, and compact status modules.
 - `ConductorGlassSurface` resolves sidebar, palette, and panel tint/stroke from the current
   theme environment. Leaf sidebar/settings rows should use `\.conductorTheme` so theme changes
   update chrome consistently without manually passing theme through every view.
+- The main window backdrop should remain translucent material plus a light theme wash, not an
+  opaque flat fill. The sidebar should carry clearer linework than the backdrop: a visible
+  rounded outline, right edge divider, section separators, and selected-row strokes.
 - Bind fluid effects only to low-frequency product state such as selection, command palette
   visibility, notification badges, sidebar visibility, and workspace navigation.
 - Do not bind glass effects, blur changes, or animated mesh/background effects to stdout,

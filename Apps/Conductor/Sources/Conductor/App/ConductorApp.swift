@@ -114,6 +114,8 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.title = "Conductor"
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.hideSystemTrafficLights()
         window.routeAppShortcut = { [weak self] event in
             self?.routeAppShortcut(event) ?? false
@@ -125,6 +127,8 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         installAgentHookObserver()
         GhosttyAppRuntime.shared.actionDelegate = model
         let contentContainer = NSView()
+        contentContainer.wantsLayer = true
+        contentContainer.layer?.backgroundColor = NSColor.clear.cgColor
         let hostingView = ConductorHostingView(rootView: ConductorRootView(model: model))
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         contentContainer.addSubview(hostingView)
