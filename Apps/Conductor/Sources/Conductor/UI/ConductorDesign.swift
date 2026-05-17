@@ -129,6 +129,7 @@ enum ConductorTokens {
         static let notificationPanelHeight: CGFloat = 360
         static let notificationPanelMinWidth: CGFloat = 280
         static let notificationPanelMinHeight: CGFloat = 300
+        static let filePreviewPanelWidth: CGFloat = 390
     }
 
     enum Typography {

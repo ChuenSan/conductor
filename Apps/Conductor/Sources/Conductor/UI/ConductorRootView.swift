@@ -23,8 +23,15 @@ struct ConductorRootView: View {
                     .stroke(model.theme.terminalOuterStroke, lineWidth: 1)
                     .allowsHitTesting(false)
             }
+
+            if model.filePreview.isVisible {
+                FilePreviewPanel(model: model)
+                    .frame(width: ConductorTokens.Space.filePreviewPanelWidth)
+                    .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .trailing)))
+            }
         }
         .animation(model.shellAnimation(ConductorMotion.layout), value: model.sidebarVisible)
+        .animation(model.shellAnimation(ConductorMotion.layout), value: model.filePreview.isVisible)
         .padding(.horizontal, ConductorDesign.shellHorizontalPadding)
         .padding(.top, ConductorDesign.shellTopPadding)
         .padding(.bottom, ConductorDesign.shellBottomPadding)
@@ -353,6 +360,8 @@ private struct CommandPaletteItem: Identifiable {
         switch id {
         case "new-terminal":
             "plus.rectangle.on.rectangle"
+        case "open-current-path":
+            "folder"
         case "duplicate-tab", "duplicate-workspace":
             "plus.square.on.square"
         case "split-right":
@@ -419,6 +428,11 @@ private enum ConductorCommandCatalog {
             CommandPaletteItem(id: "new-terminal", section: "创建", title: "新开终端", shortcut: "Cmd-T", keywords: "terminal pane shell") {
                 run {
                     model.newTerminal()
+                }
+            },
+            CommandPaletteItem(id: "open-current-path", section: "创建", title: "打开当前路径", shortcut: "Path", keywords: "folder cwd file markdown image preview") {
+                run {
+                    model.openCurrentPathForFocusedTerminal()
                 }
             },
             CommandPaletteItem(id: "duplicate-tab", section: "创建", title: "复制当前标签", shortcut: "Duplicate", keywords: "copy tab duplicate") {
@@ -2422,6 +2436,10 @@ private struct ConductorSidebar: View {
                 finishWorkspaceRenameIfNeeded()
                 model.newTerminal()
             }
+            SidebarActionRow(icon: "folder", title: "当前路径", showsTitle: showsLabels, help: "打开当前路径") {
+                finishWorkspaceRenameIfNeeded()
+                model.openCurrentPathForFocusedTerminal()
+            }
             SidebarActionRow(icon: "rectangle.split.2x1", title: "向右分屏", showsTitle: showsLabels, disabled: !model.canSplit, help: "向右分屏 Cmd-D") {
                 finishWorkspaceRenameIfNeeded()
                 model.splitRight()
@@ -2856,6 +2874,16 @@ private struct ConductorToolbar: View {
                     ConductorIconButton(systemImage: "plus.rectangle.on.rectangle", help: "新开终端 Cmd-T", title: "新终端") {
                         finishWorkspaceRenameIfNeeded()
                         model.newTerminal()
+                    }
+                    ConductorSegmentDivider()
+                    ConductorIconButton(
+                        systemImage: "folder",
+                        help: "打开当前路径",
+                        title: "路径",
+                        active: model.filePreview.isVisible
+                    ) {
+                        finishWorkspaceRenameIfNeeded()
+                        model.openCurrentPathForFocusedTerminal()
                     }
                 }
 

@@ -1,6 +1,7 @@
 import ConductorCore
 import Foundation
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum TerminalProgressKind: String, Equatable {
     case removed
@@ -31,6 +32,50 @@ struct TerminalDisplayMetadata: Equatable {
     var search = TerminalSearchMetadata()
     var readonly = false
     var bellCount = 0
+}
+
+struct FilePreviewPanelState: Equatable {
+    var isVisible = false
+    var rootURL: URL?
+    var selectedURL: URL?
+    var sourceTerminalID: TerminalID?
+    var lastError: String?
+}
+
+enum FilePreviewContentKind: Equatable, Sendable {
+    case directory
+    case markdown
+    case image
+    case text
+    case unsupported
+
+    init(url: URL, isDirectory: Bool) {
+        if isDirectory {
+            self = .directory
+            return
+        }
+
+        let fileExtension = url.pathExtension.lowercased()
+        if Self.markdownExtensions.contains(fileExtension) {
+            self = .markdown
+            return
+        }
+
+        if let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType {
+            if contentType.conforms(to: .image) {
+                self = .image
+                return
+            }
+            if contentType.conforms(to: .plainText) || contentType.conforms(to: .text) {
+                self = .text
+                return
+            }
+        }
+
+        self = .unsupported
+    }
+
+    static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd"]
 }
 
 @MainActor
@@ -67,6 +112,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published var commandPaletteVisible = false
     @Published var settingsPanelVisible = false
     @Published var workspaceOverviewVisible = false
+    @Published var filePreview = FilePreviewPanelState()
 
     var onNotificationPanelVisibilityChange: ((Bool) -> Void)?
 
@@ -210,6 +256,70 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let signpost = ConductorSignpost.begin("new-terminal")
         defer { ConductorSignpost.end("new-terminal", signpost) }
         workspace.newTerminal(title: nextTerminalTitle(prefix: "zsh"))
+    }
+
+    func openCurrentPathForFocusedTerminal() {
+        openCurrentPath(for: workspace.focusedPaneID)
+    }
+
+    func openCurrentPath(for paneID: PaneID) {
+        let terminalID = workspace.panes[paneID]?.selectedTabID
+        let url = workingDirectoryURL(for: terminalID) ?? FileManager.default.homeDirectoryForCurrentUser
+        openFilePreview(url, sourceTerminalID: terminalID)
+    }
+
+    func openFilePreview(_ url: URL, sourceTerminalID: TerminalID? = nil) {
+        var isDirectory = ObjCBool(false)
+        let expandedURL = url.standardizedFileURL
+        guard FileManager.default.fileExists(atPath: expandedURL.path, isDirectory: &isDirectory) else {
+            filePreview.isVisible = true
+            filePreview.lastError = "路径不存在：\(expandedURL.path)"
+            return
+        }
+
+        let directoryURL = isDirectory.boolValue ? expandedURL : expandedURL.deletingLastPathComponent()
+        let selectedURL = isDirectory.boolValue ? nil : expandedURL
+        filePreview = FilePreviewPanelState(
+            isVisible: true,
+            rootURL: directoryURL,
+            selectedURL: selectedURL,
+            sourceTerminalID: sourceTerminalID,
+            lastError: nil
+        )
+    }
+
+    func selectFilePreviewURL(_ url: URL) {
+        var isDirectory = ObjCBool(false)
+        let expandedURL = url.standardizedFileURL
+        guard FileManager.default.fileExists(atPath: expandedURL.path, isDirectory: &isDirectory) else {
+            filePreview.lastError = "路径不存在：\(expandedURL.path)"
+            return
+        }
+
+        if isDirectory.boolValue {
+            openFilePreview(expandedURL, sourceTerminalID: filePreview.sourceTerminalID)
+        } else {
+            filePreview.selectedURL = expandedURL
+            filePreview.lastError = nil
+        }
+    }
+
+    func closeFilePreview() {
+        filePreview.isVisible = false
+    }
+
+    func ghosttyRuntimeDidRequestOpenURL(terminalID: TerminalID?, url: URL) -> Bool {
+        guard url.isFileURL else { return false }
+        var isDirectory = ObjCBool(false)
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            return false
+        }
+        let kind = FilePreviewContentKind(url: url, isDirectory: isDirectory.boolValue)
+        guard kind == .directory || kind == .markdown || kind == .image else {
+            return false
+        }
+        openFilePreview(url, sourceTerminalID: terminalID)
+        return true
     }
 
     func splitRight() {
@@ -705,6 +815,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             workspaceOverviewVisible = false
             return true
         }
+        if filePreview.isVisible {
+            filePreview.isVisible = false
+            return true
+        }
         return false
     }
 
@@ -953,6 +1067,32 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         for candidate in workspaces {
             if let paneID = candidate.paneID(containing: terminalID) {
                 return (candidate.id, paneID)
+            }
+        }
+        return nil
+    }
+
+    private func workingDirectoryURL(for terminalID: TerminalID?) -> URL? {
+        guard let terminalID else { return nil }
+        let rawDirectory = metadata(for: terminalID).workingDirectory
+            ?? terminalTab(for: terminalID)?.workingDirectory
+        guard let rawDirectory,
+              !rawDirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        let expandedPath = (rawDirectory as NSString).expandingTildeInPath
+        return URL(fileURLWithPath: expandedPath, isDirectory: true).standardizedFileURL
+    }
+
+    private func terminalTab(for terminalID: TerminalID) -> TerminalTabState? {
+        if let paneID = workspace.paneID(containing: terminalID),
+           let tab = workspace.panes[paneID]?.tabs.first(where: { $0.id == terminalID }) {
+            return tab
+        }
+        for candidate in workspaces {
+            if let paneID = candidate.paneID(containing: terminalID),
+               let tab = candidate.panes[paneID]?.tabs.first(where: { $0.id == terminalID }) {
+                return tab
             }
         }
         return nil

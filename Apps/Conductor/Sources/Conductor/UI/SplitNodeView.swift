@@ -265,6 +265,15 @@ private struct TerminalPaneView: View {
             .layoutPriority(1)
 
             PaneBarButton(
+                systemImage: "folder",
+                title: "路径",
+                showsTitle: false,
+                help: "打开当前路径"
+            ) {
+                model.openCurrentPath(for: pane.id)
+            }
+
+            PaneBarButton(
                 systemImage: "xmark",
                 title: "关闭",
                 showsTitle: false,

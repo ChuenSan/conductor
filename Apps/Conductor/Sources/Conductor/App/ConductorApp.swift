@@ -196,6 +196,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(menuItem("New Terminal", "t", [], #selector(newTerminalCommand)))
+        fileMenu.addItem(menuItem("Open Current Path", "", [], #selector(openCurrentPathCommand)))
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(menuItem("Close Tab", "w", [], #selector(closeTabCommand)))
         fileMenu.addItem(menuItem("Close Pane", "w", [.shift], #selector(closePaneCommand)))
@@ -410,6 +411,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     @objc private func newTerminalCommand() {
         scheduleCommand { [model] in model.newTerminal() }
+    }
+
+    @objc private func openCurrentPathCommand() {
+        scheduleCommand { [model] in model.openCurrentPathForFocusedTerminal() }
     }
 
     @objc private func closeTabCommand() {

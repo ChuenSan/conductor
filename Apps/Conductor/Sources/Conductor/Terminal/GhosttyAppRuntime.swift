@@ -25,6 +25,7 @@ protocol GhosttyAppRuntimeActionDelegate: AnyObject {
     func ghosttyRuntimeDidSetReadonly(terminalID: TerminalID, readonly: Bool) -> Bool
     func ghosttyRuntimeDidRequestClose(terminalID: TerminalID) -> Bool
     func ghosttyRuntimeDidRequestCloseTabs(terminalID: TerminalID, scope: TabCloseScope) -> Bool
+    func ghosttyRuntimeDidRequestOpenURL(terminalID: TerminalID?, url: URL) -> Bool
 }
 
 @MainActor
@@ -157,13 +158,21 @@ final class GhosttyAppRuntime {
         }
     }
 
+    private nonisolated func openURL(_ url: URL, terminalID: TerminalID?) {
+        Task { @MainActor in
+            let handled = GhosttyAppRuntime.shared.actionDelegate?
+                .ghosttyRuntimeDidRequestOpenURL(terminalID: terminalID, url: url) ?? false
+            if !handled {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+
     private nonisolated func handleAction(target: ghostty_target_s, action: ghostty_action_s) -> Bool {
         guard target.tag == GHOSTTY_TARGET_SURFACE else {
             if action.tag == GHOSTTY_ACTION_OPEN_URL,
                let url = URL(ghosttyOpenURL: action.action.open_url) {
-                Task { @MainActor in
-                    NSWorkspace.shared.open(url)
-                }
+                openURL(url, terminalID: nil)
                 return true
             }
             ConductorLog.terminal.debug("Unhandled Ghostty app action=\(action.tag.rawValue)")
@@ -173,9 +182,8 @@ final class GhosttyAppRuntime {
         switch action.tag {
         case GHOSTTY_ACTION_OPEN_URL:
             guard let url = URL(ghosttyOpenURL: action.action.open_url) else { return false }
-            Task { @MainActor in
-                NSWorkspace.shared.open(url)
-            }
+            let terminalID = TerminalSurface.fromGhosttySurface(target.target.surface)?.id
+            openURL(url, terminalID: terminalID)
             return true
         case GHOSTTY_ACTION_NEW_WINDOW, GHOSTTY_ACTION_NEW_TAB:
             guard let terminal = TerminalSurface.fromGhosttySurface(target.target.surface) else { return false }
