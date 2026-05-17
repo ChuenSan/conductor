@@ -205,6 +205,9 @@ styling to terminal output.
   opacity, fill, or stroke only.
 - Show the active pane with a full pane border or rail accent. Do not rely on a small dot,
   transient badge, shadow, or text label as the only focus signal.
+- Do not draw a strong pane top border directly under the workspace toolbar. That creates a
+  redundant middle hairline between workspace tabs and terminal tabs; prefer side/bottom pane
+  borders plus tab emphasis in that region.
 - Inactive panes may still show their selected tab, but with a quieter selected style than the
   focused pane. The focused pane owns the strongest accent treatment.
 - Split gutters should have a stable hit target. Hover/drag may brighten the center handle,

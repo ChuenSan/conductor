@@ -234,16 +234,13 @@ private struct TerminalPaneView: View {
         }
         .background(model.theme.terminalBackground)
         .overlay {
-            Rectangle()
-                .stroke(paneBorderColor, lineWidth: paneBorderWidth)
-                .overlay {
-                    if isFocused && !splitResizeActive {
-                        Rectangle()
-                            .inset(by: 2)
-                            .stroke(model.theme.accent.opacity(0.22), lineWidth: 1)
-                    }
-                }
-                .allowsHitTesting(false)
+            TerminalPaneBorderOverlay(
+                color: paneBorderColor,
+                lineWidth: paneBorderWidth,
+                focused: isFocused && !splitResizeActive,
+                accent: model.theme.accent
+            )
+            .allowsHitTesting(false)
         }
         .animation(splitResizeActive ? nil : ConductorMotion.micro, value: isFocused)
     }
@@ -317,6 +314,43 @@ private struct TerminalPaneView: View {
                 ConductorMotion.perform {
                     model.focusPane(pane.id)
                 }
+            }
+        }
+    }
+}
+
+private struct TerminalPaneBorderOverlay: View {
+    let color: Color
+    let lineWidth: CGFloat
+    let focused: Bool
+    let accent: Color
+
+    var body: some View {
+        ZStack {
+            edgeStrokes(color: color, lineWidth: lineWidth, inset: 0)
+            if focused {
+                edgeStrokes(color: accent.opacity(0.18), lineWidth: 1, inset: 2)
+            }
+        }
+    }
+
+    private func edgeStrokes(color: Color, lineWidth: CGFloat, inset: CGFloat) -> some View {
+        GeometryReader { proxy in
+            let width = max(lineWidth, 0)
+            let size = proxy.size
+            ZStack {
+                Rectangle()
+                    .fill(color)
+                    .frame(width: width, height: max(0, size.height - inset))
+                    .position(x: inset + width / 2, y: size.height / 2)
+                Rectangle()
+                    .fill(color)
+                    .frame(width: width, height: max(0, size.height - inset))
+                    .position(x: size.width - inset - width / 2, y: size.height / 2)
+                Rectangle()
+                    .fill(color)
+                    .frame(width: max(0, size.width - inset * 2), height: width)
+                    .position(x: size.width / 2, y: size.height - inset - width / 2)
             }
         }
     }
