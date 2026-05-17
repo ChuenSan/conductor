@@ -182,18 +182,81 @@ enum ChromeClarity: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum AppearanceFontScale: String, CaseIterable, Codable, Identifiable {
+    case small
+    case standard
+    case large
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .small:
+            "小"
+        case .standard:
+            "标准"
+        case .large:
+            "大"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .small:
+            "更密集"
+        case .standard:
+            "默认字号"
+        case .large:
+            "更易读"
+        }
+    }
+
+    var multiplier: CGFloat {
+        switch self {
+        case .small:
+            0.94
+        case .standard:
+            1.0
+        case .large:
+            1.10
+        }
+    }
+
+    func size(_ base: CGFloat) -> CGFloat {
+        (base * multiplier).rounded(.toNearestOrAwayFromZero)
+    }
+}
+
 struct AppearancePreferences: Codable, Equatable {
     var density: AppearanceDensity
     var chromeClarity: ChromeClarity
+    var fontScale: AppearanceFontScale
     var reducedMotion: Bool
 
     init(
         density: AppearanceDensity = .standard,
         chromeClarity: ChromeClarity = .balanced,
+        fontScale: AppearanceFontScale = .standard,
         reducedMotion: Bool = false
     ) {
         self.density = density
         self.chromeClarity = chromeClarity
+        self.fontScale = fontScale
         self.reducedMotion = reducedMotion
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.density = try container.decodeIfPresent(AppearanceDensity.self, forKey: .density) ?? .standard
+        self.chromeClarity = try container.decodeIfPresent(ChromeClarity.self, forKey: .chromeClarity) ?? .balanced
+        self.fontScale = try container.decodeIfPresent(AppearanceFontScale.self, forKey: .fontScale) ?? .standard
+        self.reducedMotion = try container.decodeIfPresent(Bool.self, forKey: .reducedMotion) ?? false
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case density
+        case chromeClarity
+        case fontScale
+        case reducedMotion
     }
 }

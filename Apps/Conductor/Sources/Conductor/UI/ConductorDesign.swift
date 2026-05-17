@@ -1,6 +1,46 @@
 @preconcurrency import AppKit
 import SwiftUI
 
+private struct ConductorFontScaleKey: EnvironmentKey {
+    static let defaultValue = AppearanceFontScale.standard
+}
+
+extension EnvironmentValues {
+    var conductorFontScale: AppearanceFontScale {
+        get { self[ConductorFontScaleKey.self] }
+        set { self[ConductorFontScaleKey.self] = newValue }
+    }
+}
+
+extension Font {
+    static func conductorSystem(
+        size: CGFloat,
+        weight: Font.Weight = .regular,
+        design: Font.Design = .default,
+        scale: AppearanceFontScale
+    ) -> Font {
+        .system(size: scale.size(size), weight: weight, design: design)
+    }
+}
+
+extension NSFont {
+    static func conductorSystemFont(
+        ofSize size: CGFloat,
+        weight: NSFont.Weight = .regular,
+        scale: AppearanceFontScale
+    ) -> NSFont {
+        .systemFont(ofSize: scale.size(size), weight: weight)
+    }
+
+    static func conductorMonospacedSystemFont(
+        ofSize size: CGFloat,
+        weight: NSFont.Weight = .regular,
+        scale: AppearanceFontScale
+    ) -> NSFont {
+        .monospacedSystemFont(ofSize: scale.size(size), weight: weight)
+    }
+}
+
 enum ConductorTokens {
     enum Palette {
         static let window = Color(red: 0.933, green: 0.949, blue: 0.969)
@@ -370,14 +410,15 @@ struct ConductorIconButton: View {
     var disabled = false
     var active = false
     let action: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         HStack(spacing: title == nil ? 0 : 5) {
             Image(systemName: systemImage)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
             if let title {
                 Text(title)
-                    .font(ConductorTokens.Typography.toolbar)
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }

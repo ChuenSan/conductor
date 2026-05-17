@@ -158,6 +158,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         appearance.chromeClarity = chromeClarity
     }
 
+    func setFontScale(_ fontScale: AppearanceFontScale) {
+        guard appearance.fontScale != fontScale else { return }
+        appearance.fontScale = fontScale
+    }
+
     func setReducedMotion(_ reducedMotion: Bool) {
         guard appearance.reducedMotion != reducedMotion else { return }
         appearance.reducedMotion = reducedMotion

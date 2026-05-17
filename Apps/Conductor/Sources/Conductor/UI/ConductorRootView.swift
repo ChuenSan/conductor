@@ -38,6 +38,7 @@ struct ConductorRootView: View {
         .background(ConductorWindowBackdrop(theme: model.theme))
         .ignoresSafeArea(.container, edges: .top)
         .tint(model.theme.accent)
+        .environment(\.conductorFontScale, model.appearance.fontScale)
         .overlay {
             ZStack {
                 if model.commandPaletteVisible {
@@ -751,6 +752,7 @@ private struct CommandSuggestionButton: View {
 
 private struct AppearanceSettingsPanel: View {
     @ObservedObject var model: ConductorWindowModel
+    @Environment(\.conductorFontScale) private var fontScale
 
     private let columns = [
         GridItem(.adaptive(minimum: 142, maximum: 168), spacing: 8)
@@ -805,6 +807,20 @@ private struct AppearanceSettingsPanel: View {
                             titleForOption: \.title,
                             subtitleForOption: \.subtitle
                         )
+                        AppearanceSegmentedControl(
+                            title: "字体",
+                            options: AppearanceFontScale.allCases,
+                            selection: Binding(
+                                get: { model.appearance.fontScale },
+                                set: { fontScale in
+                                    model.performShellMotion {
+                                        model.setFontScale(fontScale)
+                                    }
+                                }
+                            ),
+                            titleForOption: \.title,
+                            subtitleForOption: \.subtitle
+                        )
                         AppearanceToggleRow(
                             title: "降低动态效果",
                             subtitle: "减少面板、tab 和选中反馈的过渡",
@@ -850,7 +866,7 @@ private struct AppearanceSettingsPanel: View {
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 24, height: 24)
                 .background(Color.white.opacity(0.28))
@@ -858,10 +874,10 @@ private struct AppearanceSettingsPanel: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("外观")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.conductorSystem(size: 14, weight: .bold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
                 Text(model.theme.title)
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
                     .foregroundStyle(ConductorDesign.tertiaryText)
             }
 
@@ -873,7 +889,7 @@ private struct AppearanceSettingsPanel: View {
                 }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.secondaryText)
                     .frame(width: 24, height: 24)
                     .background(Color.white.opacity(0.22))
@@ -893,11 +909,12 @@ private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View
     @Binding var selection: Option
     let titleForOption: (Option) -> String
     let subtitleForOption: (Option) -> String
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.system(size: 10.5, weight: .semibold))
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
 
             HStack(spacing: 5) {
@@ -907,10 +924,10 @@ private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View
                     } label: {
                         VStack(spacing: 2) {
                             Text(titleForOption(option))
-                                .font(.system(size: 11, weight: selection == option ? .bold : .semibold))
+                                .font(.conductorSystem(size: 11, weight: selection == option ? .bold : .semibold, scale: fontScale))
                                 .foregroundStyle(selection == option ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
                             Text(subtitleForOption(option))
-                                .font(.system(size: 9.5, weight: .medium))
+                                .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
                                 .foregroundStyle(ConductorDesign.tertiaryText)
                         }
                         .frame(maxWidth: .infinity)
@@ -934,15 +951,16 @@ private struct AppearanceToggleRow: View {
     let title: String
     let subtitle: String
     @Binding var isOn: Bool
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         Toggle(isOn: $isOn) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
                 Text(subtitle)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
                     .foregroundStyle(ConductorDesign.tertiaryText)
                     .lineLimit(1)
             }
@@ -961,6 +979,7 @@ private struct AppearanceToggleRow: View {
 
 private struct SettingsSectionLabel: View {
     let title: String
+    @Environment(\.conductorFontScale) private var fontScale
 
     init(_ title: String) {
         self.title = title
@@ -968,7 +987,7 @@ private struct SettingsSectionLabel: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 10.5, weight: .semibold))
+            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
             .foregroundStyle(ConductorDesign.tertiaryText)
             .padding(.horizontal, 2)
     }
@@ -979,6 +998,7 @@ private struct ThemePreviewCard: View {
     let selected: Bool
     let action: () -> Void
     @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         Button(action: action) {
@@ -1054,7 +1074,7 @@ private struct ThemePreviewCard: View {
         HStack(spacing: 7) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(theme.title)
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
                     .lineLimit(1)
                 HStack(spacing: 4) {
@@ -1991,6 +2011,7 @@ private struct ConductorSidebar: View {
     @State private var workspaceTitleDraft = ""
     @State private var renamingTerminalID: TerminalID?
     @State private var terminalTitleDraft = ""
+    @Environment(\.conductorFontScale) private var fontScale
 
     private var terminalCount: Int {
         model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
@@ -2087,7 +2108,7 @@ private struct ConductorSidebar: View {
             }
         } label: {
             Image(systemName: model.sidebarVisible ? "chevron.left" : "sidebar.left")
-                .font(.system(size: 11.5, weight: .bold))
+                .font(.conductorSystem(size: 11.5, weight: .bold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .frame(width: 26, height: 24)
                 .background(Color.black.opacity(0.045))
@@ -2181,7 +2202,7 @@ private struct ConductorSidebar: View {
                     }
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                         .foregroundStyle(ConductorDesign.secondaryText)
                         .frame(width: 18, height: 18)
                         .contentShape(RoundedRectangle(cornerRadius: 5))
@@ -2454,13 +2475,14 @@ private struct SidebarRailButton: View {
     var disabled = false
     let help: String
     let action: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         Button {
             ConductorMotion.perform(action)
         } label: {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
                 .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
                 .frame(width: 34, height: 34)
                 .background(selected ? ConductorDesign.selectedFill : Color.clear)
@@ -2478,6 +2500,7 @@ private struct SidebarRailButton: View {
 
 private struct SidebarSectionTitle: View {
     let title: String
+    @Environment(\.conductorFontScale) private var fontScale
 
     init(_ title: String) {
         self.title = title
@@ -2485,7 +2508,7 @@ private struct SidebarSectionTitle: View {
 
     var body: some View {
         Text(title)
-            .font(ConductorTokens.Typography.section)
+            .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
             .foregroundStyle(ConductorDesign.tertiaryText)
             .padding(.horizontal, 8)
             .padding(.top, 2)
@@ -2496,6 +2519,7 @@ private struct SidebarRow: View {
     let icon: String
     let title: String
     let selected: Bool
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         HStack(spacing: 7) {
@@ -2503,7 +2527,7 @@ private struct SidebarRow: View {
                 .frame(width: 14)
                 .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
             Text(title)
-                .font(selected ? ConductorTokens.Typography.rowSelected : ConductorTokens.Typography.row)
+                .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.primaryText)
             Spacer()
         }
@@ -2528,6 +2552,7 @@ private struct WorkspaceSidebarRow: View {
     @State private var hovering = false
     @State private var renameCancelled = false
     @FocusState private var titleFieldFocused: Bool
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         Group {
@@ -2554,13 +2579,13 @@ private struct WorkspaceSidebarRow: View {
     private var editingRow: some View {
         HStack(spacing: 7) {
             Image(systemName: "rectangle.3.group.fill")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .frame(width: 14)
                 .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
             RenameTextField(
                 text: $titleDraft,
                 placeholder: "工作区名称",
-                font: .systemFont(ofSize: 12, weight: .semibold),
+                font: .conductorSystemFont(ofSize: 12, weight: .semibold, scale: fontScale),
                 textColor: NSColor.labelColor,
                 onCommit: onCommitRename,
                 onCancel: onCancelRename
@@ -2582,21 +2607,21 @@ private struct WorkspaceSidebarRow: View {
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: selected ? "rectangle.3.group.fill" : "rectangle.3.group")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                     .frame(width: 14)
                     .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
                 Text(title)
-                    .font(selected ? ConductorTokens.Typography.rowSelected : ConductorTokens.Typography.row)
+                    .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
                 Text("\(terminalCount)")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
                     .foregroundStyle(ConductorDesign.tertiaryText)
                 if unreadCount > 0 {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 4)
                         .frame(minWidth: 15, minHeight: 14)
@@ -2625,6 +2650,7 @@ private struct SidebarActionRow: View {
     var help: String? = nil
     let action: () -> Void
     @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         Button {
@@ -2635,7 +2661,7 @@ private struct SidebarActionRow: View {
                     .frame(width: 14)
                 if showsTitle {
                     Text(title)
-                        .font(ConductorTokens.Typography.row)
+                        .font(.conductorSystem(size: 12, weight: .medium, scale: fontScale))
                     Spacer()
                 }
             }
@@ -2663,15 +2689,16 @@ private struct SidebarActionRow: View {
 private struct MetricRow: View {
     let title: String
     let value: String
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         HStack {
             Text(title)
-                .font(.system(size: 10.5))
+                .font(.conductorSystem(size: 10.5, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
             Spacer()
             Text(value)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.primaryText)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -2973,6 +3000,7 @@ private struct WorkspaceTopTab: View {
     @State private var hovering = false
     @State private var renameCancelled = false
     @FocusState private var titleFieldFocused: Bool
+    @Environment(\.conductorFontScale) private var fontScale
 
     private var terminalCount: Int {
         workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
@@ -2982,13 +3010,13 @@ private struct WorkspaceTopTab: View {
         HStack(spacing: 6) {
             if editing {
                 Image(systemName: "rectangle.3.group.fill")
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 14)
                 RenameTextField(
                     text: $titleDraft,
                     placeholder: "工作区名称",
-                    font: .systemFont(ofSize: 11.5, weight: .bold),
+                    font: .conductorSystemFont(ofSize: 11.5, weight: .bold, scale: fontScale),
                     textColor: NSColor.labelColor,
                     onCommit: onCommitRename,
                     onCancel: onCancelRename
@@ -2999,17 +3027,17 @@ private struct WorkspaceTopTab: View {
                 }
             } else {
                 Image(systemName: selected ? "rectangle.3.group.fill" : "rectangle.3.group")
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(selected ? accent : ConductorDesign.terminalTextMuted)
                     .frame(width: 14)
                 Text(workspace.title)
-                    .font(selected ? ConductorTokens.Typography.workspaceTabSelected : ConductorTokens.Typography.workspaceTab)
+                    .font(.conductorSystem(size: 11.5, weight: selected ? .bold : .semibold, scale: fontScale))
                     .foregroundStyle(selected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text("\(terminalCount)")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
                     .foregroundStyle(selected ? ConductorDesign.terminalText.opacity(0.86) : ConductorDesign.terminalTextMuted)
                     .padding(.horizontal, 4)
                     .frame(minWidth: 16, minHeight: 14)
@@ -3017,7 +3045,7 @@ private struct WorkspaceTopTab: View {
                     .clipShape(Capsule())
                 if unreadCount > 0 {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 4)
                         .frame(minWidth: 15, minHeight: 14)
@@ -3028,7 +3056,7 @@ private struct WorkspaceTopTab: View {
                     ConductorMotion.perform(ConductorMotion.layout, onClose)
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
                         .foregroundStyle(canClose ? ConductorDesign.terminalTextMuted.opacity(selected ? 0.90 : 0.70) : Color.clear)
                         .frame(width: 12, height: 12)
                         .contentShape(Rectangle())

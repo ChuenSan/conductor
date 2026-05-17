@@ -442,6 +442,7 @@ private struct PaneBarButton: View {
     let help: String
     let action: () -> Void
     @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         Button {
@@ -451,14 +452,14 @@ private struct PaneBarButton: View {
                 if showsTitle {
                     HStack(spacing: 4) {
                         Image(systemName: systemImage)
-                            .font(.system(size: 9.5, weight: .semibold))
+                            .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
                         Text(title)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
                             .lineLimit(1)
                     }
                 }
                 Image(systemName: systemImage)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
             }
             .foregroundStyle(hovering ? Color.accentColor.opacity(0.96) : ConductorDesign.terminalTextMuted)
             .padding(.horizontal, showsTitle ? 5 : 4)
@@ -500,6 +501,7 @@ private struct TerminalTabButton: View {
     @State private var hovering = false
     @State private var renameCancelled = false
     @FocusState private var titleFieldFocused: Bool
+    @Environment(\.conductorFontScale) private var fontScale
 
     private var tabIndex: Int? {
         model.workspace.panes[paneID]?.tabs.firstIndex { $0.id == tab.id }
@@ -545,12 +547,12 @@ private struct TerminalTabButton: View {
         HStack(spacing: 3) {
             if editingTitle {
                 Image(systemName: "terminal")
-                    .font(.system(size: 10))
+                    .font(.conductorSystem(size: 10, scale: fontScale))
                     .foregroundStyle(isSelected ? ConductorDesign.primaryText : ConductorDesign.terminalText)
                 RenameTextField(
                     text: $titleDraft,
                     placeholder: "标签名称",
-                    font: .monospacedSystemFont(ofSize: 10.5, weight: isSelected ? .semibold : .medium),
+                    font: .conductorMonospacedSystemFont(ofSize: 10.5, weight: isSelected ? .semibold : .medium, scale: fontScale),
                     textColor: NSColor.labelColor,
                     onCommit: commitRename,
                     onCancel: cancelRename
@@ -562,10 +564,10 @@ private struct TerminalTabButton: View {
             } else {
                 HStack(spacing: 5) {
                     Image(systemName: "terminal")
-                        .font(.system(size: 10))
+                        .font(.conductorSystem(size: 10, scale: fontScale))
                         .foregroundStyle(isSelected && paneFocused ? model.theme.accent : ConductorDesign.terminalTextMuted)
                     Text(tab.title)
-                        .font(isSelected ? ConductorTokens.Typography.terminalTabSelected : ConductorTokens.Typography.terminalTab)
+                        .font(.conductorSystem(size: 10.5, weight: isSelected ? .semibold : .medium, scale: fontScale))
                         .foregroundStyle(isSelected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -579,7 +581,7 @@ private struct TerminalTabButton: View {
                             .frame(width: 7, height: 7)
                     } else if metadata?.readonly == true {
                         Image(systemName: "lock")
-                            .font(.system(size: 9))
+                            .font(.conductorSystem(size: 9, scale: fontScale))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -594,7 +596,7 @@ private struct TerminalTabButton: View {
                     }
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
                         .foregroundStyle(hovering || isSelected ? ConductorDesign.terminalText.opacity(0.88) : ConductorDesign.terminalTextMuted.opacity(0.78))
                         .frame(width: 13, height: 13)
                         .background(hovering ? Color.white.opacity(0.075) : Color.clear)

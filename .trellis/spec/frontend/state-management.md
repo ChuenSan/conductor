@@ -69,8 +69,8 @@ Forbidden patterns:
 
 ### 1. Scope / Trigger
 
-- Trigger: Shell appearance preferences such as theme, density, chrome clarity, reduced
-  motion, and future font scale are added to the user-facing settings surface.
+- Trigger: Shell appearance preferences such as theme, density, chrome clarity, font scale,
+  and reduced motion are added to the user-facing settings surface.
 - Scope: These preferences are low-frequency product state. They may affect SwiftUI chrome
   dimensions, material tint, strokes, and motion policy, but they must not alter terminal
   transcript, scrollback, cursor, or Ghostty runtime identity.
@@ -80,6 +80,7 @@ Forbidden patterns:
 - `struct AppearancePreferences: Codable, Equatable`
 - `enum AppearanceDensity: String, CaseIterable, Codable, Identifiable`
 - `enum ChromeClarity: String, CaseIterable, Codable, Identifiable`
+- `enum AppearanceFontScale: String, CaseIterable, Codable, Identifiable`
 - `ConductorWindowModel.appearance: AppearancePreferences`
 - `WorkspacePersistence.save(workspaces:selectedWorkspaceID:theme:appearance:)`
 
@@ -92,6 +93,8 @@ Forbidden patterns:
 - Persistence writes the current appearance snapshot alongside workspace structure and theme.
 - Density can change toolbar, workspace tab, pane tab, and sidebar chrome dimensions.
 - Chrome clarity can change material tint and stroke emphasis.
+- Font scale can change SwiftUI shell text and icon labels in toolbar, sidebar, settings,
+  workspace tabs, and pane tabs.
 - Reduced motion can disable or shorten shell chrome animations, but must not change model
   semantics.
 
@@ -114,6 +117,8 @@ Forbidden patterns:
   standard density, balanced clarity, and normal motion.
 - Bad: Storing measured scroll offsets, terminal font metrics, or transcript-derived values in
   `AppearancePreferences`.
+- Bad: Treating font scale as a Ghostty terminal font-size control before a dedicated terminal
+  font contract exists.
 - Bad: Applying opacity, scale, or identity transitions to `TerminalSurfaceRepresentable` when
   appearance changes.
 
