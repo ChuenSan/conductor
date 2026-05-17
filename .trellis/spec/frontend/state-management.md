@@ -85,7 +85,9 @@ Forbidden patterns:
 - `WorkspacePersistence.save(workspaces:selectedWorkspaceID:theme:appearance:)`
 - `TerminalTheme.shellPanelBackground`, `shellPanelStrong`, `shellStroke`,
   `shellSelectedFill`, `shellHoverFill`, `shellControlFill`, `shellControlRaisedFill`,
-  and `terminalOuterStroke`
+  `settingsPanelBase`, `settingsPanelWash`, `settingsControlFill`, `settingsStroke`,
+  `floatingPanelBase`, `floatingPanelWash`, `floatingControlFill`,
+  `floatingControlStrongFill`, `floatingStroke`, and `terminalOuterStroke`
 - `EnvironmentValues.conductorTheme: TerminalTheme`
 
 ### 3. Contracts

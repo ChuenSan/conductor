@@ -67,6 +67,7 @@ private struct CommandPaletteView: View {
     @State private var query = ""
     @State private var selectedCommandID: String?
     @FocusState private var searchFocused: Bool
+    @Environment(\.conductorTheme) private var theme
 
     private var commands: [CommandPaletteItem] {
         ConductorCommandCatalog.items(model: model, run: run)
@@ -158,7 +159,7 @@ private struct CommandPaletteView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 24, height: 24)
-                .background(Color.white.opacity(0.28))
+                .background(theme.floatingControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 7))
 
             VStack(alignment: .leading, spacing: 1) {
@@ -183,7 +184,7 @@ private struct CommandPaletteView: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(ConductorDesign.secondaryText)
                     .frame(width: 24, height: 24)
-                    .background(Color.white.opacity(0.22))
+                    .background(theme.floatingControlFill)
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -206,11 +207,11 @@ private struct CommandPaletteView: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 32)
-        .background(Color.white.opacity(0.34))
+        .background(theme.floatingControlStrongFill)
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup)
-                .stroke(Color.white.opacity(0.56), lineWidth: 1)
+                .stroke(theme.floatingStroke, lineWidth: 1)
         }
     }
 
@@ -556,6 +557,7 @@ private struct CommandShortcutGuideItem: Identifiable {
 
 private struct CommandSectionTitle: View {
     let title: String
+    @Environment(\.conductorTheme) private var theme
 
     init(_ title: String) {
         self.title = title
@@ -567,7 +569,7 @@ private struct CommandSectionTitle: View {
                 .font(.system(size: 10.5, weight: .semibold))
                 .foregroundStyle(ConductorDesign.tertiaryText)
             Rectangle()
-                .fill(Color.white.opacity(0.24))
+                .fill(theme.floatingSeparator)
                 .frame(height: 1)
         }
         .padding(.top, 5)
@@ -581,6 +583,7 @@ private struct CommandButton: View {
     let action: () -> Void
     var onHover: () -> Void = {}
     @State private var hovering = false
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         Button(action: action) {
@@ -612,7 +615,7 @@ private struct CommandButton: View {
                     .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
                     .padding(.horizontal, 7)
                     .frame(height: 19)
-                    .background(Color.white.opacity(command.disabled ? 0.10 : 0.24))
+                    .background(command.disabled ? theme.floatingControlFill.opacity(0.50) : theme.floatingControlFill)
                     .clipShape(Capsule())
             }
             .padding(.horizontal, 8)
@@ -642,12 +645,12 @@ private struct CommandButton: View {
 
     private var rowFill: Color {
         if selected {
-            return Color.white.opacity(0.38)
+            return theme.floatingSelectedFill
         }
         if hovering {
-            return Color.white.opacity(0.26)
+            return theme.floatingHoverFill
         }
-        return Color.white.opacity(0.11)
+        return theme.floatingControlFill.opacity(0.50)
     }
 
     private var iconColor: Color {
@@ -661,7 +664,7 @@ private struct CommandButton: View {
         if selected {
             return Color.accentColor.opacity(0.13)
         }
-        return Color.white.opacity(command.disabled ? 0.10 : 0.22)
+        return command.disabled ? theme.floatingControlFill.opacity(0.45) : theme.floatingControlFill
     }
 }
 
@@ -686,6 +689,7 @@ private struct CommandStatusChip: View {
     let systemImage: String
     let title: String
     let value: String
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         HStack(spacing: 6) {
@@ -706,11 +710,11 @@ private struct CommandStatusChip: View {
         }
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
-        .background(Color.white.opacity(0.20))
+        .background(theme.floatingControlFill)
         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(Color.white.opacity(0.34), lineWidth: 1)
+                .stroke(theme.floatingStroke, lineWidth: 1)
         }
     }
 }
@@ -720,6 +724,7 @@ private struct CommandSuggestionButton: View {
     let selected: Bool
     let onHover: () -> Void
     @State private var hovering = false
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         Button(action: command.action) {
@@ -751,7 +756,7 @@ private struct CommandSuggestionButton: View {
             .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(selected ? Color.accentColor.opacity(0.58) : Color.white.opacity(0.34), lineWidth: selected ? 1.4 : 1)
+                    .stroke(selected ? Color.accentColor.opacity(0.58) : theme.floatingStroke, lineWidth: selected ? 1.4 : 1)
             }
         }
         .buttonStyle(.plain)
@@ -772,12 +777,12 @@ private struct CommandSuggestionButton: View {
 
     private var cardFill: Color {
         if selected {
-            return Color.white.opacity(0.36)
+            return theme.floatingSelectedFill
         }
         if hovering {
-            return Color.white.opacity(0.28)
+            return theme.floatingHoverFill
         }
-        return Color.white.opacity(0.18)
+        return theme.floatingControlFill.opacity(0.76)
     }
 }
 
@@ -1437,6 +1442,7 @@ private struct WorkspaceOverviewPanel: View {
     @State private var query = ""
     @State private var highlightedWorkspaceID: WorkspaceID?
     @FocusState private var searchFocused: Bool
+    @Environment(\.conductorTheme) private var theme
 
     private let columns = [
         GridItem(.adaptive(minimum: 214, maximum: 236), spacing: 10)
@@ -1541,7 +1547,7 @@ private struct WorkspaceOverviewPanel: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 24, height: 24)
-                .background(Color.white.opacity(0.28))
+                .background(theme.floatingControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 7))
 
             VStack(alignment: .leading, spacing: 1) {
@@ -1564,7 +1570,7 @@ private struct WorkspaceOverviewPanel: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(ConductorDesign.secondaryText)
                     .frame(width: 24, height: 24)
-                    .background(Color.white.opacity(0.22))
+                    .background(theme.floatingControlFill)
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -1587,11 +1593,11 @@ private struct WorkspaceOverviewPanel: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 32)
-        .background(Color.white.opacity(0.34))
+        .background(theme.floatingControlStrongFill)
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup)
-                .stroke(Color.white.opacity(0.56), lineWidth: 1)
+                .stroke(theme.floatingStroke, lineWidth: 1)
         }
     }
 
@@ -1746,12 +1752,12 @@ private struct WorkspaceOverviewCard: View {
 
     private var cardFill: Color {
         if selected {
-            return Color.white.opacity(0.42)
+            return theme.floatingSelectedFill
         }
         if highlighted || hovering {
-            return Color.white.opacity(0.31)
+            return theme.floatingHoverFill
         }
-        return Color.white.opacity(0.20)
+        return theme.floatingControlFill.opacity(0.76)
     }
 
     private var borderColor: Color {
@@ -1761,13 +1767,14 @@ private struct WorkspaceOverviewCard: View {
         if highlighted {
             return theme.accent.opacity(0.46)
         }
-        return Color.white.opacity(0.38)
+        return theme.floatingStroke
     }
 }
 
 private struct WorkspaceOverviewMetric: View {
     let systemImage: String
     let value: String
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         HStack(spacing: 4) {
@@ -1780,7 +1787,7 @@ private struct WorkspaceOverviewMetric: View {
         .foregroundStyle(ConductorDesign.secondaryText)
         .padding(.horizontal, 6)
         .frame(height: 18)
-        .background(Color.white.opacity(0.22))
+        .background(theme.floatingControlFill)
         .clipShape(Capsule())
     }
 }
@@ -1933,6 +1940,7 @@ private struct WorkspaceMiniPane: View {
 
 struct NotificationPanelView: View {
     @ObservedObject var model: ConductorWindowModel
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
@@ -1940,13 +1948,8 @@ struct NotificationPanelView: View {
                 notificationHeader
 
                 Rectangle()
-                    .fill(Color.white.opacity(0.34))
+                    .fill(theme.floatingSeparator)
                     .frame(height: 1)
-                    .overlay(alignment: .bottom) {
-                        Rectangle()
-                            .fill(Color.black.opacity(0.045))
-                            .frame(height: 1)
-                    }
 
                 if model.notifications.records.isEmpty {
                     emptyNotifications
@@ -1993,7 +1996,7 @@ struct NotificationPanelView: View {
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 20, height: 20)
-                .background(Color.white.opacity(0.28))
+                .background(theme.floatingControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             Text("通知")
                 .font(.system(size: 13, weight: .bold))
@@ -2031,7 +2034,7 @@ struct NotificationPanelView: View {
         .padding(.top, 24)
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
-        .background(Color.white.opacity(0.12))
+        .background(theme.floatingControlFill.opacity(0.45))
     }
 
     private var emptyNotifications: some View {
@@ -2055,7 +2058,7 @@ struct NotificationPanelView: View {
                     .font(.system(size: 10.5, weight: .semibold))
                     .padding(.horizontal, 9)
                     .frame(height: 23)
-                    .background(Color.white.opacity(0.30))
+                    .background(theme.floatingControlStrongFill)
                     .clipShape(Capsule())
             }
             .buttonStyle(ConductorPressButtonStyle())
@@ -2085,6 +2088,7 @@ private struct NotificationRowView: View {
     let onOpen: () -> Void
     let onClear: () -> Void
     @State private var hovering = false
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
@@ -2098,11 +2102,11 @@ private struct NotificationRowView: View {
                         .frame(width: 22, height: 22)
                         .background(
                             RoundedRectangle(cornerRadius: 7)
-                                .fill(Color.white.opacity(0.18))
+                                .fill(theme.floatingControlFill)
                         )
                         .overlay {
                             RoundedRectangle(cornerRadius: 7)
-                                .stroke(Color.white.opacity(0.26), lineWidth: 1)
+                                .stroke(theme.floatingStroke, lineWidth: 1)
                         }
                         .overlay(alignment: .topTrailing) {
                             if unread {
@@ -2131,7 +2135,7 @@ private struct NotificationRowView: View {
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(hovering ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText)
                     .frame(width: 18, height: 18)
-                    .background(Color.white.opacity(hovering ? 0.22 : 0.08))
+                    .background(hovering ? theme.floatingControlFill : theme.floatingControlFill.opacity(0.40))
                     .clipShape(Circle())
             }
             .buttonStyle(ConductorPressButtonStyle())
@@ -2145,7 +2149,7 @@ private struct NotificationRowView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .strokeBorder(
-                    unread ? Color.accentColor.opacity(0.26) : Color.white.opacity(0.32),
+                    unread ? Color.accentColor.opacity(0.26) : theme.floatingStroke,
                     lineWidth: 1
                 )
         }
@@ -2193,7 +2197,7 @@ private struct NotificationRowView: View {
                 .labelStyle(.titleAndIcon)
                 .padding(.horizontal, 5)
                 .frame(height: 16)
-                .background(Color.white.opacity(0.14))
+                .background(theme.floatingControlFill.opacity(0.58))
                 .clipShape(Capsule())
 
             Label(terminalTitle, systemImage: "terminal")
@@ -2203,7 +2207,7 @@ private struct NotificationRowView: View {
                 .lineLimit(1)
                 .padding(.horizontal, 5)
                 .frame(height: 16)
-                .background(Color.white.opacity(0.18))
+                .background(theme.floatingControlFill)
                 .clipShape(Capsule())
 
             Spacer(minLength: 0)
@@ -2213,8 +2217,8 @@ private struct NotificationRowView: View {
     private var rowBackground: some View {
         LinearGradient(
             colors: [
-                Color.white.opacity(hovering ? 0.30 : (unread ? 0.24 : 0.18)),
-                Color.white.opacity(unread ? 0.10 : 0.055),
+                hovering ? theme.floatingControlStrongFill : (unread ? theme.floatingSelectedFill : theme.floatingControlFill),
+                unread ? theme.floatingHoverFill : theme.floatingControlFill.opacity(0.35),
                 Color.black.opacity(0.025)
             ],
             startPoint: .topLeading,

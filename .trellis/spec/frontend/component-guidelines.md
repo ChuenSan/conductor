@@ -142,6 +142,11 @@ workspace overview, and compact status modules.
   borrowing the heavier terminal `shellPanelBackground`; large raw theme fills can read as a
   blue/colored film in Codex Dark and similar themes. Avoid hard split lines, opaque content
   slabs, and large option cards inside these panels.
+- Command Center, Workspace Overview, Notification Center, and future floating shell panels
+  should use theme-owned floating colors (`floatingPanelBase`, `floatingPanelWash`,
+  `floatingControlFill`, `floatingControlStrongFill`, `floatingStroke`, selected/hover fills,
+  and separators). Do not tint these panels directly with `shellPanelBackground`; that color is
+  for sidebar-style chrome and can make modal panels look like a colored sheet.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.

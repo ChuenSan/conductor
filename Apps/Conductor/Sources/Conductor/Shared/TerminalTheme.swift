@@ -215,6 +215,82 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    var floatingPanelBase: Color {
+        switch self {
+        case .codexDark:
+            Color(red: 0.918, green: 0.922, blue: 0.928).opacity(0.90)
+        case .flexoki:
+            Color(red: 0.956, green: 0.932, blue: 0.874).opacity(0.91)
+        case .aurora:
+            Color(red: 0.890, green: 0.944, blue: 0.944).opacity(0.90)
+        case .graphite:
+            Color(red: 0.900, green: 0.908, blue: 0.920).opacity(0.91)
+        case .ember:
+            Color(red: 0.966, green: 0.918, blue: 0.864).opacity(0.90)
+        }
+    }
+
+    var floatingPanelWash: Color {
+        switch self {
+        case .codexDark:
+            Color(red: 0.58, green: 0.52, blue: 0.92).opacity(0.032)
+        case .flexoki:
+            Color(red: 0.90, green: 0.58, blue: 0.18).opacity(0.060)
+        case .aurora:
+            Color(red: 0.12, green: 0.74, blue: 0.78).opacity(0.062)
+        case .graphite:
+            Color(red: 0.50, green: 0.54, blue: 0.62).opacity(0.050)
+        case .ember:
+            Color(red: 0.94, green: 0.30, blue: 0.12).opacity(0.060)
+        }
+    }
+
+    var floatingControlFill: Color {
+        switch self {
+        case .codexDark:
+            Color.white.opacity(0.20)
+        case .flexoki:
+            Color(red: 1.0, green: 0.972, blue: 0.910).opacity(0.32)
+        case .aurora:
+            Color(red: 0.940, green: 1.0, blue: 1.0).opacity(0.26)
+        case .graphite:
+            Color.white.opacity(0.22)
+        case .ember:
+            Color(red: 1.0, green: 0.940, blue: 0.884).opacity(0.30)
+        }
+    }
+
+    var floatingControlStrongFill: Color {
+        switch self {
+        case .codexDark:
+            Color.white.opacity(0.30)
+        case .flexoki:
+            Color(red: 1.0, green: 0.972, blue: 0.910).opacity(0.44)
+        case .aurora:
+            Color(red: 0.940, green: 1.0, blue: 1.0).opacity(0.36)
+        case .graphite:
+            Color.white.opacity(0.32)
+        case .ember:
+            Color(red: 1.0, green: 0.940, blue: 0.884).opacity(0.42)
+        }
+    }
+
+    var floatingStroke: Color {
+        settingsStroke
+    }
+
+    var floatingSeparator: Color {
+        floatingStroke.opacity(0.78)
+    }
+
+    var floatingSelectedFill: Color {
+        accent.opacity(0.13)
+    }
+
+    var floatingHoverFill: Color {
+        accent.opacity(0.070)
+    }
+
     var shellStroke: Color {
         switch self {
         case .codexDark:
