@@ -7,9 +7,15 @@ enum ConductorTokens {
         static let canvas = Color(red: 0.933, green: 0.949, blue: 0.969)
         static let floatingPanelFallback = Color.white.opacity(0.62)
         static let floatingPanelStrong = Color.white.opacity(0.82)
+        static let glassTint = Color.white.opacity(0.30)
+        static let glassTintStrong = Color.white.opacity(0.48)
+        static let glassTintOnDark = Color.white.opacity(0.035)
+        static let glassStroke = Color.white.opacity(0.60)
+        static let glassStrokeSubtle = Color.white.opacity(0.34)
+        static let glassShadow = Color.clear
         static let terminalRaised = Color(red: 0.024, green: 0.035, blue: 0.052)
         static let terminalChrome = Color(red: 0.047, green: 0.071, blue: 0.106)
-        static let terminalChromeSelected = Color(red: 0.925, green: 0.949, blue: 0.984)
+        static let terminalChromeSelected = Color.clear
         static let terminalText = Color(red: 0.894, green: 0.918, blue: 0.953)
         static let terminalTextMuted = Color(red: 0.494, green: 0.537, blue: 0.612)
         static let splitGutter = Color(red: 0.063, green: 0.090, blue: 0.125)
@@ -18,7 +24,7 @@ enum ConductorTokens {
         static let textSecondary = Color(red: 0.405, green: 0.443, blue: 0.505)
         static let textTertiary = Color(red: 0.604, green: 0.631, blue: 0.678)
 
-        static let selectedFill = Color.black.opacity(0.055)
+        static let selectedFill = Color.black.opacity(0.042)
         static let inactiveFill = Color.white.opacity(0.58)
         static let subtleFill = Color.white.opacity(0.36)
         static let hoverFill = Color.black.opacity(0.040)
@@ -30,8 +36,11 @@ enum ConductorTokens {
     }
 
     enum Radius {
-        static let sidebar: CGFloat = 18
-        static let controlGroup: CGFloat = 13
+        static let sidebar: CGFloat = 22
+        static let panel: CGFloat = 26
+        static let commandPalette: CGFloat = 24
+        static let card: CGFloat = 16
+        static let controlGroup: CGFloat = 14
         static let control: CGFloat = 9
         static let workspaceTab: CGFloat = 12
         static let terminalPane: CGFloat = 12
@@ -55,6 +64,10 @@ enum ConductorTokens {
         static let terminalInset: CGFloat = 0
         static let splitGutter: CGFloat = 3
         static let statusHeight: CGFloat = 18
+        static let notificationPanelWidth: CGFloat = 300
+        static let notificationPanelHeight: CGFloat = 360
+        static let notificationPanelMinWidth: CGFloat = 280
+        static let notificationPanelMinHeight: CGFloat = 300
     }
 
     enum Typography {
@@ -63,7 +76,7 @@ enum ConductorTokens {
         static let section = Font.system(size: 10, weight: .semibold)
         static let row = Font.system(size: 12, weight: .medium)
         static let rowSelected = Font.system(size: 12, weight: .semibold)
-        static let toolbar = Font.system(size: 11, weight: .bold)
+        static let toolbar = Font.system(size: 11, weight: .semibold)
         static let workspaceTab = Font.system(size: 11.5, weight: .semibold)
         static let workspaceTabSelected = Font.system(size: 11.5, weight: .bold)
         static let terminalTab = Font.system(size: 10.5, weight: .medium)
@@ -72,15 +85,198 @@ enum ConductorTokens {
     }
 
     enum Shadow {
-        static let panelOpacity = 0.130
-        static let panelRadius: CGFloat = 22
-        static let panelY: CGFloat = 12
-        static let controlOpacity = 0.080
-        static let controlRadius: CGFloat = 8
+        static let panelOpacity = 0.0
+        static let panelRadius: CGFloat = 0
+        static let panelY: CGFloat = 0
+        static let controlOpacity = 0.0
+        static let controlRadius: CGFloat = 0
         static let controlY: CGFloat = 2
-        static let selectedOpacity = 0.160
-        static let selectedRadius: CGFloat = 7
-        static let selectedY: CGFloat = 3
+        static let selectedOpacity = 0.0
+        static let selectedRadius: CGFloat = 0
+        static let selectedY: CGFloat = 0
+    }
+}
+
+enum ConductorGlassSurfaceStyle: Equatable {
+    case sidebar
+    case palette
+    case panel
+    case card
+    case controlGroup
+    case terminalToolbar
+
+    var radius: CGFloat {
+        switch self {
+        case .sidebar:
+            ConductorTokens.Radius.sidebar
+        case .palette:
+            ConductorTokens.Radius.commandPalette
+        case .panel:
+            ConductorTokens.Radius.panel
+        case .card:
+            ConductorTokens.Radius.card
+        case .controlGroup:
+            ConductorTokens.Radius.controlGroup
+        case .terminalToolbar:
+            ConductorTokens.Radius.terminalPane
+        }
+    }
+
+    var fallbackMaterial: Material {
+        switch self {
+        case .sidebar, .palette, .panel:
+            .regularMaterial
+        case .card, .controlGroup:
+            .thinMaterial
+        case .terminalToolbar:
+            .ultraThinMaterial
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .sidebar:
+            ConductorTokens.Palette.glassTintStrong
+        case .palette, .panel:
+            ConductorTokens.Palette.glassTint
+        case .card:
+            Color.white.opacity(0.20)
+        case .controlGroup:
+            ConductorTokens.Palette.glassTintOnDark
+        case .terminalToolbar:
+            Color.white.opacity(0.045)
+        }
+    }
+
+    var stroke: Color {
+        switch self {
+        case .sidebar, .palette, .panel:
+            ConductorTokens.Palette.glassStroke
+        case .card:
+            ConductorTokens.Palette.glassStrokeSubtle
+        case .controlGroup, .terminalToolbar:
+            ConductorTokens.Palette.strokeOnDark.opacity(0.50)
+        }
+    }
+
+    var shadow: Color {
+        switch self {
+        case .controlGroup, .terminalToolbar:
+            ConductorDesign.shadow(ConductorTokens.Shadow.controlOpacity)
+        case .card:
+            ConductorDesign.shadow(0.085)
+        case .sidebar, .palette, .panel:
+            ConductorTokens.Palette.glassShadow
+        }
+    }
+
+    var shadowRadius: CGFloat {
+        switch self {
+        case .controlGroup, .terminalToolbar:
+            ConductorTokens.Shadow.controlRadius
+        case .card:
+            12
+        case .sidebar, .palette, .panel:
+            ConductorTokens.Shadow.panelRadius
+        }
+    }
+
+    var shadowY: CGFloat {
+        switch self {
+        case .controlGroup, .terminalToolbar:
+            ConductorTokens.Shadow.controlY
+        case .card:
+            7
+        case .sidebar, .palette, .panel:
+            ConductorTokens.Shadow.panelY
+        }
+    }
+}
+
+struct ConductorGlassSurface<Content: View>: View {
+    let style: ConductorGlassSurfaceStyle
+    var interactive = false
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .background {
+                surfaceFill
+            }
+            .clipShape(surfaceShape)
+            .overlay {
+                surfaceShape
+                    .strokeBorder(style.stroke, lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .overlay(alignment: .topLeading) {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(style == .terminalToolbar ? 0.08 : 0.34),
+                        Color.white.opacity(0.04),
+                        Color.clear
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .clipShape(surfaceShape)
+                .allowsHitTesting(false)
+            }
+    }
+
+    private var surfaceShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: style.radius, style: .continuous)
+    }
+
+    @ViewBuilder
+    private var surfaceFill: some View {
+        if #available(macOS 26.0, *) {
+            Color.clear
+                .glassEffect(
+                    Glass.regular.tint(style.tint).interactive(interactive),
+                    in: surfaceShape
+                )
+        } else {
+            surfaceShape
+                .fill(style.fallbackMaterial)
+                .overlay {
+                    surfaceShape
+                        .fill(style.tint)
+                }
+        }
+    }
+}
+
+struct ConductorWindowBackdrop: View {
+    let theme: TerminalTheme
+
+    var body: some View {
+        ZStack {
+            theme.windowBackdropStops[1]
+            LinearGradient(
+                colors: theme.windowBackdropStops,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            RadialGradient(
+                colors: [
+                    theme.windowBackdropWash,
+                    Color.clear
+                ],
+                center: .topTrailing,
+                startRadius: 40,
+                endRadius: 620
+            )
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.42),
+                    Color.clear,
+                    Color.black.opacity(0.055)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
     }
 }
 
@@ -156,29 +352,28 @@ struct ConductorIconButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button {
-            ConductorMotion.perform(.easeOut(duration: 0.10), action)
-        } label: {
-            HStack(spacing: title == nil ? 0 : 5) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 10.5, weight: .semibold))
-                if let title {
-                    Text(title)
-                        .font(ConductorTokens.Typography.toolbar)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
+        HStack(spacing: title == nil ? 0 : 5) {
+            Image(systemName: systemImage)
+                .font(.system(size: 10.5, weight: .medium))
+            if let title {
+                Text(title)
+                    .font(ConductorTokens.Typography.toolbar)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
-            .foregroundStyle(active ? Color.white : ConductorDesign.terminalText)
-            .padding(.horizontal, title == nil ? 0 : 7)
-            .frame(width: title == nil ? 22 : nil, height: 20)
-            .background(active ? Color.accentColor.opacity(0.74) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
-            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
         }
-        .buttonStyle(ConductorPressButtonStyle())
-        .disabled(disabled)
+        .foregroundStyle(active ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
+        .padding(.horizontal, title == nil ? 0 : 8)
+        .frame(width: title == nil ? 22 : nil, height: 20)
+        .background(active ? Color.white.opacity(0.045) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
+        .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
         .opacity(disabled ? 0.38 : 1)
+        .onTapGesture {
+            guard !disabled else { return }
+            ConductorMotion.perform(.easeOut(duration: 0.10), action)
+        }
+        .accessibilityAddTraits(.isButton)
         .animation(ConductorMotion.standard, value: active)
         .animation(ConductorMotion.micro, value: disabled)
         .fixedSize(horizontal: true, vertical: false)
@@ -233,23 +428,36 @@ struct ConductorPillGroup<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 1) {
             content
         }
         .padding(2)
-        .background(Color.white.opacity(0.040))
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup))
+        .background(Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup)
-                .stroke(ConductorTokens.Palette.strokeOnDark.opacity(0.70), lineWidth: 1)
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
+                .stroke(ConductorTokens.Palette.strokeOnDark.opacity(0.28), lineWidth: 1)
         }
-        .shadow(
-            color: ConductorDesign.shadow(ConductorTokens.Shadow.controlOpacity),
-            radius: ConductorTokens.Shadow.controlRadius,
-            y: ConductorTokens.Shadow.controlY
-        )
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)
+    }
+}
+
+struct ConductorSegmentDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.075))
+            .frame(width: 1, height: 15)
+    }
+}
+
+struct ConductorTerminalToolbarSurface<Content: View>: View {
+    let theme: TerminalTheme
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .background(theme.terminalChrome)
     }
 }
 

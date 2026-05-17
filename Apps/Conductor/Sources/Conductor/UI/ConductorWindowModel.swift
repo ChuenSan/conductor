@@ -81,6 +81,29 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.theme = persisted?.theme ?? .codexDark
     }
 
+    #if DEBUG
+    init(
+        previewWorkspaces: [WorkspaceState],
+        selectedWorkspaceID: WorkspaceID? = nil,
+        theme: TerminalTheme = .codexDark,
+        notifications: TerminalNotificationState = TerminalNotificationState(),
+        sidebarVisible: Bool = true,
+        commandPaletteVisible: Bool = false,
+        notificationPanelVisible: Bool = false
+    ) {
+        let resolvedWorkspaces = previewWorkspaces.isEmpty ? [WorkspaceState()] : previewWorkspaces
+        let selectedID = selectedWorkspaceID ?? resolvedWorkspaces[0].id
+        self.workspaces = resolvedWorkspaces
+        self.selectedWorkspaceID = selectedID
+        self.workspace = resolvedWorkspaces.first { $0.id == selectedID } ?? resolvedWorkspaces[0]
+        self.theme = theme
+        self.notifications = notifications
+        self.sidebarVisible = sidebarVisible
+        self.commandPaletteVisible = commandPaletteVisible
+        self.notificationPanelVisible = notificationPanelVisible
+    }
+    #endif
+
     var canSplit: Bool {
         workspace.canSplit()
     }
@@ -103,6 +126,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     var canMoveSelectedTabToNewSplit: Bool {
         workspace.canMoveSelectedTabToNewSplit()
+    }
+
+    func cycleTheme() {
+        theme = theme.next
     }
 
     var runtimeSurfaceCount: Int {

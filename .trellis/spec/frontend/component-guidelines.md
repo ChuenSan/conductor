@@ -94,6 +94,38 @@ terminal area inside a decorative card just to match the sidebar.
 
 Only introduce one-off numeric styling when the value is intrinsic to a specific asset or AppKit bridge. Otherwise add or reuse a token first.
 
+### Convention: macOS 2026 Glass Direction
+
+**What**: Conductor's modern shell should target the macOS 2026 / Liquid Glass visual
+language for product chrome while keeping the terminal renderer itself owned by
+GhosttyKit/AppKit.
+
+**Why**: The product should feel like a native macOS 2026 workspace, not a web dashboard
+wrapped around terminals. Glass surfaces, floating control groups, and fluid navigation
+belong around the terminal: sidebar, toolbar groups, command center, notification feed,
+workspace overview, and compact status modules.
+
+**Contract**:
+
+- Use `ConductorGlassSurface` for floating glass panels, command surfaces, cards, and
+  control groups instead of ad hoc `.regularMaterial`, strokes, and shadows.
+- Keep glass styling centralized in `ConductorGlassSurfaceStyle` and token enums so SDK
+  feature detection, macOS 14/15 fallback, and macOS 26 Liquid Glass behavior stay in one
+  place.
+- Prefer system-first, lightweight controls: icon buttons, compact pills, searchable command
+  surfaces, popovers, inspectors, and floating control groups.
+- Do not make terminal content decorative. The terminal pane remains the dark working surface;
+  glass belongs to navigation and metadata chrome.
+- Treat visual themes as whole-shell presets, not terminal palettes only. A theme should own
+  Ghostty colors, terminal chrome, the window backdrop, and the accent color together so the
+  shell feels intentionally composed after switching themes.
+- Bind fluid effects only to low-frequency product state such as selection, command palette
+  visibility, notification badges, sidebar visibility, and workspace navigation.
+- Do not bind glass effects, blur changes, or animated mesh/background effects to stdout,
+  scrollback, cursor movement, or terminal redraws.
+- Xcode live preview scenarios should use compact preview fixtures. Prefer `PreviewProvider`
+  while SwiftPM command-line builds cannot resolve Xcode's `#Preview` macro plugin.
+
 ### Convention: Shell Motion
 
 **What**: Low-frequency product UI changes should use shared motion tokens such as
@@ -207,9 +239,9 @@ Forbidden patterns:
   controls should align to the same centered rail axis as workspace and action icons, not keep
   the expanded sidebar's trailing alignment. Avoid narrow decorative capsules behind traffic
   lights because native button geometry can drift from them; use a full-width titlebar wash
-  clipped by the sidebar shape instead. The sidebar panel should start at the window origin in
-  full-size-content windows so the default `NSWindow` traffic-light inset lands inside the
-  panel rather than exactly on the panel's rounded edge.
+  clipped by the sidebar shape instead. If the sidebar must remain a floating card with outer
+  margins, hide the standard `NSWindow` traffic lights and provide stable custom window-control
+  buttons inside the sidebar rather than moving the whole panel to the window edge.
 - Guessing at root shell spacing when the window titlebar is involved. First measure
   `NSWindow.contentLayoutRect`, `contentView.safeAreaInsets`, and the root hosted view frame,
   then keep `ConductorTokens.Space.shellTop` as the compact titlebar clearance rather than

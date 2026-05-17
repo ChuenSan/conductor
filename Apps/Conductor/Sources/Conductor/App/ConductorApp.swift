@@ -57,6 +57,16 @@ final class ConductorWindow: NSWindow {
         }
         return nil
     }
+
+    func hideSystemTrafficLights() {
+        [
+            NSWindow.ButtonType.closeButton,
+            .miniaturizeButton,
+            .zoomButton
+        ].forEach { buttonType in
+            standardWindowButton(buttonType)?.isHidden = true
+        }
+    }
 }
 
 final class ConductorHostingView<Content: View>: NSHostingView<Content> {
@@ -103,6 +113,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.title = "Conductor"
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        window.hideSystemTrafficLights()
         window.routeAppShortcut = { [weak self] event in
             self?.routeAppShortcut(event) ?? false
         }
@@ -470,7 +481,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         panel.isFloatingPanel = false
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
-        panel.minSize = NSSize(width: 360, height: 420)
+        panel.minSize = NSSize(
+            width: ConductorTokens.Space.notificationPanelMinWidth,
+            height: ConductorTokens.Space.notificationPanelMinHeight
+        )
 
         let delegate = NotificationWindowDelegate { [weak self] in
             self?.model.hideNotificationPanel()
@@ -483,7 +497,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         contentContainer.layer?.backgroundColor = NSColor.clear.cgColor
         let hostingView = ConductorHostingView(
             rootView: NotificationPanelView(model: model)
-                .frame(minWidth: 360, minHeight: 420)
+                .frame(
+                    minWidth: ConductorTokens.Space.notificationPanelMinWidth,
+                    minHeight: ConductorTokens.Space.notificationPanelMinHeight
+                )
         )
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         contentContainer.addSubview(hostingView)
@@ -517,7 +534,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     }
 
     private func notificationWindowFrame() -> NSRect {
-        let size = NSSize(width: 380, height: 520)
+        let size = NSSize(
+            width: ConductorTokens.Space.notificationPanelWidth,
+            height: ConductorTokens.Space.notificationPanelHeight
+        )
         guard let window else {
             return NSRect(x: 180, y: 180, width: size.width, height: size.height)
         }

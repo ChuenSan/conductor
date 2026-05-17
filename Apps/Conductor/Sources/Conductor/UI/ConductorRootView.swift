@@ -15,19 +15,18 @@ struct ConductorRootView: View {
                 SplitNodeView(node: model.workspace.visibleRoot, model: model)
                     .background(model.theme.terminalBackground)
             }
-            .padding(.top, ConductorDesign.shellTopPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(ConductorTokens.Palette.terminalRaised)
+            .background(model.theme.terminalRaisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane))
             .overlay {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane)
                     .stroke(Color.black.opacity(0.68), lineWidth: 1)
                     .allowsHitTesting(false)
             }
-            .shadow(color: ConductorDesign.shadow(0.16), radius: 18, y: 8)
         }
         .animation(ConductorMotion.layout, value: model.sidebarVisible)
-        .padding(.trailing, ConductorDesign.shellHorizontalPadding)
+        .padding(.horizontal, ConductorDesign.shellHorizontalPadding)
+        .padding(.top, ConductorDesign.shellTopPadding)
         .padding(.bottom, ConductorDesign.shellBottomPadding)
         .frame(
             minWidth: 1080,
@@ -36,7 +35,7 @@ struct ConductorRootView: View {
             maxHeight: .infinity,
             alignment: .topLeading
         )
-        .background(ConductorDesign.windowBackground)
+        .background(ConductorWindowBackdrop(theme: model.theme))
         .ignoresSafeArea(.container, edges: .top)
         .tint(model.theme.accent)
         .overlay {
@@ -220,7 +219,8 @@ private struct CommandPaletteView: View {
                     model.hideCommandPalette()
                 }
 
-            VStack(alignment: .leading, spacing: 6) {
+            ConductorGlassSurface(style: .palette, interactive: true) {
+                VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 7) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 12, weight: .semibold))
@@ -235,11 +235,11 @@ private struct CommandPaletteView: View {
                 }
                 .padding(.horizontal, 10)
                 .frame(height: 32)
-                .background(Color.white.opacity(0.50))
+                .background(Color.white.opacity(0.36))
                 .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup))
                 .overlay {
                     RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup)
-                        .stroke(ConductorDesign.toolbarStroke, lineWidth: 1)
+                        .stroke(Color.white.opacity(0.58), lineWidth: 1)
                 }
 
                 if filteredCommands.isEmpty {
@@ -272,16 +272,10 @@ private struct CommandPaletteView: View {
                     }
                     .frame(maxHeight: 360)
                 }
+                }
+                .padding(11)
             }
-            .padding(10)
-            .frame(width: 340)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.sidebar))
-            .overlay {
-                RoundedRectangle(cornerRadius: ConductorTokens.Radius.sidebar)
-                    .stroke(Color.white.opacity(0.55), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.14), radius: 22, y: 10)
+            .frame(width: 360)
             .onAppear {
                 searchFocused = true
                 ensureSelection()
@@ -420,20 +414,7 @@ struct NotificationPanelView: View {
     @ObservedObject var model: ConductorWindowModel
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 26)
-                .fill(.ultraThinMaterial)
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.30),
-                    Color.white.opacity(0.10),
-                    Color.black.opacity(0.04)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .allowsHitTesting(false)
-
+        ConductorGlassSurface(style: .panel, interactive: true) {
             VStack(alignment: .leading, spacing: 0) {
                 notificationHeader
 
@@ -450,7 +431,7 @@ struct NotificationPanelView: View {
                     emptyNotifications
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 7) {
+                        LazyVStack(spacing: 5) {
                             ForEach(model.notifications.records) { notification in
                                 NotificationRowView(
                                     notification: notification,
@@ -469,7 +450,7 @@ struct NotificationPanelView: View {
                                 ))
                             }
                         }
-                        .padding(10)
+                        .padding(8)
                     }
                     .scrollIndicators(.visible)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -477,34 +458,31 @@ struct NotificationPanelView: View {
                 }
             }
         }
-        .frame(minWidth: 360, minHeight: 420)
-        .clipShape(RoundedRectangle(cornerRadius: 26))
-        .overlay {
-            RoundedRectangle(cornerRadius: 26)
-                .strokeBorder(Color.white.opacity(0.62), lineWidth: 1)
-        }
-        .shadow(color: Color.black.opacity(0.16), radius: 28, y: 16)
+        .frame(
+            minWidth: ConductorTokens.Space.notificationPanelMinWidth,
+            minHeight: ConductorTokens.Space.notificationPanelMinHeight
+        )
         .animation(ConductorMotion.layout, value: model.notifications.records.map(\.id))
         .animation(ConductorMotion.emphasized, value: model.notifications.snapshot.unreadCount)
     }
 
     private var notificationHeader: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 7) {
             Image(systemName: model.notifications.snapshot.unreadCount > 0 ? "bell.badge.fill" : "bell")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
-                .frame(width: 24, height: 24)
+                .frame(width: 20, height: 20)
                 .background(Color.white.opacity(0.28))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
             Text("通知")
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(ConductorDesign.primaryText)
             if model.notifications.snapshot.unreadCount > 0 {
                 Text("\(model.notifications.snapshot.unreadCount)")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .frame(height: 17)
+                    .padding(.horizontal, 5)
+                    .frame(height: 15)
                     .background(Color.accentColor)
                     .clipShape(Capsule())
                     .transition(.scale(scale: 0.82).combined(with: .opacity))
@@ -516,7 +494,7 @@ struct NotificationPanelView: View {
                 }
             }
             .buttonStyle(ConductorPressButtonStyle())
-            .font(.system(size: 11, weight: .semibold))
+            .font(.system(size: 10.5, weight: .semibold))
             .foregroundStyle(model.notifications.snapshot.latestUnread == nil ? ConductorDesign.tertiaryText : Color.accentColor)
             .disabled(model.notifications.snapshot.latestUnread == nil)
             Button("清空") {
@@ -525,26 +503,26 @@ struct NotificationPanelView: View {
                 }
             }
             .buttonStyle(ConductorPressButtonStyle())
-            .font(.system(size: 11, weight: .semibold))
+            .font(.system(size: 10.5, weight: .semibold))
             .foregroundStyle(model.notifications.records.isEmpty ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
             .disabled(model.notifications.records.isEmpty)
         }
-        .padding(.top, 34)
-        .padding(.horizontal, 14)
-        .padding(.bottom, 10)
-        .background(.regularMaterial.opacity(0.72))
+        .padding(.top, 24)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .background(Color.white.opacity(0.12))
     }
 
     private var emptyNotifications: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             Image(systemName: "bell.slash")
-                .font(.system(size: 25, weight: .medium))
+                .font(.system(size: 21, weight: .medium))
                 .foregroundStyle(ConductorDesign.tertiaryText)
             Text("暂无通知")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(ConductorDesign.secondaryText)
             Text("Codex 完成、终端通知和响铃都会出现在这里")
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .multilineTextAlignment(.center)
             Button {
@@ -553,9 +531,9 @@ struct NotificationPanelView: View {
                 }
             } label: {
                 Label("连接 Codex", systemImage: "bolt.horizontal.circle")
-                    .font(.system(size: 11, weight: .semibold))
-                    .padding(.horizontal, 10)
-                    .frame(height: 26)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .padding(.horizontal, 9)
+                    .frame(height: 23)
                     .background(Color.white.opacity(0.30))
                     .clipShape(Capsule())
             }
@@ -588,33 +566,33 @@ private struct NotificationRowView: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 9) {
+        HStack(alignment: .top, spacing: 7) {
             Button {
                 ConductorMotion.perform(onOpen)
             } label: {
-                HStack(alignment: .top, spacing: 9) {
+                HStack(alignment: .top, spacing: 7) {
                     Image(systemName: iconName)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(iconColor)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 22, height: 22)
                         .background(
-                            RoundedRectangle(cornerRadius: 9)
+                            RoundedRectangle(cornerRadius: 7)
                                 .fill(Color.white.opacity(0.18))
                         )
                         .overlay {
-                            RoundedRectangle(cornerRadius: 9)
+                            RoundedRectangle(cornerRadius: 7)
                                 .stroke(Color.white.opacity(0.26), lineWidth: 1)
                         }
                         .overlay(alignment: .topTrailing) {
                             if unread {
                                 Circle()
                                     .fill(Color.accentColor)
-                                    .frame(width: 6, height: 6)
+                                    .frame(width: 5, height: 5)
                                     .offset(x: 2, y: -2)
                             }
                         }
 
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 4) {
                         rowTitle
                         rowBody
                         rowMetadata
@@ -631,27 +609,25 @@ private struct NotificationRowView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(hovering ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText)
-                    .frame(width: 20, height: 20)
+                    .frame(width: 18, height: 18)
                     .background(Color.white.opacity(hovering ? 0.22 : 0.08))
                     .clipShape(Circle())
             }
             .buttonStyle(ConductorPressButtonStyle())
             .help("清除通知")
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 8)
-        .padding(.vertical, 10)
-        .background(.regularMaterial)
+        .padding(.leading, 9)
+        .padding(.trailing, 6)
+        .padding(.vertical, 7)
         .background(rowBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 11))
         .overlay {
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .strokeBorder(
-                    unread ? Color.accentColor.opacity(0.22) : Color.white.opacity(0.28),
+                    unread ? Color.accentColor.opacity(0.26) : Color.white.opacity(0.32),
                     lineWidth: 1
                 )
         }
-        .shadow(color: Color.black.opacity(hovering ? 0.085 : 0.045), radius: hovering ? 10 : 6, y: hovering ? 6 : 3)
         .scaleEffect(hovering ? 1.002 : 1)
         .animation(ConductorMotion.micro, value: hovering)
         .animation(ConductorMotion.emphasized, value: unread)
@@ -663,14 +639,14 @@ private struct NotificationRowView: View {
     }
 
     private var rowTitle: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 7) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(notification.title)
-                .font(.system(size: 12.5, weight: unread ? .semibold : .medium))
+                .font(.system(size: 11.5, weight: unread ? .semibold : .medium))
                 .foregroundStyle(ConductorDesign.primaryText)
                 .lineLimit(1)
             Spacer(minLength: 6)
             Text(notification.createdAt.formatted(date: .omitted, time: .shortened))
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .monospacedDigit()
         }
@@ -680,32 +656,32 @@ private struct NotificationRowView: View {
     private var rowBody: some View {
         if !notification.body.isEmpty {
             Text(notification.body)
-                .font(.system(size: 11.5, weight: .medium))
+                .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(ConductorDesign.secondaryText)
-                .lineSpacing(1.5)
-                .lineLimit(3)
+                .lineSpacing(1)
+                .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var rowMetadata: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             Label(kindLabel, systemImage: kindChipIcon)
-                .font(.system(size: 9.5, weight: .medium))
+                .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .labelStyle(.titleAndIcon)
-                .padding(.horizontal, 6)
-                .frame(height: 18)
+                .padding(.horizontal, 5)
+                .frame(height: 16)
                 .background(Color.white.opacity(0.14))
                 .clipShape(Capsule())
 
             Label(terminalTitle, systemImage: "terminal")
-                .font(.system(size: 9.5, weight: .medium))
+                .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .labelStyle(.titleAndIcon)
                 .lineLimit(1)
-                .padding(.horizontal, 6)
-                .frame(height: 18)
+                .padding(.horizontal, 5)
+                .frame(height: 16)
                 .background(Color.white.opacity(0.18))
                 .clipShape(Capsule())
 
@@ -770,6 +746,47 @@ private struct NotificationRowView: View {
     }
 }
 
+private struct WindowControlButtons: View {
+    private let controls: [WindowControl] = [
+        WindowControl(color: Color(red: 1.0, green: 0.33, blue: 0.32), accessibilityLabel: "关闭窗口") {
+            NSApp.keyWindow?.performClose(nil)
+        },
+        WindowControl(color: Color(red: 1.0, green: 0.75, blue: 0.10), accessibilityLabel: "最小化窗口") {
+            NSApp.keyWindow?.performMiniaturize(nil)
+        },
+        WindowControl(color: Color(red: 0.14, green: 0.78, blue: 0.27), accessibilityLabel: "缩放窗口") {
+            NSApp.keyWindow?.performZoom(nil)
+        }
+    ]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(controls) { control in
+                Button(action: control.action) {
+                    Circle()
+                        .fill(control.color)
+                        .overlay {
+                            Circle()
+                                .stroke(Color.black.opacity(0.12), lineWidth: 0.7)
+                        }
+                        .frame(width: 13, height: 13)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(control.accessibilityLabel)
+                .help(control.accessibilityLabel)
+            }
+        }
+        .frame(height: 20)
+    }
+}
+
+private struct WindowControl: Identifiable {
+    let id = UUID()
+    let color: Color
+    let accessibilityLabel: String
+    let action: () -> Void
+}
+
 private struct ConductorSidebar: View {
     @ObservedObject var model: ConductorWindowModel
     @State private var renamingWorkspaceID: WorkspaceID?
@@ -786,7 +803,7 @@ private struct ConductorSidebar: View {
     }
 
     private var sidebarHeaderHeight: CGFloat {
-        model.sidebarVisible ? 56 : 84
+        model.sidebarVisible ? 54 : 82
     }
 
     var body: some View {
@@ -806,22 +823,17 @@ private struct ConductorSidebar: View {
         .padding(.bottom, ConductorTokens.Space.sidebarBottom)
         .frame(width: model.sidebarVisible ? ConductorDesign.sidebarWidth : ConductorDesign.sidebarCollapsedWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius)
-                .stroke(Color.white.opacity(0.70), lineWidth: 1)
+        .background {
+            ConductorGlassSurface(style: .sidebar, interactive: true) {
+                Color.clear
+            }
         }
+        .clipShape(RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous))
         .overlay(alignment: .top) {
             if !model.sidebarVisible {
                 collapsedTrafficLightShelf
             }
         }
-        .shadow(
-            color: ConductorDesign.shadow(ConductorTokens.Shadow.panelOpacity),
-            radius: ConductorTokens.Shadow.panelRadius,
-            y: ConductorTokens.Shadow.panelY
-        )
         .animation(ConductorMotion.layout, value: model.sidebarVisible)
         .animation(ConductorMotion.standard, value: model.workspace.id)
         .animation(ConductorMotion.layout, value: model.workspaces.map(\.id))
@@ -847,18 +859,24 @@ private struct ConductorSidebar: View {
     @ViewBuilder
     private var sidebarHeader: some View {
         if model.sidebarVisible {
-            HStack {
-                Spacer()
-                sidebarToggleButton
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    WindowControlButtons()
+                    Spacer(minLength: 8)
+                    sidebarToggleButton
+                }
+                .padding(.top, 11)
             }
-            .frame(height: sidebarHeaderHeight, alignment: .bottom)
+            .frame(height: sidebarHeaderHeight, alignment: .top)
         } else {
             VStack(spacing: 0) {
+                WindowControlButtons()
+                    .padding(.top, 11)
                 Spacer(minLength: 0)
                 sidebarToggleButton
             }
             .frame(maxWidth: .infinity)
-            .frame(height: sidebarHeaderHeight, alignment: .bottom)
+            .frame(height: sidebarHeaderHeight, alignment: .top)
         }
     }
 
@@ -933,10 +951,14 @@ private struct ConductorSidebar: View {
 
             Spacer(minLength: 8)
 
-            SidebarActionRow(icon: "paintpalette", title: model.theme.title, help: "切换终端配色") {
+            SidebarActionRow(icon: "paintpalette", title: model.theme.title, help: "切换主题") {
+                finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform {
-                    model.theme = model.theme == .codexDark ? .flexoki : .codexDark
+                    model.cycleTheme()
                 }
+            }
+            .contextMenu {
+                themeMenuItems
             }
             SidebarActionRow(icon: "gearshape", title: "设置", help: "设置") {}
         }
@@ -1037,11 +1059,27 @@ private struct ConductorSidebar: View {
             Spacer(minLength: 8)
 
             SidebarRailButton(icon: "paintpalette", help: model.theme.title) {
+                finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform {
-                    model.theme = model.theme == .codexDark ? .flexoki : .codexDark
+                    model.cycleTheme()
                 }
             }
+            .contextMenu {
+                themeMenuItems
+            }
             SidebarRailButton(icon: "gearshape", help: "设置") {}
+        }
+    }
+
+    @ViewBuilder
+    private var themeMenuItems: some View {
+        ForEach(TerminalTheme.allCases) { theme in
+            Button(theme.title) {
+                finishWorkspaceRenameIfNeeded()
+                ConductorMotion.perform {
+                    model.theme = theme
+                }
+            }
         }
     }
 
@@ -1434,84 +1472,89 @@ private struct ConductorToolbar: View {
     @State private var workspaceTitleDraft = ""
 
     var body: some View {
-        HStack(spacing: ConductorTokens.Space.toolbarGap) {
-            WorkspaceTabStrip(
-                model: model,
-                editingWorkspaceID: $editingWorkspaceID,
-                workspaceTitleDraft: $workspaceTitleDraft,
-                onBeginRename: beginRenameWorkspace,
-                onCommitRename: commitWorkspaceRename,
-                onCancelRename: cancelWorkspaceRename
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(0)
+        ConductorTerminalToolbarSurface(theme: model.theme) {
+            HStack(spacing: ConductorTokens.Space.toolbarGap) {
+                WorkspaceTabStrip(
+                    model: model,
+                    editingWorkspaceID: $editingWorkspaceID,
+                    workspaceTitleDraft: $workspaceTitleDraft,
+                    onBeginRename: beginRenameWorkspace,
+                    onCommitRename: commitWorkspaceRename,
+                    onCancelRename: cancelWorkspaceRename
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(0)
 
-            ConductorPillGroup {
-                ConductorIconButton(systemImage: "plus", help: "新建工作区", title: "工作区") {
-                    finishWorkspaceRenameIfNeeded()
-                    model.newWorkspace()
+                ConductorPillGroup {
+                    ConductorIconButton(systemImage: "plus", help: "新建工作区", title: "工作区") {
+                        finishWorkspaceRenameIfNeeded()
+                        model.newWorkspace()
+                    }
                 }
-            }
 
-            ConductorPillGroup {
-                ConductorIconButton(systemImage: "plus.rectangle.on.rectangle", help: "新开终端 Cmd-T", title: "新终端") {
-                    finishWorkspaceRenameIfNeeded()
-                    model.newTerminal()
+                ConductorPillGroup {
+                    ConductorIconButton(systemImage: "plus.rectangle.on.rectangle", help: "新开终端 Cmd-T", title: "新终端") {
+                        finishWorkspaceRenameIfNeeded()
+                        model.newTerminal()
+                    }
+                    ConductorSegmentDivider()
+                    ConductorIconButton(systemImage: "plus", help: "新标签 Cmd-Shift-T", title: "新标签") {
+                        finishWorkspaceRenameIfNeeded()
+                        if let paneID = model.workspace.focusedPane?.id {
+                            model.newTab(in: paneID)
+                        }
+                    }
                 }
-                ConductorIconButton(systemImage: "plus", help: "新标签 Cmd-Shift-T", title: "新标签") {
-                    finishWorkspaceRenameIfNeeded()
-                    if let paneID = model.workspace.focusedPane?.id {
-                        model.newTab(in: paneID)
+
+                ConductorPillGroup {
+                    ConductorIconButton(systemImage: "rectangle.split.2x1", help: "向右分屏 Cmd-D", title: "右分屏", disabled: !model.canSplit) {
+                        finishWorkspaceRenameIfNeeded()
+                        model.splitRight()
+                    }
+                    ConductorSegmentDivider()
+                    ConductorIconButton(systemImage: "rectangle.split.1x2", help: "向下分屏 Cmd-Shift-D", title: "下分屏", disabled: !model.canSplit) {
+                        finishWorkspaceRenameIfNeeded()
+                        model.splitDown()
+                    }
+                    ConductorSegmentDivider()
+                    ConductorIconButton(
+                        systemImage: "arrow.up.left.and.arrow.down.right",
+                        help: model.workspace.isZoomed ? "还原当前分屏" : "放大当前分屏",
+                        title: nil,
+                        disabled: model.workspace.root.leaves.count <= 1,
+                        active: model.workspace.isZoomed
+                    ) {
+                        finishWorkspaceRenameIfNeeded()
+                        model.toggleZoom()
+                    }
+                }
+
+                ConductorPillGroup {
+                    ConductorIconButton(
+                        systemImage: model.notifications.snapshot.unreadCount > 0 ? "bell.badge" : "bell",
+                        help: "通知中心",
+                        title: model.notifications.snapshot.unreadCount > 0 ? "\(model.notifications.snapshot.unreadCount)" : nil,
+                        active: model.notificationPanelVisible
+                    ) {
+                        finishWorkspaceRenameIfNeeded()
+                        model.toggleNotificationPanel()
+                    }
+                    ConductorSegmentDivider()
+                    ConductorIconButton(systemImage: "ellipsis", help: "命令面板 Cmd-K", title: "命令") {
+                        finishWorkspaceRenameIfNeeded()
+                        model.toggleCommandPalette()
                     }
                 }
             }
-
-            ConductorPillGroup {
-                ConductorIconButton(systemImage: "rectangle.split.2x1", help: "向右分屏 Cmd-D", title: "右分屏", disabled: !model.canSplit) {
-                    finishWorkspaceRenameIfNeeded()
-                    model.splitRight()
-                }
-                ConductorIconButton(systemImage: "rectangle.split.1x2", help: "向下分屏 Cmd-Shift-D", title: "下分屏", disabled: !model.canSplit) {
-                    finishWorkspaceRenameIfNeeded()
-                    model.splitDown()
-                }
-                ConductorIconButton(
-                    systemImage: "arrow.up.left.and.arrow.down.right",
-                    help: model.workspace.isZoomed ? "还原当前分屏" : "放大当前分屏",
-                    title: nil,
-                    disabled: model.workspace.root.leaves.count <= 1,
-                    active: model.workspace.isZoomed
-                ) {
-                    finishWorkspaceRenameIfNeeded()
-                    model.toggleZoom()
-                }
-            }
-
-            ConductorPillGroup {
-                ConductorIconButton(
-                    systemImage: model.notifications.snapshot.unreadCount > 0 ? "bell.badge" : "bell",
-                    help: "通知中心",
-                    title: model.notifications.snapshot.unreadCount > 0 ? "\(model.notifications.snapshot.unreadCount)" : nil,
-                    active: model.notificationPanelVisible
-                ) {
-                    finishWorkspaceRenameIfNeeded()
-                    model.toggleNotificationPanel()
-                }
-                ConductorIconButton(systemImage: "ellipsis", help: "命令面板 Cmd-K", title: "命令") {
-                    finishWorkspaceRenameIfNeeded()
-                    model.toggleCommandPalette()
-                }
-            }
+            .controlSize(.small)
+            .padding(.leading, 10)
+            .padding(.trailing, 6)
+            .frame(height: ConductorDesign.toolbarHeight)
         }
-        .controlSize(.small)
-        .padding(.horizontal, 4)
+        .padding(.top, 5)
+        .padding(.bottom, 2)
         .frame(height: ConductorDesign.toolbarHeight)
-        .background(ConductorTokens.Palette.terminalChrome)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(ConductorTokens.Palette.strokeOnDark.opacity(0.55))
-                .frame(height: 1)
-        }
+        .background(model.theme.terminalChrome)
     }
 
     private func beginRenameWorkspace(_ workspace: WorkspaceState) {
@@ -1659,10 +1702,10 @@ private struct WorkspaceTabStrip: View {
 }
 
 private enum WorkspaceTabMetrics {
-    static let width: CGFloat = 132
-    static let height: CGFloat = 25
-    static let spacing: CGFloat = 4
-    static let edgePadding: CGFloat = 6
+    static let width: CGFloat = 128
+    static let height: CGFloat = 23
+    static let spacing: CGFloat = 8
+    static let edgePadding: CGFloat = 2
 }
 
 private struct WorkspaceTopTab: View {
@@ -1710,20 +1753,20 @@ private struct WorkspaceTopTab: View {
             } else {
                 Image(systemName: selected ? "rectangle.3.group.fill" : "rectangle.3.group")
                     .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(selected ? ConductorDesign.primaryText : ConductorDesign.terminalTextMuted)
+                    .foregroundStyle(selected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
                     .frame(width: 14)
                 Text(workspace.title)
                     .font(selected ? ConductorTokens.Typography.workspaceTabSelected : ConductorTokens.Typography.workspaceTab)
-                    .foregroundStyle(selected ? ConductorDesign.primaryText : ConductorDesign.terminalTextMuted)
+                    .foregroundStyle(selected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text("\(terminalCount)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(selected ? ConductorDesign.tertiaryText : ConductorDesign.terminalTextMuted)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(ConductorDesign.terminalTextMuted)
                     .padding(.horizontal, 4)
                     .frame(minWidth: 16, minHeight: 14)
-                    .background(selected ? Color.accentColor.opacity(0.10) : Color.white.opacity(0.08))
+                    .background(Color.white.opacity(selected ? 0.055 : 0.030))
                     .clipShape(Capsule())
                 if unreadCount > 0 {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
@@ -1739,7 +1782,7 @@ private struct WorkspaceTopTab: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(canClose ? (selected ? ConductorDesign.tertiaryText : ConductorDesign.terminalTextMuted.opacity(0.70)) : Color.clear)
+                        .foregroundStyle(canClose ? ConductorDesign.terminalTextMuted.opacity(selected ? 0.90 : 0.70) : Color.clear)
                         .frame(width: 12, height: 12)
                         .contentShape(Rectangle())
                 }
@@ -1748,20 +1791,23 @@ private struct WorkspaceTopTab: View {
                 .help("关闭工作区")
             }
         }
-        .padding(.leading, 7)
-        .padding(.trailing, editing ? 7 : 5)
+        .padding(.leading, 4)
+        .padding(.trailing, editing ? 6 : 4)
         .frame(width: WorkspaceTabMetrics.width, height: WorkspaceTabMetrics.height)
-        .background(selected ? ConductorTokens.Palette.terminalChromeSelected : (hovering ? Color.white.opacity(0.06) : Color.white.opacity(0.035)))
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab))
-        .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab)
-                .stroke(selected ? Color.white.opacity(0.72) : Color.white.opacity(hovering ? 0.07 : 0.025), lineWidth: 1)
+        .background(selected ? Color.white.opacity(0.040) : (hovering ? Color.white.opacity(0.030) : Color.clear))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay(alignment: .bottomLeading) {
+            if selected {
+                Capsule()
+                    .fill(Color.accentColor.opacity(0.88))
+                    .frame(width: 36, height: 2.5)
+                    .padding(.leading, 22)
+            }
         }
-        .shadow(
-            color: selected ? ConductorDesign.shadow(ConductorTokens.Shadow.controlOpacity) : ConductorDesign.shadow(0.030),
-            radius: ConductorTokens.Shadow.controlRadius,
-            y: ConductorTokens.Shadow.controlY
-        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(selected ? Color.white.opacity(0.14) : Color.clear, lineWidth: 1)
+        }
         .scaleEffect(hovering && !selected ? 0.992 : 1)
         .animation(nil, value: selected)
         .animation(ConductorMotion.micro, value: hovering)
