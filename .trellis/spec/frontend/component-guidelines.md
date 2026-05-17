@@ -133,6 +133,9 @@ workspace overview, and compact status modules.
 - The top workspace toolbar should feel like a translucent command shelf, not a compressed
   black strip. Give it enough vertical room, use material plus theme tint, separate workspace
   navigation from command groups, and make action clusters read as floating capsules.
+- Settings and appearance panels should share the sidebar's glass language: one soft rounded
+  shell, quiet internal dividers, sidebar-style category rows, and compact segmented controls.
+  Avoid hard split lines, opaque content slabs, and large option cards inside these panels.
 - Bind fluid effects only to low-frequency product state such as selection, command palette
   visibility, notification badges, sidebar visibility, and workspace navigation.
 - Do not bind glass effects, blur changes, or animated mesh/background effects to stdout,

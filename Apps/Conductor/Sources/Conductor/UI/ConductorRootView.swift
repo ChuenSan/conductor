@@ -794,6 +794,7 @@ private struct AppearanceSettingsPanel: View {
     @ObservedObject var model: ConductorWindowModel
     @State private var selectedSection: SettingsPanelSection = .interface
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     private let columns = [
         GridItem(.adaptive(minimum: 150, maximum: 178), spacing: 9)
@@ -801,7 +802,7 @@ private struct AppearanceSettingsPanel: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.12)
+            Color.black.opacity(0.08)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
@@ -810,15 +811,20 @@ private struct AppearanceSettingsPanel: View {
                     sidebar
 
                     Rectangle()
-                        .fill(model.theme.shellStroke.opacity(0.80))
+                        .fill(theme.shellStroke.opacity(0.16))
                         .frame(width: 1)
+                        .padding(.vertical, 18)
 
                     contentPane
                 }
-                .background(model.theme.shellPanelBackground)
             }
             .clipShape(RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous))
-            .frame(width: 686, height: 486)
+            .overlay {
+                RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous)
+                    .stroke(theme.shellStroke.opacity(0.82), lineWidth: 0.8)
+                    .allowsHitTesting(false)
+            }
+            .frame(width: 690, height: 486)
             .onExitCommand {
                 model.hideSettingsPanel()
             }
@@ -830,9 +836,9 @@ private struct AppearanceSettingsPanel: View {
             HStack(spacing: 8) {
                 Image(systemName: "gearshape")
                     .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .foregroundStyle(theme.accent.opacity(0.88))
                     .frame(width: 24, height: 24)
-                    .background(model.theme.shellControlFill)
+                    .background(theme.shellControlFill)
                     .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 1) {
@@ -848,7 +854,7 @@ private struct AppearanceSettingsPanel: View {
             .padding(.bottom, 4)
 
             SidebarSeparator()
-                .padding(.horizontal, -1)
+                .padding(.horizontal, -2)
 
             SidebarSectionTitle("分类")
 
@@ -868,7 +874,7 @@ private struct AppearanceSettingsPanel: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .frame(width: 154)
+        .frame(width: 164)
         .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 
@@ -876,13 +882,14 @@ private struct AppearanceSettingsPanel: View {
         VStack(spacing: 0) {
             header
 
-            Rectangle()
-                .fill(model.theme.shellStroke.opacity(0.82))
-                .frame(height: 1)
+            SidebarSeparator()
+                .padding(.horizontal, 4)
+                .padding(.vertical, 0)
 
             ScrollView {
                 detailContent
-                    .padding(13)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 11)
             }
             .scrollIndicators(.visible)
         }
@@ -893,9 +900,9 @@ private struct AppearanceSettingsPanel: View {
         HStack(spacing: 9) {
             Image(systemName: selectedSection.systemImage)
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.secondaryText)
+                .foregroundStyle(theme.accent.opacity(0.88))
                 .frame(width: 24, height: 24)
-                .background(model.theme.shellControlFill)
+                .background(theme.shellControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 1) {
@@ -918,13 +925,13 @@ private struct AppearanceSettingsPanel: View {
                     .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.secondaryText)
                     .frame(width: 24, height: 24)
-                    .background(model.theme.shellControlFill)
+                    .background(theme.shellControlFill)
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
             .help("关闭设置")
         }
-        .padding(.vertical, 11)
+        .padding(.vertical, 12)
         .padding(.horizontal, 14)
     }
 
@@ -1076,7 +1083,7 @@ private struct SettingsSidebarItem: View {
             HStack(spacing: 8) {
                 Image(systemName: section.systemImage)
                     .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
+                    .foregroundStyle(selected ? theme.accent : ConductorDesign.secondaryText)
                     .frame(width: 14)
 
                 Text(section.title)
@@ -1134,26 +1141,29 @@ private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View
                     Button {
                         selection = option
                     } label: {
-                        VStack(spacing: 2) {
-                            Text(titleForOption(option))
-                                .font(.conductorSystem(size: 11, weight: selection == option ? .bold : .semibold, scale: fontScale))
-                                .foregroundStyle(selection == option ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
-                            Text(subtitleForOption(option))
-                                .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
-                                .foregroundStyle(ConductorDesign.tertiaryText)
-                        }
+                        Text(titleForOption(option))
+                            .font(.conductorSystem(size: 11, weight: selection == option ? .bold : .semibold, scale: fontScale))
+                            .foregroundStyle(selection == option ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
+                            .lineLimit(1)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 7)
-                        .background(selection == option ? theme.shellSelectedFill : theme.shellPanelStrong.opacity(0.42))
+                        .frame(height: 28)
+                        .background(selection == option ? theme.shellSelectedFill : Color.clear)
                         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(selection == option ? theme.shellStroke.opacity(0.92) : theme.shellStroke.opacity(0.52), lineWidth: 1)
+                                .stroke(selection == option ? theme.shellStroke.opacity(0.54) : Color.clear, lineWidth: 1)
                         }
                     }
                     .buttonStyle(.plain)
-                    .help(titleForOption(option))
+                    .help("\(titleForOption(option)) · \(subtitleForOption(option))")
                 }
+            }
+            .padding(3)
+            .background(theme.shellPanelStrong.opacity(0.34))
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(theme.shellStroke.opacity(0.30), lineWidth: 1)
             }
         }
     }
@@ -1168,25 +1178,20 @@ private struct AppearanceToggleRow: View {
 
     var body: some View {
         Toggle(isOn: $isOn) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                Text(subtitle)
-                    .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .lineLimit(1)
-            }
+            Text(title)
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
         }
         .toggleStyle(.switch)
         .padding(.vertical, 7)
         .padding(.horizontal, 9)
-        .background(theme.shellPanelStrong.opacity(0.42))
+        .background(theme.shellPanelStrong.opacity(0.34))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(theme.shellStroke.opacity(0.54), lineWidth: 1)
+                .stroke(theme.shellStroke.opacity(0.30), lineWidth: 1)
         }
+        .help(subtitle)
     }
 }
 
@@ -1218,11 +1223,11 @@ private struct CommandShortcutGuide: View {
         }
         .scrollIndicators(.visible)
         .frame(height: height)
-        .background(theme.shellPanelStrong.opacity(0.36))
+        .background(theme.shellPanelStrong.opacity(0.28))
         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(theme.shellStroke.opacity(0.54), lineWidth: 1)
+                .stroke(theme.shellStroke.opacity(0.30), lineWidth: 1)
         }
     }
 }
@@ -1290,12 +1295,12 @@ private struct ThemePreviewCard: View {
             }
             .padding(8)
             .background(cardFill)
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(selected ? theme.accent.opacity(0.86) : theme.shellStroke.opacity(hovering ? 0.88 : 0.58), lineWidth: selected ? 1.5 : 1)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(selected ? theme.accent.opacity(0.78) : theme.shellStroke.opacity(hovering ? 0.58 : 0.34), lineWidth: selected ? 1.2 : 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { value in
