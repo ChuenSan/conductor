@@ -465,13 +465,27 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         if visible {
             showNotificationWindow()
         } else {
-            notificationWindow?.orderOut(nil)
+            hideNotificationWindow()
+        }
+    }
+
+    private func hideNotificationWindow() {
+        notificationWindow?.orderOut(nil)
+        restoreMainWindowFocus()
+    }
+
+    private func restoreMainWindowFocus() {
+        guard let window else { return }
+        if NSApp.isActive {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            window.orderFront(nil)
         }
     }
 
     private func showNotificationWindow() {
         if let notificationWindow {
-            notificationWindow.makeKeyAndOrderFront(nil)
+            notificationWindow.orderFrontRegardless()
             return
         }
 
@@ -488,6 +502,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         panel.backgroundColor = .clear
         panel.isReleasedWhenClosed = false
         panel.isFloatingPanel = false
+        panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         panel.minSize = NSSize(
@@ -522,7 +537,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         ])
 
         notificationWindow = panel
-        panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
     }
 
     private func installAgentHookObserver() {

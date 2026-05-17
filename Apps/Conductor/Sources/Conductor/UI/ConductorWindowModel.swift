@@ -618,6 +618,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func toggleCommandPalette() {
         commandPaletteVisible.toggle()
         if commandPaletteVisible {
+            notificationPanelVisible = false
             settingsPanelVisible = false
             workspaceOverviewVisible = false
         }

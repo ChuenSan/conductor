@@ -175,6 +175,46 @@ ConductorMotion.perform(ConductorMotion.layout) {
 .opacity(isFocused ? 1 : 0.9) // applied to the live terminal surface
 ```
 
+### Convention: Auxiliary Panel Focus
+
+**What**: AppKit auxiliary panels such as the notification center must not leave the main
+`ConductorWindow` without key focus after they are hidden or replaced by an in-window SwiftUI
+surface.
+
+**Why**: If an `NSPanel` is shown with `makeKeyAndOrderFront` and later hidden with only
+`orderOut`, the app can remain active while the main window is no longer key. The next click
+on toolbar/sidebar chrome may only refocus the main window instead of activating the control,
+which feels like the app stopped accepting clicks.
+
+**Contract**:
+
+- Prefer `orderFront` or `orderFrontRegardless` for notification-style panels that do not need
+  text input focus.
+- Set `becomesKeyOnlyIfNeeded = true` for notification panels.
+- When hiding an auxiliary panel, call a main-window focus restoration helper that makes the
+  main `ConductorWindow` key again while the app is active.
+- Opening an in-window modal surface such as Command Center, Appearance Center, or Workspace
+  Overview must also dismiss any auxiliary notification panel.
+- Do not use separate `NSPanel` windows for shell surfaces that can live safely inside the
+  main SwiftUI window; prefer a single in-window overlay when possible.
+
+**Correct**:
+
+```swift
+panel.becomesKeyOnlyIfNeeded = true
+panel.orderFrontRegardless()
+
+notificationWindow?.orderOut(nil)
+restoreMainWindowFocus()
+```
+
+**Wrong**:
+
+```swift
+panel.makeKeyAndOrderFront(nil)
+notificationWindow?.orderOut(nil)
+```
+
 ---
 
 ## Accessibility
@@ -250,3 +290,6 @@ Forbidden patterns:
   SwiftUI can call this for unrelated metadata changes, so live terminal hosts should coalesce
   post-layout geometry syncs and let AppKit `layout`, `setFrameSize`, and `setBoundsSize`
   drive resize-sensitive Ghostty updates.
+- Letting an auxiliary `NSPanel` steal key focus from the main window without restoring it
+  after hide. Notification-style panels should not require a second click on the main window
+  just to make toolbar/sidebar controls responsive again.
