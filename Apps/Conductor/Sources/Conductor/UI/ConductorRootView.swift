@@ -179,21 +179,6 @@ private struct CommandPaletteView: View {
         }
     }
 
-    private var suggestedCommands: [CommandPaletteItem] {
-        let ids = ["new-terminal", "split-right", "workspace-overview", "notifications", "appearance-settings"]
-        return ids.compactMap { id in
-            commands.first { $0.id == id }
-        }
-    }
-
-    private var terminalCount: Int {
-        model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
-    }
-
-    private var focusedTerminalTitle: String {
-        model.workspace.focusedPane?.selectedTab?.title ?? "终端"
-    }
-
     var body: some View {
         ZStack {
             Color.black.opacity(0.18)
@@ -204,24 +189,12 @@ private struct CommandPaletteView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     commandHeader
                     FloatingPanelDivider()
-                    CommandStatusStrip(
-                        workspaceTitle: model.workspace.title,
-                        terminalTitle: focusedTerminalTitle,
-                        paneCount: model.workspace.panes.count,
-                        terminalCount: terminalCount,
-                        unreadCount: model.notifications.snapshot.unreadCount
-                    )
                     commandSearchField
-
-                    if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        suggestionShelf
-                    }
-
                     commandResults
                 }
                 .padding(12)
             }
-            .frame(width: 560)
+            .frame(width: 690, height: 486)
             .onAppear {
                 searchFocused = true
                 ensureSelection()
@@ -284,19 +257,6 @@ private struct CommandPaletteView: View {
         }
     }
 
-    private var suggestionShelf: some View {
-        HStack(spacing: 8) {
-            ForEach(suggestedCommands) { command in
-                CommandSuggestionButton(
-                    command: command,
-                    selected: command.id == selectedCommandID
-                ) {
-                    selectedCommandID = command.id
-                }
-            }
-        }
-    }
-
     private var commandResults: some View {
         Group {
             if filteredCommands.isEmpty {
@@ -332,9 +292,9 @@ private struct CommandPaletteView: View {
                     .padding(.vertical, 1)
                 }
                 .scrollIndicators(.visible)
-                .frame(maxHeight: 332)
             }
         }
+        .frame(maxHeight: .infinity)
     }
 
     private func run(_ action: () -> Void) {
@@ -694,7 +654,7 @@ private struct CommandButton: View {
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
             .overlay {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.row)
-                    .stroke(selected ? Color.accentColor.opacity(0.52) : Color.clear, lineWidth: 1)
+                    .stroke(selected ? theme.accent.opacity(0.52) : Color.clear, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -726,132 +686,14 @@ private struct CommandButton: View {
         if command.disabled {
             return ConductorDesign.tertiaryText
         }
-        return selected ? Color.accentColor : ConductorDesign.secondaryText
+        return selected ? theme.accent : ConductorDesign.secondaryText
     }
 
     private var iconFill: Color {
         if selected {
-            return Color.accentColor.opacity(0.13)
+            return theme.accent.opacity(0.13)
         }
         return command.disabled ? theme.floatingControlFill.opacity(0.45) : theme.floatingControlFill
-    }
-}
-
-private struct CommandStatusStrip: View {
-    let workspaceTitle: String
-    let terminalTitle: String
-    let paneCount: Int
-    let terminalCount: Int
-    let unreadCount: Int
-
-    var body: some View {
-        HStack(spacing: 7) {
-            CommandStatusChip(systemImage: "rectangle.3.group", title: "工作区", value: workspaceTitle)
-            CommandStatusChip(systemImage: "terminal", title: "当前", value: terminalTitle)
-            CommandStatusChip(systemImage: "square.split.2x2", title: "分屏", value: "\(paneCount)")
-            CommandStatusChip(systemImage: unreadCount > 0 ? "bell.badge" : "bell", title: "通知", value: "\(unreadCount)")
-        }
-    }
-}
-
-private struct CommandStatusChip: View {
-    let systemImage: String
-    let title: String
-    let value: String
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 17)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: 8.5, weight: .semibold))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                Text(value)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-        }
-        .padding(.horizontal, 8)
-        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
-        .background(theme.floatingControlFill)
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(theme.floatingStroke, lineWidth: 1)
-        }
-    }
-}
-
-private struct CommandSuggestionButton: View {
-    let command: CommandPaletteItem
-    let selected: Bool
-    let onHover: () -> Void
-    @State private var hovering = false
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        Button(action: command.action) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: command.systemImage)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : Color.accentColor)
-                    Spacer()
-                    if command.disabled {
-                        Image(systemName: "lock")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(ConductorDesign.tertiaryText)
-                    }
-                }
-                Text(command.title)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.primaryText)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Text(command.shortcut)
-                    .font(.system(size: 9.5, weight: .semibold))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .lineLimit(1)
-            }
-            .padding(9)
-            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
-            .background(cardFill)
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(selected ? Color.accentColor.opacity(0.58) : theme.floatingStroke, lineWidth: selected ? 1.4 : 1)
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(command.disabled)
-        .opacity(command.disabled ? 0.62 : 1)
-        .onHover { value in
-            withAnimation(ConductorMotion.micro) {
-                hovering = value
-            }
-            if value && !command.disabled {
-                onHover()
-            }
-        }
-        .animation(ConductorMotion.micro, value: hovering)
-        .animation(ConductorMotion.standard, value: selected)
-        .help(command.title)
-    }
-
-    private var cardFill: Color {
-        if selected {
-            return theme.floatingSelectedFill
-        }
-        if hovering {
-            return theme.floatingHoverFill
-        }
-        return theme.floatingControlFill.opacity(0.76)
     }
 }
 
@@ -870,7 +712,7 @@ private struct AppearanceSettingsPanel: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
-            ConductorGlassSurface(style: .settings, clarity: model.appearance.chromeClarity, interactive: true) {
+            ConductorGlassSurface(style: .palette, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(spacing: 0) {
                     FloatingPanelHeader(
                         systemImage: "gearshape",
@@ -890,7 +732,7 @@ private struct AppearanceSettingsPanel: View {
                         sidebar
 
                         Rectangle()
-                            .fill(theme.settingsStroke.opacity(0.70))
+                            .fill(theme.floatingSeparator)
                             .frame(width: 1)
                             .padding(.vertical, 14)
 
@@ -901,7 +743,7 @@ private struct AppearanceSettingsPanel: View {
             .clipShape(RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous)
-                    .stroke(theme.settingsStroke.opacity(0.82), lineWidth: 0.8)
+                    .stroke(theme.floatingStroke.opacity(0.82), lineWidth: 0.8)
                     .allowsHitTesting(false)
             }
             .frame(width: 690, height: 486)
@@ -1169,11 +1011,11 @@ private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View
                 }
             }
             .padding(3)
-            .background(theme.settingsControlFill)
+            .background(theme.floatingControlFill)
             .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(theme.settingsStroke, lineWidth: 1)
+                    .stroke(theme.floatingStroke, lineWidth: 1)
             }
         }
     }
@@ -1195,11 +1037,11 @@ private struct AppearanceToggleRow: View {
         .toggleStyle(.switch)
         .padding(.vertical, 7)
         .padding(.horizontal, 9)
-        .background(theme.settingsControlFill)
+        .background(theme.floatingControlFill)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(theme.settingsStroke, lineWidth: 1)
+                .stroke(theme.floatingStroke, lineWidth: 1)
         }
         .help(subtitle)
     }
@@ -1233,11 +1075,11 @@ private struct CommandShortcutGuide: View {
         }
         .scrollIndicators(.visible)
         .frame(height: height)
-        .background(theme.settingsControlFill)
+        .background(theme.floatingControlFill)
         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(theme.settingsStroke, lineWidth: 1)
+                .stroke(theme.floatingStroke, lineWidth: 1)
         }
     }
 }
@@ -1251,7 +1093,7 @@ private struct CommandShortcutGuideRow: View {
         HStack(spacing: 8) {
             Image(systemName: item.systemImage)
                 .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(theme.accent)
                 .frame(width: 18)
 
             Text(item.title)
@@ -1514,12 +1356,12 @@ private struct WorkspaceOverviewPanel: View {
                             .padding(.bottom, 2)
                         }
                         .scrollIndicators(.visible)
-                        .frame(maxHeight: 438)
+                        .frame(maxHeight: .infinity)
                     }
                 }
                 .padding(12)
             }
-            .frame(width: 760)
+            .frame(width: 690, height: 486)
             .onAppear {
                 highlightedWorkspaceID = model.workspace.id
                 searchFocused = true
@@ -1995,7 +1837,7 @@ struct NotificationPanelView: View {
             }
             .buttonStyle(ConductorPressButtonStyle())
             .font(.system(size: 10.5, weight: .semibold))
-            .foregroundStyle(model.notifications.snapshot.latestUnread == nil ? ConductorDesign.tertiaryText : Color.accentColor)
+            .foregroundStyle(model.notifications.snapshot.latestUnread == nil ? ConductorDesign.tertiaryText : theme.accent)
             .disabled(model.notifications.snapshot.latestUnread == nil)
             Button("清空") {
                 ConductorMotion.perform(ConductorMotion.layout) {
@@ -2086,7 +1928,7 @@ private struct NotificationRowView: View {
                         .overlay(alignment: .topTrailing) {
                             if unread {
                                 Circle()
-                                    .fill(Color.accentColor)
+                                    .fill(theme.accent)
                                     .frame(width: 5, height: 5)
                                     .offset(x: 2, y: -2)
                             }
@@ -2124,7 +1966,7 @@ private struct NotificationRowView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .strokeBorder(
-                    unread ? Color.accentColor.opacity(0.26) : theme.floatingStroke,
+                    unread ? theme.accent.opacity(0.26) : theme.floatingStroke,
                     lineWidth: 1
                 )
         }

@@ -135,22 +135,17 @@ workspace overview, and compact status modules.
   navigation from command groups, and make action clusters read as floating capsules.
 - Terminal creation should have one primary user-facing entry. Do not expose separate "new
   terminal" and "new tab" controls when they perform the same focused-pane action.
-- Settings and appearance panels should share the sidebar's glass language: one soft rounded
-  shell, quiet internal dividers, sidebar-style category rows, and compact segmented controls.
-  Use theme-owned settings colors (`settingsPanelBase`, `settingsPanelWash`,
-  `settingsControlFill`, and `settingsStroke`) so settings follow the active theme without
-  borrowing the heavier terminal `shellPanelBackground`; large raw theme fills can read as a
-  blue/colored film in Codex Dark and similar themes. Avoid hard split lines, opaque content
-  slabs, and large option cards inside these panels.
-- Command Center, Workspace Overview, Notification Center, and future floating shell panels
-  should use theme-owned floating colors (`floatingPanelBase`, `floatingPanelWash`,
+- Command Center, Settings, Workspace Overview, Notification Center, and future floating shell
+  panels should use theme-owned floating colors (`floatingPanelBase`, `floatingPanelWash`,
   `floatingControlFill`, `floatingControlStrongFill`, `floatingStroke`, selected/hover fills,
-  and separators). Do not tint these panels directly with `shellPanelBackground`; that color is
-  for sidebar-style chrome and can make modal panels look like a colored sheet.
+  and separators). Do not tint these panels directly with `shellPanelBackground` and do not
+  create a separate settings-only color language; one app theme must produce one floating-panel
+  language.
 - Floating shell panels should share one outer skeleton: `ConductorGlassSurface`, one
   `FloatingPanelHeader`, one `FloatingPanelDivider`, then the panel's specialized content.
   Settings may include an internal category sidebar, but it should not add a second competing
-  title bar inside the panel.
+  title bar inside the panel. In-window floating panels should share a common width/height
+  unless the surface is a true small popover.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.
