@@ -126,14 +126,17 @@ private struct SplitDivider: View {
     @State private var hovering = false
 
     var body: some View {
-        Rectangle()
-            .fill(ConductorDesign.splitGutter)
-            .overlay {
-                Capsule()
-                    .fill(active || hovering ? Color.accentColor.opacity(0.70) : Color.white.opacity(0.045))
-                    .frame(width: axis == .horizontal ? 2 : nil, height: axis == .vertical ? 2 : nil)
-                    .frame(width: axis == .horizontal ? nil : 32, height: axis == .vertical ? nil : 32)
-            }
+        ZStack {
+            Rectangle()
+                .fill(Color.black.opacity(active ? 0.34 : 0.22))
+            Rectangle()
+                .fill(Color.white.opacity(active ? 0.080 : 0.035))
+
+            Capsule()
+                .fill(active || hovering ? Color.accentColor.opacity(0.82) : Color.white.opacity(0.105))
+                .frame(width: axis == .horizontal ? 2 : nil, height: axis == .vertical ? 2 : nil)
+                .frame(width: axis == .horizontal ? nil : 34, height: axis == .vertical ? nil : 34)
+        }
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -185,14 +188,14 @@ private struct TerminalPaneView: View {
         if unreadCount > 0 {
             return model.theme.accent.opacity(0.72)
         }
-        return isFocused ? model.theme.accent.opacity(0.48) : Color.white.opacity(0.040)
+        return isFocused ? model.theme.accent.opacity(0.82) : Color.white.opacity(0.075)
     }
 
     private var paneBorderWidth: CGFloat {
         if unreadCount > 0 {
             return 1.5
         }
-        return isFocused ? 1.25 : 1
+        return isFocused ? 1.5 : 1
     }
 
     var body: some View {
@@ -207,7 +210,8 @@ private struct TerminalPaneView: View {
                 .overlay {
                     if isFocused {
                         Rectangle()
-                            .stroke(model.theme.accent.opacity(0.16), lineWidth: 3)
+                            .inset(by: 2)
+                            .stroke(model.theme.accent.opacity(0.22), lineWidth: 1)
                     }
                 }
                 .allowsHitTesting(false)
@@ -216,10 +220,11 @@ private struct TerminalPaneView: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             StableTerminalTabStrip(
                 pane: pane,
                 model: model,
+                paneFocused: isFocused,
                 highlightedDropTabID: $highlightedDropTabID
             )
             .frame(minWidth: 64, maxWidth: .infinity, alignment: .leading)
@@ -230,8 +235,6 @@ private struct TerminalPaneView: View {
                     model.newTab(in: pane.id)
                 }
             }
-
-            PaneFocusBadge(title: "当前", active: isFocused, accent: model.theme.accent)
 
             PaneBarButton(
                 systemImage: "xmark",
@@ -245,13 +248,30 @@ private struct TerminalPaneView: View {
                 }
             }
         }
-        .padding(.leading, 10)
+        .padding(.leading, 8)
         .padding(.trailing, 4)
-        .frame(height: 25)
-        .background(model.theme.terminalChrome.opacity(0.98))
+        .frame(height: ConductorTokens.Space.paneTabRailHeight)
+        .background {
+            ZStack(alignment: .bottom) {
+                model.theme.terminalChrome.opacity(0.96)
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isFocused ? 0.075 : 0.045),
+                        Color.clear
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        }
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(isFocused ? model.theme.accent.opacity(0.82) : Color.white.opacity(0.045))
+                .frame(height: isFocused ? 1.5 : 1)
+        }
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(Color.white.opacity(0.040))
+                .fill(Color.white.opacity(isFocused ? 0.080 : 0.045))
                 .frame(height: 1)
         }
     }
@@ -281,10 +301,11 @@ private struct TerminalPaneView: View {
 private struct StableTerminalTabStrip: View {
     let pane: PaneState
     @ObservedObject var model: ConductorWindowModel
+    let paneFocused: Bool
     @Binding var highlightedDropTabID: TerminalID?
 
-    private let tabWidth: CGFloat = 112
-    private let tabSpacing: CGFloat = 3
+    private let tabWidth: CGFloat = ConductorTokens.Space.paneTabWidth
+    private let tabSpacing: CGFloat = 4
     private let tabEdgePadding: CGFloat = 0
 
     private var tabIDs: [TerminalID] {
@@ -321,7 +342,7 @@ private struct StableTerminalTabStrip: View {
                 scrollToSelectedTab(proxy)
             }
         }
-        .frame(height: 21)
+        .frame(height: ConductorTokens.Space.paneTabHeight)
         .clipped()
         .mask(ConductorHorizontalFadeMask())
         .transaction { transaction in
@@ -342,6 +363,7 @@ private struct StableTerminalTabStrip: View {
         TerminalTabButton(
             tab: tab,
             isSelected: tab.id == pane.selectedTabID,
+            paneFocused: paneFocused,
             isDropTarget: highlightedDropTabID == tab.id,
             metadata: model.metadataByTerminalID[tab.id],
             unreadCount: model.notifications.snapshot.unreadCount(for: tab.id),
@@ -439,13 +461,17 @@ private struct PaneBarButton: View {
                 Image(systemName: systemImage)
                     .font(.system(size: 10, weight: .semibold))
             }
-            .foregroundStyle(ConductorDesign.terminalTextMuted)
+            .foregroundStyle(hovering ? Color.accentColor.opacity(0.96) : ConductorDesign.terminalTextMuted)
             .padding(.horizontal, showsTitle ? 5 : 4)
             .frame(height: 18)
-            .frame(minWidth: showsTitle ? nil : 18)
-            .background(hovering ? Color.white.opacity(0.08) : (showsTitle ? Color.white.opacity(0.055) : Color.clear))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .contentShape(RoundedRectangle(cornerRadius: 6))
+            .frame(minWidth: showsTitle ? nil : 19)
+            .background(hovering ? Color.accentColor.opacity(0.115) : Color.white.opacity(showsTitle ? 0.050 : 0.025))
+            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
+                    .stroke(hovering ? Color.accentColor.opacity(0.34) : Color.white.opacity(0.075), lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
         }
         .buttonStyle(ConductorPressButtonStyle())
         .disabled(disabled)
@@ -461,37 +487,10 @@ private struct PaneBarButton: View {
     }
 }
 
-private struct PaneFocusBadge: View {
-    let title: String
-    let active: Bool
-    let accent: Color
-
-    var body: some View {
-        Group {
-            if active {
-                Text(title)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(ConductorDesign.terminalText)
-                    .padding(.horizontal, 6)
-                    .frame(height: 18)
-                    .background(accent.opacity(0.12))
-                    .clipShape(Capsule())
-                    .overlay {
-                        Capsule()
-                            .stroke(accent.opacity(0.38), lineWidth: 1)
-                    }
-            }
-        }
-        .frame(width: active ? nil : 0, height: 18)
-        .opacity(active ? 1 : 0)
-        .animation(ConductorMotion.standard, value: active)
-        .help(active ? "当前分屏" : "未聚焦分屏")
-    }
-}
-
 private struct TerminalTabButton: View {
     let tab: TerminalTabState
     let isSelected: Bool
+    let paneFocused: Bool
     let isDropTarget: Bool
     let metadata: TerminalDisplayMetadata?
     let unreadCount: Int
@@ -523,6 +522,26 @@ private struct TerminalTabButton: View {
         tabIndex != nil && tabCount > 1 && model.workspace.canSplit()
     }
 
+    private var tabFill: Color {
+        if isSelected {
+            return paneFocused ? model.theme.accent.opacity(0.18) : Color.white.opacity(0.070)
+        }
+        if hovering {
+            return model.theme.accent.opacity(0.075)
+        }
+        return Color.white.opacity(0.026)
+    }
+
+    private var tabStroke: Color {
+        if isDropTarget {
+            return model.theme.accent.opacity(0.88)
+        }
+        if isSelected {
+            return paneFocused ? model.theme.accent.opacity(0.58) : Color.white.opacity(0.18)
+        }
+        return Color.white.opacity(hovering ? 0.13 : 0.075)
+    }
+
     var body: some View {
         HStack(spacing: 3) {
             if editingTitle {
@@ -545,7 +564,7 @@ private struct TerminalTabButton: View {
                 HStack(spacing: 5) {
                     Image(systemName: "terminal")
                         .font(.system(size: 10))
-                        .foregroundStyle(isSelected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
+                        .foregroundStyle(isSelected && paneFocused ? model.theme.accent : ConductorDesign.terminalTextMuted)
                     Text(tab.title)
                         .font(isSelected ? ConductorTokens.Typography.terminalTabSelected : ConductorTokens.Typography.terminalTab)
                         .foregroundStyle(isSelected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
@@ -577,37 +596,33 @@ private struct TerminalTabButton: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(ConductorDesign.terminalTextMuted.opacity(isSelected ? 0.92 : 1))
-                        .frame(width: 12, height: 12)
+                        .foregroundStyle(hovering || isSelected ? ConductorDesign.terminalText.opacity(0.88) : ConductorDesign.terminalTextMuted.opacity(0.78))
+                        .frame(width: 13, height: 13)
+                        .background(hovering ? Color.white.opacity(0.075) : Color.clear)
+                        .clipShape(Circle())
                 }
                 .buttonStyle(ConductorPressButtonStyle())
                 .help("关闭标签")
             }
         }
-        .padding(.leading, 7)
+        .padding(.leading, 8)
         .padding(.trailing, 4)
-        .frame(height: 21)
-        .frame(minWidth: 64, idealWidth: 94, maxWidth: 118)
-        .background(isSelected ? Color.white.opacity(0.080) : (hovering ? Color.white.opacity(0.045) : Color.clear))
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab))
-        .overlay(alignment: .leading) {
+        .frame(height: ConductorTokens.Space.paneTabHeight)
+        .frame(minWidth: 72, idealWidth: ConductorTokens.Space.paneTabWidth, maxWidth: ConductorTokens.Space.paneTabWidth)
+        .background(tabFill)
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
+        .overlay(alignment: .bottom) {
             if isSelected {
-                Capsule()
-                    .fill(model.theme.accent.opacity(0.90))
-                    .frame(width: 2.5, height: 13)
-                    .padding(.leading, 3)
+                Rectangle()
+                    .fill(paneFocused ? model.theme.accent.opacity(0.96) : Color.white.opacity(0.30))
+                    .frame(height: 2)
+                    .padding(.horizontal, 8)
             }
         }
         .overlay {
-            if isDropTarget {
-                RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab)
-                    .stroke(model.theme.accent.opacity(0.85), lineWidth: 1.5)
-            } else if isSelected {
-                RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab)
-                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
-            }
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
+                .stroke(tabStroke, lineWidth: isDropTarget || isSelected ? 1.2 : 1)
         }
-        .scaleEffect(hovering && !isSelected ? 0.994 : 1)
         .animation(nil, value: isSelected)
         .animation(ConductorMotion.micro, value: hovering)
         .animation(ConductorMotion.micro, value: isDropTarget)

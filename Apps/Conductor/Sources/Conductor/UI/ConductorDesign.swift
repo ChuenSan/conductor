@@ -62,7 +62,10 @@ enum ConductorTokens {
         static let toolbarX: CGFloat = 0
         static let toolbarGap: CGFloat = 5
         static let terminalInset: CGFloat = 0
-        static let splitGutter: CGFloat = 3
+        static let splitGutter: CGFloat = 4
+        static let paneTabRailHeight: CGFloat = 26
+        static let paneTabHeight: CGFloat = 21
+        static let paneTabWidth: CGFloat = 118
         static let statusHeight: CGFloat = 18
         static let notificationPanelWidth: CGFloat = 300
         static let notificationPanelHeight: CGFloat = 360

@@ -175,6 +175,41 @@ ConductorMotion.perform(ConductorMotion.layout) {
 .opacity(isFocused ? 1 : 0.9) // applied to the live terminal surface
 ```
 
+### Convention: Terminal Pane Chrome
+
+**What**: Pane tab rails, terminal tabs, split gutters, and active-pane focus rings are
+working chrome. They must use stable tokenized dimensions and may only reflect compact
+product state such as selected tab, focused pane, unread state, hover, and drag state.
+
+**Why**: Terminal panes are the primary work surface. Focus needs to be unmistakable, but
+visual polish must not resize tab strips, add shadows over terminal text, or couple SwiftUI
+styling to terminal output.
+
+**Contract**:
+
+- Keep pane tab rail height, tab height, tab width, and split gutter width in
+  `ConductorTokens.Space`.
+- Do not add or remove tab controls on hover. Reserve stable close/new-tab slots and change
+  opacity, fill, or stroke only.
+- Show the active pane with a full pane border or rail accent. Do not rely on a small dot,
+  transient badge, shadow, or text label as the only focus signal.
+- Inactive panes may still show their selected tab, but with a quieter selected style than the
+  focused pane. The focused pane owns the strongest accent treatment.
+- Split gutters should have a stable hit target. Hover/drag may brighten the center handle,
+  but dragging must keep split fraction updates animation-free.
+- Do not apply opacity/scale animations to the live `TerminalSurfaceRepresentable`; animate
+  separate chrome overlays only.
+
+**Correct**:
+
+```swift
+.frame(height: ConductorTokens.Space.paneTabRailHeight)
+
+Rectangle()
+    .stroke(isFocused ? theme.accent.opacity(0.82) : Color.white.opacity(0.075), lineWidth: isFocused ? 1.5 : 1)
+    .allowsHitTesting(false)
+```
+
 ### Convention: Auxiliary Panel Focus
 
 **What**: AppKit auxiliary panels such as the notification center must not leave the main
