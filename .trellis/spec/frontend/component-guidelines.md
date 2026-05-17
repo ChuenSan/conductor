@@ -168,6 +168,10 @@ Forbidden patterns:
 - Letting tab editing state use a different layout contract from normal state. Rename fields
   inside workspace or terminal tabs must fill the same fixed tab content area as labels do;
   do not leave `NSTextField`/`TextField` at intrinsic or minimum width inside a fixed tab.
+- Relying only on `controlTextDidEndEditing` for inline rename commit. SwiftUI buttons and
+  row taps may not reliably resign an embedded `NSTextField`, so inline rename bridges must
+  explicitly commit when the user clicks outside the field, while Escape still cancels and
+  Return still commits.
 - Keeping close affordances active inside an inline terminal rename field. While a tab title is
   being edited, reserve the full tab content area for the rename field and avoid adjacent close
   controls that can be hit accidentally during text selection or IME composition.

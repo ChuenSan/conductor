@@ -1,4 +1,4 @@
-import AppKit
+@preconcurrency import AppKit
 import SwiftUI
 
 enum ConductorTokens {
@@ -279,6 +279,7 @@ struct RenameTextField: NSViewRepresentable {
         field.usesSingleLineMode = true
         field.cell?.wraps = false
         field.cell?.isScrollable = true
+        context.coordinator.attach(field)
         DispatchQueue.main.async {
             field.window?.makeFirstResponder(field)
             field.currentEditor()?.selectAll(nil)
@@ -296,18 +297,42 @@ struct RenameTextField: NSViewRepresentable {
         context.coordinator.text = $text
         context.coordinator.onCommit = onCommit
         context.coordinator.onCancel = onCancel
+        context.coordinator.attach(field)
     }
 
-    final class Coordinator: NSObject, NSTextFieldDelegate {
+    static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) {
+        coordinator.detach()
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate, @unchecked Sendable {
         var text: Binding<String>
         var onCommit: () -> Void
         var onCancel: () -> Void
         private var handledEndEditing = false
+        private weak var field: NSTextField?
+        private var mouseMonitor: Any?
 
         init(text: Binding<String>, onCommit: @escaping () -> Void, onCancel: @escaping () -> Void) {
             self.text = text
             self.onCommit = onCommit
             self.onCancel = onCancel
+        }
+
+        deinit {
+            detach()
+        }
+
+        func attach(_ field: NSTextField) {
+            self.field = field
+            installMouseMonitorIfNeeded()
+        }
+
+        func detach() {
+            if let mouseMonitor {
+                NSEvent.removeMonitor(mouseMonitor)
+                self.mouseMonitor = nil
+            }
+            field = nil
         }
 
         func controlTextDidChange(_ notification: Notification) {
@@ -317,6 +342,9 @@ struct RenameTextField: NSViewRepresentable {
 
         func controlTextDidEndEditing(_ notification: Notification) {
             guard !handledEndEditing else { return }
+            if let field = notification.object as? NSTextField {
+                text.wrappedValue = field.stringValue
+            }
             handledEndEditing = true
             onCommit()
         }
@@ -337,6 +365,44 @@ struct RenameTextField: NSViewRepresentable {
             default:
                 return false
             }
+        }
+
+        private func installMouseMonitorIfNeeded() {
+            guard mouseMonitor == nil else { return }
+            mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+                let windowNumber = event.windowNumber
+                let locationInWindow = event.locationInWindow
+                DispatchQueue.main.async { [weak self] in
+                    self?.commitIfClickWasOutsideField(windowNumber: windowNumber, locationInWindow: locationInWindow)
+                }
+                return event
+            }
+        }
+
+        @MainActor
+        private func commitIfClickWasOutsideField(windowNumber: Int, locationInWindow: NSPoint) {
+            guard let field,
+                  !handledEndEditing else {
+                return
+            }
+
+            if field.window?.windowNumber == windowNumber {
+                let location = field.convert(locationInWindow, from: nil)
+                if field.bounds.contains(location) {
+                    return
+                }
+            }
+
+            commitFromOutsideClick(field)
+        }
+
+        @MainActor
+        private func commitFromOutsideClick(_ field: NSTextField) {
+            guard !handledEndEditing else { return }
+            handledEndEditing = true
+            text.wrappedValue = field.stringValue
+            onCommit()
+            field.window?.makeFirstResponder(nil)
         }
     }
 }
