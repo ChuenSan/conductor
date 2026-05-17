@@ -15,6 +15,7 @@ struct ConductorRootView: View {
                 SplitNodeView(node: model.workspace.visibleRoot, model: model)
                     .background(model.theme.terminalBackground)
             }
+            .padding(.top, ConductorDesign.shellTopPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(ConductorTokens.Palette.terminalRaised)
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane))
@@ -26,8 +27,7 @@ struct ConductorRootView: View {
             .shadow(color: ConductorDesign.shadow(0.16), radius: 18, y: 8)
         }
         .animation(ConductorMotion.layout, value: model.sidebarVisible)
-        .padding(.horizontal, ConductorDesign.shellHorizontalPadding)
-        .padding(.top, ConductorDesign.shellTopPadding)
+        .padding(.trailing, ConductorDesign.shellHorizontalPadding)
         .padding(.bottom, ConductorDesign.shellBottomPadding)
         .frame(
             minWidth: 1080,

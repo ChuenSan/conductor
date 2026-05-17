@@ -207,7 +207,9 @@ Forbidden patterns:
   controls should align to the same centered rail axis as workspace and action icons, not keep
   the expanded sidebar's trailing alignment. Avoid narrow decorative capsules behind traffic
   lights because native button geometry can drift from them; use a full-width titlebar wash
-  clipped by the sidebar shape instead.
+  clipped by the sidebar shape instead. The sidebar panel should start at the window origin in
+  full-size-content windows so the default `NSWindow` traffic-light inset lands inside the
+  panel rather than exactly on the panel's rounded edge.
 - Guessing at root shell spacing when the window titlebar is involved. First measure
   `NSWindow.contentLayoutRect`, `contentView.safeAreaInsets`, and the root hosted view frame,
   then keep `ConductorTokens.Space.shellTop` as the compact titlebar clearance rather than
