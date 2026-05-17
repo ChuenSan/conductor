@@ -907,6 +907,7 @@ private struct ConductorSidebar: View {
                 Spacer()
                 Button {
                     ConductorMotion.perform(ConductorMotion.layout) {
+                        finishWorkspaceRenameIfNeeded()
                         model.newWorkspace()
                     }
                 } label: {
@@ -1005,20 +1006,25 @@ private struct ConductorSidebar: View {
     private func quickActions(showsLabels: Bool) -> some View {
         Group {
             SidebarActionRow(icon: "plus.rectangle.on.rectangle", title: "新开终端", showsTitle: showsLabels, help: "新开终端 Cmd-T") {
+                finishWorkspaceRenameIfNeeded()
                 model.newTerminal()
             }
             SidebarActionRow(icon: "plus", title: "新标签", showsTitle: showsLabels, help: "在当前分屏中新建标签 Cmd-Shift-T") {
+                finishWorkspaceRenameIfNeeded()
                 if let paneID = model.workspace.focusedPane?.id {
                     model.newTab(in: paneID)
                 }
             }
             SidebarActionRow(icon: "rectangle.split.2x1", title: "向右分屏", showsTitle: showsLabels, disabled: !model.canSplit, help: "向右分屏 Cmd-D") {
+                finishWorkspaceRenameIfNeeded()
                 model.splitRight()
             }
             SidebarActionRow(icon: "rectangle.split.1x2", title: "向下分屏", showsTitle: showsLabels, disabled: !model.canSplit, help: "向下分屏 Cmd-Shift-D") {
+                finishWorkspaceRenameIfNeeded()
                 model.splitDown()
             }
             SidebarActionRow(icon: "command", title: "命令面板", showsTitle: showsLabels, help: "打开命令面板 Cmd-K") {
+                finishWorkspaceRenameIfNeeded()
                 model.toggleCommandPalette()
             }
             SidebarActionRow(
@@ -1027,6 +1033,7 @@ private struct ConductorSidebar: View {
                 showsTitle: showsLabels,
                 help: "查看通知和跳转未读"
             ) {
+                finishWorkspaceRenameIfNeeded()
                 model.toggleNotificationPanel()
             }
             SidebarActionRow(icon: "text.cursor", title: "重命名工作区", showsTitle: showsLabels, help: "重命名当前工作区") {
@@ -1049,30 +1056,36 @@ private struct ConductorSidebar: View {
             onCommitRename: commitWorkspaceRename,
             onCancelRename: cancelWorkspaceRename
         ) {
+            finishWorkspaceRenameIfNeeded(except: workspace.id)
             model.selectWorkspace(workspace.id)
         } onRename: {
+            finishWorkspaceRenameIfNeeded(except: workspace.id)
             beginRenameWorkspace(workspace)
         }
         .contextMenu {
             Button("重命名工作区...") {
                 ConductorMotion.perform {
+                    finishWorkspaceRenameIfNeeded(except: workspace.id)
                     beginRenameWorkspace(workspace)
                 }
             }
             Button("复制工作区") {
                 ConductorMotion.perform(ConductorMotion.layout) {
+                    finishWorkspaceRenameIfNeeded()
                     model.duplicateWorkspace(workspace.id)
                 }
             }
             Divider()
             Button("关闭其他工作区") {
                 ConductorMotion.perform(ConductorMotion.layout) {
+                    finishWorkspaceRenameIfNeeded(except: workspace.id)
                     model.closeOtherWorkspaces(keeping: workspace.id)
                 }
             }
             .disabled(model.workspaces.count <= 1)
             Button("关闭右侧工作区") {
                 ConductorMotion.perform(ConductorMotion.layout) {
+                    finishWorkspaceRenameIfNeeded()
                     model.closeWorkspacesToRight(of: workspace.id)
                 }
             }
@@ -1080,6 +1093,7 @@ private struct ConductorSidebar: View {
             Divider()
             Button("关闭工作区") {
                 ConductorMotion.perform(ConductorMotion.layout) {
+                    finishWorkspaceRenameIfNeeded()
                     model.closeWorkspace(workspace.id)
                 }
             }
@@ -1103,6 +1117,14 @@ private struct ConductorSidebar: View {
             }
         }
         renamingWorkspaceID = nil
+    }
+
+    private func finishWorkspaceRenameIfNeeded(except workspaceID: WorkspaceID? = nil) {
+        guard let renamingWorkspaceID,
+              renamingWorkspaceID != workspaceID else {
+            return
+        }
+        commitWorkspaceRename()
     }
 
     private func cancelWorkspaceRename() {
@@ -1240,7 +1262,7 @@ private struct WorkspaceSidebarRow: View {
             Image(systemName: "rectangle.3.group.fill")
                 .font(.system(size: 11, weight: .semibold))
                 .frame(width: 14)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
             RenameTextField(
                 text: $titleDraft,
                 placeholder: "工作区名称",
@@ -1252,7 +1274,7 @@ private struct WorkspaceSidebarRow: View {
         }
         .padding(.horizontal, 7)
         .frame(height: 32)
-        .background(ConductorDesign.selectedFill)
+        .background(selected ? ConductorDesign.selectedFill : ConductorDesign.hoverFill)
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .onAppear {
@@ -1383,15 +1405,18 @@ private struct ConductorToolbar: View {
 
             ConductorPillGroup {
                 ConductorIconButton(systemImage: "plus", help: "新建工作区", title: "工作区") {
+                    finishWorkspaceRenameIfNeeded()
                     model.newWorkspace()
                 }
             }
 
             ConductorPillGroup {
                 ConductorIconButton(systemImage: "plus.rectangle.on.rectangle", help: "新开终端 Cmd-T", title: "新终端") {
+                    finishWorkspaceRenameIfNeeded()
                     model.newTerminal()
                 }
                 ConductorIconButton(systemImage: "plus", help: "新标签 Cmd-Shift-T", title: "新标签") {
+                    finishWorkspaceRenameIfNeeded()
                     if let paneID = model.workspace.focusedPane?.id {
                         model.newTab(in: paneID)
                     }
@@ -1400,9 +1425,11 @@ private struct ConductorToolbar: View {
 
             ConductorPillGroup {
                 ConductorIconButton(systemImage: "rectangle.split.2x1", help: "向右分屏 Cmd-D", title: "右分屏", disabled: !model.canSplit) {
+                    finishWorkspaceRenameIfNeeded()
                     model.splitRight()
                 }
                 ConductorIconButton(systemImage: "rectangle.split.1x2", help: "向下分屏 Cmd-Shift-D", title: "下分屏", disabled: !model.canSplit) {
+                    finishWorkspaceRenameIfNeeded()
                     model.splitDown()
                 }
                 ConductorIconButton(
@@ -1412,6 +1439,7 @@ private struct ConductorToolbar: View {
                     disabled: model.workspace.root.leaves.count <= 1,
                     active: model.workspace.isZoomed
                 ) {
+                    finishWorkspaceRenameIfNeeded()
                     model.toggleZoom()
                 }
             }
@@ -1423,9 +1451,11 @@ private struct ConductorToolbar: View {
                     title: model.notifications.snapshot.unreadCount > 0 ? "\(model.notifications.snapshot.unreadCount)" : nil,
                     active: model.notificationPanelVisible
                 ) {
+                    finishWorkspaceRenameIfNeeded()
                     model.toggleNotificationPanel()
                 }
                 ConductorIconButton(systemImage: "ellipsis", help: "命令面板 Cmd-K", title: "命令") {
+                    finishWorkspaceRenameIfNeeded()
                     model.toggleCommandPalette()
                 }
             }
@@ -1453,6 +1483,11 @@ private struct ConductorToolbar: View {
             }
         }
         editingWorkspaceID = nil
+    }
+
+    private func finishWorkspaceRenameIfNeeded() {
+        guard editingWorkspaceID != nil else { return }
+        commitWorkspaceRename()
     }
 
     private func cancelWorkspaceRename() {
@@ -1525,10 +1560,12 @@ private struct WorkspaceTabStrip: View {
             editing: editingWorkspaceID == workspace.id,
             titleDraft: $workspaceTitleDraft,
             onSelect: {
+                finishWorkspaceRenameIfNeeded(except: workspace.id)
                 model.selectWorkspace(workspace.id)
             },
             onRename: {
                 ConductorMotion.perform {
+                    finishWorkspaceRenameIfNeeded(except: workspace.id)
                     onBeginRename(workspace)
                 }
             },
@@ -1536,21 +1573,25 @@ private struct WorkspaceTabStrip: View {
             onCancelRename: onCancelRename,
             onDuplicate: {
                 ConductorMotion.perform(ConductorMotion.layout) {
+                    finishWorkspaceRenameIfNeeded()
                     model.duplicateWorkspace(workspace.id)
                 }
             },
             onClose: {
                 ConductorMotion.perform(ConductorMotion.layout) {
+                    finishWorkspaceRenameIfNeeded()
                     model.closeWorkspace(workspace.id)
                 }
             },
             onCloseOthers: {
                 ConductorMotion.perform(ConductorMotion.layout) {
+                    finishWorkspaceRenameIfNeeded(except: workspace.id)
                     model.closeOtherWorkspaces(keeping: workspace.id)
                 }
             },
             onCloseRight: {
                 ConductorMotion.perform(ConductorMotion.layout) {
+                    finishWorkspaceRenameIfNeeded()
                     model.closeWorkspacesToRight(of: workspace.id)
                 }
             }
@@ -1563,6 +1604,14 @@ private struct WorkspaceTabStrip: View {
                 model: model
             )
         )
+    }
+
+    private func finishWorkspaceRenameIfNeeded(except workspaceID: WorkspaceID? = nil) {
+        guard let editingWorkspaceID,
+              editingWorkspaceID != workspaceID else {
+            return
+        }
+        onCommitRename()
     }
 }
 

@@ -171,7 +171,9 @@ Forbidden patterns:
 - Relying only on `controlTextDidEndEditing` for inline rename commit. SwiftUI buttons and
   row taps may not reliably resign an embedded `NSTextField`, so inline rename bridges must
   explicitly commit when the user clicks outside the field, while Escape still cancels and
-  Return still commits.
+  Return still commits. Parent navigation actions such as selecting another workspace,
+  creating a workspace, closing a workspace, or running a toolbar/sidebar command must also
+  finish any active workspace rename before they mutate selection or layout.
 - Keeping close affordances active inside an inline terminal rename field. While a tab title is
   being edited, reserve the full tab content area for the rename field and avoid adjacent close
   controls that can be hit accidentally during text selection or IME composition.
