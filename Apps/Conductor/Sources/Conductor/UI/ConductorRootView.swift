@@ -44,7 +44,7 @@ struct ConductorRootView: View {
         )
         .background(ConductorWindowBackdrop(theme: model.theme))
         .ignoresSafeArea(.container, edges: .top)
-        .tint(model.theme.accent)
+        .tint(model.theme.floatingEmphasis)
         .environment(\.conductorFontScale, model.appearance.fontScale)
         .environment(\.conductorTheme, model.theme)
         .overlay {
@@ -98,7 +98,7 @@ private struct FloatingPanelHeader<Trailing: View>: View {
         HStack(spacing: 9) {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(theme.accent.opacity(0.88))
+                .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
                 .frame(width: 24, height: 24)
                 .background(theme.floatingControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -192,7 +192,7 @@ private struct CommandPaletteView: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
-            ConductorGlassSurface(style: .palette, clarity: model.appearance.chromeClarity, interactive: true) {
+            ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 10) {
                     commandHeader
                     FloatingPanelDivider()
@@ -668,7 +668,7 @@ private struct CommandButton: View {
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
             .overlay {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.row)
-                    .stroke(selected ? theme.accent.opacity(0.52) : Color.clear, lineWidth: 1)
+                    .stroke(selected ? theme.floatingSelectedStroke : Color.clear, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -700,12 +700,12 @@ private struct CommandButton: View {
         if command.disabled {
             return ConductorDesign.tertiaryText
         }
-        return selected ? theme.accent : ConductorDesign.secondaryText
+        return selected ? theme.floatingEmphasis : ConductorDesign.secondaryText
     }
 
     private var iconFill: Color {
         if selected {
-            return theme.accent.opacity(0.13)
+            return theme.floatingSelectedFill
         }
         return command.disabled ? theme.floatingControlFill.opacity(0.45) : theme.floatingControlFill
     }
@@ -722,11 +722,11 @@ private struct AppearanceSettingsPanel: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.08)
+            Color.black.opacity(0.18)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
-            ConductorGlassSurface(style: .palette, clarity: model.appearance.chromeClarity, interactive: true) {
+            ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(spacing: 0) {
                     FloatingPanelHeader(
                         systemImage: "gearshape",
@@ -949,7 +949,7 @@ private struct SettingsSidebarItem: View {
             HStack(spacing: 8) {
                 Image(systemName: section.systemImage)
                     .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(selected ? theme.accent : ConductorDesign.secondaryText)
+                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
                     .frame(width: 14)
 
                 Text(section.title)
@@ -1013,11 +1013,11 @@ private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View
                             .lineLimit(1)
                         .frame(maxWidth: .infinity)
                         .frame(height: 28)
-                        .background(selection == option ? theme.accent.opacity(0.14) : Color.clear)
+                        .background(selection == option ? theme.floatingSelectedFill : Color.clear)
                         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(selection == option ? theme.accent.opacity(0.24) : Color.clear, lineWidth: 1)
+                                .stroke(selection == option ? theme.floatingSelectedStroke : Color.clear, lineWidth: 1)
                         }
                     }
                     .buttonStyle(.plain)
@@ -1107,7 +1107,7 @@ private struct CommandShortcutGuideRow: View {
         HStack(spacing: 8) {
             Image(systemName: item.systemImage)
                 .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.accent)
+                .foregroundStyle(ConductorDesign.secondaryText)
                 .frame(width: 18)
 
             Text(item.title)
@@ -1164,7 +1164,7 @@ private struct ThemePreviewCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(selected ? theme.accent.opacity(0.78) : theme.shellStroke.opacity(hovering ? 0.58 : 0.34), lineWidth: selected ? 1.2 : 1)
+                    .stroke(selected ? theme.floatingSelectedStroke : theme.shellStroke.opacity(hovering ? 0.58 : 0.34), lineWidth: selected ? 1.2 : 1)
             }
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
@@ -1264,7 +1264,7 @@ private struct ThemePreviewCard: View {
             Spacer(minLength: 0)
             Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(selected ? theme.accent : ConductorDesign.tertiaryText.opacity(0.70))
+                .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.tertiaryText.opacity(0.70))
         }
     }
 
@@ -1338,7 +1338,7 @@ private struct WorkspaceOverviewPanel: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
-            ConductorGlassSurface(style: .palette, clarity: model.appearance.chromeClarity, interactive: true) {
+            ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 11) {
                     header
                     FloatingPanelDivider()
@@ -1537,7 +1537,7 @@ private struct WorkspaceOverviewCard: View {
                     HStack(spacing: 7) {
                         Image(systemName: selected ? "rectangle.3.group.fill" : "rectangle.3.group")
                             .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(selected ? theme.accent : ConductorDesign.secondaryText)
+                            .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
                             .frame(width: 16)
                         Text(workspace.title)
                             .font(.system(size: 12.5, weight: .semibold))
@@ -1551,7 +1551,7 @@ private struct WorkspaceOverviewCard: View {
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 5)
                                 .frame(minWidth: 16, minHeight: 15)
-                                .background(theme.accent)
+                                .background(theme.floatingEmphasis)
                                 .clipShape(Capsule())
                         }
                     }
@@ -1607,10 +1607,10 @@ private struct WorkspaceOverviewCard: View {
 
     private var borderColor: Color {
         if selected {
-            return theme.accent.opacity(0.88)
+            return theme.floatingSelectedStroke
         }
         if highlighted {
-            return theme.accent.opacity(0.46)
+            return theme.floatingSelectedStroke.opacity(0.78)
         }
         return theme.floatingStroke
     }
@@ -1737,7 +1737,7 @@ private struct WorkspaceMiniPane: View {
 
             HStack(spacing: 4) {
                 Circle()
-                    .fill(focused ? theme.accent : Color.white.opacity(0.32))
+                    .fill(focused ? theme.floatingEmphasis : Color.white.opacity(0.32))
                     .frame(width: 4.5, height: 4.5)
                 Text(title)
                     .font(.system(size: 7.5, weight: .medium))
@@ -1760,7 +1760,7 @@ private struct WorkspaceMiniPane: View {
                     .fill(Color.white.opacity(0.30))
                     .frame(width: 32, height: 2)
                 RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(theme.accent.opacity(focused ? 0.92 : 0.40))
+                    .fill(theme.floatingEmphasis.opacity(focused ? 0.76 : 0.34))
                     .frame(width: focused ? 44 : 25, height: 2)
                 RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                     .fill(Color.white.opacity(0.18))
@@ -1770,7 +1770,7 @@ private struct WorkspaceMiniPane: View {
 
             if unreadCount > 0 {
                 Circle()
-                    .fill(theme.accent)
+                    .fill(theme.floatingEmphasis)
                     .frame(width: 6, height: 6)
                     .offset(x: -1, y: -1)
             }
@@ -1778,7 +1778,7 @@ private struct WorkspaceMiniPane: View {
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(focused ? theme.accent.opacity(0.74) : Color.white.opacity(0.14), lineWidth: focused ? 1.3 : 1)
+                .stroke(focused ? theme.floatingSelectedStroke : Color.white.opacity(0.14), lineWidth: focused ? 1.3 : 1)
         }
     }
 }
@@ -1851,7 +1851,7 @@ struct NotificationPanelView: View {
             }
             .buttonStyle(ConductorPressButtonStyle())
             .font(.system(size: 10.5, weight: .semibold))
-            .foregroundStyle(model.notifications.snapshot.latestUnread == nil ? ConductorDesign.tertiaryText : theme.accent)
+            .foregroundStyle(model.notifications.snapshot.latestUnread == nil ? ConductorDesign.tertiaryText : theme.floatingEmphasis)
             .disabled(model.notifications.snapshot.latestUnread == nil)
             Button("清空") {
                 ConductorMotion.perform(ConductorMotion.layout) {
@@ -1942,7 +1942,7 @@ private struct NotificationRowView: View {
                         .overlay(alignment: .topTrailing) {
                             if unread {
                                 Circle()
-                                    .fill(theme.accent)
+                                    .fill(theme.floatingEmphasis)
                                     .frame(width: 5, height: 5)
                                     .offset(x: 2, y: -2)
                             }
@@ -1980,7 +1980,7 @@ private struct NotificationRowView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .strokeBorder(
-                    unread ? theme.accent.opacity(0.26) : theme.floatingStroke,
+                    unread ? theme.floatingSelectedStroke : theme.floatingStroke,
                     lineWidth: 1
                 )
         }
@@ -2568,7 +2568,7 @@ private struct SidebarStatusSummary: View {
             HStack(spacing: 6) {
                 Image(systemName: "scope")
                     .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.accent.opacity(0.88))
+                    .foregroundStyle(theme.floatingEmphasis.opacity(0.88))
                     .frame(width: 14)
                 Text("焦点")
                     .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
@@ -2599,14 +2599,14 @@ private struct SidebarStatusPill: View {
         HStack(spacing: 4) {
             Text(title)
                 .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
-                .foregroundStyle(highlighted ? theme.accent.opacity(0.86) : ConductorDesign.tertiaryText)
+                .foregroundStyle(highlighted ? theme.floatingEmphasis.opacity(0.86) : ConductorDesign.tertiaryText)
             Text(value)
                 .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
-                .foregroundStyle(highlighted ? theme.accent : ConductorDesign.primaryText)
+                .foregroundStyle(highlighted ? theme.floatingEmphasis : ConductorDesign.primaryText)
         }
         .padding(.horizontal, 7)
         .frame(height: 20)
-        .background(highlighted ? theme.accent.opacity(0.12) : theme.shellControlFill.opacity(0.72))
+        .background(highlighted ? theme.shellSelectedFill : theme.shellControlFill.opacity(0.72))
         .clipShape(Capsule())
     }
 }
@@ -2782,7 +2782,7 @@ private struct WorkspaceSidebarRow: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 4)
                         .frame(minWidth: 15, minHeight: 14)
-                        .background(Color.accentColor)
+                        .background(theme.floatingEmphasis)
                         .clipShape(Capsule())
                 }
             }

@@ -46,7 +46,7 @@ struct FilePreviewPanel: View {
         HStack(spacing: 9) {
             Image(systemName: "doc.richtext")
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.accent.opacity(0.90))
+                .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
                 .frame(width: 24, height: 24)
                 .background(theme.floatingControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -488,7 +488,7 @@ private struct FilePreviewEntryRow: View {
 
     private var iconColor: Color {
         if selected {
-            return theme.accent
+            return theme.floatingEmphasis
         }
         return entry.isDirectory ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText
     }

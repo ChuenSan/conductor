@@ -141,6 +141,12 @@ workspace overview, and compact status modules.
   and separators). Do not tint these panels directly with `shellPanelBackground` and do not
   create a separate settings-only color language; one app theme must produce one floating-panel
   language.
+- Floating shell panels must not use the terminal/workspace `accent` as their default selected,
+  hover, icon, unread, or focus color. Use neutral panel tokens such as `floatingEmphasis`,
+  `floatingSelectedFill`, `floatingHoverFill`, and `floatingSelectedStroke` so Command Center,
+  Settings, Workspace Overview, Notification Center, and file/tool previews match the sidebar's
+  low-saturation glass language. The terminal `accent` remains appropriate for live terminal
+  focus rings, terminal tabs, cursor/progress affordances, and explicit theme preview swatches.
 - Floating shell panels should share one outer skeleton: `ConductorGlassSurface`, one
   `FloatingPanelHeader`, one `FloatingPanelDivider`, then the panel's specialized content.
   Settings may include an internal category sidebar, but it should not add a second competing

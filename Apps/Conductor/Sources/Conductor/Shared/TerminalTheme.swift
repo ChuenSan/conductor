@@ -174,30 +174,30 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     var floatingPanelBase: Color {
         switch self {
         case .codexDark:
-            Color(red: 0.918, green: 0.922, blue: 0.928).opacity(0.90)
+            Color(red: 0.945, green: 0.960, blue: 0.982).opacity(0.78)
         case .flexoki:
-            Color(red: 0.956, green: 0.932, blue: 0.874).opacity(0.91)
+            Color(red: 0.968, green: 0.940, blue: 0.875).opacity(0.78)
         case .aurora:
-            Color(red: 0.890, green: 0.944, blue: 0.944).opacity(0.90)
+            Color(red: 0.900, green: 0.966, blue: 0.972).opacity(0.78)
         case .graphite:
-            Color(red: 0.900, green: 0.908, blue: 0.920).opacity(0.91)
+            Color(red: 0.920, green: 0.928, blue: 0.940).opacity(0.78)
         case .ember:
-            Color(red: 0.966, green: 0.918, blue: 0.864).opacity(0.90)
+            Color(red: 0.984, green: 0.912, blue: 0.838).opacity(0.78)
         }
     }
 
     var floatingPanelWash: Color {
         switch self {
         case .codexDark:
-            Color(red: 0.58, green: 0.52, blue: 0.92).opacity(0.032)
+            Color(red: 0.62, green: 0.68, blue: 0.76).opacity(0.045)
         case .flexoki:
-            Color(red: 0.90, green: 0.58, blue: 0.18).opacity(0.060)
+            Color(red: 0.62, green: 0.52, blue: 0.38).opacity(0.050)
         case .aurora:
-            Color(red: 0.12, green: 0.74, blue: 0.78).opacity(0.062)
+            Color(red: 0.44, green: 0.64, blue: 0.68).opacity(0.052)
         case .graphite:
             Color(red: 0.50, green: 0.54, blue: 0.62).opacity(0.050)
         case .ember:
-            Color(red: 0.94, green: 0.30, blue: 0.12).opacity(0.060)
+            Color(red: 0.66, green: 0.46, blue: 0.36).opacity(0.052)
         }
     }
 
@@ -250,12 +250,31 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         floatingStroke.opacity(0.78)
     }
 
+    var floatingEmphasis: Color {
+        switch self {
+        case .codexDark:
+            Color(red: 0.42, green: 0.47, blue: 0.55)
+        case .flexoki:
+            Color(red: 0.52, green: 0.43, blue: 0.30)
+        case .aurora:
+            Color(red: 0.34, green: 0.48, blue: 0.52)
+        case .graphite:
+            Color(red: 0.43, green: 0.47, blue: 0.54)
+        case .ember:
+            Color(red: 0.56, green: 0.39, blue: 0.32)
+        }
+    }
+
     var floatingSelectedFill: Color {
-        accent.opacity(0.13)
+        floatingEmphasis.opacity(0.13)
     }
 
     var floatingHoverFill: Color {
-        accent.opacity(0.070)
+        floatingEmphasis.opacity(0.070)
+    }
+
+    var floatingSelectedStroke: Color {
+        floatingEmphasis.opacity(0.34)
     }
 
     var shellStroke: Color {
@@ -274,11 +293,11 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     }
 
     var shellSelectedFill: Color {
-        accent.opacity(0.10)
+        floatingEmphasis.opacity(0.10)
     }
 
     var shellHoverFill: Color {
-        accent.opacity(0.055)
+        floatingEmphasis.opacity(0.055)
     }
 
     var shellControlFill: Color {

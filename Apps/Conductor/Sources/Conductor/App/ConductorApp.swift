@@ -542,6 +542,8 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         contentContainer.layer?.backgroundColor = NSColor.clear.cgColor
         let hostingView = ConductorHostingView(
             rootView: NotificationPanelView(model: model)
+                .environment(\.conductorTheme, model.theme)
+                .environment(\.conductorFontScale, model.appearance.fontScale)
                 .frame(
                     minWidth: ConductorTokens.Space.notificationPanelMinWidth,
                     minHeight: ConductorTokens.Space.notificationPanelMinHeight
