@@ -839,25 +839,40 @@ private struct ConductorSidebar: View {
         }
     }
 
+    @ViewBuilder
     private var sidebarHeader: some View {
-        HStack {
-            Spacer()
-            Button {
-                ConductorMotion.perform(ConductorMotion.layout) {
-                    model.sidebarVisible.toggle()
-                }
-            } label: {
-                Image(systemName: model.sidebarVisible ? "chevron.left" : "sidebar.left")
-                    .font(.system(size: 11.5, weight: .bold))
-                    .foregroundStyle(ConductorDesign.secondaryText)
-                    .frame(width: 26, height: 24)
-                    .background(Color.black.opacity(0.045))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+        if model.sidebarVisible {
+            HStack {
+                Spacer()
+                sidebarToggleButton
             }
-            .buttonStyle(ConductorPressButtonStyle())
-            .help(model.sidebarVisible ? "收起侧边栏" : "展开侧边栏")
+            .frame(height: sidebarHeaderHeight, alignment: .bottom)
+        } else {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                sidebarToggleButton
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: sidebarHeaderHeight, alignment: .bottom)
         }
-        .frame(height: sidebarHeaderHeight, alignment: .bottom)
+    }
+
+    private var sidebarToggleButton: some View {
+        Button {
+            ConductorMotion.perform(ConductorMotion.layout) {
+                finishWorkspaceRenameIfNeeded()
+                model.sidebarVisible.toggle()
+            }
+        } label: {
+            Image(systemName: model.sidebarVisible ? "chevron.left" : "sidebar.left")
+                .font(.system(size: 11.5, weight: .bold))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .frame(width: 26, height: 24)
+                .background(Color.black.opacity(0.045))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(ConductorPressButtonStyle())
+        .help(model.sidebarVisible ? "收起侧边栏" : "展开侧边栏")
     }
 
     private var expandedSidebar: some View {

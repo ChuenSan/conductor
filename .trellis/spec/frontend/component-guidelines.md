@@ -203,7 +203,9 @@ Forbidden patterns:
 - Collapsing the sidebar narrower than the macOS traffic-light cluster. In a full-size-content
   window, the standard close/minimize/zoom controls still occupy the top-left titlebar area;
   collapsed sidebar width and header clearance must keep those controls visually inside the
-  sidebar instead of letting them float over the terminal canvas.
+  sidebar instead of letting them float over the terminal canvas. Collapsed sidebar header
+  controls should align to the same centered rail axis as workspace and action icons, not keep
+  the expanded sidebar's trailing alignment.
 - Guessing at root shell spacing when the window titlebar is involved. First measure
   `NSWindow.contentLayoutRect`, `contentView.safeAreaInsets`, and the root hosted view frame,
   then keep `ConductorTokens.Space.shellTop` as the compact titlebar clearance rather than
