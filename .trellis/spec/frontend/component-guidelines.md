@@ -135,7 +135,9 @@ workspace overview, and compact status modules.
   navigation from command groups, and make action clusters read as floating capsules.
 - Settings and appearance panels should share the sidebar's glass language: one soft rounded
   shell, quiet internal dividers, sidebar-style category rows, and compact segmented controls.
-  Avoid hard split lines, opaque content slabs, and large option cards inside these panels.
+  Use a neutral glass tint for the settings shell instead of the theme `shellPanelBackground`;
+  large tinted panels can read as a blue/colored film in Codex Dark and similar themes. Avoid
+  hard split lines, opaque content slabs, and large option cards inside these panels.
 - Bind fluid effects only to low-frequency product state such as selection, command palette
   visibility, notification badges, sidebar visibility, and workspace navigation.
 - Do not bind glass effects, blur changes, or animated mesh/background effects to stdout,

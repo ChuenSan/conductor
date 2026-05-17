@@ -160,6 +160,7 @@ enum ConductorTokens {
 
 enum ConductorGlassSurfaceStyle: Equatable {
     case sidebar
+    case settings
     case palette
     case panel
     case card
@@ -168,7 +169,7 @@ enum ConductorGlassSurfaceStyle: Equatable {
 
     var radius: CGFloat {
         switch self {
-        case .sidebar:
+        case .sidebar, .settings:
             ConductorTokens.Radius.sidebar
         case .palette:
             ConductorTokens.Radius.commandPalette
@@ -185,7 +186,7 @@ enum ConductorGlassSurfaceStyle: Equatable {
 
     var fallbackMaterial: Material {
         switch self {
-        case .sidebar, .palette, .panel:
+        case .sidebar, .settings, .palette, .panel:
             .regularMaterial
         case .card, .controlGroup:
             .thinMaterial
@@ -198,6 +199,8 @@ enum ConductorGlassSurfaceStyle: Equatable {
         switch self {
         case .sidebar:
             ConductorTokens.Palette.glassTintStrong
+        case .settings:
+            Color.white.opacity(0.12)
         case .palette, .panel:
             ConductorTokens.Palette.glassTint
         case .card:
@@ -211,7 +214,7 @@ enum ConductorGlassSurfaceStyle: Equatable {
 
     var stroke: Color {
         switch self {
-        case .sidebar, .palette, .panel:
+        case .sidebar, .settings, .palette, .panel:
             ConductorTokens.Palette.glassStroke
         case .card:
             ConductorTokens.Palette.glassStrokeSubtle
@@ -226,7 +229,7 @@ enum ConductorGlassSurfaceStyle: Equatable {
             ConductorDesign.shadow(ConductorTokens.Shadow.controlOpacity)
         case .card:
             ConductorDesign.shadow(0.085)
-        case .sidebar, .palette, .panel:
+        case .sidebar, .settings, .palette, .panel:
             ConductorTokens.Palette.glassShadow
         }
     }
@@ -237,7 +240,7 @@ enum ConductorGlassSurfaceStyle: Equatable {
             ConductorTokens.Shadow.controlRadius
         case .card:
             12
-        case .sidebar, .palette, .panel:
+        case .sidebar, .settings, .palette, .panel:
             ConductorTokens.Shadow.panelRadius
         }
     }
@@ -248,7 +251,7 @@ enum ConductorGlassSurfaceStyle: Equatable {
             ConductorTokens.Shadow.controlY
         case .card:
             7
-        case .sidebar, .palette, .panel:
+        case .sidebar, .settings, .palette, .panel:
             ConductorTokens.Shadow.panelY
         }
     }
@@ -295,6 +298,8 @@ struct ConductorGlassSurface<Content: View>: View {
         switch style {
         case .sidebar, .palette, .panel:
             theme.shellPanelBackground.opacity(clarity.glassTintMultiplier)
+        case .settings:
+            style.tint.opacity(clarity.glassTintMultiplier)
         case .card, .controlGroup, .terminalToolbar:
             style.tint.opacity(clarity.glassTintMultiplier)
         }
@@ -304,6 +309,8 @@ struct ConductorGlassSurface<Content: View>: View {
         switch style {
         case .sidebar, .palette, .panel:
             theme.shellStroke.opacity(clarity.strokeMultiplier)
+        case .settings:
+            style.stroke.opacity(clarity.strokeMultiplier)
         case .card, .controlGroup, .terminalToolbar:
             style.stroke.opacity(clarity.strokeMultiplier)
         }
@@ -311,7 +318,14 @@ struct ConductorGlassSurface<Content: View>: View {
 
     @ViewBuilder
     private var surfaceFill: some View {
-        if #available(macOS 26.0, *) {
+        if style == .settings {
+            surfaceShape
+                .fill(Color(red: 0.945, green: 0.938, blue: 0.912).opacity(0.94))
+                .overlay {
+                    surfaceShape
+                        .fill(Color.white.opacity(0.04 * clarity.highlightMultiplier))
+                }
+        } else if #available(macOS 26.0, *) {
             Color.clear
                 .glassEffect(
                     Glass.regular.tint(resolvedTint).interactive(interactive),

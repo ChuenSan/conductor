@@ -806,7 +806,7 @@ private struct AppearanceSettingsPanel: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
-            ConductorGlassSurface(style: .sidebar, clarity: model.appearance.chromeClarity, interactive: true) {
+            ConductorGlassSurface(style: .settings, clarity: model.appearance.chromeClarity, interactive: true) {
                 HStack(spacing: 0) {
                     sidebar
 
@@ -1147,11 +1147,11 @@ private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View
                             .lineLimit(1)
                         .frame(maxWidth: .infinity)
                         .frame(height: 28)
-                        .background(selection == option ? theme.shellSelectedFill : Color.clear)
+                        .background(selection == option ? theme.accent.opacity(0.14) : Color.clear)
                         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(selection == option ? theme.shellStroke.opacity(0.54) : Color.clear, lineWidth: 1)
+                                .stroke(selection == option ? theme.accent.opacity(0.24) : Color.clear, lineWidth: 1)
                         }
                     }
                     .buttonStyle(.plain)
@@ -1159,11 +1159,11 @@ private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View
                 }
             }
             .padding(3)
-            .background(theme.shellPanelStrong.opacity(0.34))
+            .background(Color.white.opacity(0.28))
             .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(theme.shellStroke.opacity(0.30), lineWidth: 1)
+                    .stroke(Color.black.opacity(0.045), lineWidth: 1)
             }
         }
     }
@@ -1185,11 +1185,11 @@ private struct AppearanceToggleRow: View {
         .toggleStyle(.switch)
         .padding(.vertical, 7)
         .padding(.horizontal, 9)
-        .background(theme.shellPanelStrong.opacity(0.34))
+        .background(Color.white.opacity(0.28))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(theme.shellStroke.opacity(0.30), lineWidth: 1)
+                .stroke(Color.black.opacity(0.045), lineWidth: 1)
         }
         .help(subtitle)
     }
@@ -1223,11 +1223,11 @@ private struct CommandShortcutGuide: View {
         }
         .scrollIndicators(.visible)
         .frame(height: height)
-        .background(theme.shellPanelStrong.opacity(0.28))
+        .background(Color.white.opacity(0.24))
         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(theme.shellStroke.opacity(0.30), lineWidth: 1)
+                .stroke(Color.black.opacity(0.045), lineWidth: 1)
         }
     }
 }
