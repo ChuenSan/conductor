@@ -1334,7 +1334,6 @@ private struct WorkspaceTabStrip: View {
         .clipped()
         .mask(ConductorHorizontalFadeMask())
         .animation(ConductorMotion.layout, value: workspaceIDs)
-        .animation(ConductorMotion.standard, value: model.workspace.id)
     }
 
     private func scrollToSelectedWorkspace(_ proxy: ScrollViewProxy) {
@@ -1352,9 +1351,7 @@ private struct WorkspaceTabStrip: View {
             editing: editingWorkspaceID == workspace.id,
             titleDraft: $workspaceTitleDraft,
             onSelect: {
-                ConductorMotion.perform {
-                    model.selectWorkspace(workspace.id)
-                }
+                model.selectWorkspace(workspace.id)
             },
             onRename: {
                 ConductorMotion.perform {
@@ -1499,8 +1496,8 @@ private struct WorkspaceTopTab: View {
             radius: ConductorTokens.Shadow.controlRadius,
             y: ConductorTokens.Shadow.controlY
         )
-        .scaleEffect(selected ? 1 : (hovering ? 0.992 : 0.985))
-        .animation(ConductorMotion.standard, value: selected)
+        .scaleEffect(hovering && !selected ? 0.992 : 1)
+        .animation(nil, value: selected)
         .animation(ConductorMotion.micro, value: hovering)
         .animation(ConductorMotion.standard, value: editing)
         .animation(ConductorMotion.emphasized, value: unreadCount)
@@ -1512,7 +1509,7 @@ private struct WorkspaceTopTab: View {
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab))
         .simultaneousGesture(
             TapGesture(count: 1).onEnded {
-                ConductorMotion.perform(onSelect)
+                onSelect()
             }
         )
         .simultaneousGesture(

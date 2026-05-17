@@ -117,6 +117,10 @@ rendering into SwiftUI work or making precision interactions lag behind the poin
 - Do not use directional slide transitions for workspace or terminal tab insertion. Tab strips
   are navigation chrome, so adding or restoring many tabs should not look like the entire strip
   is sliding in. Prefer opacity plus a tiny scale change for tab insertion/removal.
+- Keep workspace and terminal tab selection atomic. Do not attach implicit animations to
+  selected foreground, icon, fill, stroke, or shadow styles, and do not wrap tab selection
+  actions in a broad animated transaction. Animate scroll-to-visible, insertion/removal,
+  hover/press, badges, and separate indicators instead.
 - Use tiny transform-only feedback for hover/press; never insert or remove controls on hover.
 
 **Correct**:

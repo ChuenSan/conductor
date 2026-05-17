@@ -298,7 +298,6 @@ private struct StableTerminalTabStrip: View {
         .clipped()
         .mask(ConductorHorizontalFadeMask())
         .animation(ConductorMotion.layout, value: tabIDs)
-        .animation(ConductorMotion.standard, value: pane.selectedTabID)
     }
 
     private func scrollToSelectedTab(_ proxy: ScrollViewProxy) {
@@ -576,8 +575,8 @@ private struct TerminalTabButton: View {
             radius: ConductorTokens.Shadow.selectedRadius,
             y: ConductorTokens.Shadow.selectedY
         )
-        .scaleEffect(isSelected ? 1 : (hovering ? 0.994 : 0.988))
-        .animation(ConductorMotion.standard, value: isSelected)
+        .scaleEffect(hovering && !isSelected ? 0.994 : 1)
+        .animation(nil, value: isSelected)
         .animation(ConductorMotion.micro, value: hovering)
         .animation(ConductorMotion.micro, value: isDropTarget)
         .animation(ConductorMotion.standard, value: editingTitle)
@@ -591,15 +590,11 @@ private struct TerminalTabButton: View {
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab))
         .simultaneousGesture(
             TapGesture(count: 1).onEnded {
-                ConductorMotion.perform {
-                    model.selectTab(tab.id, in: paneID)
-                }
+                model.selectTab(tab.id, in: paneID)
             }
         )
         .onDrag {
-            ConductorMotion.perform {
-                model.selectTab(tab.id, in: paneID)
-            }
+            model.selectTab(tab.id, in: paneID)
             return NSItemProvider(object: tab.id.description as NSString)
         }
         .simultaneousGesture(
