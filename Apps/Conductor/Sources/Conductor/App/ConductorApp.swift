@@ -94,6 +94,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     private var notificationWindow: NSPanel?
     private var notificationWindowDelegate: NotificationWindowDelegate?
     private var agentHookObserver: NSObjectProtocol?
+    private var shellKeyMonitor: Any?
     private let model = ConductorWindowModel()
     private var didStart = false
 
@@ -120,6 +121,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         model.onNotificationPanelVisibilityChange = { [weak self] visible in
             self?.setNotificationWindowVisible(visible)
         }
+        installShellKeyMonitor()
         installAgentHookObserver()
         GhosttyAppRuntime.shared.actionDelegate = model
         let contentContainer = NSView()
@@ -143,6 +145,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         runLayoutAutomationIfRequested()
         runLifecycleAutomationIfRequested()
         runWorkspaceAutomationIfRequested()
+        runShellPanelAutomationIfRequested()
         runStressAutomationIfRequested()
         runResizeStressAutomationIfRequested()
         ConductorLog.app.info("Conductor window launched")
@@ -161,6 +164,9 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         notificationWindow?.close()
         if let agentHookObserver {
             DistributedNotificationCenter.default().removeObserver(agentHookObserver)
+        }
+        if let shellKeyMonitor {
+            NSEvent.removeMonitor(shellKeyMonitor)
         }
         model.closeAllSurfaces()
         GhosttyAppRuntime.shared.actionDelegate = nil
@@ -383,6 +389,23 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         Task { @MainActor in
             command()
         }
+    }
+
+    private func installShellKeyMonitor() {
+        guard shellKeyMonitor == nil else { return }
+        shellKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            return self.consumeShellEscape(event) ? nil : event
+        }
+    }
+
+    private func consumeShellEscape(_ event: NSEvent) -> Bool {
+        guard event.keyCode == 53 else { return false }
+        let flags = event.modifierFlags
+            .intersection(.deviceIndependentFlagsMask)
+            .subtracting([.numericPad, .function, .capsLock])
+        guard flags.isEmpty else { return false }
+        return model.dismissVisibleShellPanel()
     }
 
     @objc private func newTerminalCommand() {
@@ -969,6 +992,65 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             self.model.workspace = originalWorkspace
             self.model.theme = originalTheme
             self.model.flushPersistence()
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func runShellPanelAutomationIfRequested() {
+        guard ProcessInfo.processInfo.environment["CONDUCTOR_SHELL_PANEL_AUTORUN"] == "1" else { return }
+        let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_SHELL_PANEL_OUTPUT"] ?? "/tmp/conductor-shell-panel-ok.txt"
+        let originalWorkspace = model.workspace
+        let originalTheme = model.theme
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [model] in
+            let dismissesEmpty = model.dismissVisibleShellPanel()
+
+            model.toggleSettingsPanel()
+            let settingsOpenedAlone = model.settingsPanelVisible &&
+                !model.commandPaletteVisible &&
+                !model.workspaceOverviewVisible
+            let settingsDismissed = model.dismissVisibleShellPanel() &&
+                !model.settingsPanelVisible
+
+            model.toggleCommandPalette()
+            let commandOpenedAlone = model.commandPaletteVisible &&
+                !model.settingsPanelVisible &&
+                !model.workspaceOverviewVisible
+            let commandDismissed = model.dismissVisibleShellPanel() &&
+                !model.commandPaletteVisible
+
+            model.toggleWorkspaceOverview()
+            let overviewOpenedAlone = model.workspaceOverviewVisible &&
+                !model.commandPaletteVisible &&
+                !model.settingsPanelVisible
+            let overviewDismissed = model.dismissVisibleShellPanel() &&
+                !model.workspaceOverviewVisible
+
+            let status = !dismissesEmpty &&
+                settingsOpenedAlone &&
+                settingsDismissed &&
+                commandOpenedAlone &&
+                commandDismissed &&
+                overviewOpenedAlone &&
+                overviewDismissed
+
+            let summary = [
+                "status=\(status ? "ok" : "invalid")",
+                "shell-panels=dismiss",
+                "empty=\(!dismissesEmpty)",
+                "settings=\(settingsOpenedAlone && settingsDismissed)",
+                "command=\(commandOpenedAlone && commandDismissed)",
+                "overview=\(overviewOpenedAlone && overviewDismissed)"
+            ].joined(separator: "\n")
+
+            do {
+                try summary.write(toFile: outputPath, atomically: true, encoding: .utf8)
+            } catch {
+                ConductorLog.app.error("Shell panel automation output write failed: \(error.localizedDescription)")
+            }
+            model.workspace = originalWorkspace
+            model.theme = originalTheme
+            model.flushPersistence()
             NSApp.terminate(nil)
         }
     }

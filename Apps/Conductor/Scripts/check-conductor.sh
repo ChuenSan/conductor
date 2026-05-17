@@ -100,6 +100,19 @@ grep -qx 'panes=2' /tmp/conductor-workspace-ok.txt
 grep -qx 'terminals=2' /tmp/conductor-workspace-ok.txt
 grep -qx 'zoomed=false' /tmp/conductor-workspace-ok.txt
 
+rm -f /tmp/conductor-shell-panel-ok.txt
+CONDUCTOR_SHELL_PANEL_AUTORUN=1 \
+CONDUCTOR_SHELL_PANEL_OUTPUT=/tmp/conductor-shell-panel-ok.txt \
+swift run Conductor >/tmp/conductor-shell-panel-run.log 2>&1
+cat /tmp/conductor-shell-panel-ok.txt
+echo
+grep -qx 'status=ok' /tmp/conductor-shell-panel-ok.txt
+grep -qx 'shell-panels=dismiss' /tmp/conductor-shell-panel-ok.txt
+grep -qx 'empty=true' /tmp/conductor-shell-panel-ok.txt
+grep -qx 'settings=true' /tmp/conductor-shell-panel-ok.txt
+grep -qx 'command=true' /tmp/conductor-shell-panel-ok.txt
+grep -qx 'overview=true' /tmp/conductor-shell-panel-ok.txt
+
 rm -f /tmp/conductor-stress-ok.txt
 CONDUCTOR_STRESS_AUTORUN=1 \
 CONDUCTOR_STRESS_OUTPUT=/tmp/conductor-stress-ok.txt \

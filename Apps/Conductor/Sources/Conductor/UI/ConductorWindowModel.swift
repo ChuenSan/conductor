@@ -654,6 +654,23 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspaceOverviewVisible = false
     }
 
+    @discardableResult
+    func dismissVisibleShellPanel() -> Bool {
+        if commandPaletteVisible {
+            commandPaletteVisible = false
+            return true
+        }
+        if settingsPanelVisible {
+            settingsPanelVisible = false
+            return true
+        }
+        if workspaceOverviewVisible {
+            workspaceOverviewVisible = false
+            return true
+        }
+        return false
+    }
+
     func toggleNotificationPanel() {
         notificationPanelVisible.toggle()
         if notificationPanelVisible {

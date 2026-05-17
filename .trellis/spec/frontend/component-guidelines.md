@@ -197,6 +197,14 @@ which feels like the app stopped accepting clicks.
   Overview must also dismiss any auxiliary notification panel.
 - Do not use separate `NSPanel` windows for shell surfaces that can live safely inside the
   main SwiftUI window; prefer a single in-window overlay when possible.
+- In-window dimming layers for Command Center, Appearance Center, and Workspace Overview are
+  visual only unless the surface is intentionally modal. They must use
+  `.allowsHitTesting(false)` so toolbar, sidebar, and tab clicks below the overlay are not
+  swallowed by an invisible full-window hit target. Provide explicit close affordances such as
+  the close button and Escape instead of making the dim layer a catch-all tap gesture.
+- Escape-to-dismiss must be routed at the app/window event layer while one of these panels is
+  visible so it works even when the terminal AppKit host is first responder. When no shell
+  panel is visible, Escape remains terminal input.
 
 **Correct**:
 
@@ -206,6 +214,14 @@ panel.orderFrontRegardless()
 
 notificationWindow?.orderOut(nil)
 restoreMainWindowFocus()
+
+Color.black.opacity(0.12)
+    .ignoresSafeArea()
+    .allowsHitTesting(false)
+
+if event.keyCode == 53, model.dismissVisibleShellPanel() {
+    return nil
+}
 ```
 
 **Wrong**:
@@ -213,6 +229,10 @@ restoreMainWindowFocus()
 ```swift
 panel.makeKeyAndOrderFront(nil)
 notificationWindow?.orderOut(nil)
+
+Color.black.opacity(0.12)
+    .ignoresSafeArea()
+    .onTapGesture { model.hideSettingsPanel() }
 ```
 
 ---
@@ -293,3 +313,10 @@ Forbidden patterns:
 - Letting an auxiliary `NSPanel` steal key focus from the main window without restoring it
   after hide. Notification-style panels should not require a second click on the main window
   just to make toolbar/sidebar controls responsive again.
+- Using a full-window hit-testing dim layer behind in-window shell panels. It makes the first
+  click after opening settings, command center, or workspace overview dismiss the overlay
+  instead of activating the control the user clicked, which feels like the app stopped
+  accepting clicks.
+- Relying only on SwiftUI `.onExitCommand` for shell panels while the terminal host can remain
+  first responder. Escape may go to Ghostty/AppKit instead of the panel unless the app event
+  layer consumes it only while a shell panel is visible.

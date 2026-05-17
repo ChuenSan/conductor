@@ -254,9 +254,7 @@ private struct CommandPaletteView: View {
         ZStack {
             Color.black.opacity(0.18)
                 .ignoresSafeArea()
-                .onTapGesture {
-                    model.hideCommandPalette()
-                }
+                .allowsHitTesting(false)
 
             ConductorGlassSurface(style: .palette, interactive: true) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -762,9 +760,7 @@ private struct AppearanceSettingsPanel: View {
         ZStack {
             Color.black.opacity(0.12)
                 .ignoresSafeArea()
-                .onTapGesture {
-                    model.hideSettingsPanel()
-                }
+                .allowsHitTesting(false)
 
             ConductorGlassSurface(style: .panel, interactive: true) {
                 VStack(alignment: .leading, spacing: 12) {
@@ -799,6 +795,9 @@ private struct AppearanceSettingsPanel: View {
                 }
             }
             .frame(width: 524)
+            .onExitCommand {
+                model.hideSettingsPanel()
+            }
         }
     }
 
@@ -1020,9 +1019,7 @@ private struct WorkspaceOverviewPanel: View {
         ZStack {
             Color.black.opacity(0.18)
                 .ignoresSafeArea()
-                .onTapGesture {
-                    model.hideWorkspaceOverview()
-                }
+                .allowsHitTesting(false)
 
             ConductorGlassSurface(style: .palette, interactive: true) {
                 VStack(alignment: .leading, spacing: 11) {
