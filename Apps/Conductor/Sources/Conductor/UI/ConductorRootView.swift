@@ -786,7 +786,7 @@ private struct ConductorSidebar: View {
     }
 
     private var sidebarHeaderHeight: CGFloat {
-        model.sidebarVisible ? 56 : 80
+        model.sidebarVisible ? 56 : 84
     }
 
     var body: some View {
@@ -882,23 +882,24 @@ private struct ConductorSidebar: View {
 
     private var collapsedTrafficLightShelf: some View {
         VStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 15)
-                .fill(Color.white.opacity(0.20))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 15)
-                        .stroke(Color.white.opacity(0.34), lineWidth: 1)
-                }
-                .frame(height: 34)
-                .padding(.horizontal, 6)
-                .padding(.top, 6)
-            Rectangle()
-                .fill(ConductorDesign.sidebarStroke.opacity(0.45))
-                .frame(height: 1)
-                .padding(.horizontal, 18)
-                .padding(.top, 5)
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.26),
+                    Color.white.opacity(0.12),
+                    Color.white.opacity(0.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 58)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(ConductorDesign.sidebarStroke.opacity(0.30))
+                    .frame(height: 1)
+                    .padding(.horizontal, 12)
+            }
             Spacer(minLength: 0)
         }
-        .frame(height: 48)
         .allowsHitTesting(false)
     }
 

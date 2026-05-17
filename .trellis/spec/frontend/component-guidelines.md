@@ -205,7 +205,9 @@ Forbidden patterns:
   collapsed sidebar width and header clearance must keep those controls visually inside the
   sidebar instead of letting them float over the terminal canvas. Collapsed sidebar header
   controls should align to the same centered rail axis as workspace and action icons, not keep
-  the expanded sidebar's trailing alignment.
+  the expanded sidebar's trailing alignment. Avoid narrow decorative capsules behind traffic
+  lights because native button geometry can drift from them; use a full-width titlebar wash
+  clipped by the sidebar shape instead.
 - Guessing at root shell spacing when the window titlebar is involved. First measure
   `NSWindow.contentLayoutRect`, `contentView.safeAreaInsets`, and the root hosted view frame,
   then keep `ConductorTokens.Space.shellTop` as the compact titlebar clearance rather than
