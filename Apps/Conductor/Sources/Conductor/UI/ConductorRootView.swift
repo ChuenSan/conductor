@@ -590,41 +590,37 @@ private struct NotificationRowView: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 9) {
             Button {
                 ConductorMotion.perform(onOpen)
             } label: {
-                HStack(alignment: .top, spacing: 8) {
-                    Circle()
-                        .fill(unread ? Color.accentColor : Color.clear)
-                        .overlay {
-                            Circle()
-                                .stroke(Color.accentColor.opacity(unread ? 0.95 : 0.25), lineWidth: 1)
-                        }
-                        .frame(width: 7, height: 7)
-                        .padding(.top, 5)
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            Text(notification.title)
-                                .font(.system(size: 12, weight: unread ? .semibold : .medium))
-                                .foregroundStyle(ConductorDesign.primaryText)
-                                .lineLimit(1)
-                            Spacer()
-                            Text(notification.createdAt.formatted(date: .omitted, time: .shortened))
-                                .font(.system(size: 10))
-                                .foregroundStyle(ConductorDesign.tertiaryText)
-                        }
-                        if !notification.body.isEmpty {
-                            Text(notification.body)
-                                .font(.system(size: 11))
-                                .foregroundStyle(ConductorDesign.secondaryText)
-                                .lineLimit(3)
-                        }
-                        Text(terminalTitle)
-                            .font(.system(size: 10))
-                            .foregroundStyle(ConductorDesign.tertiaryText)
-                            .lineLimit(1)
+                HStack(alignment: .top, spacing: 10) {
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(unread ? accentColor.opacity(0.88) : Color.clear)
+                            .frame(width: 3)
+                            .offset(x: -8)
+
+                        Image(systemName: iconName)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(accentColor)
+                            .frame(width: 30, height: 30)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(accentColor.opacity(unread ? 0.16 : 0.10))
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.white.opacity(0.38), lineWidth: 1)
+                            }
                     }
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        rowTitle
+                        rowBody
+                        rowMetadata
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .contentShape(Rectangle())
             }
@@ -636,26 +632,150 @@ private struct NotificationRowView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(hovering ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 22, height: 22)
+                    .background(Color.white.opacity(hovering ? 0.25 : 0.12))
+                    .clipShape(Circle())
             }
             .buttonStyle(ConductorPressButtonStyle())
             .help("清除通知")
         }
-        .padding(9)
-        .background(.thinMaterial)
-        .background(hovering ? Color.white.opacity(0.34) : Color.white.opacity(unread ? 0.24 : 0.14))
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
+        .padding(.vertical, 10)
+        .background(.regularMaterial)
+        .background(rowBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 15))
         .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.row)
-                .stroke(unread ? Color.accentColor.opacity(0.22) : Color.white.opacity(0.32), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 15)
+                .strokeBorder(
+                    unread ? accentColor.opacity(0.26) : Color.white.opacity(0.30),
+                    lineWidth: 1
+                )
         }
-        .scaleEffect(hovering ? 1.006 : 1)
+        .shadow(color: Color.black.opacity(hovering ? 0.10 : 0.055), radius: hovering ? 12 : 7, y: hovering ? 7 : 4)
+        .scaleEffect(hovering ? 1.004 : 1)
         .animation(ConductorMotion.micro, value: hovering)
         .animation(ConductorMotion.emphasized, value: unread)
         .onHover { value in
             withAnimation(ConductorMotion.micro) {
                 hovering = value
             }
+        }
+    }
+
+    private var rowTitle: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Text(notification.title)
+                .font(.system(size: 12.5, weight: unread ? .bold : .semibold))
+                .foregroundStyle(ConductorDesign.primaryText)
+                .lineLimit(1)
+            if unread {
+                Text("新")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .frame(height: 15)
+                    .background(accentColor)
+                    .clipShape(Capsule())
+            }
+            Spacer(minLength: 6)
+            Text(notification.createdAt.formatted(date: .omitted, time: .shortened))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .monospacedDigit()
+        }
+    }
+
+    @ViewBuilder
+    private var rowBody: some View {
+        if !notification.body.isEmpty {
+            Text(notification.body)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .lineSpacing(1.5)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var rowMetadata: some View {
+        HStack(spacing: 6) {
+            Label(kindLabel, systemImage: kindChipIcon)
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(accentColor)
+                .labelStyle(.titleAndIcon)
+                .padding(.horizontal, 6)
+                .frame(height: 18)
+                .background(accentColor.opacity(0.10))
+                .clipShape(Capsule())
+
+            Label(terminalTitle, systemImage: "terminal")
+                .font(.system(size: 9.5, weight: .medium))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .labelStyle(.titleAndIcon)
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .frame(height: 18)
+                .background(Color.white.opacity(0.18))
+                .clipShape(Capsule())
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var rowBackground: some View {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(hovering ? 0.38 : (unread ? 0.30 : 0.20)),
+                accentColor.opacity(unread ? 0.075 : 0.035),
+                Color.black.opacity(0.025)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var iconName: String {
+        switch notification.kind {
+        case .agent:
+            "sparkles"
+        case .bell:
+            "bell.and.waves.left.and.right.fill"
+        case .notification:
+            "terminal"
+        }
+    }
+
+    private var kindChipIcon: String {
+        switch notification.kind {
+        case .agent:
+            "bolt.horizontal"
+        case .bell:
+            "bell"
+        case .notification:
+            "app.badge"
+        }
+    }
+
+    private var kindLabel: String {
+        switch notification.kind {
+        case .agent:
+            "Agent"
+        case .bell:
+            "响铃"
+        case .notification:
+            "终端"
+        }
+    }
+
+    private var accentColor: Color {
+        switch notification.kind {
+        case .agent:
+            Color.accentColor
+        case .bell:
+            ConductorDesign.warmAccent
+        case .notification:
+            Color(red: 0.100, green: 0.520, blue: 0.900)
         }
     }
 }
