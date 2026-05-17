@@ -92,8 +92,8 @@ skip ahead to higher-level agent features until the terminal workspace feels dep
 2. [done] Add long-output stress scenario with several active panes.
 3. [done] Add rapid tab switching and complex workspace invariant stress through model checks and smoke automation.
 4. [done] Add resize-while-output stress.
-5. [pending] Inspect main-thread behavior and SwiftUI invalidation with Instruments.
-6. [pending] Document thresholds and findings.
+5. [partial] Inspect main-thread behavior and SwiftUI invalidation: `sample` evidence captured; `xcrun xctrace` is unavailable in this environment, so full Instruments trace remains a release-readiness follow-up.
+6. [done] Document thresholds and findings in `performance-resize-stress-findings.md`.
 
 **Exit Criteria**:
 
