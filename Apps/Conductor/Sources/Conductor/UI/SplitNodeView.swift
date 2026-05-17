@@ -1,5 +1,6 @@
 import ConductorCore
 import AppKit
+import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -583,7 +584,7 @@ private struct TerminalTabButton: View {
 
     private var tabFill: Color {
         if isSelected {
-            return paneFocused ? model.theme.accent.opacity(0.18) : Color.white.opacity(0.070)
+            return paneFocused ? model.theme.accent.opacity(0.30) : Color.white.opacity(0.105)
         }
         if hovering {
             return model.theme.accent.opacity(0.075)
@@ -596,9 +597,38 @@ private struct TerminalTabButton: View {
             return model.theme.accent.opacity(0.88)
         }
         if isSelected {
-            return paneFocused ? model.theme.accent.opacity(0.58) : Color.white.opacity(0.18)
+            return paneFocused ? model.theme.accent.opacity(0.86) : Color.white.opacity(0.26)
         }
         return Color.white.opacity(hovering ? 0.13 : 0.075)
+    }
+
+    private var terminalDetailLabel: String? {
+        guard let workingDirectory = metadata?.workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !workingDirectory.isEmpty else {
+            return nil
+        }
+        let normalized = (workingDirectory as NSString).expandingTildeInPath
+        let lastComponent = (normalized as NSString).lastPathComponent
+        guard !lastComponent.isEmpty,
+              lastComponent != "/",
+              lastComponent != tab.title else {
+            return nil
+        }
+        return lastComponent
+    }
+
+    private var terminalHelpText: String {
+        var parts = [tab.title]
+        if let terminalDetailLabel {
+            parts.append(terminalDetailLabel)
+        }
+        if unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0 {
+            parts.append("未读")
+        }
+        if metadata?.readonly == true {
+            parts.append("只读")
+        }
+        return parts.joined(separator: " · ")
     }
 
     var body: some View {
@@ -623,12 +653,19 @@ private struct TerminalTabButton: View {
                 HStack(spacing: 5) {
                     Image(systemName: "terminal")
                         .font(.conductorSystem(size: 10, scale: fontScale))
-                        .foregroundStyle(isSelected && paneFocused ? model.theme.accent : ConductorDesign.terminalTextMuted)
+                        .foregroundStyle(isSelected ? (paneFocused ? model.theme.accent : ConductorDesign.terminalText) : ConductorDesign.terminalTextMuted)
                     Text(tab.title)
                         .font(.conductorSystem(size: 10.5, weight: isSelected ? .semibold : .medium, scale: fontScale))
                         .foregroundStyle(isSelected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
                         .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .layoutPriority(1)
+                    if let terminalDetailLabel, isSelected || hovering {
+                        Text("· \(terminalDetailLabel)")
+                            .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
+                            .foregroundStyle(isSelected && paneFocused ? model.theme.accent.opacity(0.82) : ConductorDesign.terminalTextMuted.opacity(0.78))
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 2)
                     if unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0 {
                         Circle()
                             .fill(model.theme.accent)
@@ -644,7 +681,7 @@ private struct TerminalTabButton: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .help(tab.title)
+                .help(terminalHelpText)
             }
 
             if !editingTitle {
@@ -674,17 +711,9 @@ private struct TerminalTabButton: View {
         )
         .background(tabFill)
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
-        .overlay(alignment: .bottom) {
-            if isSelected {
-                Rectangle()
-                    .fill(paneFocused ? model.theme.accent.opacity(0.96) : Color.white.opacity(0.30))
-                    .frame(height: 2)
-                    .padding(.horizontal, 8)
-            }
-        }
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
-                .stroke(tabStroke, lineWidth: isDropTarget || isSelected ? 1.2 : 1)
+                .stroke(tabStroke, lineWidth: isDropTarget || (isSelected && paneFocused) ? 1.35 : 1)
         }
         .animation(nil, value: isSelected)
         .animation(ConductorMotion.micro, value: hovering)

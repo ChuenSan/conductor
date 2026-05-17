@@ -217,6 +217,9 @@ styling to terminal output.
   borders plus tab emphasis in that region.
 - Inactive panes may still show their selected tab, but with a quieter selected style than the
   focused pane. The focused pane owns the strongest accent treatment.
+- Terminal tab selection should come from fill, stroke, icon/text weight, and compact metadata
+  such as cwd/unread/readonly. Avoid bottom underlines in pane tabs; they create extra horizontal
+  seams against the workspace toolbar and pane rail.
 - Split gutters should have a stable hit target. Hover/drag may brighten the center handle,
   but dragging must keep split fraction updates animation-free.
 - While a divider is being dragged, quiet adjacent pane border overlays so the gutter remains

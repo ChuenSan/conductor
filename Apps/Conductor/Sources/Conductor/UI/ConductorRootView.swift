@@ -2316,8 +2316,6 @@ private struct ConductorSidebar: View {
     @ObservedObject var model: ConductorWindowModel
     @State private var renamingWorkspaceID: WorkspaceID?
     @State private var workspaceTitleDraft = ""
-    @State private var renamingTerminalID: TerminalID?
-    @State private var terminalTitleDraft = ""
     @Environment(\.conductorFontScale) private var fontScale
 
     private var terminalCount: Int {
@@ -2369,23 +2367,6 @@ private struct ConductorSidebar: View {
         .animation(model.shellAnimation(ConductorMotion.standard), value: model.workspace.id)
         .animation(model.shellAnimation(ConductorMotion.layout), value: model.workspaces.map(\.id))
         .animation(model.shellAnimation(ConductorMotion.layout), value: model.appearance.density)
-        .alert("重命名标签", isPresented: Binding(
-            get: { renamingTerminalID != nil },
-            set: { if !$0 { renamingTerminalID = nil } }
-        )) {
-            TextField("标签名称", text: $terminalTitleDraft)
-            Button("取消", role: .cancel) {
-                renamingTerminalID = nil
-            }
-            Button("保存") {
-                if let renamingTerminalID {
-                    ConductorMotion.perform {
-                        model.renameTerminal(renamingTerminalID, title: terminalTitleDraft)
-                    }
-                }
-                renamingTerminalID = nil
-            }
-        }
     }
 
     @ViewBuilder
@@ -2461,25 +2442,17 @@ private struct ConductorSidebar: View {
             SidebarSeparator()
 
             SidebarSectionTitle("状态")
-            VStack(spacing: 4) {
-                MetricRow(title: "分屏", value: "\(model.workspace.panes.count)")
-                MetricRow(title: "终端", value: "\(terminalCount)")
-                MetricRow(title: "通知", value: "\(model.notifications.snapshot.unreadCount)")
-                MetricRow(title: "当前", value: focusedTerminalTitle)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(model.theme.shellPanelStrong.opacity(0.56))
-            .clipShape(RoundedRectangle(cornerRadius: 11))
-            .overlay {
-                RoundedRectangle(cornerRadius: 11)
-                    .stroke(model.theme.shellStroke, lineWidth: 1)
-            }
+            SidebarStatusSummary(
+                splitCount: model.workspace.panes.count,
+                terminalCount: terminalCount,
+                unreadCount: model.notifications.snapshot.unreadCount,
+                focusedTerminalTitle: focusedTerminalTitle
+            )
 
             SidebarSeparator()
 
             SidebarSectionTitle("快捷操作")
-            quickActions(showsLabels: true)
+            primaryQuickActions(showsLabels: true)
 
             Spacer(minLength: 8)
 
@@ -2591,7 +2564,7 @@ private struct ConductorSidebar: View {
             SidebarSeparator()
                 .padding(.horizontal, -1)
 
-            quickActions(showsLabels: false)
+            primaryQuickActions(showsLabels: false)
 
             Spacer(minLength: 8)
 
@@ -2626,7 +2599,7 @@ private struct ConductorSidebar: View {
     }
 
     @ViewBuilder
-    private func quickActions(showsLabels: Bool) -> some View {
+    private func primaryQuickActions(showsLabels: Bool) -> some View {
         Group {
             SidebarActionRow(icon: "plus.rectangle.on.rectangle", title: "新开终端", showsTitle: showsLabels, help: "新开终端 Cmd-T") {
                 finishWorkspaceRenameIfNeeded()
@@ -2649,25 +2622,6 @@ private struct ConductorSidebar: View {
             SidebarActionRow(icon: "command", title: "命令面板", showsTitle: showsLabels, help: "打开命令面板 Cmd-K") {
                 finishWorkspaceRenameIfNeeded()
                 model.toggleCommandPalette()
-            }
-            SidebarActionRow(icon: "rectangle.3.group", title: "工作区总览", showsTitle: showsLabels, help: "工作区总览 Cmd-O") {
-                finishWorkspaceRenameIfNeeded()
-                model.toggleWorkspaceOverview()
-            }
-            SidebarActionRow(
-                icon: model.notifications.snapshot.unreadCount > 0 ? "bell.badge" : "bell",
-                title: "通知 \(model.notifications.snapshot.unreadCount)",
-                showsTitle: showsLabels,
-                help: "查看通知和跳转未读"
-            ) {
-                finishWorkspaceRenameIfNeeded()
-                model.toggleNotificationPanel()
-            }
-            SidebarActionRow(icon: "text.cursor", title: "重命名工作区", showsTitle: showsLabels, help: "重命名当前工作区") {
-                beginRenameWorkspace(model.workspace)
-            }
-            SidebarActionRow(icon: "tag", title: "重命名标签", showsTitle: showsLabels, help: "重命名当前标签") {
-                beginRenameFocusedTerminal()
             }
         }
     }
@@ -2758,16 +2712,73 @@ private struct ConductorSidebar: View {
         renamingWorkspaceID = nil
     }
 
-    private func beginRenameFocusedTerminal() {
-        guard let tab = model.workspace.focusedPane?.selectedTab else { return }
-        terminalTitleDraft = tab.title
-        renamingTerminalID = tab.id
-    }
-
     private func scrollSidebarSelection(_ proxy: ScrollViewProxy) {
         withAnimation(ConductorMotion.standard) {
             proxy.scrollTo(model.workspace.id, anchor: .center)
         }
+    }
+}
+
+private struct SidebarStatusSummary: View {
+    let splitCount: Int
+    let terminalCount: Int
+    let unreadCount: Int
+    let focusedTerminalTitle: String
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                SidebarStatusPill(title: "分屏", value: "\(splitCount)")
+                SidebarStatusPill(title: "终端", value: "\(terminalCount)")
+                if unreadCount > 0 {
+                    SidebarStatusPill(title: "未读", value: unreadCount > 99 ? "99+" : "\(unreadCount)", highlighted: true)
+                }
+            }
+            HStack(spacing: 6) {
+                Image(systemName: "scope")
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.accent.opacity(0.88))
+                    .frame(width: 14)
+                Text("焦点")
+                    .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                Text(focusedTerminalTitle)
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.shellPanelStrong.opacity(0.36))
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row + 2, style: .continuous))
+    }
+}
+
+private struct SidebarStatusPill: View {
+    let title: String
+    let value: String
+    var highlighted = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                .foregroundStyle(highlighted ? theme.accent.opacity(0.86) : ConductorDesign.tertiaryText)
+            Text(value)
+                .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
+                .foregroundStyle(highlighted ? theme.accent : ConductorDesign.primaryText)
+        }
+        .padding(.horizontal, 7)
+        .frame(height: 20)
+        .background(highlighted ? theme.accent.opacity(0.12) : theme.shellControlFill.opacity(0.72))
+        .clipShape(Capsule())
     }
 }
 
@@ -2776,9 +2787,9 @@ private struct SidebarSeparator: View {
 
     var body: some View {
         Rectangle()
-            .fill(theme.shellStroke.opacity(0.72))
+            .fill(theme.shellStroke.opacity(0.38))
             .frame(height: 1)
-            .padding(.horizontal, 13)
+            .padding(.horizontal, 20)
             .padding(.vertical, 4)
     }
 }
@@ -3001,26 +3012,6 @@ private struct SidebarActionRow: View {
             }
         }
         .help(help ?? title)
-    }
-}
-
-private struct MetricRow: View {
-    let title: String
-    let value: String
-    @Environment(\.conductorFontScale) private var fontScale
-
-    var body: some View {
-        HStack {
-            Text(title)
-                .font(.conductorSystem(size: 10.5, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-            Spacer()
-            Text(value)
-                .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.primaryText)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
     }
 }
 
