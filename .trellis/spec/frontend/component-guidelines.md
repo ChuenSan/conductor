@@ -147,6 +147,10 @@ workspace overview, and compact status modules.
   `floatingControlFill`, `floatingControlStrongFill`, `floatingStroke`, selected/hover fills,
   and separators). Do not tint these panels directly with `shellPanelBackground`; that color is
   for sidebar-style chrome and can make modal panels look like a colored sheet.
+- Floating shell panels should share one outer skeleton: `ConductorGlassSurface`, one
+  `FloatingPanelHeader`, one `FloatingPanelDivider`, then the panel's specialized content.
+  Settings may include an internal category sidebar, but it should not add a second competing
+  title bar inside the panel.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.

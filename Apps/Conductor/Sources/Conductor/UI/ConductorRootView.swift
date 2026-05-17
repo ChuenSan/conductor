@@ -62,6 +62,102 @@ struct ConductorRootView: View {
     }
 }
 
+private struct FloatingPanelHeader<Trailing: View>: View {
+    let systemImage: String
+    let title: String
+    let subtitle: String
+    let closeHelp: String
+    let onClose: () -> Void
+    let trailing: Trailing
+    @Environment(\.conductorTheme) private var theme
+
+    init(
+        systemImage: String,
+        title: String,
+        subtitle: String,
+        closeHelp: String,
+        onClose: @escaping () -> Void,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.systemImage = systemImage
+        self.title = title
+        self.subtitle = subtitle
+        self.closeHelp = closeHelp
+        self.onClose = onClose
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(theme.accent.opacity(0.88))
+                .frame(width: 24, height: 24)
+                .background(theme.floatingControlFill)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 10)
+
+            trailing
+
+            Button {
+                ConductorMotion.perform(onClose)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .frame(width: 24, height: 24)
+                    .background(theme.floatingControlFill)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help(closeHelp)
+        }
+    }
+}
+
+private extension FloatingPanelHeader where Trailing == EmptyView {
+    init(
+        systemImage: String,
+        title: String,
+        subtitle: String,
+        closeHelp: String,
+        onClose: @escaping () -> Void
+    ) {
+        self.init(
+            systemImage: systemImage,
+            title: title,
+            subtitle: subtitle,
+            closeHelp: closeHelp,
+            onClose: onClose
+        ) {
+            EmptyView()
+        }
+    }
+}
+
+private struct FloatingPanelDivider: View {
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Rectangle()
+            .fill(theme.floatingSeparator)
+            .frame(height: 1)
+    }
+}
+
 private struct CommandPaletteView: View {
     @ObservedObject var model: ConductorWindowModel
     @State private var query = ""
@@ -107,6 +203,7 @@ private struct CommandPaletteView: View {
             ConductorGlassSurface(style: .palette, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 10) {
                     commandHeader
+                    FloatingPanelDivider()
                     CommandStatusStrip(
                         workspaceTitle: model.workspace.title,
                         terminalTitle: focusedTerminalTitle,
@@ -154,41 +251,13 @@ private struct CommandPaletteView: View {
     }
 
     private var commandHeader: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "command")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 24, height: 24)
-                .background(theme.floatingControlFill)
-                .clipShape(RoundedRectangle(cornerRadius: 7))
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Command Center")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                Text(model.workspace.title)
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-
-            Spacer()
-
-            Button {
-                ConductorMotion.perform {
-                    model.hideCommandPalette()
-                }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(ConductorDesign.secondaryText)
-                    .frame(width: 24, height: 24)
-                    .background(theme.floatingControlFill)
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .help("关闭命令中心")
+        FloatingPanelHeader(
+            systemImage: "command",
+            title: "Command Center",
+            subtitle: model.workspace.title,
+            closeHelp: "关闭命令中心"
+        ) {
+            model.hideCommandPalette()
         }
     }
 
@@ -789,7 +858,6 @@ private struct CommandSuggestionButton: View {
 private struct AppearanceSettingsPanel: View {
     @ObservedObject var model: ConductorWindowModel
     @State private var selectedSection: SettingsPanelSection = .interface
-    @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
     private let columns = [
@@ -803,15 +871,31 @@ private struct AppearanceSettingsPanel: View {
                 .allowsHitTesting(false)
 
             ConductorGlassSurface(style: .settings, clarity: model.appearance.chromeClarity, interactive: true) {
-                HStack(spacing: 0) {
-                    sidebar
+                VStack(spacing: 0) {
+                    FloatingPanelHeader(
+                        systemImage: "gearshape",
+                        title: "设置",
+                        subtitle: model.theme.title,
+                        closeHelp: "关闭设置"
+                    ) {
+                        model.hideSettingsPanel()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
 
-                    Rectangle()
-                        .fill(theme.settingsStroke.opacity(0.70))
-                        .frame(width: 1)
-                        .padding(.vertical, 18)
+                    FloatingPanelDivider()
+                        .padding(.horizontal, 14)
 
-                    contentPane
+                    HStack(spacing: 0) {
+                        sidebar
+
+                        Rectangle()
+                            .fill(theme.settingsStroke.opacity(0.70))
+                            .frame(width: 1)
+                            .padding(.vertical, 14)
+
+                        contentPane
+                    }
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous))
@@ -829,29 +913,6 @@ private struct AppearanceSettingsPanel: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "gearshape")
-                    .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.accent.opacity(0.88))
-                    .frame(width: 24, height: 24)
-                    .background(theme.settingsControlFill)
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("设置")
-                        .font(.conductorSystem(size: 13, weight: .bold, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.primaryText)
-                    Text(model.theme.title)
-                        .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.bottom, 4)
-
-            SidebarSeparator()
-                .padding(.horizontal, -2)
-
             SidebarSectionTitle("分类")
 
             VStack(spacing: 3) {
@@ -875,60 +936,13 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var contentPane: some View {
-        VStack(spacing: 0) {
-            header
-
-            SidebarSeparator()
-                .padding(.horizontal, 4)
-                .padding(.vertical, 0)
-
-            ScrollView {
-                detailContent
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 11)
-            }
-            .scrollIndicators(.visible)
+        ScrollView {
+            detailContent
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
         }
+        .scrollIndicators(.visible)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var header: some View {
-        HStack(spacing: 9) {
-            Image(systemName: selectedSection.systemImage)
-                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.accent.opacity(0.88))
-                .frame(width: 24, height: 24)
-                .background(theme.settingsControlFill)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(selectedSection.title)
-                    .font(.conductorSystem(size: 14, weight: .bold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                Text(selectedSection.subtitle)
-                    .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-            }
-
-            Spacer()
-
-            Button {
-                model.performShellMotion {
-                    model.hideSettingsPanel()
-                }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.secondaryText)
-                    .frame(width: 24, height: 24)
-                    .background(theme.settingsControlFill)
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .help("关闭设置")
-        }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 14)
     }
 
     @ViewBuilder
@@ -1471,6 +1485,7 @@ private struct WorkspaceOverviewPanel: View {
             ConductorGlassSurface(style: .palette, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 11) {
                     header
+                    FloatingPanelDivider()
                     searchField
 
                     if filteredWorkspaces.isEmpty {
@@ -1542,39 +1557,13 @@ private struct WorkspaceOverviewPanel: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "rectangle.3.group")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 24, height: 24)
-                .background(theme.floatingControlFill)
-                .clipShape(RoundedRectangle(cornerRadius: 7))
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("工作区总览")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                Text("\(model.workspaces.count) 个工作区")
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-            }
-
-            Spacer()
-
-            Button {
-                ConductorMotion.perform {
-                    model.hideWorkspaceOverview()
-                }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(ConductorDesign.secondaryText)
-                    .frame(width: 24, height: 24)
-                    .background(theme.floatingControlFill)
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .help("关闭总览")
+        FloatingPanelHeader(
+            systemImage: "rectangle.3.group",
+            title: "工作区总览",
+            subtitle: "\(model.workspaces.count) 个工作区",
+            closeHelp: "关闭总览"
+        ) {
+            model.hideWorkspaceOverview()
         }
     }
 
@@ -1991,27 +1980,14 @@ struct NotificationPanelView: View {
     }
 
     private var notificationHeader: some View {
-        HStack(spacing: 7) {
-            Image(systemName: model.notifications.snapshot.unreadCount > 0 ? "bell.badge.fill" : "bell")
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 20, height: 20)
-                .background(theme.floatingControlFill)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            Text("通知")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(ConductorDesign.primaryText)
-            if model.notifications.snapshot.unreadCount > 0 {
-                Text("\(model.notifications.snapshot.unreadCount)")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 5)
-                    .frame(height: 15)
-                    .background(Color.accentColor)
-                    .clipShape(Capsule())
-                    .transition(.scale(scale: 0.82).combined(with: .opacity))
-            }
-            Spacer()
+        FloatingPanelHeader(
+            systemImage: model.notifications.snapshot.unreadCount > 0 ? "bell.badge.fill" : "bell",
+            title: "通知",
+            subtitle: model.notifications.records.isEmpty ? "暂无通知" : "\(model.notifications.records.count) 条记录",
+            closeHelp: "关闭通知"
+        ) {
+            model.hideNotificationPanel()
+        } trailing: {
             Button("跳转") {
                 ConductorMotion.perform {
                     _ = model.jumpToLatestUnread()
@@ -2031,10 +2007,9 @@ struct NotificationPanelView: View {
             .foregroundStyle(model.notifications.records.isEmpty ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
             .disabled(model.notifications.records.isEmpty)
         }
-        .padding(.top, 24)
+        .padding(.top, 12)
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
-        .background(theme.floatingControlFill.opacity(0.45))
     }
 
     private var emptyNotifications: some View {
