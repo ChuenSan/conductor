@@ -40,6 +40,7 @@ Tests and verification should scale with risk:
 
 - For ordinary UI chrome, verify layout, keyboard access, and state transitions.
 - For terminal-adjacent UI, test workspace switch, split resize, pane move, notification arrival, focus restoration, and long-output responsiveness.
+- Resize stress should include active terminal output, not only static split models. The Conductor gate runs a `resize-while-output` route that creates multiple panes, sends large output through Ghostty surfaces, repeatedly resizes/focuses/equalizes splits, and asserts compact workspace invariants without inspecting transcript text.
 - For tab/split model changes, include invariant checks that the split tree leaves match the pane dictionary, focused/zoomed panes exist, every pane has a selected tab, and rapid tab switching does not reorder tabs.
 - For performance-sensitive changes, capture Instruments or signpost evidence before release.
 

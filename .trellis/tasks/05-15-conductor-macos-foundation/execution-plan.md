@@ -91,7 +91,7 @@ skip ahead to higher-level agent features until the terminal workspace feels dep
 1. [done] Add performance signposts for tab switch, split, resize, close, host swap, and attach.
 2. [done] Add long-output stress scenario with several active panes.
 3. [done] Add rapid tab switching and complex workspace invariant stress through model checks and smoke automation.
-4. [manual validation] Add resize-while-output stress.
+4. [done] Add resize-while-output stress.
 5. [pending] Inspect main-thread behavior and SwiftUI invalidation with Instruments.
 6. [pending] Document thresholds and findings.
 

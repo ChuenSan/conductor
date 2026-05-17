@@ -144,6 +144,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         runLifecycleAutomationIfRequested()
         runWorkspaceAutomationIfRequested()
         runStressAutomationIfRequested()
+        runResizeStressAutomationIfRequested()
         ConductorLog.app.info("Conductor window launched")
     }
 
@@ -990,6 +991,96 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
                 model.flushPersistence()
                 NSApp.terminate(nil)
             }
+        }
+    }
+
+    private func runResizeStressAutomationIfRequested() {
+        guard ProcessInfo.processInfo.environment["CONDUCTOR_RESIZE_STRESS_AUTORUN"] == "1" else { return }
+        let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_RESIZE_STRESS_OUTPUT"] ?? "/tmp/conductor-resize-stress-ok.txt"
+        let originalWorkspace = model.workspace
+        let originalTheme = model.theme
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self else { return }
+            self.model.closeAllSurfaces()
+            self.model.workspace = WorkspaceState(title: "Resize Stress Automation")
+            self.model.commandPaletteVisible = false
+
+            self.model.newTerminal()
+            self.model.splitRight()
+            self.model.splitDown()
+            self.model.equalizeSplits()
+            self.model.closeAllSurfaces()
+
+            let command = "for i in {1..4000}; do echo conductor-resize-stress-$i; done\n"
+            for pane in self.model.workspace.panes.values {
+                guard let tab = pane.selectedTab else { continue }
+                self.model.surface(for: tab).sendText(command)
+            }
+
+            self.performResizeStressStep(
+                index: 0,
+                outputPath: outputPath,
+                originalWorkspace: originalWorkspace,
+                originalTheme: originalTheme
+            )
+        }
+    }
+
+    private func performResizeStressStep(
+        index: Int,
+        outputPath: String,
+        originalWorkspace: WorkspaceState,
+        originalTheme: TerminalTheme
+    ) {
+        let directions: [ResizeSplitDirection] = [.right, .down, .left, .up]
+        if index < 32 {
+            model.resizeFocusedSplit(direction: directions[index % directions.count], amount: 7)
+            if index % 3 == 0 {
+                model.focusNextPane()
+            }
+            if index % 8 == 7 {
+                model.equalizeSplits()
+            }
+            window?.contentView?.layoutSubtreeIfNeeded()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.075) { [weak self] in
+                self?.performResizeStressStep(
+                    index: index + 1,
+                    outputPath: outputPath,
+                    originalWorkspace: originalWorkspace,
+                    originalTheme: originalTheme
+                )
+            }
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            guard let self else { return }
+            let ok = self.workspaceIsValid(self.model.workspace) &&
+                self.model.workspace.panes.count == 3 &&
+                self.model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count } == 4 &&
+                self.model.runtimeSurfaceCount == 4 &&
+                !self.model.workspace.isZoomed
+            let summary = [
+                "status=\(ok ? "ok" : "invalid")",
+                "stress=resize-while-output",
+                "resized=true",
+                "panes=\(self.model.workspace.panes.count)",
+                "terminals=\(self.model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count })",
+                "surfaces=\(self.model.runtimeSurfaceCount)",
+                "zoomed=\(self.model.workspace.isZoomed)"
+            ].joined(separator: "\n")
+
+            do {
+                try summary.write(toFile: outputPath, atomically: true, encoding: .utf8)
+            } catch {
+                ConductorLog.app.error("Resize stress output write failed: \(error.localizedDescription)")
+            }
+            self.model.closeAllSurfaces()
+            self.model.workspace = originalWorkspace
+            self.model.theme = originalTheme
+            self.model.flushPersistence()
+            NSApp.terminate(nil)
         }
     }
 

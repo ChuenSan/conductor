@@ -57,6 +57,13 @@ stress=long-output
 panes=3
 terminals=4
 zoomed=false
+status=ok
+stress=resize-while-output
+resized=true
+panes=3
+terminals=4
+surfaces=4
+zoomed=false
 ```
 
 `Vendor/GhosttyKit.xcframework/` is prepared locally and ignored by Git.
