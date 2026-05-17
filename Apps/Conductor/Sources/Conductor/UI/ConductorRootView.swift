@@ -3130,14 +3130,11 @@ private struct ConductorToolbar: View {
                 }
             }
             .controlSize(.small)
-            .padding(.leading, 10)
-            .padding(.trailing, 6)
+            .padding(.leading, 12)
+            .padding(.trailing, 10)
             .frame(height: ConductorDesign.toolbarHeight(for: model.appearance))
         }
-        .padding(.top, 5)
-        .padding(.bottom, 2)
         .frame(height: ConductorDesign.toolbarHeight(for: model.appearance))
-        .background(model.theme.terminalChrome)
     }
 
     private func beginRenameWorkspace(_ workspace: WorkspaceState) {
@@ -3342,8 +3339,8 @@ private struct WorkspaceTopTab: View {
     private var tabFill: some ShapeStyle {
         LinearGradient(
             colors: [
-                selected ? Color.white.opacity(0.092) : (hovering ? Color.white.opacity(0.052) : Color.white.opacity(0.024)),
-                selected ? Color.white.opacity(0.040) : (hovering ? Color.white.opacity(0.030) : Color.white.opacity(0.014))
+                selected ? accent.opacity(0.150 * appearance.chromeClarity.accentFillMultiplier) : (hovering ? Color.white.opacity(0.070) : Color.white.opacity(0.030)),
+                selected ? Color.white.opacity(0.068) : (hovering ? Color.white.opacity(0.040) : Color.white.opacity(0.018))
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -3352,9 +3349,9 @@ private struct WorkspaceTopTab: View {
 
     private var tabStroke: Color {
         if selected {
-            return accent.opacity(0.34 * appearance.chromeClarity.accentFillMultiplier)
+            return accent.opacity(0.40 * appearance.chromeClarity.accentFillMultiplier)
         }
-        return Color.white.opacity(hovering ? 0.095 : 0.060)
+        return Color.white.opacity(hovering ? 0.120 : 0.070)
     }
 
     private var titleColor: Color {
@@ -3422,9 +3419,9 @@ private struct WorkspaceTopTab: View {
             height: WorkspaceTabMetrics.height(for: appearance)
         )
         .background(tabFill)
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous))
+        .clipShape(Capsule())
         .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous)
+            Capsule()
                 .stroke(tabStroke, lineWidth: 1)
         }
         .animation(nil, value: selected)
@@ -3436,7 +3433,7 @@ private struct WorkspaceTopTab: View {
                 hovering = value
             }
         }
-        .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab))
+        .contentShape(Capsule())
         .simultaneousGesture(
             TapGesture(count: 1).onEnded {
                 onSelect()

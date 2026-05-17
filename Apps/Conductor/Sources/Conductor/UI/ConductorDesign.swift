@@ -456,9 +456,9 @@ struct ConductorIconButton: View {
             }
         }
         .foregroundStyle(active ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
-        .padding(.horizontal, title == nil ? 0 : 8)
-        .frame(width: title == nil ? 22 : nil, height: 20)
-        .background(active ? Color.white.opacity(0.045) : Color.clear)
+        .padding(.horizontal, title == nil ? 0 : 9)
+        .frame(width: title == nil ? 24 : nil, height: 24)
+        .background(active ? Color.white.opacity(0.060) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
         .opacity(disabled ? 0.38 : 1)
@@ -524,12 +524,12 @@ struct ConductorPillGroup<Content: View>: View {
         HStack(spacing: 1) {
             content
         }
-        .padding(2)
-        .background(Color.clear)
+        .padding(3)
+        .background(Color.white.opacity(0.040))
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
-                .stroke(ConductorTokens.Palette.strokeOnDark.opacity(0.28), lineWidth: 1)
+                .stroke(ConductorTokens.Palette.strokeOnDark.opacity(0.34), lineWidth: 1)
         }
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)
@@ -550,7 +550,28 @@ struct ConductorTerminalToolbarSurface<Content: View>: View {
 
     var body: some View {
         content
-            .background(theme.terminalChrome)
+            .background {
+                ZStack {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                    LinearGradient(
+                        colors: [
+                            theme.terminalChrome.opacity(0.82),
+                            theme.terminalRaisedBackground.opacity(0.72)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.070),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            }
     }
 }
 

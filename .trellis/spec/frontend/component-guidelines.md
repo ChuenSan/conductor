@@ -129,6 +129,9 @@ workspace overview, and compact status modules.
 - The main window backdrop should remain translucent material plus a light theme wash, not an
   opaque flat fill. The sidebar should carry clearer linework than the backdrop: a visible
   rounded outline, right edge divider, section separators, and selected-row strokes.
+- The top workspace toolbar should feel like a translucent command shelf, not a compressed
+  black strip. Give it enough vertical room, use material plus theme tint, separate workspace
+  navigation from command groups, and make action clusters read as floating capsules.
 - Bind fluid effects only to low-frequency product state such as selection, command palette
   visibility, notification badges, sidebar visibility, and workspace navigation.
 - Do not bind glass effects, blur changes, or animated mesh/background effects to stdout,
@@ -167,8 +170,8 @@ rendering into SwiftUI work or making precision interactions lag behind the poin
   actions in a broad animated transaction. Animate scroll-to-visible, insertion/removal,
   hover/press, badges, and separate indicators instead.
 - Use tiny transform-only feedback for hover/press; never insert or remove controls on hover.
-- Workspace tabs should read as restrained track chrome, not generic pill buttons: use a
-  compact dark fill, subtle stroke, stable grid glyph, and quiet terminal-count badge.
+- Workspace tabs should read as restrained floating capsules, not generic square buttons:
+  use a compact dark fill, subtle stroke, stable grid glyph, and quiet terminal-count badge.
   Avoid stacking a selected-tab underline with the pane rail separator below it; selected
   state should come from fill, stroke, text weight, and glyph emphasis instead. Keep inactive
   workspace tabs visible but low-contrast so the terminal surface remains dominant.

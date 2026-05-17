@@ -33,11 +33,11 @@ enum AppearanceDensity: String, CaseIterable, Codable, Identifiable {
     var toolbarHeight: CGFloat {
         switch self {
         case .compact:
-            31
+            42
         case .standard:
-            34
+            46
         case .spacious:
-            38
+            50
         }
     }
 
@@ -55,11 +55,11 @@ enum AppearanceDensity: String, CaseIterable, Codable, Identifiable {
     var workspaceTabHeight: CGFloat {
         switch self {
         case .compact:
-            24
-        case .standard:
-            26
-        case .spacious:
             28
+        case .standard:
+            30
+        case .spacious:
+            32
         }
     }
 
