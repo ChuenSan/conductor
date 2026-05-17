@@ -119,6 +119,13 @@ workspace overview, and compact status modules.
 - Treat visual themes as whole-shell presets, not terminal palettes only. A theme should own
   Ghostty colors, terminal chrome, the window backdrop, and the accent color together so the
   shell feels intentionally composed after switching themes.
+- Whole-shell theme colors live on `TerminalTheme`. Shell surfaces should read theme-owned
+  panel backgrounds, selected fills, hover fills, strokes, terminal chrome, terminal pane
+  outlines, backdrop stops, and accent color instead of hard-coding fixed white/black opacity
+  values in each component.
+- `ConductorGlassSurface` resolves sidebar, palette, and panel tint/stroke from the current
+  theme environment. Leaf sidebar/settings rows should use `\.conductorTheme` so theme changes
+  update chrome consistently without manually passing theme through every view.
 - Bind fluid effects only to low-frequency product state such as selection, command palette
   visibility, notification badges, sidebar visibility, and workspace navigation.
 - Do not bind glass effects, blur changes, or animated mesh/background effects to stdout,

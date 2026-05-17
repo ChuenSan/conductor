@@ -83,6 +83,10 @@ Forbidden patterns:
 - `enum AppearanceFontScale: String, CaseIterable, Codable, Identifiable`
 - `ConductorWindowModel.appearance: AppearancePreferences`
 - `WorkspacePersistence.save(workspaces:selectedWorkspaceID:theme:appearance:)`
+- `TerminalTheme.shellPanelBackground`, `shellPanelStrong`, `shellStroke`,
+  `shellSelectedFill`, `shellHoverFill`, `shellControlFill`, `shellControlRaisedFill`,
+  and `terminalOuterStroke`
+- `EnvironmentValues.conductorTheme: TerminalTheme`
 
 ### 3. Contracts
 
@@ -91,6 +95,11 @@ Forbidden patterns:
 - `ConductorWindowModel.appearance` is the only published source of truth for shell
   appearance preferences.
 - Persistence writes the current appearance snapshot alongside workspace structure and theme.
+- `TerminalTheme` is the whole-shell preset source of truth. It owns terminal colors plus
+  low-frequency SwiftUI chrome colors for sidebar/settings panels, selection, hover,
+  strokes, controls, window backdrop, accent, and terminal pane outline.
+- Root shell must inject the selected `TerminalTheme` through `\.conductorTheme` so leaf
+  shell components can update together without receiving theme parameters manually.
 - Density can change toolbar, workspace tab, pane tab, and sidebar chrome dimensions.
 - Chrome clarity can change material tint and stroke emphasis.
 - Font scale can change SwiftUI shell text and icon labels in toolbar, sidebar, settings,
@@ -107,11 +116,16 @@ Forbidden patterns:
   unsafe layout data just to keep appearance settings.
 - Appearance change while terminals are streaming output -> only shell chrome invalidates;
   terminal output remains outside SwiftUI state.
+- Theme change while terminals are streaming output -> Ghostty config/terminal host color
+  updates may occur, but SwiftUI observes only the compact `TerminalTheme` value and theme
+  derived chrome colors.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: Switching density changes tab rail heights while the same Ghostty host views remain
   alive.
+- Good: Switching theme changes window backdrop, sidebar/settings chrome, command surfaces,
+  terminal chrome, accent, and Ghostty color config as one preset.
 - Good: Reduced motion disables panel and tab-scroll animation through a transaction.
 - Base: A user upgrades from a state file that only contains `theme`; appearance defaults to
   standard density, balanced clarity, and normal motion.
@@ -121,6 +135,8 @@ Forbidden patterns:
   font contract exists.
 - Bad: Applying opacity, scale, or identity transitions to `TerminalSurfaceRepresentable` when
   appearance changes.
+- Bad: Hard-coding fixed white/black opacity fills for selected sidebar/settings rows when a
+  `TerminalTheme` shell color exists.
 
 ### 6. Tests Required
 
@@ -144,6 +160,20 @@ Forbidden patterns:
 
 ```swift
 @Published var appearance = AppearancePreferences()
+```
+
+#### Wrong
+
+```swift
+.background(ConductorDesign.selectedFill)
+```
+
+#### Correct
+
+```swift
+@Environment(\.conductorTheme) private var theme
+
+.background(theme.shellSelectedFill)
 ```
 
 #### Wrong

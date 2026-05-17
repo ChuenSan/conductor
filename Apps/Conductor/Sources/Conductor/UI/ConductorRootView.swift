@@ -20,7 +20,7 @@ struct ConductorRootView: View {
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane))
             .overlay {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane)
-                    .stroke(Color.black.opacity(0.68), lineWidth: 1)
+                    .stroke(model.theme.terminalOuterStroke, lineWidth: 1)
                     .allowsHitTesting(false)
             }
         }
@@ -39,6 +39,7 @@ struct ConductorRootView: View {
         .ignoresSafeArea(.container, edges: .top)
         .tint(model.theme.accent)
         .environment(\.conductorFontScale, model.appearance.fontScale)
+        .environment(\.conductorTheme, model.theme)
         .overlay {
             ZStack {
                 if model.commandPaletteVisible {
@@ -809,12 +810,12 @@ private struct AppearanceSettingsPanel: View {
                     sidebar
 
                     Rectangle()
-                        .fill(ConductorDesign.sidebarStroke.opacity(0.80))
+                        .fill(model.theme.shellStroke.opacity(0.80))
                         .frame(width: 1)
 
                     contentPane
                 }
-                .background(ConductorDesign.sidebarBackground)
+                .background(model.theme.shellPanelBackground)
             }
             .clipShape(RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous))
             .frame(width: 686, height: 486)
@@ -831,7 +832,7 @@ private struct AppearanceSettingsPanel: View {
                     .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.secondaryText)
                     .frame(width: 24, height: 24)
-                    .background(Color.black.opacity(0.045))
+                    .background(model.theme.shellControlFill)
                     .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 1) {
@@ -876,7 +877,7 @@ private struct AppearanceSettingsPanel: View {
             header
 
             Rectangle()
-                .fill(ConductorDesign.sidebarStroke.opacity(0.82))
+                .fill(model.theme.shellStroke.opacity(0.82))
                 .frame(height: 1)
 
             ScrollView {
@@ -894,7 +895,7 @@ private struct AppearanceSettingsPanel: View {
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .frame(width: 24, height: 24)
-                .background(Color.black.opacity(0.045))
+                .background(model.theme.shellControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 1) {
@@ -917,7 +918,7 @@ private struct AppearanceSettingsPanel: View {
                     .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.secondaryText)
                     .frame(width: 24, height: 24)
-                    .background(Color.black.opacity(0.045))
+                    .background(model.theme.shellControlFill)
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -1068,6 +1069,7 @@ private struct SettingsSidebarItem: View {
     let action: () -> Void
     @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         Button(action: action) {
@@ -1103,10 +1105,10 @@ private struct SettingsSidebarItem: View {
 
     private var rowFill: Color {
         if selected {
-            return ConductorDesign.selectedFill
+            return theme.shellSelectedFill
         }
         if hovering {
-            return ConductorDesign.hoverFill
+            return theme.shellHoverFill
         }
         return Color.clear
     }
@@ -1119,6 +1121,7 @@ private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View
     let titleForOption: (Option) -> String
     let subtitleForOption: (Option) -> String
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1141,11 +1144,11 @@ private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 7)
-                        .background(selection == option ? ConductorDesign.selectedFill : Color.white.opacity(0.30))
+                        .background(selection == option ? theme.shellSelectedFill : theme.shellPanelStrong.opacity(0.42))
                         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(selection == option ? ConductorDesign.sidebarStroke : ConductorDesign.sidebarStroke.opacity(0.52), lineWidth: 1)
+                                .stroke(selection == option ? theme.shellStroke.opacity(0.92) : theme.shellStroke.opacity(0.52), lineWidth: 1)
                         }
                     }
                     .buttonStyle(.plain)
@@ -1161,6 +1164,7 @@ private struct AppearanceToggleRow: View {
     let subtitle: String
     @Binding var isOn: Bool
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         Toggle(isOn: $isOn) {
@@ -1177,11 +1181,11 @@ private struct AppearanceToggleRow: View {
         .toggleStyle(.switch)
         .padding(.vertical, 7)
         .padding(.horizontal, 9)
-        .background(Color.white.opacity(0.30))
+        .background(theme.shellPanelStrong.opacity(0.42))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(ConductorDesign.sidebarStroke.opacity(0.54), lineWidth: 1)
+                .stroke(theme.shellStroke.opacity(0.54), lineWidth: 1)
         }
     }
 }
@@ -1190,6 +1194,7 @@ private struct CommandShortcutGuide: View {
     @ObservedObject var model: ConductorWindowModel
     var height: CGFloat = 178
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     private var items: [CommandShortcutGuideItem] {
         ConductorCommandCatalog.shortcutGuideItems(model: model)
@@ -1213,11 +1218,11 @@ private struct CommandShortcutGuide: View {
         }
         .scrollIndicators(.visible)
         .frame(height: height)
-        .background(Color.white.opacity(0.26))
+        .background(theme.shellPanelStrong.opacity(0.36))
         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(ConductorDesign.sidebarStroke.opacity(0.54), lineWidth: 1)
+                .stroke(theme.shellStroke.opacity(0.54), lineWidth: 1)
         }
     }
 }
@@ -1225,6 +1230,7 @@ private struct CommandShortcutGuide: View {
 private struct CommandShortcutGuideRow: View {
     let item: CommandShortcutGuideItem
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         HStack(spacing: 8) {
@@ -1245,7 +1251,7 @@ private struct CommandShortcutGuideRow: View {
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .padding(.horizontal, 6)
                 .frame(height: 17)
-                .background(ConductorDesign.selectedFill)
+                .background(theme.shellSelectedFill)
                 .clipShape(Capsule())
         }
         .padding(.horizontal, 8)
@@ -1287,7 +1293,7 @@ private struct ThemePreviewCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(selected ? theme.accent.opacity(0.86) : Color.white.opacity(hovering ? 0.62 : 0.38), lineWidth: selected ? 1.5 : 1)
+                    .stroke(selected ? theme.accent.opacity(0.86) : theme.shellStroke.opacity(hovering ? 0.88 : 0.58), lineWidth: selected ? 1.5 : 1)
             }
             .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         }
@@ -1309,34 +1315,58 @@ private struct ThemePreviewCard: View {
                 endPoint: .bottomTrailing
             )
 
-            VStack(spacing: 0) {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(Color.white.opacity(0.74))
-                        .frame(width: 5, height: 5)
-                    Circle()
-                        .fill(theme.accent.opacity(0.72))
-                        .frame(width: 5, height: 5)
-                    Circle()
-                        .fill(Color.black.opacity(0.24))
-                        .frame(width: 5, height: 5)
-                    Spacer()
+            HStack(spacing: 5) {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(Color.white.opacity(0.82))
+                            .frame(width: 4, height: 4)
+                        Circle()
+                            .fill(theme.accent.opacity(0.76))
+                            .frame(width: 4, height: 4)
+                        Spacer(minLength: 0)
+                    }
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(theme.shellSelectedFill)
+                        .frame(height: 8)
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(theme.shellHoverFill)
+                        .frame(width: 26, height: 8)
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 7)
-                .frame(height: 16)
-                .background(theme.terminalChrome.opacity(0.92))
+                .padding(6)
+                .frame(width: 45)
+                .background(theme.shellPanelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 3) {
-                    PreviewTerminalLine(prompt: "$", text: "swift build", accent: theme.accent)
-                    PreviewTerminalLine(prompt: ">", text: "Conductor", accent: theme.accent)
-                    Rectangle()
-                        .fill(theme.accent.opacity(0.86))
-                        .frame(width: 22, height: 2)
+                VStack(spacing: 0) {
+                    HStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(theme.accent.opacity(0.80))
+                            .frame(width: 18, height: 4)
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(Color.white.opacity(0.22))
+                            .frame(width: 28, height: 4)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 7)
+                    .frame(height: 16)
+                    .background(theme.terminalChrome.opacity(0.92))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        PreviewTerminalLine(prompt: "$", text: "swift build", accent: theme.accent)
+                        PreviewTerminalLine(prompt: ">", text: "Conductor", accent: theme.accent)
+                        Rectangle()
+                            .fill(theme.accent.opacity(0.86))
+                            .frame(width: 22, height: 2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(7)
+                    .background(theme.terminalBackground)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(7)
-                .background(theme.terminalBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
+            .padding(6)
         }
         .frame(height: 76)
         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -1355,6 +1385,7 @@ private struct ThemePreviewCard: View {
                     .lineLimit(1)
                 HStack(spacing: 4) {
                     ThemeSwatch(color: theme.accent)
+                    ThemeSwatch(color: theme.shellPanelBackground)
                     ThemeSwatch(color: theme.terminalChrome)
                     ThemeSwatch(color: theme.terminalBackground)
                 }
@@ -1368,9 +1399,9 @@ private struct ThemePreviewCard: View {
 
     private var cardFill: Color {
         if selected {
-            return Color.white.opacity(0.38)
+            return theme.shellPanelStrong.opacity(0.62)
         }
-        return Color.white.opacity(hovering ? 0.28 : 0.18)
+        return theme.shellPanelStrong.opacity(hovering ? 0.48 : 0.34)
     }
 }
 
@@ -2320,7 +2351,7 @@ private struct ConductorSidebar: View {
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background {
             ConductorGlassSurface(style: .sidebar, clarity: model.appearance.chromeClarity, interactive: true) {
-                Color.clear
+                model.theme.shellPanelBackground
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous))
@@ -2387,7 +2418,7 @@ private struct ConductorSidebar: View {
                 .font(.conductorSystem(size: 11.5, weight: .bold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .frame(width: 26, height: 24)
-                .background(Color.black.opacity(0.045))
+                .background(model.theme.shellControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(ConductorPressButtonStyle())
@@ -2408,7 +2439,7 @@ private struct ConductorSidebar: View {
             .frame(height: 58)
             .overlay(alignment: .bottom) {
                 Rectangle()
-                    .fill(ConductorDesign.sidebarStroke.opacity(0.30))
+                    .fill(model.theme.shellStroke.opacity(0.30))
                     .frame(height: 1)
                     .padding(.horizontal, 12)
             }
@@ -2433,11 +2464,11 @@ private struct ConductorSidebar: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(Color.white.opacity(0.45))
+            .background(model.theme.shellPanelStrong.opacity(0.56))
             .clipShape(RoundedRectangle(cornerRadius: 11))
             .overlay {
                 RoundedRectangle(cornerRadius: 11)
-                    .stroke(ConductorDesign.sidebarStroke, lineWidth: 1)
+                    .stroke(model.theme.shellStroke, lineWidth: 1)
             }
 
             SidebarSeparator()
@@ -2736,9 +2767,11 @@ private struct ConductorSidebar: View {
 }
 
 private struct SidebarSeparator: View {
+    @Environment(\.conductorTheme) private var theme
+
     var body: some View {
         Rectangle()
-            .fill(ConductorDesign.sidebarStroke)
+            .fill(theme.shellStroke)
             .frame(height: 1)
             .padding(.horizontal, 7)
             .padding(.vertical, 1)
@@ -2752,6 +2785,7 @@ private struct SidebarRailButton: View {
     let help: String
     let action: () -> Void
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         Button {
@@ -2761,7 +2795,7 @@ private struct SidebarRailButton: View {
                 .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
                 .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
                 .frame(width: 34, height: 34)
-                .background(selected ? ConductorDesign.selectedFill : Color.clear)
+                .background(selected ? theme.shellSelectedFill : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 11))
                 .contentShape(RoundedRectangle(cornerRadius: 11))
         }
@@ -2796,6 +2830,7 @@ private struct SidebarRow: View {
     let title: String
     let selected: Bool
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         HStack(spacing: 7) {
@@ -2809,7 +2844,7 @@ private struct SidebarRow: View {
         }
         .padding(.horizontal, 7)
         .frame(height: 25)
-        .background(selected ? ConductorDesign.selectedFill : Color.clear)
+        .background(selected ? theme.shellSelectedFill : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
     }
 }
@@ -2829,6 +2864,7 @@ private struct WorkspaceSidebarRow: View {
     @State private var renameCancelled = false
     @FocusState private var titleFieldFocused: Bool
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         Group {
@@ -2869,7 +2905,7 @@ private struct WorkspaceSidebarRow: View {
         }
         .padding(.horizontal, 7)
         .frame(height: 32)
-        .background(selected ? ConductorDesign.selectedFill : ConductorDesign.hoverFill)
+        .background(selected ? theme.shellSelectedFill : theme.shellHoverFill)
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .onAppear {
@@ -2907,7 +2943,7 @@ private struct WorkspaceSidebarRow: View {
             }
             .padding(.horizontal, 7)
             .frame(height: 32)
-            .background(selected ? ConductorDesign.selectedFill : (hovering ? ConductorDesign.hoverFill : Color.clear))
+            .background(selected ? theme.shellSelectedFill : (hovering ? theme.shellHoverFill : Color.clear))
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         }
@@ -2927,6 +2963,7 @@ private struct SidebarActionRow: View {
     let action: () -> Void
     @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         Button {
@@ -2944,7 +2981,7 @@ private struct SidebarActionRow: View {
             .foregroundStyle(ConductorDesign.secondaryText)
             .padding(.horizontal, showsTitle ? 8 : 0)
             .frame(width: showsTitle ? nil : 34, height: showsTitle ? 28 : 34)
-            .background(hovering ? ConductorDesign.hoverFill : Color.clear)
+            .background(hovering ? theme.shellHoverFill : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: showsTitle ? ConductorTokens.Radius.row : 11))
             .contentShape(RoundedRectangle(cornerRadius: showsTitle ? ConductorTokens.Radius.row : 11))
         }

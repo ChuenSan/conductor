@@ -126,9 +126,10 @@ skip ahead to higher-level agent features until the terminal workspace feels dep
 
 ## Stage 9: macOS 2026 Appearance System
 
-1. [in progress] Add a compact Settings / Appearance Center opened from the sidebar.
-2. [in progress] Make themes feel like whole-shell presets, not terminal-only color swaps.
-3. [pending] Add live preview coverage for shell chrome, terminal chrome, and backdrop behavior.
+1. [done] Add a compact Settings / Appearance Center opened from the sidebar.
+2. [done] Make themes feel like whole-shell presets, not terminal-only color swaps.
+3. [deferred] Do not add live preview coverage yet; use manual smoke and the full Conductor
+   gate until the preview route is explicitly resumed.
 4. [done] Add persisted appearance preferences beyond theme: density, chrome clarity, font scale, and reduced motion.
 
 **Exit Criteria**:

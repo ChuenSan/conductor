@@ -5,10 +5,19 @@ private struct ConductorFontScaleKey: EnvironmentKey {
     static let defaultValue = AppearanceFontScale.standard
 }
 
+private struct ConductorThemeKey: EnvironmentKey {
+    static let defaultValue = TerminalTheme.codexDark
+}
+
 extension EnvironmentValues {
     var conductorFontScale: AppearanceFontScale {
         get { self[ConductorFontScaleKey.self] }
         set { self[ConductorFontScaleKey.self] = newValue }
+    }
+
+    var conductorTheme: TerminalTheme {
+        get { self[ConductorThemeKey.self] }
+        set { self[ConductorThemeKey.self] = newValue }
     }
 }
 
@@ -241,6 +250,7 @@ struct ConductorGlassSurface<Content: View>: View {
     var clarity = ChromeClarity.balanced
     var interactive = false
     @ViewBuilder var content: Content
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         content
@@ -273,11 +283,21 @@ struct ConductorGlassSurface<Content: View>: View {
     }
 
     private var resolvedTint: Color {
-        style.tint.opacity(clarity.glassTintMultiplier)
+        switch style {
+        case .sidebar, .palette, .panel:
+            theme.shellPanelBackground.opacity(clarity.glassTintMultiplier)
+        case .card, .controlGroup, .terminalToolbar:
+            style.tint.opacity(clarity.glassTintMultiplier)
+        }
     }
 
     private var resolvedStroke: Color {
-        style.stroke.opacity(clarity.strokeMultiplier)
+        switch style {
+        case .sidebar, .palette, .panel:
+            theme.shellStroke.opacity(clarity.strokeMultiplier)
+        case .card, .controlGroup, .terminalToolbar:
+            style.stroke.opacity(clarity.strokeMultiplier)
+        }
     }
 
     @ViewBuilder

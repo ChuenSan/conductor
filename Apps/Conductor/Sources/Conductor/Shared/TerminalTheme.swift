@@ -125,6 +125,82 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    var shellPanelBackground: Color {
+        switch self {
+        case .codexDark:
+            Color(red: 0.945, green: 0.960, blue: 0.982).opacity(0.74)
+        case .flexoki:
+            Color(red: 0.968, green: 0.940, blue: 0.875).opacity(0.76)
+        case .aurora:
+            Color(red: 0.900, green: 0.966, blue: 0.972).opacity(0.74)
+        case .graphite:
+            Color(red: 0.920, green: 0.928, blue: 0.940).opacity(0.76)
+        case .ember:
+            Color(red: 0.984, green: 0.912, blue: 0.838).opacity(0.74)
+        }
+    }
+
+    var shellPanelStrong: Color {
+        switch self {
+        case .codexDark:
+            Color(red: 0.982, green: 0.988, blue: 0.996).opacity(0.84)
+        case .flexoki:
+            Color(red: 0.988, green: 0.960, blue: 0.900).opacity(0.84)
+        case .aurora:
+            Color(red: 0.942, green: 0.990, blue: 0.994).opacity(0.82)
+        case .graphite:
+            Color(red: 0.972, green: 0.976, blue: 0.982).opacity(0.82)
+        case .ember:
+            Color(red: 0.996, green: 0.936, blue: 0.872).opacity(0.82)
+        }
+    }
+
+    var shellStroke: Color {
+        switch self {
+        case .codexDark:
+            Color(red: 0.18, green: 0.22, blue: 0.32).opacity(0.15)
+        case .flexoki:
+            Color(red: 0.42, green: 0.31, blue: 0.18).opacity(0.16)
+        case .aurora:
+            Color(red: 0.10, green: 0.36, blue: 0.42).opacity(0.16)
+        case .graphite:
+            Color(red: 0.22, green: 0.24, blue: 0.28).opacity(0.15)
+        case .ember:
+            Color(red: 0.50, green: 0.18, blue: 0.10).opacity(0.16)
+        }
+    }
+
+    var shellSelectedFill: Color {
+        accent.opacity(0.10)
+    }
+
+    var shellHoverFill: Color {
+        accent.opacity(0.055)
+    }
+
+    var shellControlFill: Color {
+        Color.black.opacity(0.045)
+    }
+
+    var shellControlRaisedFill: Color {
+        shellPanelStrong.opacity(0.62)
+    }
+
+    var terminalOuterStroke: Color {
+        switch self {
+        case .codexDark:
+            Color.black.opacity(0.68)
+        case .flexoki:
+            Color(red: 0.18, green: 0.12, blue: 0.08).opacity(0.70)
+        case .aurora:
+            Color(red: 0.02, green: 0.15, blue: 0.20).opacity(0.72)
+        case .graphite:
+            Color.black.opacity(0.62)
+        case .ember:
+            Color(red: 0.24, green: 0.08, blue: 0.04).opacity(0.70)
+        }
+    }
+
     var accent: Color {
         switch self {
         case .codexDark:
