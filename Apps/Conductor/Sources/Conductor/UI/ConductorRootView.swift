@@ -68,162 +68,7 @@ private struct CommandPaletteView: View {
     @FocusState private var searchFocused: Bool
 
     private var commands: [CommandPaletteItem] {
-        [
-            CommandPaletteItem(id: "new-terminal", section: "创建", title: "新开终端", shortcut: "Cmd-T", keywords: "terminal pane shell") {
-                run {
-                    model.newTerminal()
-                }
-            },
-            CommandPaletteItem(id: "new-tab", section: "创建", title: "新标签", shortcut: "Cmd-Shift-T", keywords: "tab terminal") {
-                run {
-                    if let paneID = model.workspace.focusedPane?.id {
-                        model.newTab(in: paneID)
-                    }
-                }
-            },
-            CommandPaletteItem(id: "duplicate-tab", section: "创建", title: "复制当前标签", shortcut: "Duplicate", keywords: "copy tab duplicate") {
-                run {
-                    model.duplicateSelectedTab()
-                }
-            },
-            CommandPaletteItem(id: "split-right", section: "创建", title: "向右分屏", shortcut: "Cmd-D", disabled: !model.canSplit, disabledReason: "当前布局已到可用分屏上限", keywords: "split right vertical") {
-                run {
-                    model.splitRight()
-                }
-            },
-            CommandPaletteItem(id: "split-down", section: "创建", title: "向下分屏", shortcut: "Cmd-Shift-D", disabled: !model.canSplit, disabledReason: "当前布局已到可用分屏上限", keywords: "split down horizontal") {
-                run {
-                    model.splitDown()
-                }
-            },
-            CommandPaletteItem(id: "next-tab", section: "导航", title: "下一个标签", shortcut: "Cmd-]", keywords: "next tab") {
-                run {
-                    model.selectNextTab()
-                }
-            },
-            CommandPaletteItem(id: "previous-tab", section: "导航", title: "上一个标签", shortcut: "Cmd-[", keywords: "previous tab") {
-                run {
-                    model.selectPreviousTab()
-                }
-            },
-            CommandPaletteItem(id: "next-pane", section: "导航", title: "下一个分屏", shortcut: "Cmd-Shift-]", keywords: "next pane focus") {
-                run {
-                    model.focusNextPane()
-                }
-            },
-            CommandPaletteItem(id: "previous-pane", section: "导航", title: "上一个分屏", shortcut: "Cmd-Shift-[", keywords: "previous pane focus") {
-                run {
-                    model.focusPreviousPane()
-                }
-            },
-            CommandPaletteItem(
-                id: "notifications",
-                section: "导航",
-                title: "通知中心",
-                shortcut: "\(model.notifications.snapshot.unreadCount)",
-                keywords: "notification unread agent"
-            ) {
-                run {
-                    model.toggleNotificationPanel()
-                }
-            },
-            CommandPaletteItem(
-                id: "jump-unread",
-                section: "导航",
-                title: "跳到最新未读",
-                shortcut: "Unread",
-                disabled: model.notifications.snapshot.latestUnread == nil,
-                disabledReason: "没有未读通知",
-                keywords: "notification unread jump"
-            ) {
-                run {
-                    _ = model.jumpToLatestUnread()
-                }
-            },
-            CommandPaletteItem(id: "close-tab", section: "整理", title: "关闭标签", shortcut: "Cmd-W", keywords: "close tab") {
-                run {
-                    model.closeSelectedTab()
-                }
-            },
-            CommandPaletteItem(id: "close-pane", section: "整理", title: "关闭分屏", shortcut: "Cmd-Shift-W", disabled: !model.canCloseFocusedPane, disabledReason: "至少保留一个分屏", keywords: "close pane split") {
-                run {
-                    model.closePane(model.workspace.focusedPaneID)
-                }
-            },
-            CommandPaletteItem(id: "move-tab-left", section: "整理", title: "标签左移", shortcut: "Cmd-Shift-,", disabled: !model.canMoveSelectedTabLeft, disabledReason: "已经在最左侧", keywords: "move tab left") {
-                run {
-                    model.moveSelectedTabLeft()
-                }
-            },
-            CommandPaletteItem(id: "move-tab-right", section: "整理", title: "标签右移", shortcut: "Cmd-Shift-.", disabled: !model.canMoveSelectedTabRight, disabledReason: "已经在最右侧", keywords: "move tab right") {
-                run {
-                    model.moveSelectedTabRight()
-                }
-            },
-            CommandPaletteItem(id: "move-tab-next-pane", section: "整理", title: "移到下一个分屏", shortcut: "Cmd-Opt-M", disabled: !model.canMoveSelectedTabToNextPane, disabledReason: "需要另一个分屏", keywords: "move tab pane") {
-                run {
-                    model.moveSelectedTabToNextPane()
-                }
-            },
-            CommandPaletteItem(id: "move-tab-new-split", section: "整理", title: "移到右侧新分屏", shortcut: "Cmd-Opt-Shift-M", disabled: !model.canMoveSelectedTabToNewSplit, disabledReason: "需要可移动标签和可用分屏空间", keywords: "move tab new split") {
-                run {
-                    model.moveSelectedTabToNewSplit(.right)
-                }
-            },
-            CommandPaletteItem(
-                id: "toggle-zoom",
-                section: "视图",
-                title: model.workspace.isZoomed ? "还原当前分屏" : "放大当前分屏",
-                shortcut: "Cmd-Z",
-                disabled: model.workspace.root.leaves.count <= 1,
-                disabledReason: "需要多个分屏",
-                keywords: "zoom pane"
-            ) {
-                run {
-                    model.toggleZoom()
-                }
-            },
-            CommandPaletteItem(id: "equalize-splits", section: "视图", title: "均分分屏", shortcut: "Cmd-Shift-=", disabled: model.workspace.root.leaves.count <= 1, disabledReason: "需要多个分屏", keywords: "equalize split layout") {
-                run {
-                    model.equalizeSplits()
-                }
-            },
-            CommandPaletteItem(id: "workspace-overview", section: "视图", title: "工作区总览", shortcut: "Cmd-O", keywords: "workspace overview mission control") {
-                run {
-                    model.toggleWorkspaceOverview()
-                }
-            },
-            CommandPaletteItem(id: "appearance-settings", section: "视图", title: "外观设置", shortcut: "Theme", keywords: "appearance theme settings") {
-                run {
-                    model.toggleSettingsPanel()
-                }
-            },
-            CommandPaletteItem(id: "duplicate-workspace", section: "视图", title: "复制工作区", shortcut: "Duplicate", keywords: "workspace duplicate") {
-                run {
-                    model.duplicateWorkspace(model.workspace.id)
-                }
-            },
-            CommandPaletteItem(id: "reset-workspace", section: "视图", title: "重置工作区", shortcut: "Reset", keywords: "workspace reset") {
-                run {
-                    model.resetWorkspace()
-                }
-            },
-            CommandPaletteItem(id: "clear-notifications", section: "整理", title: "清空通知", shortcut: "Clear", disabled: model.notifications.records.isEmpty, disabledReason: "通知中心为空", keywords: "notification clear") {
-                run {
-                    model.clearAllNotifications()
-                }
-            },
-            CommandPaletteItem(id: "install-codex-hooks", section: "集成", title: "连接 Codex 完成通知", shortcut: "Codex", keywords: "codex hooks notification agent") {
-                run {
-                    model.installCodexNotificationHooks()
-                }
-            },
-            CommandPaletteItem(id: "debug-notification", section: "调试", title: "模拟当前终端通知", shortcut: "Test", keywords: "notification test") {
-                run {
-                    model.notifyFocusedTerminalForTesting()
-                }
-            }
-        ]
+        ConductorCommandCatalog.items(model: model, run: run)
     }
 
     private var filteredCommands: [CommandPaletteItem] {
@@ -521,6 +366,200 @@ private struct CommandPaletteItem: Identifiable {
             "command"
         }
     }
+
+    var discoveryShortcut: String {
+        if shortcut.hasPrefix("Cmd") {
+            return shortcut
+        }
+        switch id {
+        case "notifications":
+            return "工具栏"
+        default:
+            return "Command Center"
+        }
+    }
+}
+
+private enum ConductorCommandCatalog {
+    @MainActor
+    static func items(
+        model: ConductorWindowModel,
+        run: @escaping (@escaping () -> Void) -> Void
+    ) -> [CommandPaletteItem] {
+        [
+            CommandPaletteItem(id: "new-terminal", section: "创建", title: "新开终端", shortcut: "Cmd-T", keywords: "terminal pane shell") {
+                run {
+                    model.newTerminal()
+                }
+            },
+            CommandPaletteItem(id: "new-tab", section: "创建", title: "新标签", shortcut: "Cmd-Shift-T", keywords: "tab terminal") {
+                run {
+                    if let paneID = model.workspace.focusedPane?.id {
+                        model.newTab(in: paneID)
+                    }
+                }
+            },
+            CommandPaletteItem(id: "duplicate-tab", section: "创建", title: "复制当前标签", shortcut: "Duplicate", keywords: "copy tab duplicate") {
+                run {
+                    model.duplicateSelectedTab()
+                }
+            },
+            CommandPaletteItem(id: "split-right", section: "创建", title: "向右分屏", shortcut: "Cmd-D", disabled: !model.canSplit, disabledReason: "当前布局已到可用分屏上限", keywords: "split right vertical") {
+                run {
+                    model.splitRight()
+                }
+            },
+            CommandPaletteItem(id: "split-down", section: "创建", title: "向下分屏", shortcut: "Cmd-Shift-D", disabled: !model.canSplit, disabledReason: "当前布局已到可用分屏上限", keywords: "split down horizontal") {
+                run {
+                    model.splitDown()
+                }
+            },
+            CommandPaletteItem(id: "next-tab", section: "导航", title: "下一个标签", shortcut: "Cmd-]", keywords: "next tab") {
+                run {
+                    model.selectNextTab()
+                }
+            },
+            CommandPaletteItem(id: "previous-tab", section: "导航", title: "上一个标签", shortcut: "Cmd-[", keywords: "previous tab") {
+                run {
+                    model.selectPreviousTab()
+                }
+            },
+            CommandPaletteItem(id: "next-pane", section: "导航", title: "下一个分屏", shortcut: "Cmd-Shift-]", keywords: "next pane focus") {
+                run {
+                    model.focusNextPane()
+                }
+            },
+            CommandPaletteItem(id: "previous-pane", section: "导航", title: "上一个分屏", shortcut: "Cmd-Shift-[", keywords: "previous pane focus") {
+                run {
+                    model.focusPreviousPane()
+                }
+            },
+            CommandPaletteItem(id: "notifications", section: "导航", title: "通知中心", shortcut: "\(model.notifications.snapshot.unreadCount)", keywords: "notification unread agent") {
+                run {
+                    model.toggleNotificationPanel()
+                }
+            },
+            CommandPaletteItem(
+                id: "jump-unread",
+                section: "导航",
+                title: "跳到最新未读",
+                shortcut: "Unread",
+                disabled: model.notifications.snapshot.latestUnread == nil,
+                disabledReason: "没有未读通知",
+                keywords: "notification unread jump"
+            ) {
+                run {
+                    _ = model.jumpToLatestUnread()
+                }
+            },
+            CommandPaletteItem(id: "close-tab", section: "整理", title: "关闭标签", shortcut: "Cmd-W", keywords: "close tab") {
+                run {
+                    model.closeSelectedTab()
+                }
+            },
+            CommandPaletteItem(id: "close-pane", section: "整理", title: "关闭分屏", shortcut: "Cmd-Shift-W", disabled: !model.canCloseFocusedPane, disabledReason: "至少保留一个分屏", keywords: "close pane split") {
+                run {
+                    model.closePane(model.workspace.focusedPaneID)
+                }
+            },
+            CommandPaletteItem(id: "move-tab-left", section: "整理", title: "标签左移", shortcut: "Cmd-Shift-,", disabled: !model.canMoveSelectedTabLeft, disabledReason: "已经在最左侧", keywords: "move tab left") {
+                run {
+                    model.moveSelectedTabLeft()
+                }
+            },
+            CommandPaletteItem(id: "move-tab-right", section: "整理", title: "标签右移", shortcut: "Cmd-Shift-.", disabled: !model.canMoveSelectedTabRight, disabledReason: "已经在最右侧", keywords: "move tab right") {
+                run {
+                    model.moveSelectedTabRight()
+                }
+            },
+            CommandPaletteItem(id: "move-tab-next-pane", section: "整理", title: "移到下一个分屏", shortcut: "Cmd-Opt-M", disabled: !model.canMoveSelectedTabToNextPane, disabledReason: "需要另一个分屏", keywords: "move tab pane") {
+                run {
+                    model.moveSelectedTabToNextPane()
+                }
+            },
+            CommandPaletteItem(id: "move-tab-new-split", section: "整理", title: "移到右侧新分屏", shortcut: "Cmd-Opt-Shift-M", disabled: !model.canMoveSelectedTabToNewSplit, disabledReason: "需要可移动标签和可用分屏空间", keywords: "move tab new split") {
+                run {
+                    model.moveSelectedTabToNewSplit(.right)
+                }
+            },
+            CommandPaletteItem(
+                id: "toggle-zoom",
+                section: "视图",
+                title: model.workspace.isZoomed ? "还原当前分屏" : "放大当前分屏",
+                shortcut: "Cmd-Z",
+                disabled: model.workspace.root.leaves.count <= 1,
+                disabledReason: "需要多个分屏",
+                keywords: "zoom pane"
+            ) {
+                run {
+                    model.toggleZoom()
+                }
+            },
+            CommandPaletteItem(id: "equalize-splits", section: "视图", title: "均分分屏", shortcut: "Cmd-Shift-=", disabled: model.workspace.root.leaves.count <= 1, disabledReason: "需要多个分屏", keywords: "equalize split layout") {
+                run {
+                    model.equalizeSplits()
+                }
+            },
+            CommandPaletteItem(id: "workspace-overview", section: "视图", title: "工作区总览", shortcut: "Cmd-O", keywords: "workspace overview mission control") {
+                run {
+                    model.toggleWorkspaceOverview()
+                }
+            },
+            CommandPaletteItem(id: "appearance-settings", section: "视图", title: "外观设置", shortcut: "Theme", keywords: "appearance theme settings") {
+                run {
+                    model.toggleSettingsPanel()
+                }
+            },
+            CommandPaletteItem(id: "duplicate-workspace", section: "视图", title: "复制工作区", shortcut: "Duplicate", keywords: "workspace duplicate") {
+                run {
+                    model.duplicateWorkspace(model.workspace.id)
+                }
+            },
+            CommandPaletteItem(id: "reset-workspace", section: "视图", title: "重置工作区", shortcut: "Reset", keywords: "workspace reset") {
+                run {
+                    model.resetWorkspace()
+                }
+            },
+            CommandPaletteItem(id: "clear-notifications", section: "整理", title: "清空通知", shortcut: "Clear", disabled: model.notifications.records.isEmpty, disabledReason: "通知中心为空", keywords: "notification clear") {
+                run {
+                    model.clearAllNotifications()
+                }
+            },
+            CommandPaletteItem(id: "install-codex-hooks", section: "集成", title: "连接 Codex 完成通知", shortcut: "Codex", keywords: "codex hooks notification agent") {
+                run {
+                    model.installCodexNotificationHooks()
+                }
+            },
+            CommandPaletteItem(id: "debug-notification", section: "调试", title: "模拟当前终端通知", shortcut: "Test", keywords: "notification test") {
+                run {
+                    model.notifyFocusedTerminalForTesting()
+                }
+            }
+        ]
+    }
+
+    @MainActor
+    static func shortcutGuideItems(model: ConductorWindowModel) -> [CommandShortcutGuideItem] {
+        items(model: model) { _ in }
+            .filter { $0.section != "调试" }
+            .map { command in
+                CommandShortcutGuideItem(
+                    id: command.id,
+                    section: command.section,
+                    title: command.title,
+                    shortcut: command.discoveryShortcut,
+                    systemImage: command.systemImage
+                )
+            }
+    }
+}
+
+private struct CommandShortcutGuideItem: Identifiable {
+    let id: String
+    let section: String
+    let title: String
+    let shortcut: String
+    let systemImage: String
 }
 
 private struct CommandSectionTitle: View {
@@ -838,6 +877,17 @@ private struct AppearanceSettingsPanel: View {
                         .padding(.horizontal, 12)
 
                     VStack(alignment: .leading, spacing: 8) {
+                        SettingsSectionLabel("命令与快捷键")
+                        CommandShortcutGuide(model: model)
+                    }
+                    .padding(.horizontal, 12)
+
+                    Rectangle()
+                        .fill(Color.white.opacity(0.28))
+                        .frame(height: 1)
+                        .padding(.horizontal, 12)
+
+                    VStack(alignment: .leading, spacing: 8) {
                         SettingsSectionLabel("全壳主题")
                         LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
                             ForEach(TerminalTheme.allCases) { theme in
@@ -974,6 +1024,72 @@ private struct AppearanceToggleRow: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.white.opacity(0.30), lineWidth: 1)
         }
+    }
+}
+
+private struct CommandShortcutGuide: View {
+    @ObservedObject var model: ConductorWindowModel
+    @Environment(\.conductorFontScale) private var fontScale
+
+    private var items: [CommandShortcutGuideItem] {
+        ConductorCommandCatalog.shortcutGuideItems(model: model)
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 5) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    if index == 0 || items[index - 1].section != item.section {
+                        Text(item.section)
+                            .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.tertiaryText)
+                            .padding(.top, index == 0 ? 0 : 4)
+                            .padding(.horizontal, 2)
+                    }
+                    CommandShortcutGuideRow(item: item)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .scrollIndicators(.visible)
+        .frame(height: 178)
+        .background(Color.white.opacity(0.14))
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(Color.white.opacity(0.30), lineWidth: 1)
+        }
+    }
+}
+
+private struct CommandShortcutGuideRow: View {
+    let item: CommandShortcutGuideItem
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: item.systemImage)
+                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 18)
+
+            Text(item.title)
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            Text(item.shortcut)
+                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .padding(.horizontal, 6)
+                .frame(height: 17)
+                .background(Color.white.opacity(0.24))
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 26)
     }
 }
 

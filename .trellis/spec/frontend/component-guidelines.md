@@ -308,6 +308,37 @@ Color.black.opacity(0.12)
     .onTapGesture { model.hideSettingsPanel() }
 ```
 
+### Convention: Command Discovery Source
+
+**What**: Command Center rows and settings-panel shortcut discovery must be generated from the
+same command catalog.
+
+**Why**: Users need the shortcut guide to match the real command surface. Duplicating labels,
+sections, shortcut glyphs, disabled states, or command actions across views makes the guide drift
+from Command Center and breaks keyboard-first workflows.
+
+**Contract**:
+
+- Keep app-level commands in a single MainActor command catalog near the command UI unless the
+  catalog becomes large enough to deserve its own file.
+- Command Center may include executable actions and state-aware disabled reasons; shortcut
+  discovery should project the same command records into lightweight display rows.
+- Exclude debug-only commands from user-facing shortcut discovery.
+- Do not route terminal output, scrollback, cursor state, or per-cell rendering through the
+  command catalog. It may read only compact shell/product state from the window model.
+
+**Correct**:
+
+```swift
+private var commands: [CommandPaletteItem] {
+    ConductorCommandCatalog.items(model: model, run: run)
+}
+
+private var shortcutRows: [CommandShortcutGuideItem] {
+    ConductorCommandCatalog.shortcutGuideItems(model: model)
+}
+```
+
 ---
 
 ## Accessibility
