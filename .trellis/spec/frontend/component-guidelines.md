@@ -164,6 +164,10 @@ rendering into SwiftUI work or making precision interactions lag behind the poin
   actions in a broad animated transaction. Animate scroll-to-visible, insertion/removal,
   hover/press, badges, and separate indicators instead.
 - Use tiny transform-only feedback for hover/press; never insert or remove controls on hover.
+- Workspace tabs should read as restrained track chrome, not generic pill buttons: use a
+  compact dark fill, subtle stroke, stable grid glyph, quiet terminal-count badge, and a
+  bottom accent rail for the selected workspace. Keep inactive workspace tabs visible but
+  low-contrast so the terminal surface remains dominant.
 
 **Correct**:
 

@@ -44,22 +44,22 @@ enum AppearanceDensity: String, CaseIterable, Codable, Identifiable {
     var workspaceTabWidth: CGFloat {
         switch self {
         case .compact:
-            118
+            126
         case .standard:
-            128
-        case .spacious:
             140
+        case .spacious:
+            154
         }
     }
 
     var workspaceTabHeight: CGFloat {
         switch self {
         case .compact:
-            21
+            24
         case .standard:
-            23
+            26
         case .spacious:
-            25
+            28
         }
     }
 

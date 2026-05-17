@@ -3319,13 +3319,32 @@ private struct WorkspaceTopTab: View {
         workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
     }
 
+    private var tabFill: some ShapeStyle {
+        LinearGradient(
+            colors: [
+                selected ? Color.white.opacity(0.092) : (hovering ? Color.white.opacity(0.052) : Color.white.opacity(0.024)),
+                selected ? Color.white.opacity(0.040) : (hovering ? Color.white.opacity(0.030) : Color.white.opacity(0.014))
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var tabStroke: Color {
+        if selected {
+            return accent.opacity(0.34 * appearance.chromeClarity.accentFillMultiplier)
+        }
+        return Color.white.opacity(hovering ? 0.095 : 0.060)
+    }
+
+    private var titleColor: Color {
+        selected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted
+    }
+
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 7) {
             if editing {
-                Image(systemName: "rectangle.3.group.fill")
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 14)
+                WorkspaceTabGlyph(selected: true, accent: accent)
                 RenameTextField(
                     text: $titleDraft,
                     placeholder: "工作区名称",
@@ -3339,23 +3358,20 @@ private struct WorkspaceTopTab: View {
                     renameCancelled = false
                 }
             } else {
-                Image(systemName: selected ? "rectangle.3.group.fill" : "rectangle.3.group")
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(selected ? accent : ConductorDesign.terminalTextMuted)
-                    .frame(width: 14)
+                WorkspaceTabGlyph(selected: selected, accent: accent)
                 Text(workspace.title)
                     .font(.conductorSystem(size: 11.5, weight: selected ? .bold : .semibold, scale: fontScale))
-                    .foregroundStyle(selected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
+                    .foregroundStyle(titleColor)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text("\(terminalCount)")
-                    .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
-                    .foregroundStyle(selected ? ConductorDesign.terminalText.opacity(0.86) : ConductorDesign.terminalTextMuted)
-                    .padding(.horizontal, 4)
-                    .frame(minWidth: 16, minHeight: 14)
-                    .background(selected ? accent.opacity(0.16) : Color.white.opacity(0.030))
-                    .clipShape(Capsule())
+                    .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
+                    .foregroundStyle(selected ? accent.opacity(0.94) : ConductorDesign.terminalTextMuted.opacity(0.86))
+                    .padding(.horizontal, 5)
+                    .frame(minWidth: 21, minHeight: 20)
+                    .background(selected ? accent.opacity(0.135 * appearance.chromeClarity.accentFillMultiplier) : Color.white.opacity(0.045))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 if unreadCount > 0 {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
                         .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
@@ -3369,9 +3385,9 @@ private struct WorkspaceTopTab: View {
                     ConductorMotion.perform(ConductorMotion.layout, onClose)
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(canClose ? ConductorDesign.terminalTextMuted.opacity(selected ? 0.90 : 0.70) : Color.clear)
-                        .frame(width: 12, height: 12)
+                        .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
+                        .foregroundStyle(canClose ? titleColor.opacity(selected || hovering ? 0.74 : 0.52) : Color.clear)
+                        .frame(width: 13, height: 13)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(ConductorPressButtonStyle())
@@ -3379,27 +3395,26 @@ private struct WorkspaceTopTab: View {
                 .help("关闭工作区")
             }
         }
-        .padding(.leading, 4)
-        .padding(.trailing, editing ? 6 : 4)
+        .padding(.leading, 8)
+        .padding(.trailing, editing ? 8 : 6)
         .frame(
             width: WorkspaceTabMetrics.width(for: appearance),
             height: WorkspaceTabMetrics.height(for: appearance)
         )
-        .background(selected ? accent.opacity(0.105 * appearance.chromeClarity.accentFillMultiplier) : (hovering ? Color.white.opacity(0.030) : Color.clear))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .overlay(alignment: .bottomLeading) {
+        .background(tabFill)
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous))
+        .overlay(alignment: .bottom) {
             if selected {
-                Capsule()
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(accent.opacity(0.92 * appearance.chromeClarity.accentFillMultiplier))
-                    .frame(width: 42, height: 2.5)
-                    .padding(.leading, 22)
+                    .frame(height: 2)
+                    .padding(.horizontal, 10)
             }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(selected ? accent.opacity(0.36 * appearance.chromeClarity.accentFillMultiplier) : Color.clear, lineWidth: 1)
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous)
+                .stroke(tabStroke, lineWidth: 1)
         }
-        .scaleEffect(hovering && !selected ? 0.992 : 1)
         .animation(nil, value: selected)
         .animation(ConductorMotion.micro, value: hovering)
         .animation(ConductorMotion.standard, value: editing)
@@ -3446,6 +3461,38 @@ private struct WorkspaceTopTab: View {
             .disabled(!canClose)
         }
         .help("\(workspace.title) · \(workspace.panes.count) 分屏 · \(terminalCount) 终端")
+    }
+}
+
+private struct WorkspaceTabGlyph: View {
+    let selected: Bool
+    let accent: Color
+
+    var body: some View {
+        Grid(horizontalSpacing: 2.4, verticalSpacing: 2.4) {
+            GridRow {
+                cell(opacity: selected ? 0.98 : 0.62)
+                cell(opacity: selected ? 0.74 : 0.38)
+            }
+            GridRow {
+                cell(opacity: selected ? 0.56 : 0.34)
+                cell(opacity: selected ? 0.88 : 0.48)
+            }
+        }
+        .frame(width: 16, height: 16)
+        .padding(2)
+        .background(selected ? accent.opacity(0.105) : Color.white.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .stroke(selected ? accent.opacity(0.24) : Color.white.opacity(0.06), lineWidth: 1)
+        }
+    }
+
+    private func cell(opacity: Double) -> some View {
+        RoundedRectangle(cornerRadius: 1.6, style: .continuous)
+            .fill((selected ? accent : ConductorDesign.terminalTextMuted).opacity(opacity))
+            .frame(width: 4.6, height: 4.6)
     }
 }
 
