@@ -299,7 +299,7 @@ struct ConductorGlassSurface<Content: View>: View {
         case .sidebar, .palette, .panel:
             theme.shellPanelBackground.opacity(clarity.glassTintMultiplier)
         case .settings:
-            style.tint.opacity(clarity.glassTintMultiplier)
+            theme.settingsPanelWash.opacity(clarity.glassTintMultiplier)
         case .card, .controlGroup, .terminalToolbar:
             style.tint.opacity(clarity.glassTintMultiplier)
         }
@@ -310,7 +310,7 @@ struct ConductorGlassSurface<Content: View>: View {
         case .sidebar, .palette, .panel:
             theme.shellStroke.opacity(clarity.strokeMultiplier)
         case .settings:
-            style.stroke.opacity(clarity.strokeMultiplier)
+            theme.settingsStroke.opacity(clarity.strokeMultiplier)
         case .card, .controlGroup, .terminalToolbar:
             style.stroke.opacity(clarity.strokeMultiplier)
         }
@@ -320,7 +320,11 @@ struct ConductorGlassSurface<Content: View>: View {
     private var surfaceFill: some View {
         if style == .settings {
             surfaceShape
-                .fill(Color(red: 0.945, green: 0.938, blue: 0.912).opacity(0.94))
+                .fill(theme.settingsPanelBase)
+                .overlay {
+                    surfaceShape
+                        .fill(resolvedTint)
+                }
                 .overlay {
                     surfaceShape
                         .fill(Color.white.opacity(0.04 * clarity.highlightMultiplier))

@@ -155,6 +155,66 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    var settingsPanelBase: Color {
+        switch self {
+        case .codexDark:
+            Color(red: 0.918, green: 0.922, blue: 0.928).opacity(0.92)
+        case .flexoki:
+            Color(red: 0.956, green: 0.932, blue: 0.874).opacity(0.93)
+        case .aurora:
+            Color(red: 0.890, green: 0.944, blue: 0.944).opacity(0.92)
+        case .graphite:
+            Color(red: 0.900, green: 0.908, blue: 0.920).opacity(0.93)
+        case .ember:
+            Color(red: 0.966, green: 0.918, blue: 0.864).opacity(0.92)
+        }
+    }
+
+    var settingsPanelWash: Color {
+        switch self {
+        case .codexDark:
+            Color(red: 0.58, green: 0.52, blue: 0.92).opacity(0.035)
+        case .flexoki:
+            Color(red: 0.90, green: 0.58, blue: 0.18).opacity(0.070)
+        case .aurora:
+            Color(red: 0.12, green: 0.74, blue: 0.78).opacity(0.070)
+        case .graphite:
+            Color(red: 0.50, green: 0.54, blue: 0.62).opacity(0.060)
+        case .ember:
+            Color(red: 0.94, green: 0.30, blue: 0.12).opacity(0.070)
+        }
+    }
+
+    var settingsControlFill: Color {
+        switch self {
+        case .codexDark:
+            Color.white.opacity(0.22)
+        case .flexoki:
+            Color(red: 1.0, green: 0.972, blue: 0.910).opacity(0.34)
+        case .aurora:
+            Color(red: 0.940, green: 1.0, blue: 1.0).opacity(0.28)
+        case .graphite:
+            Color.white.opacity(0.24)
+        case .ember:
+            Color(red: 1.0, green: 0.940, blue: 0.884).opacity(0.32)
+        }
+    }
+
+    var settingsStroke: Color {
+        switch self {
+        case .codexDark:
+            Color(red: 0.20, green: 0.23, blue: 0.30).opacity(0.13)
+        case .flexoki:
+            Color(red: 0.42, green: 0.31, blue: 0.18).opacity(0.14)
+        case .aurora:
+            Color(red: 0.10, green: 0.34, blue: 0.38).opacity(0.14)
+        case .graphite:
+            Color(red: 0.20, green: 0.22, blue: 0.25).opacity(0.13)
+        case .ember:
+            Color(red: 0.48, green: 0.18, blue: 0.10).opacity(0.14)
+        }
+    }
+
     var shellStroke: Color {
         switch self {
         case .codexDark:

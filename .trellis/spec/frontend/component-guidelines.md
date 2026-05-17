@@ -137,9 +137,11 @@ workspace overview, and compact status modules.
   terminal" and "new tab" controls when they perform the same focused-pane action.
 - Settings and appearance panels should share the sidebar's glass language: one soft rounded
   shell, quiet internal dividers, sidebar-style category rows, and compact segmented controls.
-  Use a neutral glass tint for the settings shell instead of the theme `shellPanelBackground`;
-  large tinted panels can read as a blue/colored film in Codex Dark and similar themes. Avoid
-  hard split lines, opaque content slabs, and large option cards inside these panels.
+  Use theme-owned settings colors (`settingsPanelBase`, `settingsPanelWash`,
+  `settingsControlFill`, and `settingsStroke`) so settings follow the active theme without
+  borrowing the heavier terminal `shellPanelBackground`; large raw theme fills can read as a
+  blue/colored film in Codex Dark and similar themes. Avoid hard split lines, opaque content
+  slabs, and large option cards inside these panels.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.
@@ -394,10 +396,9 @@ settings grow, while preserving a stable right-side detail area.
   animation is appropriate.
 - The sidebar should use compact rows with icons, labels, and restrained selected fills. Avoid
   high-contrast alternating blocks, heavy shadows, or large explanatory cards.
-- Settings sidebars should reuse the main sidebar's surface language: `ConductorGlassSurface`
-  with sidebar styling, `ConductorDesign.selectedFill`, `ConductorDesign.hoverFill`, and
-  `ConductorDesign.sidebarStroke`. Do not use accent-tinted outlines or large two-line rows
-  for category navigation.
+- Settings sidebars should reuse the main sidebar's surface language through the dedicated
+  settings glass styling and theme-owned settings strokes/fills. Do not use accent-tinted
+  outlines or large two-line rows for category navigation.
 - When a settings panel floats over the dark terminal canvas, add a sidebar-background underlay
   inside the glass surface so the panel matches the main sidebar instead of becoming a gray,
   low-contrast blur over terminal content.

@@ -802,7 +802,7 @@ private struct AppearanceSettingsPanel: View {
                     sidebar
 
                     Rectangle()
-                        .fill(theme.shellStroke.opacity(0.16))
+                        .fill(theme.settingsStroke.opacity(0.70))
                         .frame(width: 1)
                         .padding(.vertical, 18)
 
@@ -812,7 +812,7 @@ private struct AppearanceSettingsPanel: View {
             .clipShape(RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous)
-                    .stroke(theme.shellStroke.opacity(0.82), lineWidth: 0.8)
+                    .stroke(theme.settingsStroke.opacity(0.82), lineWidth: 0.8)
                     .allowsHitTesting(false)
             }
             .frame(width: 690, height: 486)
@@ -829,7 +829,7 @@ private struct AppearanceSettingsPanel: View {
                     .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                     .foregroundStyle(theme.accent.opacity(0.88))
                     .frame(width: 24, height: 24)
-                    .background(theme.shellControlFill)
+                    .background(theme.settingsControlFill)
                     .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 1) {
@@ -893,7 +893,7 @@ private struct AppearanceSettingsPanel: View {
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(theme.accent.opacity(0.88))
                 .frame(width: 24, height: 24)
-                .background(theme.shellControlFill)
+                .background(theme.settingsControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 1) {
@@ -916,7 +916,7 @@ private struct AppearanceSettingsPanel: View {
                     .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.secondaryText)
                     .frame(width: 24, height: 24)
-                    .background(theme.shellControlFill)
+                    .background(theme.settingsControlFill)
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -1150,11 +1150,11 @@ private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View
                 }
             }
             .padding(3)
-            .background(Color.white.opacity(0.28))
+            .background(theme.settingsControlFill)
             .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(Color.black.opacity(0.045), lineWidth: 1)
+                    .stroke(theme.settingsStroke, lineWidth: 1)
             }
         }
     }
@@ -1176,11 +1176,11 @@ private struct AppearanceToggleRow: View {
         .toggleStyle(.switch)
         .padding(.vertical, 7)
         .padding(.horizontal, 9)
-        .background(Color.white.opacity(0.28))
+        .background(theme.settingsControlFill)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.black.opacity(0.045), lineWidth: 1)
+                .stroke(theme.settingsStroke, lineWidth: 1)
         }
         .help(subtitle)
     }
@@ -1214,11 +1214,11 @@ private struct CommandShortcutGuide: View {
         }
         .scrollIndicators(.visible)
         .frame(height: height)
-        .background(Color.white.opacity(0.24))
+        .background(theme.settingsControlFill)
         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(Color.black.opacity(0.045), lineWidth: 1)
+                .stroke(theme.settingsStroke, lineWidth: 1)
         }
     }
 }
