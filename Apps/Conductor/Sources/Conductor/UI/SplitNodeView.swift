@@ -39,6 +39,10 @@ private struct SplitPairView: View {
     @ObservedObject var model: ConductorWindowModel
     @State private var dragStartFraction: Double?
 
+    private var isDragging: Bool {
+        dragStartFraction != nil
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
@@ -73,6 +77,13 @@ private struct SplitPairView: View {
                     SplitNodeView(node: second, model: model, path: path + [.second])
                         .frame(width: available - firstWidth)
                 }
+                .environment(\.conductorSplitResizeActive, isDragging)
+                .transaction { transaction in
+                    if isDragging {
+                        transaction.disablesAnimations = true
+                        transaction.animation = nil
+                    }
+                }
             } else {
                 let available = max(1, size.height - divider)
                 let minPane = min(150, available / 2)
@@ -103,6 +114,13 @@ private struct SplitPairView: View {
                     SplitNodeView(node: second, model: model, path: path + [.second])
                         .frame(height: available - firstHeight)
                 }
+                .environment(\.conductorSplitResizeActive, isDragging)
+                .transaction { transaction in
+                    if isDragging {
+                        transaction.disablesAnimations = true
+                        transaction.animation = nil
+                    }
+                }
             }
         }
     }
@@ -124,18 +142,19 @@ private struct SplitDivider: View {
     let onEnded: (DragGesture.Value) -> Void
     let onDoubleClick: () -> Void
     @State private var hovering = false
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         ZStack {
             Rectangle()
-                .fill(Color.black.opacity(active ? 0.34 : 0.22))
+                .fill(theme.terminalChrome.opacity(active ? 0.98 : 0.82))
             Rectangle()
-                .fill(Color.white.opacity(active ? 0.080 : 0.035))
+                .fill(theme.accent.opacity(active ? 0.12 : hovering ? 0.055 : 0.0))
 
             Capsule()
-                .fill(active || hovering ? Color.accentColor.opacity(0.82) : Color.white.opacity(0.105))
-                .frame(width: axis == .horizontal ? 2 : nil, height: axis == .vertical ? 2 : nil)
-                .frame(width: axis == .horizontal ? nil : 34, height: axis == .vertical ? nil : 34)
+                .fill(active || hovering ? theme.accent.opacity(0.78) : theme.terminalOuterStroke.opacity(0.62))
+                .frame(width: axis == .horizontal ? (active ? 2 : 1) : nil, height: axis == .vertical ? (active ? 2 : 1) : nil)
+                .frame(width: axis == .horizontal ? nil : 32, height: axis == .vertical ? nil : 32)
         }
             .contentShape(Rectangle())
             .gesture(
@@ -175,6 +194,7 @@ private struct TerminalPaneView: View {
     let pane: PaneState
     @ObservedObject var model: ConductorWindowModel
     @State private var highlightedDropTabID: TerminalID?
+    @Environment(\.conductorSplitResizeActive) private var splitResizeActive
 
     private var isFocused: Bool {
         model.workspace.focusedPaneID == pane.id
@@ -185,6 +205,12 @@ private struct TerminalPaneView: View {
     }
 
     private var paneBorderColor: Color {
+        if splitResizeActive && !isFocused && unreadCount == 0 {
+            return Color.clear
+        }
+        if splitResizeActive && isFocused {
+            return model.theme.accent.opacity(0.62)
+        }
         if unreadCount > 0 {
             return model.theme.accent.opacity(0.72)
         }
@@ -192,6 +218,9 @@ private struct TerminalPaneView: View {
     }
 
     private var paneBorderWidth: CGFloat {
+        if splitResizeActive {
+            return isFocused || unreadCount > 0 ? 1.2 : 0
+        }
         if unreadCount > 0 {
             return 1.5
         }
@@ -208,7 +237,7 @@ private struct TerminalPaneView: View {
             Rectangle()
                 .stroke(paneBorderColor, lineWidth: paneBorderWidth)
                 .overlay {
-                    if isFocused {
+                    if isFocused && !splitResizeActive {
                         Rectangle()
                             .inset(by: 2)
                             .stroke(model.theme.accent.opacity(0.22), lineWidth: 1)
@@ -216,7 +245,7 @@ private struct TerminalPaneView: View {
                 }
                 .allowsHitTesting(false)
         }
-        .animation(ConductorMotion.micro, value: isFocused)
+        .animation(splitResizeActive ? nil : ConductorMotion.micro, value: isFocused)
     }
 
     private var tabBar: some View {

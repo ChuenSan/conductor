@@ -60,13 +60,19 @@ final class TerminalSurfaceContainerView: NSView {
         }
 
         let themeChanged = currentTheme != theme
-        surface.applyTheme(theme)
+        if surfaceChanged || themeChanged {
+            surface.applyTheme(theme)
+        }
         currentTheme = theme
         surface.attachIfPossible()
         surface.setFocused(focused)
-        syncCurrentSurface(force: surfaceChanged || themeChanged)
+        if surfaceChanged || themeChanged {
+            syncCurrentSurface(force: true)
+        }
         restoreFocusIfNeeded()
-        schedulePostLayoutGeometrySync(for: surface, force: surfaceChanged || themeChanged || focusChanged)
+        if surfaceChanged || themeChanged || focusChanged {
+            schedulePostLayoutGeometrySync(for: surface, force: surfaceChanged || themeChanged)
+        }
     }
 
     override func viewDidMoveToWindow() {

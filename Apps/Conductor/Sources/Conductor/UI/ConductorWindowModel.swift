@@ -840,9 +840,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func setSplitFraction(path: [SplitPathElement], fraction: Double) {
+        let nextRoot = workspace.root.settingFraction(at: path[...], to: fraction)
+        guard nextRoot != workspace.root else { return }
         let signpost = ConductorSignpost.begin("drag-split-divider")
         defer { ConductorSignpost.end("drag-split-divider", signpost) }
-        workspace.setSplitFraction(path: path, fraction: fraction)
+        workspace.root = nextRoot
     }
 
     private func refreshSurfaceAfterNavigation(_ terminalID: TerminalID) {

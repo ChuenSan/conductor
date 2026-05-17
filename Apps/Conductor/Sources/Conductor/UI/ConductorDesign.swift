@@ -9,6 +9,10 @@ private struct ConductorThemeKey: EnvironmentKey {
     static let defaultValue = TerminalTheme.codexDark
 }
 
+private struct ConductorSplitResizeActiveKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     var conductorFontScale: AppearanceFontScale {
         get { self[ConductorFontScaleKey.self] }
@@ -18,6 +22,11 @@ extension EnvironmentValues {
     var conductorTheme: TerminalTheme {
         get { self[ConductorThemeKey.self] }
         set { self[ConductorThemeKey.self] = newValue }
+    }
+
+    var conductorSplitResizeActive: Bool {
+        get { self[ConductorSplitResizeActiveKey.self] }
+        set { self[ConductorSplitResizeActiveKey.self] = newValue }
     }
 }
 

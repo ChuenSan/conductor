@@ -204,6 +204,9 @@ styling to terminal output.
   focused pane. The focused pane owns the strongest accent treatment.
 - Split gutters should have a stable hit target. Hover/drag may brighten the center handle,
   but dragging must keep split fraction updates animation-free.
+- While a divider is being dragged, quiet adjacent pane border overlays so the gutter remains
+  the only strong shared edge. Do not let both pane borders plus the divider draw competing
+  hairlines during resize.
 - Do not apply opacity/scale animations to the live `TerminalSurfaceRepresentable`; animate
   separate chrome overlays only.
 

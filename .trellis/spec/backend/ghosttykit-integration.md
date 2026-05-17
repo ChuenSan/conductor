@@ -155,6 +155,10 @@ Do not free terminal state or renderer resources during transient SwiftUI disman
 - `syncGeometry(force:)` must set content scale, display id, and backing pixel size only when changed or forced, then refresh the surface when geometry changed.
 - Focus changes must call Ghostty focus and refresh the surface.
 - SwiftUI `updateNSView` may schedule one coalesced post-layout sync, but must not force repeated layout/refresh loops on every SwiftUI update.
+- A pure split-fraction drag is not a terminal surface identity, theme, or focus change.
+  Existing `NSView` layout callbacks should drive deduplicated geometry sync for those frames;
+  `updateNSView` must not call immediate `layoutSubtreeIfNeeded` just because SwiftUI rebuilt
+  the representable during divider movement.
 - Split-divider drags must update split fractions inside a non-animated transaction.
 - Notification jumps or programmatic terminal navigation must focus the owning pane, select the tab, then force a current-run-loop and next-run-loop geometry refresh for the target surface if it already exists.
 
