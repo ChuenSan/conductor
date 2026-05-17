@@ -293,11 +293,6 @@ private struct TerminalPaneView: View {
                 )
             }
         }
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(isFocused ? model.theme.accent.opacity(0.82) : Color.white.opacity(0.045))
-                .frame(height: isFocused ? 1.5 : 1)
-        }
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(Color.white.opacity(isFocused ? 0.080 : 0.045))

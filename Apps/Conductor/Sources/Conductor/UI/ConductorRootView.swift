@@ -3403,14 +3403,6 @@ private struct WorkspaceTopTab: View {
         )
         .background(tabFill)
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous))
-        .overlay(alignment: .bottom) {
-            if selected {
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(accent.opacity(0.92 * appearance.chromeClarity.accentFillMultiplier))
-                    .frame(height: 2)
-                    .padding(.horizontal, 10)
-            }
-        }
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous)
                 .stroke(tabStroke, lineWidth: 1)

@@ -165,9 +165,10 @@ rendering into SwiftUI work or making precision interactions lag behind the poin
   hover/press, badges, and separate indicators instead.
 - Use tiny transform-only feedback for hover/press; never insert or remove controls on hover.
 - Workspace tabs should read as restrained track chrome, not generic pill buttons: use a
-  compact dark fill, subtle stroke, stable grid glyph, quiet terminal-count badge, and a
-  bottom accent rail for the selected workspace. Keep inactive workspace tabs visible but
-  low-contrast so the terminal surface remains dominant.
+  compact dark fill, subtle stroke, stable grid glyph, and quiet terminal-count badge.
+  Avoid stacking a selected-tab underline with the pane rail separator below it; selected
+  state should come from fill, stroke, text weight, and glyph emphasis instead. Keep inactive
+  workspace tabs visible but low-contrast so the terminal surface remains dominant.
 
 **Correct**:
 
