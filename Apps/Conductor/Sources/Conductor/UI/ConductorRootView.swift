@@ -25,6 +25,9 @@ struct ConductorRootView: View {
             }
             .shadow(color: ConductorDesign.shadow(0.16), radius: 18, y: 8)
         }
+        .animation(ConductorMotion.layout, value: model.sidebarVisible)
+        .animation(ConductorMotion.layout, value: model.workspace.root.leaves)
+        .animation(ConductorMotion.standard, value: model.workspace.focusedPaneID)
         .padding(.horizontal, ConductorDesign.shellHorizontalPadding)
         .padding(.top, ConductorDesign.shellTopPadding)
         .padding(.bottom, ConductorDesign.shellBottomPadding)
@@ -41,8 +44,10 @@ struct ConductorRootView: View {
         .overlay {
             if model.commandPaletteVisible {
                 CommandPaletteView(model: model)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
         }
+        .animation(ConductorMotion.standard, value: model.commandPaletteVisible)
     }
 }
 
@@ -281,6 +286,8 @@ private struct CommandPaletteView: View {
             .onChange(of: query) {
                 ensureSelection()
             }
+            .animation(ConductorMotion.standard, value: selectedCommandID)
+            .animation(ConductorMotion.micro, value: query)
             .onMoveCommand { direction in
                 switch direction {
                 case .up:
@@ -298,8 +305,10 @@ private struct CommandPaletteView: View {
     }
 
     private func run(_ action: () -> Void) {
-        action()
-        model.hideCommandPalette()
+        ConductorMotion.perform {
+            action()
+            model.hideCommandPalette()
+        }
     }
 
     private func ensureSelection() {
@@ -391,9 +400,13 @@ private struct CommandButton: View {
         .buttonStyle(.plain)
         .disabled(disabled)
         .opacity(disabled ? 0.45 : 1)
-        .onHover {
-            hovering = $0
-            if $0 {
+        .animation(ConductorMotion.micro, value: selected)
+        .animation(ConductorMotion.micro, value: hovering)
+        .onHover { value in
+            withAnimation(ConductorMotion.micro) {
+                hovering = value
+            }
+            if value {
                 onHover()
             }
         }
@@ -420,19 +433,24 @@ struct NotificationPanelView: View {
                         .frame(height: 16)
                         .background(Color.accentColor)
                         .clipShape(Capsule())
+                        .transition(.scale(scale: 0.82).combined(with: .opacity))
                 }
                 Spacer()
                 Button("跳转") {
-                    _ = model.jumpToLatestUnread()
+                    ConductorMotion.perform {
+                        _ = model.jumpToLatestUnread()
+                    }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ConductorPressButtonStyle())
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(model.notifications.snapshot.latestUnread == nil ? ConductorDesign.tertiaryText : Color.accentColor)
                 .disabled(model.notifications.snapshot.latestUnread == nil)
                 Button("清空") {
-                    model.clearAllNotifications()
+                    ConductorMotion.perform(ConductorMotion.layout) {
+                        model.clearAllNotifications()
+                    }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ConductorPressButtonStyle())
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(model.notifications.records.isEmpty ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
                 .disabled(model.notifications.records.isEmpty)
@@ -454,6 +472,7 @@ struct NotificationPanelView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(maxHeight: .infinity)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
             } else {
                 ScrollView {
                     LazyVStack(spacing: 6) {
@@ -469,15 +488,22 @@ struct NotificationPanelView: View {
                                     model.clearNotification(notification.id)
                                 }
                             )
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                removal: .opacity.combined(with: .scale(scale: 0.96))
+                            ))
                         }
                     }
                     .padding(8)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
             }
         }
         .frame(minWidth: 360, minHeight: 420)
         .background(ConductorDesign.windowBackground)
+        .animation(ConductorMotion.layout, value: model.notifications.records.map(\.id))
+        .animation(ConductorMotion.emphasized, value: model.notifications.snapshot.unreadCount)
     }
 
     private func title(for terminalID: TerminalID) -> String {
@@ -502,7 +528,9 @@ private struct NotificationRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Button(action: onOpen) {
+            Button {
+                ConductorMotion.perform(onOpen)
+            } label: {
                 HStack(alignment: .top, spacing: 8) {
                     Circle()
                         .fill(unread ? Color.accentColor : Color.clear)
@@ -537,15 +565,17 @@ private struct NotificationRowView: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ConductorPressButtonStyle())
 
-            Button(action: onClear) {
+            Button {
+                ConductorMotion.perform(ConductorMotion.layout, onClear)
+            } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(hovering ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText)
                     .frame(width: 16, height: 16)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ConductorPressButtonStyle())
             .help("清除通知")
         }
         .padding(9)
@@ -555,7 +585,14 @@ private struct NotificationRowView: View {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.row)
                 .stroke(unread ? Color.accentColor.opacity(0.16) : ConductorDesign.sidebarStroke, lineWidth: 1)
         }
-        .onHover { hovering = $0 }
+        .scaleEffect(hovering ? 1.006 : 1)
+        .animation(ConductorMotion.micro, value: hovering)
+        .animation(ConductorMotion.emphasized, value: unread)
+        .onHover { value in
+            withAnimation(ConductorMotion.micro) {
+                hovering = value
+            }
+        }
     }
 }
 
@@ -584,8 +621,10 @@ private struct ConductorSidebar: View {
 
             if model.sidebarVisible {
                 expandedSidebar
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
             } else {
                 collapsedSidebar
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
             }
         }
         .padding(.horizontal, model.sidebarVisible ? ConductorTokens.Space.sidebarX : 6)
@@ -604,6 +643,9 @@ private struct ConductorSidebar: View {
             radius: ConductorTokens.Shadow.panelRadius,
             y: ConductorTokens.Shadow.panelY
         )
+        .animation(ConductorMotion.layout, value: model.sidebarVisible)
+        .animation(ConductorMotion.standard, value: model.workspace.id)
+        .animation(ConductorMotion.layout, value: model.workspaces.map(\.id))
         .alert("重命名标签", isPresented: Binding(
             get: { renamingTerminalID != nil },
             set: { if !$0 { renamingTerminalID = nil } }
@@ -614,7 +656,9 @@ private struct ConductorSidebar: View {
             }
             Button("保存") {
                 if let renamingTerminalID {
-                    model.renameTerminal(renamingTerminalID, title: terminalTitleDraft)
+                    ConductorMotion.perform {
+                        model.renameTerminal(renamingTerminalID, title: terminalTitleDraft)
+                    }
                 }
                 renamingTerminalID = nil
             }
@@ -625,7 +669,9 @@ private struct ConductorSidebar: View {
         HStack {
             Spacer()
             Button {
-                model.sidebarVisible.toggle()
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.sidebarVisible.toggle()
+                }
             } label: {
                 Image(systemName: model.sidebarVisible ? "chevron.left" : "sidebar.left")
                     .font(.system(size: 11.5, weight: .bold))
@@ -634,7 +680,7 @@ private struct ConductorSidebar: View {
                     .background(Color.black.opacity(0.045))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ConductorPressButtonStyle())
             .help(model.sidebarVisible ? "收起侧边栏" : "展开侧边栏")
         }
         .frame(height: sidebarHeaderHeight, alignment: .bottom)
@@ -671,7 +717,9 @@ private struct ConductorSidebar: View {
             Spacer(minLength: 8)
 
             SidebarActionRow(icon: "paintpalette", title: model.theme.title, help: "切换终端配色") {
-                model.theme = model.theme == .codexDark ? .flexoki : .codexDark
+                ConductorMotion.perform {
+                    model.theme = model.theme == .codexDark ? .flexoki : .codexDark
+                }
             }
             SidebarActionRow(icon: "gearshape", title: "设置", help: "设置") {}
         }
@@ -684,7 +732,9 @@ private struct ConductorSidebar: View {
                 SidebarSectionTitle("工作区")
                 Spacer()
                 Button {
-                    model.newWorkspace()
+                    ConductorMotion.perform(ConductorMotion.layout) {
+                        model.newWorkspace()
+                    }
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 10, weight: .semibold))
@@ -692,7 +742,7 @@ private struct ConductorSidebar: View {
                         .frame(width: 18, height: 18)
                         .contentShape(RoundedRectangle(cornerRadius: 5))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ConductorPressButtonStyle())
                 .help("新建工作区")
             }
             .padding(.trailing, 5)
@@ -703,6 +753,10 @@ private struct ConductorSidebar: View {
                         ForEach(model.workspaces) { workspace in
                             workspaceRow(for: workspace)
                                 .id(workspace.id)
+                                .transition(.asymmetric(
+                                    insertion: .opacity.combined(with: .move(edge: .leading)),
+                                    removal: .opacity.combined(with: .move(edge: .trailing))
+                                ))
                         }
                     }
                     .padding(.vertical, 2)
@@ -733,9 +787,12 @@ private struct ConductorSidebar: View {
                                 selected: workspace.id == model.workspace.id,
                                 help: workspace.title
                             ) {
-                                model.selectWorkspace(workspace.id)
+                                ConductorMotion.perform {
+                                    model.selectWorkspace(workspace.id)
+                                }
                             }
                             .id(workspace.id)
+                            .transition(.scale(scale: 0.86).combined(with: .opacity))
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -762,7 +819,9 @@ private struct ConductorSidebar: View {
             Spacer(minLength: 8)
 
             SidebarRailButton(icon: "paintpalette", help: model.theme.title) {
-                model.theme = model.theme == .codexDark ? .flexoki : .codexDark
+                ConductorMotion.perform {
+                    model.theme = model.theme == .codexDark ? .flexoki : .codexDark
+                }
             }
             SidebarRailButton(icon: "gearshape", help: "设置") {}
         }
@@ -822,23 +881,33 @@ private struct ConductorSidebar: View {
         }
         .contextMenu {
             Button("重命名工作区...") {
-                beginRenameWorkspace(workspace)
+                ConductorMotion.perform {
+                    beginRenameWorkspace(workspace)
+                }
             }
             Button("复制工作区") {
-                model.duplicateWorkspace(workspace.id)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.duplicateWorkspace(workspace.id)
+                }
             }
             Divider()
             Button("关闭其他工作区") {
-                model.closeOtherWorkspaces(keeping: workspace.id)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.closeOtherWorkspaces(keeping: workspace.id)
+                }
             }
             .disabled(model.workspaces.count <= 1)
             Button("关闭右侧工作区") {
-                model.closeWorkspacesToRight(of: workspace.id)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.closeWorkspacesToRight(of: workspace.id)
+                }
             }
             .disabled(model.workspaces.count <= 1)
             Divider()
             Button("关闭工作区") {
-                model.closeWorkspace(workspace.id)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.closeWorkspace(workspace.id)
+                }
             }
             .disabled(model.workspaces.count <= 1)
         }
@@ -855,7 +924,9 @@ private struct ConductorSidebar: View {
 
     private func commitWorkspaceRename() {
         if let renamingWorkspaceID {
-            model.renameWorkspace(renamingWorkspaceID, title: workspaceTitleDraft)
+            ConductorMotion.perform {
+                model.renameWorkspace(renamingWorkspaceID, title: workspaceTitleDraft)
+            }
         }
         renamingWorkspaceID = nil
     }
@@ -871,7 +942,7 @@ private struct ConductorSidebar: View {
     }
 
     private func scrollSidebarSelection(_ proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.12)) {
+        withAnimation(ConductorMotion.standard) {
             proxy.scrollTo(model.workspace.id, anchor: .center)
         }
     }
@@ -895,7 +966,9 @@ private struct SidebarRailButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            ConductorMotion.perform(action)
+        } label: {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
@@ -904,9 +977,11 @@ private struct SidebarRailButton: View {
                 .clipShape(RoundedRectangle(cornerRadius: 11))
                 .contentShape(RoundedRectangle(cornerRadius: 11))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ConductorPressButtonStyle())
         .disabled(disabled)
         .opacity(disabled ? 0.35 : 1)
+        .animation(ConductorMotion.standard, value: selected)
+        .animation(ConductorMotion.micro, value: disabled)
         .help(help)
     }
 }
@@ -968,11 +1043,21 @@ private struct WorkspaceSidebarRow: View {
         Group {
             if editing {
                 editingRow
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
             } else {
                 displayRow
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
         }
-        .onHover { hovering = $0 }
+        .animation(ConductorMotion.standard, value: selected)
+        .animation(ConductorMotion.standard, value: editing)
+        .animation(ConductorMotion.standard, value: terminalCount)
+        .animation(ConductorMotion.emphasized, value: unreadCount)
+        .onHover { value in
+            withAnimation(ConductorMotion.micro) {
+                hovering = value
+            }
+        }
         .help(title)
     }
 
@@ -1002,7 +1087,9 @@ private struct WorkspaceSidebarRow: View {
     }
 
     private var displayRow: some View {
-        Button(action: action) {
+        Button {
+            ConductorMotion.perform(action)
+        } label: {
             HStack(spacing: 7) {
                 Image(systemName: selected ? "rectangle.3.group.fill" : "rectangle.3.group")
                     .font(.system(size: 11, weight: .semibold))
@@ -1033,7 +1120,7 @@ private struct WorkspaceSidebarRow: View {
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ConductorPressButtonStyle())
         .simultaneousGesture(
             TapGesture(count: 2).onEnded(onRename)
         )
@@ -1050,7 +1137,9 @@ private struct SidebarActionRow: View {
     @State private var hovering = false
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            ConductorMotion.perform(action)
+        } label: {
             HStack(spacing: 7) {
                 Image(systemName: icon)
                     .frame(width: 14)
@@ -1067,10 +1156,16 @@ private struct SidebarActionRow: View {
             .clipShape(RoundedRectangle(cornerRadius: showsTitle ? ConductorTokens.Radius.row : 11))
             .contentShape(RoundedRectangle(cornerRadius: showsTitle ? ConductorTokens.Radius.row : 11))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ConductorPressButtonStyle())
         .disabled(disabled)
         .opacity(disabled ? 0.38 : 1)
-        .onHover { hovering = $0 }
+        .animation(ConductorMotion.micro, value: disabled)
+        .animation(ConductorMotion.micro, value: hovering)
+        .onHover { value in
+            withAnimation(ConductorMotion.micro) {
+                hovering = value
+            }
+        }
         .help(help ?? title)
     }
 }
@@ -1179,7 +1274,9 @@ private struct ConductorToolbar: View {
 
     private func commitWorkspaceRename() {
         if let editingWorkspaceID {
-            model.renameWorkspace(editingWorkspaceID, title: workspaceTitleDraft)
+            ConductorMotion.perform {
+                model.renameWorkspace(editingWorkspaceID, title: workspaceTitleDraft)
+            }
         }
         editingWorkspaceID = nil
     }
@@ -1208,6 +1305,10 @@ private struct WorkspaceTabStrip: View {
                 HStack(spacing: WorkspaceTabMetrics.spacing) {
                     ForEach(model.workspaces) { workspace in
                         workspaceTabView(for: workspace)
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .trailing)),
+                                removal: .opacity.combined(with: .scale(scale: 0.92))
+                            ))
                     }
                 }
                 .padding(.horizontal, WorkspaceTabMetrics.edgePadding)
@@ -1232,10 +1333,12 @@ private struct WorkspaceTabStrip: View {
         .frame(minWidth: WorkspaceTabMetrics.width, maxWidth: .infinity, minHeight: WorkspaceTabMetrics.height, maxHeight: WorkspaceTabMetrics.height, alignment: .leading)
         .clipped()
         .mask(ConductorHorizontalFadeMask())
+        .animation(ConductorMotion.layout, value: workspaceIDs)
+        .animation(ConductorMotion.standard, value: model.workspace.id)
     }
 
     private func scrollToSelectedWorkspace(_ proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.12)) {
+        withAnimation(ConductorMotion.standard) {
             proxy.scrollTo(model.workspace.id, anchor: .center)
         }
     }
@@ -1249,24 +1352,36 @@ private struct WorkspaceTabStrip: View {
             editing: editingWorkspaceID == workspace.id,
             titleDraft: $workspaceTitleDraft,
             onSelect: {
-                model.selectWorkspace(workspace.id)
+                ConductorMotion.perform {
+                    model.selectWorkspace(workspace.id)
+                }
             },
             onRename: {
-                onBeginRename(workspace)
+                ConductorMotion.perform {
+                    onBeginRename(workspace)
+                }
             },
             onCommitRename: onCommitRename,
             onCancelRename: onCancelRename,
             onDuplicate: {
-                model.duplicateWorkspace(workspace.id)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.duplicateWorkspace(workspace.id)
+                }
             },
             onClose: {
-                model.closeWorkspace(workspace.id)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.closeWorkspace(workspace.id)
+                }
             },
             onCloseOthers: {
-                model.closeOtherWorkspaces(keeping: workspace.id)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.closeOtherWorkspaces(keeping: workspace.id)
+                }
             },
             onCloseRight: {
-                model.closeWorkspacesToRight(of: workspace.id)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.closeWorkspacesToRight(of: workspace.id)
+                }
             }
         )
         .id(workspace.id)
@@ -1356,14 +1471,16 @@ private struct WorkspaceTopTab: View {
                         .background(Color.accentColor)
                         .clipShape(Capsule())
                 }
-                Button(action: onClose) {
+                Button {
+                    ConductorMotion.perform(ConductorMotion.layout, onClose)
+                } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(canClose ? (selected ? ConductorDesign.tertiaryText : ConductorDesign.terminalTextMuted.opacity(0.70)) : Color.clear)
                         .frame(width: 12, height: 12)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ConductorPressButtonStyle())
                 .disabled(!canClose)
                 .help("关闭工作区")
             }
@@ -1382,13 +1499,26 @@ private struct WorkspaceTopTab: View {
             radius: ConductorTokens.Shadow.controlRadius,
             y: ConductorTokens.Shadow.controlY
         )
-        .onHover { hovering = $0 }
+        .scaleEffect(selected ? 1 : (hovering ? 0.992 : 0.985))
+        .animation(ConductorMotion.standard, value: selected)
+        .animation(ConductorMotion.micro, value: hovering)
+        .animation(ConductorMotion.standard, value: editing)
+        .animation(ConductorMotion.emphasized, value: unreadCount)
+        .onHover { value in
+            withAnimation(ConductorMotion.micro) {
+                hovering = value
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab))
         .simultaneousGesture(
-            TapGesture(count: 1).onEnded(onSelect)
+            TapGesture(count: 1).onEnded {
+                ConductorMotion.perform(onSelect)
+            }
         )
         .simultaneousGesture(
-            TapGesture(count: 2).onEnded(onRename)
+            TapGesture(count: 2).onEnded {
+                ConductorMotion.perform(onRename)
+            }
         )
         .onDrag {
             NSItemProvider(object: workspace.id.description as NSString)
@@ -1443,7 +1573,9 @@ private struct WorkspaceTabDropDelegate: DropDelegate {
             }
 
             Task { @MainActor in
-                model.moveWorkspace(WorkspaceID(uuid), before: targetWorkspaceID)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.moveWorkspace(WorkspaceID(uuid), before: targetWorkspaceID)
+                }
             }
         }
         return true

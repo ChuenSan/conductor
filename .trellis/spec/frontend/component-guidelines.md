@@ -94,6 +94,45 @@ terminal area inside a decorative card just to match the sidebar.
 
 Only introduce one-off numeric styling when the value is intrinsic to a specific asset or AppKit bridge. Otherwise add or reuse a token first.
 
+### Convention: Shell Motion
+
+**What**: Low-frequency product UI changes should use shared motion tokens such as
+`ConductorMotion.micro`, `standard`, `layout`, and `emphasized`. Apply motion to
+shell chrome: sidebar expansion, workspace and terminal tab selection, tab/list insertions
+and removals, badges, notification rows, command palette entry, pane focus rings, and
+button press/hover feedback.
+
+**Why**: Motion should make the app feel native and responsive without turning terminal
+rendering into SwiftUI work or making precision interactions lag behind the pointer.
+
+**Contract**:
+
+- Use `ConductorMotion.perform` around user-triggered metadata actions when the resulting
+  SwiftUI chrome should animate.
+- Do not bind animations to terminal output, scrollback, cursor movement, or runtime redraws.
+- Do not animate the Ghostty/AppKit terminal surface itself with opacity, scale, or identity
+  changes.
+- Do not attach a layout animation to split fractions during divider drag. Animate split
+  creation, close, move, or equalize, but drag updates must stay immediate.
+- Use tiny transform-only feedback for hover/press; never insert or remove controls on hover.
+
+**Correct**:
+
+```swift
+ConductorMotion.perform(ConductorMotion.layout) {
+    model.closePane(pane.id)
+}
+
+.animation(ConductorMotion.standard, value: isFocused)
+```
+
+**Wrong**:
+
+```swift
+.animation(ConductorMotion.layout, value: model.workspace.root) // also animates drag fraction
+.opacity(isFocused ? 1 : 0.9) // applied to the live terminal surface
+```
+
 ---
 
 ## Accessibility

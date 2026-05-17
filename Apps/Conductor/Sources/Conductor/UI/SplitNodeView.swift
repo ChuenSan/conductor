@@ -14,6 +14,7 @@ struct SplitNodeView: View {
             if let pane = model.workspace.panes[paneID] {
                 TerminalPaneView(pane: pane, model: model)
                     .frame(minWidth: 180, minHeight: 150)
+                    .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
         case let .split(axis, first, second, fraction):
             SplitPairView(
@@ -24,6 +25,7 @@ struct SplitNodeView: View {
                 path: path,
                 model: model
             )
+            .transition(.opacity)
         }
     }
 }
@@ -62,7 +64,9 @@ private struct SplitPairView: View {
                             dragStartFraction = nil
                         },
                         onDoubleClick: {
-                            model.equalizeSplits()
+                            ConductorMotion.perform(ConductorMotion.layout) {
+                                model.equalizeSplits()
+                            }
                         }
                     )
                     .frame(width: divider)
@@ -90,7 +94,9 @@ private struct SplitPairView: View {
                             dragStartFraction = nil
                         },
                         onDoubleClick: {
-                            model.equalizeSplits()
+                            ConductorMotion.perform(ConductorMotion.layout) {
+                                model.equalizeSplits()
+                            }
                         }
                     )
                     .frame(height: divider)
@@ -131,6 +137,8 @@ private struct SplitDivider: View {
             .onHover { isHovering in
                 updateCursor(hovering: isHovering)
             }
+            .animation(ConductorMotion.micro, value: active)
+            .animation(ConductorMotion.micro, value: hovering)
             .onDisappear {
                 if hovering {
                     hovering = false
@@ -178,6 +186,8 @@ private struct TerminalPaneView: View {
                 )
                 .allowsHitTesting(false)
         }
+        .animation(ConductorMotion.standard, value: isFocused)
+        .animation(ConductorMotion.emphasized, value: unreadCount)
     }
 
     private var tabBar: some View {
@@ -191,7 +201,9 @@ private struct TerminalPaneView: View {
             .layoutPriority(1)
 
             PaneBarButton(systemImage: "plus", title: "新标签", showsTitle: false, help: "新标签 Cmd-Shift-T") {
-                model.newTab(in: pane.id)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.newTab(in: pane.id)
+                }
             }
 
             PaneFocusBadge(title: "当前", active: isFocused, accent: model.theme.accent)
@@ -203,7 +215,9 @@ private struct TerminalPaneView: View {
                 disabled: !model.workspace.canClosePane(pane.id),
                 help: "关闭这个分屏 Cmd-Shift-W"
             ) {
-                model.closePane(pane.id)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.closePane(pane.id)
+                }
             }
         }
         .padding(.horizontal, 4)
@@ -226,7 +240,9 @@ private struct TerminalPaneView: View {
             )
             .background(model.theme.terminalBackground)
             .onTapGesture {
-                model.focusPane(pane.id)
+                ConductorMotion.perform {
+                    model.focusPane(pane.id)
+                }
             }
         }
     }
@@ -251,6 +267,10 @@ private struct StableTerminalTabStrip: View {
                 HStack(spacing: tabSpacing) {
                     ForEach(pane.tabs) { tab in
                         tabView(for: tab)
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .trailing)),
+                                removal: .opacity.combined(with: .scale(scale: 0.90))
+                            ))
                     }
                 }
                 .padding(.horizontal, tabEdgePadding)
@@ -277,10 +297,12 @@ private struct StableTerminalTabStrip: View {
         .frame(height: 21)
         .clipped()
         .mask(ConductorHorizontalFadeMask())
+        .animation(ConductorMotion.layout, value: tabIDs)
+        .animation(ConductorMotion.standard, value: pane.selectedTabID)
     }
 
     private func scrollToSelectedTab(_ proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.12)) {
+        withAnimation(ConductorMotion.standard) {
             proxy.scrollTo(pane.selectedTabID, anchor: .center)
         }
     }
@@ -347,10 +369,12 @@ private struct TerminalTabDropDelegate: DropDelegate {
 
             Task { @MainActor in
                 let draggedTabID = TerminalID(uuid)
-                if let targetTabID {
-                    model.moveTab(draggedTabID, before: targetTabID, in: paneID)
-                } else {
-                    model.moveTabToEnd(draggedTabID, in: paneID)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    if let targetTabID {
+                        model.moveTab(draggedTabID, before: targetTabID, in: paneID)
+                    } else {
+                        model.moveTabToEnd(draggedTabID, in: paneID)
+                    }
                 }
             }
         }
@@ -368,7 +392,9 @@ private struct PaneBarButton: View {
     @State private var hovering = false
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            ConductorMotion.perform(action)
+        } label: {
             ViewThatFits(in: .horizontal) {
                 if showsTitle {
                     HStack(spacing: 4) {
@@ -390,10 +416,16 @@ private struct PaneBarButton: View {
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .contentShape(RoundedRectangle(cornerRadius: 6))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ConductorPressButtonStyle())
         .disabled(disabled)
         .opacity(disabled ? 0.35 : 1)
-        .onHover { hovering = $0 }
+        .animation(ConductorMotion.micro, value: disabled)
+        .animation(ConductorMotion.micro, value: hovering)
+        .onHover { value in
+            withAnimation(ConductorMotion.micro) {
+                hovering = value
+            }
+        }
         .help(help)
     }
 }
@@ -423,6 +455,8 @@ private struct PaneFocusBadge: View {
         .frame(height: 18)
         .background(active ? accent.opacity(0.10) : Color.clear)
         .clipShape(Capsule())
+        .scaleEffect(active ? 1 : 0.86)
+        .animation(ConductorMotion.standard, value: active)
         .help(active ? "当前分屏" : "未聚焦分屏")
     }
 }
@@ -509,14 +543,16 @@ private struct TerminalTabButton: View {
 
             if !editingTitle {
                 Button {
-                    model.closeTab(tab.id, in: paneID)
+                    ConductorMotion.perform(ConductorMotion.layout) {
+                        model.closeTab(tab.id, in: paneID)
+                    }
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(isSelected ? ConductorDesign.tertiaryText : ConductorDesign.terminalTextMuted)
                         .frame(width: 12, height: 12)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ConductorPressButtonStyle())
                 .help("关闭标签")
             }
         }
@@ -540,73 +576,112 @@ private struct TerminalTabButton: View {
             radius: ConductorTokens.Shadow.selectedRadius,
             y: ConductorTokens.Shadow.selectedY
         )
-        .onHover { hovering = $0 }
+        .scaleEffect(isSelected ? 1 : (hovering ? 0.994 : 0.988))
+        .animation(ConductorMotion.standard, value: isSelected)
+        .animation(ConductorMotion.micro, value: hovering)
+        .animation(ConductorMotion.micro, value: isDropTarget)
+        .animation(ConductorMotion.standard, value: editingTitle)
+        .animation(ConductorMotion.emphasized, value: unreadCount)
+        .animation(ConductorMotion.standard, value: metadata?.progressKind)
+        .onHover { value in
+            withAnimation(ConductorMotion.micro) {
+                hovering = value
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab))
         .simultaneousGesture(
             TapGesture(count: 1).onEnded {
-                model.selectTab(tab.id, in: paneID)
+                ConductorMotion.perform {
+                    model.selectTab(tab.id, in: paneID)
+                }
             }
         )
         .onDrag {
-            model.selectTab(tab.id, in: paneID)
+            ConductorMotion.perform {
+                model.selectTab(tab.id, in: paneID)
+            }
             return NSItemProvider(object: tab.id.description as NSString)
         }
         .simultaneousGesture(
             TapGesture(count: 2).onEnded {
-                beginRename()
+                ConductorMotion.perform {
+                    beginRename()
+                }
             }
         )
         .contextMenu {
             Button("重命名标签...") {
-                beginRename()
+                ConductorMotion.perform {
+                    beginRename()
+                }
             }
             if tab.userTitle != nil {
                 Button("恢复终端标题") {
-                    model.clearUserTerminalTitle(tab.id)
+                    ConductorMotion.perform {
+                        model.clearUserTerminalTitle(tab.id)
+                    }
                 }
             }
             Button("复制标签") {
-                model.duplicateTab(tab.id, in: paneID)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.duplicateTab(tab.id, in: paneID)
+                }
             }
             Divider()
             Button("关闭标签") {
-                model.closeTab(tab.id, in: paneID)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.closeTab(tab.id, in: paneID)
+                }
             }
             Button("关闭其他标签") {
-                model.selectTab(tab.id, in: paneID)
-                model.closeOtherTabs(in: paneID)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.selectTab(tab.id, in: paneID)
+                    model.closeOtherTabs(in: paneID)
+                }
             }
             .disabled(!model.workspace.canCloseOtherTabs(in: paneID))
             Button("关闭右侧标签") {
-                model.selectTab(tab.id, in: paneID)
-                model.closeTabsToRight(in: paneID)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.selectTab(tab.id, in: paneID)
+                    model.closeTabsToRight(in: paneID)
+                }
             }
             .disabled(!model.workspace.canCloseTabsToRight(of: tab.id, in: paneID))
             Divider()
             Button("标签左移") {
-                model.selectTab(tab.id, in: paneID)
-                model.moveSelectedTabLeft()
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.selectTab(tab.id, in: paneID)
+                    model.moveSelectedTabLeft()
+                }
             }
             .disabled(tabIndex == nil || tabIndex == 0)
             Button("标签右移") {
-                model.selectTab(tab.id, in: paneID)
-                model.moveSelectedTabRight()
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.selectTab(tab.id, in: paneID)
+                    model.moveSelectedTabRight()
+                }
             }
             .disabled(tabIndex == nil || tabIndex == tabCount - 1)
             Divider()
             Button("移动到下一个分屏") {
-                model.selectTab(tab.id, in: paneID)
-                model.moveSelectedTabToNextPane()
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.selectTab(tab.id, in: paneID)
+                    model.moveSelectedTabToNextPane()
+                }
             }
             .disabled(!canMoveTargetTabToNextPane)
             Button("移动到右侧新分屏") {
-                model.selectTab(tab.id, in: paneID)
-                model.moveSelectedTabToNewSplit(.right)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.selectTab(tab.id, in: paneID)
+                    model.moveSelectedTabToNewSplit(.right)
+                }
             }
             .disabled(!canMoveTargetTabToNewSplit)
             Button("移动到下方新分屏") {
-                model.selectTab(tab.id, in: paneID)
-                model.moveSelectedTabToNewSplit(.down)
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.selectTab(tab.id, in: paneID)
+                    model.moveSelectedTabToNewSplit(.down)
+                }
             }
             .disabled(!canMoveTargetTabToNewSplit)
         }
@@ -620,11 +695,15 @@ private struct TerminalTabButton: View {
     }
 
     private func commitRename() {
-        model.renameTerminal(tab.id, title: titleDraft)
-        editingTitle = false
+        ConductorMotion.perform {
+            model.renameTerminal(tab.id, title: titleDraft)
+            editingTitle = false
+        }
     }
 
     private func cancelRename() {
-        editingTitle = false
+        ConductorMotion.perform {
+            editingTitle = false
+        }
     }
 }

@@ -122,6 +122,31 @@ enum ConductorDesign {
     }
 }
 
+enum ConductorMotion {
+    static let micro = Animation.easeOut(duration: 0.12)
+    static let standard = Animation.spring(response: 0.24, dampingFraction: 0.86, blendDuration: 0)
+    static let layout = Animation.spring(response: 0.32, dampingFraction: 0.88, blendDuration: 0)
+    static let emphasized = Animation.spring(response: 0.38, dampingFraction: 0.78, blendDuration: 0)
+
+    static func perform(_ action: () -> Void) {
+        withAnimation(standard, action)
+    }
+
+    static func perform(_ animation: Animation = ConductorMotion.standard, _ action: () -> Void) {
+        withAnimation(animation, action)
+    }
+}
+
+struct ConductorPressButtonStyle: ButtonStyle {
+    var pressedScale: CGFloat = 0.96
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .animation(ConductorMotion.micro, value: configuration.isPressed)
+    }
+}
+
 struct ConductorIconButton: View {
     let systemImage: String
     let help: String
@@ -131,7 +156,9 @@ struct ConductorIconButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            ConductorMotion.perform(.easeOut(duration: 0.10), action)
+        } label: {
             HStack(spacing: title == nil ? 0 : 5) {
                 Image(systemName: systemImage)
                     .font(.system(size: 10.5, weight: .semibold))
@@ -149,9 +176,11 @@ struct ConductorIconButton: View {
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ConductorPressButtonStyle())
         .disabled(disabled)
         .opacity(disabled ? 0.38 : 1)
+        .animation(ConductorMotion.standard, value: active)
+        .animation(ConductorMotion.micro, value: disabled)
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)
         .help(help)
