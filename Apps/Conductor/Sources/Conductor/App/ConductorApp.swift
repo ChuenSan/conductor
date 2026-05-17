@@ -73,6 +73,10 @@ final class ConductorHostingView<Content: View>: NSHostingView<Content> {
     override var safeAreaInsets: NSEdgeInsets {
         NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
     }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
 }
 
 @MainActor

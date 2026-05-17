@@ -138,6 +138,9 @@ workspace overview, and compact status modules.
   Use a neutral glass tint for the settings shell instead of the theme `shellPanelBackground`;
   large tinted panels can read as a blue/colored film in Codex Dark and similar themes. Avoid
   hard split lines, opaque content slabs, and large option cards inside these panels.
+- When a shell panel is open, suspend terminal input focus so the live terminal host does not
+  reclaim first responder from controls inside settings, command palette, or overview. The first
+  click inside a panel must activate the clicked control, not only move focus away from terminal.
 - Bind fluid effects only to low-frequency product state such as selection, command palette
   visibility, notification badges, sidebar visibility, and workspace navigation.
 - Do not bind glass effects, blur changes, or animated mesh/background effects to stdout,

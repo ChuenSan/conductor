@@ -201,6 +201,13 @@ private struct TerminalPaneView: View {
         model.workspace.focusedPaneID == pane.id
     }
 
+    private var terminalAcceptsInputFocus: Bool {
+        isFocused &&
+            !model.commandPaletteVisible &&
+            !model.settingsPanelVisible &&
+            !model.workspaceOverviewVisible
+    }
+
     private var unreadCount: Int {
         model.notifications.snapshot.unreadCount(for: pane.id)
     }
@@ -304,7 +311,7 @@ private struct TerminalPaneView: View {
             TerminalSurfaceRepresentable(
                 surface: model.surface(for: selected),
                 theme: model.theme,
-                isFocused: isFocused
+                isFocused: terminalAcceptsInputFocus
             )
             .background(model.theme.terminalBackground)
             .transaction { transaction in

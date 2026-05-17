@@ -66,6 +66,7 @@ final class TerminalSurfaceContainerView: NSView {
         currentTheme = theme
         surface.attachIfPossible()
         surface.setFocused(focused)
+        resignFocusIfNeeded(for: surface)
         if surfaceChanged || themeChanged {
             syncCurrentSurface(force: true)
         }
@@ -146,6 +147,14 @@ final class TerminalSurfaceContainerView: NSView {
             return
         }
         window?.makeFirstResponder(surface.hostView)
+    }
+
+    private func resignFocusIfNeeded(for surface: TerminalSurface) {
+        guard !wantsTerminalFocus,
+              window?.firstResponder === surface.hostView else {
+            return
+        }
+        window?.makeFirstResponder(nil)
     }
 
     private func configureLayerForTerminalHosting(_ layer: CALayer?) {
