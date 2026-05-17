@@ -85,12 +85,12 @@ private struct CommandPaletteView: View {
                     model.duplicateSelectedTab()
                 }
             },
-            CommandPaletteItem(id: "split-right", section: "创建", title: "向右分屏", shortcut: "Cmd-D", disabled: !model.canSplit, keywords: "split right vertical") {
+            CommandPaletteItem(id: "split-right", section: "创建", title: "向右分屏", shortcut: "Cmd-D", disabled: !model.canSplit, disabledReason: "当前布局已到可用分屏上限", keywords: "split right vertical") {
                 run {
                     model.splitRight()
                 }
             },
-            CommandPaletteItem(id: "split-down", section: "创建", title: "向下分屏", shortcut: "Cmd-Shift-D", disabled: !model.canSplit, keywords: "split down horizontal") {
+            CommandPaletteItem(id: "split-down", section: "创建", title: "向下分屏", shortcut: "Cmd-Shift-D", disabled: !model.canSplit, disabledReason: "当前布局已到可用分屏上限", keywords: "split down horizontal") {
                 run {
                     model.splitDown()
                 }
@@ -132,6 +132,7 @@ private struct CommandPaletteView: View {
                 title: "跳到最新未读",
                 shortcut: "Unread",
                 disabled: model.notifications.snapshot.latestUnread == nil,
+                disabledReason: "没有未读通知",
                 keywords: "notification unread jump"
             ) {
                 run {
@@ -143,27 +144,27 @@ private struct CommandPaletteView: View {
                     model.closeSelectedTab()
                 }
             },
-            CommandPaletteItem(id: "close-pane", section: "整理", title: "关闭分屏", shortcut: "Cmd-Shift-W", disabled: !model.canCloseFocusedPane, keywords: "close pane split") {
+            CommandPaletteItem(id: "close-pane", section: "整理", title: "关闭分屏", shortcut: "Cmd-Shift-W", disabled: !model.canCloseFocusedPane, disabledReason: "至少保留一个分屏", keywords: "close pane split") {
                 run {
                     model.closePane(model.workspace.focusedPaneID)
                 }
             },
-            CommandPaletteItem(id: "move-tab-left", section: "整理", title: "标签左移", shortcut: "Cmd-Shift-,", disabled: !model.canMoveSelectedTabLeft, keywords: "move tab left") {
+            CommandPaletteItem(id: "move-tab-left", section: "整理", title: "标签左移", shortcut: "Cmd-Shift-,", disabled: !model.canMoveSelectedTabLeft, disabledReason: "已经在最左侧", keywords: "move tab left") {
                 run {
                     model.moveSelectedTabLeft()
                 }
             },
-            CommandPaletteItem(id: "move-tab-right", section: "整理", title: "标签右移", shortcut: "Cmd-Shift-.", disabled: !model.canMoveSelectedTabRight, keywords: "move tab right") {
+            CommandPaletteItem(id: "move-tab-right", section: "整理", title: "标签右移", shortcut: "Cmd-Shift-.", disabled: !model.canMoveSelectedTabRight, disabledReason: "已经在最右侧", keywords: "move tab right") {
                 run {
                     model.moveSelectedTabRight()
                 }
             },
-            CommandPaletteItem(id: "move-tab-next-pane", section: "整理", title: "移到下一个分屏", shortcut: "Cmd-Opt-M", disabled: !model.canMoveSelectedTabToNextPane, keywords: "move tab pane") {
+            CommandPaletteItem(id: "move-tab-next-pane", section: "整理", title: "移到下一个分屏", shortcut: "Cmd-Opt-M", disabled: !model.canMoveSelectedTabToNextPane, disabledReason: "需要另一个分屏", keywords: "move tab pane") {
                 run {
                     model.moveSelectedTabToNextPane()
                 }
             },
-            CommandPaletteItem(id: "move-tab-new-split", section: "整理", title: "移到右侧新分屏", shortcut: "Cmd-Opt-Shift-M", disabled: !model.canMoveSelectedTabToNewSplit, keywords: "move tab new split") {
+            CommandPaletteItem(id: "move-tab-new-split", section: "整理", title: "移到右侧新分屏", shortcut: "Cmd-Opt-Shift-M", disabled: !model.canMoveSelectedTabToNewSplit, disabledReason: "需要可移动标签和可用分屏空间", keywords: "move tab new split") {
                 run {
                     model.moveSelectedTabToNewSplit(.right)
                 }
@@ -174,13 +175,14 @@ private struct CommandPaletteView: View {
                 title: model.workspace.isZoomed ? "还原当前分屏" : "放大当前分屏",
                 shortcut: "Cmd-Z",
                 disabled: model.workspace.root.leaves.count <= 1,
+                disabledReason: "需要多个分屏",
                 keywords: "zoom pane"
             ) {
                 run {
                     model.toggleZoom()
                 }
             },
-            CommandPaletteItem(id: "equalize-splits", section: "视图", title: "均分分屏", shortcut: "Cmd-Shift-=", disabled: model.workspace.root.leaves.count <= 1, keywords: "equalize split layout") {
+            CommandPaletteItem(id: "equalize-splits", section: "视图", title: "均分分屏", shortcut: "Cmd-Shift-=", disabled: model.workspace.root.leaves.count <= 1, disabledReason: "需要多个分屏", keywords: "equalize split layout") {
                 run {
                     model.equalizeSplits()
                 }
@@ -205,7 +207,7 @@ private struct CommandPaletteView: View {
                     model.resetWorkspace()
                 }
             },
-            CommandPaletteItem(id: "clear-notifications", section: "整理", title: "清空通知", shortcut: "Clear", disabled: model.notifications.records.isEmpty, keywords: "notification clear") {
+            CommandPaletteItem(id: "clear-notifications", section: "整理", title: "清空通知", shortcut: "Clear", disabled: model.notifications.records.isEmpty, disabledReason: "通知中心为空", keywords: "notification clear") {
                 run {
                     model.clearAllNotifications()
                 }
@@ -227,10 +229,25 @@ private struct CommandPaletteView: View {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalizedQuery.isEmpty else { return commands }
         return commands.filter { command in
-            "\(command.title) \(command.shortcut) \(command.keywords)"
+            "\(command.title) \(command.shortcut) \(command.section) \(command.keywords)"
                 .lowercased()
                 .contains(normalizedQuery)
         }
+    }
+
+    private var suggestedCommands: [CommandPaletteItem] {
+        let ids = ["new-tab", "split-right", "workspace-overview", "notifications", "appearance-settings"]
+        return ids.compactMap { id in
+            commands.first { $0.id == id }
+        }
+    }
+
+    private var terminalCount: Int {
+        model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+    }
+
+    private var focusedTerminalTitle: String {
+        model.workspace.focusedPane?.selectedTab?.title ?? "终端"
     }
 
     var body: some View {
@@ -242,62 +259,26 @@ private struct CommandPaletteView: View {
                 }
 
             ConductorGlassSurface(style: .palette, interactive: true) {
-                VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 7) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                    TextField("搜索命令", text: $query)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13, weight: .medium))
-                        .focused($searchFocused)
-                    Text("↵")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                }
-                .padding(.horizontal, 10)
-                .frame(height: 32)
-                .background(Color.white.opacity(0.36))
-                .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup))
-                .overlay {
-                    RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup)
-                        .stroke(Color.white.opacity(0.58), lineWidth: 1)
-                }
+                VStack(alignment: .leading, spacing: 10) {
+                    commandHeader
+                    CommandStatusStrip(
+                        workspaceTitle: model.workspace.title,
+                        terminalTitle: focusedTerminalTitle,
+                        paneCount: model.workspace.panes.count,
+                        terminalCount: terminalCount,
+                        unreadCount: model.notifications.snapshot.unreadCount
+                    )
+                    commandSearchField
 
-                if filteredCommands.isEmpty {
-                    Text("没有匹配的命令")
-                        .font(.system(size: 12))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 24)
-                } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 2) {
-                            ForEach(Array(filteredCommands.enumerated()), id: \.element.id) { index, command in
-                                if index == 0 || filteredCommands[index - 1].section != command.section {
-                                    CommandSectionTitle(command.section)
-                                }
-                                CommandButton(
-                                    title: command.title,
-                                    shortcut: command.shortcut,
-                                    selected: command.id == selectedCommandID,
-                                    disabled: command.disabled,
-                                    action: command.action,
-                                    onHover: {
-                                        if !command.disabled {
-                                            selectedCommandID = command.id
-                                        }
-                                    }
-                                )
-                            }
-                        }
+                    if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        suggestionShelf
                     }
-                    .frame(maxHeight: 360)
+
+                    commandResults
                 }
-                }
-                .padding(11)
+                .padding(12)
             }
-            .frame(width: 360)
+            .frame(width: 560)
             .onAppear {
                 searchFocused = true
                 ensureSelection()
@@ -319,6 +300,124 @@ private struct CommandPaletteView: View {
             }
             .onSubmit {
                 executeSelected()
+            }
+            .onExitCommand {
+                model.hideCommandPalette()
+            }
+        }
+    }
+
+    private var commandHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "command")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 24, height: 24)
+                .background(Color.white.opacity(0.28))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Command Center")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                Text(model.workspace.title)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer()
+
+            Button {
+                ConductorMotion.perform {
+                    model.hideCommandPalette()
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .frame(width: 24, height: 24)
+                    .background(Color.white.opacity(0.22))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help("关闭命令中心")
+        }
+    }
+
+    private var commandSearchField: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+            TextField("搜索命令", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13, weight: .medium))
+                .focused($searchFocused)
+            Text("↵")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 32)
+        .background(Color.white.opacity(0.34))
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup)
+                .stroke(Color.white.opacity(0.56), lineWidth: 1)
+        }
+    }
+
+    private var suggestionShelf: some View {
+        HStack(spacing: 8) {
+            ForEach(suggestedCommands) { command in
+                CommandSuggestionButton(
+                    command: command,
+                    selected: command.id == selectedCommandID
+                ) {
+                    selectedCommandID = command.id
+                }
+            }
+        }
+    }
+
+    private var commandResults: some View {
+        Group {
+            if filteredCommands.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "command")
+                        .font(.system(size: 22, weight: .medium))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                    Text("没有匹配的命令")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(ConductorDesign.secondaryText)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 190)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 3) {
+                        ForEach(Array(filteredCommands.enumerated()), id: \.element.id) { index, command in
+                            if index == 0 || filteredCommands[index - 1].section != command.section {
+                                CommandSectionTitle(command.section)
+                            }
+                            CommandButton(
+                                command: command,
+                                selected: command.id == selectedCommandID,
+                                action: command.action,
+                                onHover: {
+                                    if !command.disabled {
+                                        selectedCommandID = command.id
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+                .scrollIndicators(.visible)
+                .frame(maxHeight: 332)
             }
         }
     }
@@ -371,8 +470,58 @@ private struct CommandPaletteItem: Identifiable {
     let title: String
     let shortcut: String
     var disabled = false
+    var disabledReason: String? = nil
     var keywords = ""
     let action: () -> Void
+
+    var systemImage: String {
+        switch id {
+        case "new-terminal":
+            "plus.rectangle.on.rectangle"
+        case "new-tab":
+            "plus"
+        case "duplicate-tab", "duplicate-workspace":
+            "plus.square.on.square"
+        case "split-right":
+            "rectangle.split.2x1"
+        case "split-down":
+            "rectangle.split.1x2"
+        case "next-tab", "next-pane":
+            "arrow.right"
+        case "previous-tab", "previous-pane":
+            "arrow.left"
+        case "notifications":
+            "bell"
+        case "jump-unread":
+            "bell.badge"
+        case "close-tab", "close-pane", "clear-notifications":
+            "xmark"
+        case "move-tab-left":
+            "arrow.left.to.line"
+        case "move-tab-right":
+            "arrow.right.to.line"
+        case "move-tab-next-pane":
+            "arrowshape.turn.up.right"
+        case "move-tab-new-split":
+            "rectangle.split.2x1"
+        case "toggle-zoom":
+            "arrow.up.left.and.arrow.down.right"
+        case "equalize-splits":
+            "equal.square"
+        case "workspace-overview":
+            "rectangle.3.group"
+        case "appearance-settings":
+            "slider.horizontal.3"
+        case "reset-workspace":
+            "arrow.counterclockwise"
+        case "install-codex-hooks":
+            "bolt.horizontal.circle"
+        case "debug-notification":
+            "bell.badge"
+        default:
+            "command"
+        }
+    }
 }
 
 private struct CommandSectionTitle: View {
@@ -383,42 +532,72 @@ private struct CommandSectionTitle: View {
     }
 
     var body: some View {
-        Text(title)
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(ConductorDesign.tertiaryText)
-            .padding(.top, 4)
-            .padding(.horizontal, 10)
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+            Rectangle()
+                .fill(Color.white.opacity(0.24))
+                .frame(height: 1)
+        }
+        .padding(.top, 5)
+        .padding(.horizontal, 4)
     }
 }
 
 private struct CommandButton: View {
-    let title: String
-    let shortcut: String
+    let command: CommandPaletteItem
     var selected = false
-    var disabled = false
     let action: () -> Void
     var onHover: () -> Void = {}
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-                Spacer()
-                Text(shortcut)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 9) {
+                Image(systemName: command.systemImage)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 24, height: 24)
+                    .background(iconFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(command.title)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.primaryText)
+                        .lineLimit(1)
+                    if let disabledReason = command.disabledReason, command.disabled {
+                        Text(disabledReason)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(ConductorDesign.tertiaryText)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                Text(command.shortcut)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
+                    .padding(.horizontal, 7)
+                    .frame(height: 19)
+                    .background(Color.white.opacity(command.disabled ? 0.10 : 0.24))
+                    .clipShape(Capsule())
             }
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background(selected ? ConductorDesign.selectedFill : (hovering ? ConductorDesign.hoverFill : Color.clear))
+            .padding(.horizontal, 8)
+            .frame(height: command.disabledReason != nil && command.disabled ? 42 : 36)
+            .background(rowFill)
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
+            .overlay {
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.row)
+                    .stroke(selected ? Color.accentColor.opacity(0.52) : Color.clear, lineWidth: 1)
+            }
         }
         .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.45 : 1)
+        .disabled(command.disabled)
+        .opacity(command.disabled ? 0.62 : 1)
         .animation(ConductorMotion.micro, value: selected)
         .animation(ConductorMotion.micro, value: hovering)
         .onHover { value in
@@ -429,6 +608,146 @@ private struct CommandButton: View {
                 onHover()
             }
         }
+    }
+
+    private var rowFill: Color {
+        if selected {
+            return Color.white.opacity(0.38)
+        }
+        if hovering {
+            return Color.white.opacity(0.26)
+        }
+        return Color.white.opacity(0.11)
+    }
+
+    private var iconColor: Color {
+        if command.disabled {
+            return ConductorDesign.tertiaryText
+        }
+        return selected ? Color.accentColor : ConductorDesign.secondaryText
+    }
+
+    private var iconFill: Color {
+        if selected {
+            return Color.accentColor.opacity(0.13)
+        }
+        return Color.white.opacity(command.disabled ? 0.10 : 0.22)
+    }
+}
+
+private struct CommandStatusStrip: View {
+    let workspaceTitle: String
+    let terminalTitle: String
+    let paneCount: Int
+    let terminalCount: Int
+    let unreadCount: Int
+
+    var body: some View {
+        HStack(spacing: 7) {
+            CommandStatusChip(systemImage: "rectangle.3.group", title: "工作区", value: workspaceTitle)
+            CommandStatusChip(systemImage: "terminal", title: "当前", value: terminalTitle)
+            CommandStatusChip(systemImage: "square.split.2x2", title: "分屏", value: "\(paneCount)")
+            CommandStatusChip(systemImage: unreadCount > 0 ? "bell.badge" : "bell", title: "通知", value: "\(unreadCount)")
+        }
+    }
+}
+
+private struct CommandStatusChip: View {
+    let systemImage: String
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 17)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                Text(value)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+        .background(Color.white.opacity(0.20))
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(Color.white.opacity(0.34), lineWidth: 1)
+        }
+    }
+}
+
+private struct CommandSuggestionButton: View {
+    let command: CommandPaletteItem
+    let selected: Bool
+    let onHover: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: command.action) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: command.systemImage)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : Color.accentColor)
+                    Spacer()
+                    if command.disabled {
+                        Image(systemName: "lock")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(ConductorDesign.tertiaryText)
+                    }
+                }
+                Text(command.title)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(command.shortcut)
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(1)
+            }
+            .padding(9)
+            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
+            .background(cardFill)
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(selected ? Color.accentColor.opacity(0.58) : Color.white.opacity(0.34), lineWidth: selected ? 1.4 : 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(command.disabled)
+        .opacity(command.disabled ? 0.62 : 1)
+        .onHover { value in
+            withAnimation(ConductorMotion.micro) {
+                hovering = value
+            }
+            if value && !command.disabled {
+                onHover()
+            }
+        }
+        .animation(ConductorMotion.micro, value: hovering)
+        .animation(ConductorMotion.standard, value: selected)
+        .help(command.title)
+    }
+
+    private var cardFill: Color {
+        if selected {
+            return Color.white.opacity(0.36)
+        }
+        if hovering {
+            return Color.white.opacity(0.28)
+        }
+        return Color.white.opacity(0.18)
     }
 }
 

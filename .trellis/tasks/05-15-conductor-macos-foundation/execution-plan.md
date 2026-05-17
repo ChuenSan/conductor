@@ -151,9 +151,9 @@ skip ahead to higher-level agent features until the terminal workspace feels dep
 
 ## Stage 11: Command Center 2.0
 
-1. [pending] Expand the command palette into a searchable command center with grouped actions, recents, and state-aware suggestions.
-2. [pending] Add settings-driven shortcut discovery and future keybinding editing.
-3. [pending] Route all commands through model/service contracts, not view internals.
+1. [done] Expand the command palette into a searchable command center with grouped actions, recommended actions, and state-aware disabled reasons.
+2. [in progress] Add settings-driven shortcut discovery and future keybinding editing.
+3. [done] Route all commands through model/service contracts, not view internals.
 
 **Exit Criteria**:
 
