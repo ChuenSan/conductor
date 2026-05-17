@@ -804,18 +804,20 @@ private struct AppearanceSettingsPanel: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
-            ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
+            ConductorGlassSurface(style: .sidebar, clarity: model.appearance.chromeClarity, interactive: true) {
                 HStack(spacing: 0) {
                     sidebar
 
                     Rectangle()
-                        .fill(Color.white.opacity(0.22))
+                        .fill(ConductorDesign.sidebarStroke.opacity(0.80))
                         .frame(width: 1)
 
                     contentPane
                 }
+                .background(ConductorDesign.sidebarBackground)
             }
-            .frame(width: 708, height: 500)
+            .clipShape(RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous))
+            .frame(width: 686, height: 486)
             .onExitCommand {
                 model.hideSettingsPanel()
             }
@@ -823,13 +825,13 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "gearshape")
                     .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(ConductorDesign.secondaryText)
                     .frame(width: 24, height: 24)
-                    .background(Color.white.opacity(0.20))
+                    .background(Color.black.opacity(0.045))
                     .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 1) {
@@ -842,9 +844,14 @@ private struct AppearanceSettingsPanel: View {
                         .lineLimit(1)
                 }
             }
-            .padding(.bottom, 2)
+            .padding(.bottom, 4)
 
-            VStack(spacing: 5) {
+            SidebarSeparator()
+                .padding(.horizontal, -1)
+
+            SidebarSectionTitle("分类")
+
+            VStack(spacing: 3) {
                 ForEach(SettingsPanelSection.allCases) { section in
                     SettingsSidebarItem(
                         section: section,
@@ -860,9 +867,8 @@ private struct AppearanceSettingsPanel: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .frame(width: 168)
+        .frame(width: 154)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.white.opacity(0.07))
     }
 
     private var contentPane: some View {
@@ -870,17 +876,12 @@ private struct AppearanceSettingsPanel: View {
             header
 
             Rectangle()
-                .fill(Color.white.opacity(0.26))
+                .fill(ConductorDesign.sidebarStroke.opacity(0.82))
                 .frame(height: 1)
-                .overlay(alignment: .bottom) {
-                    Rectangle()
-                        .fill(Color.black.opacity(0.045))
-                        .frame(height: 1)
-                }
 
             ScrollView {
                 detailContent
-                    .padding(14)
+                    .padding(13)
             }
             .scrollIndicators(.visible)
         }
@@ -891,10 +892,10 @@ private struct AppearanceSettingsPanel: View {
         HStack(spacing: 9) {
             Image(systemName: selectedSection.systemImage)
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(ConductorDesign.secondaryText)
                 .frame(width: 24, height: 24)
-                .background(Color.white.opacity(0.20))
-                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .background(Color.black.opacity(0.045))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(selectedSection.title)
@@ -916,13 +917,13 @@ private struct AppearanceSettingsPanel: View {
                     .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.secondaryText)
                     .frame(width: 24, height: 24)
-                    .background(Color.white.opacity(0.22))
+                    .background(Color.black.opacity(0.045))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
             .help("关闭设置")
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 11)
         .padding(.horizontal, 14)
     }
 
@@ -1072,45 +1073,40 @@ private struct SettingsSidebarItem: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: section.systemImage)
-                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                     .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
-                    .frame(width: 20, height: 20)
+                    .frame(width: 14)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(section.title)
-                        .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(selected ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
-                    Text(section.subtitle)
-                        .font(.conductorSystem(size: 9, weight: .medium, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                        .lineLimit(1)
-                }
+                Text(section.title)
+                    .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
 
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 8)
-            .frame(height: 42)
+            .padding(.horizontal, 7)
+            .frame(height: 32)
             .background(rowFill)
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(selected ? Color.accentColor.opacity(0.44) : Color.white.opacity(0.0), lineWidth: 1)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ConductorPressButtonStyle())
         .onHover { value in
-            hovering = value
+            withAnimation(ConductorMotion.micro) {
+                hovering = value
+            }
         }
+        .animation(ConductorMotion.standard, value: selected)
+        .animation(ConductorMotion.micro, value: hovering)
         .help(section.title)
     }
 
     private var rowFill: Color {
         if selected {
-            return Color.accentColor.opacity(0.16)
+            return ConductorDesign.selectedFill
         }
         if hovering {
-            return Color.white.opacity(0.12)
+            return ConductorDesign.hoverFill
         }
         return Color.clear
     }
@@ -1145,11 +1141,11 @@ private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 7)
-                        .background(selection == option ? Color.white.opacity(0.42) : Color.white.opacity(0.16))
+                        .background(selection == option ? ConductorDesign.selectedFill : Color.white.opacity(0.30))
                         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(selection == option ? Color.accentColor.opacity(0.46) : Color.white.opacity(0.30), lineWidth: 1)
+                                .stroke(selection == option ? ConductorDesign.sidebarStroke : ConductorDesign.sidebarStroke.opacity(0.52), lineWidth: 1)
                         }
                     }
                     .buttonStyle(.plain)
@@ -1181,11 +1177,11 @@ private struct AppearanceToggleRow: View {
         .toggleStyle(.switch)
         .padding(.vertical, 7)
         .padding(.horizontal, 9)
-        .background(Color.white.opacity(0.16))
+        .background(Color.white.opacity(0.30))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(0.30), lineWidth: 1)
+                .stroke(ConductorDesign.sidebarStroke.opacity(0.54), lineWidth: 1)
         }
     }
 }
@@ -1217,11 +1213,11 @@ private struct CommandShortcutGuide: View {
         }
         .scrollIndicators(.visible)
         .frame(height: height)
-        .background(Color.white.opacity(0.14))
+        .background(Color.white.opacity(0.26))
         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(Color.white.opacity(0.30), lineWidth: 1)
+                .stroke(ConductorDesign.sidebarStroke.opacity(0.54), lineWidth: 1)
         }
     }
 }
@@ -1249,7 +1245,7 @@ private struct CommandShortcutGuideRow: View {
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .padding(.horizontal, 6)
                 .frame(height: 17)
-                .background(Color.white.opacity(0.24))
+                .background(ConductorDesign.selectedFill)
                 .clipShape(Capsule())
         }
         .padding(.horizontal, 8)

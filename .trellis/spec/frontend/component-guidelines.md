@@ -356,6 +356,13 @@ settings grow, while preserving a stable right-side detail area.
   animation is appropriate.
 - The sidebar should use compact rows with icons, labels, and restrained selected fills. Avoid
   high-contrast alternating blocks, heavy shadows, or large explanatory cards.
+- Settings sidebars should reuse the main sidebar's surface language: `ConductorGlassSurface`
+  with sidebar styling, `ConductorDesign.selectedFill`, `ConductorDesign.hoverFill`, and
+  `ConductorDesign.sidebarStroke`. Do not use accent-tinted outlines or large two-line rows
+  for category navigation.
+- When a settings panel floats over the dark terminal canvas, add a sidebar-background underlay
+  inside the glass surface so the panel matches the main sidebar instead of becoming a gray,
+  low-contrast blur over terminal content.
 - The detail pane may scroll, but each category should own a focused set of controls. Do not
   reintroduce a single mixed list of unrelated settings inside the detail pane.
 - Settings categories may read compact product state such as appearance preferences, command
