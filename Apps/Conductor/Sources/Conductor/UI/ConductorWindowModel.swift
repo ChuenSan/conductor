@@ -59,6 +59,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published var sidebarVisible = true
     @Published var commandPaletteVisible = false
     @Published var settingsPanelVisible = false
+    @Published var workspaceOverviewVisible = false
 
     var onNotificationPanelVisibilityChange: ((Bool) -> Void)?
 
@@ -91,7 +92,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         sidebarVisible: Bool = true,
         commandPaletteVisible: Bool = false,
         notificationPanelVisible: Bool = false,
-        settingsPanelVisible: Bool = false
+        settingsPanelVisible: Bool = false,
+        workspaceOverviewVisible: Bool = false
     ) {
         let resolvedWorkspaces = previewWorkspaces.isEmpty ? [WorkspaceState()] : previewWorkspaces
         let selectedID = selectedWorkspaceID ?? resolvedWorkspaces[0].id
@@ -104,6 +106,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.commandPaletteVisible = commandPaletteVisible
         self.notificationPanelVisible = notificationPanelVisible
         self.settingsPanelVisible = settingsPanelVisible
+        self.workspaceOverviewVisible = workspaceOverviewVisible
     }
     #endif
 
@@ -392,6 +395,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         selectedWorkspaceID = next.id
         workspace = next
         commandPaletteVisible = false
+        workspaceOverviewVisible = false
     }
 
     func duplicateWorkspace(_ workspaceID: WorkspaceID) {
@@ -404,17 +408,23 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         selectedWorkspaceID = duplicate.id
         workspace = duplicate
         commandPaletteVisible = false
+        workspaceOverviewVisible = false
     }
 
     func selectWorkspace(_ workspaceID: WorkspaceID) {
-        guard workspaceID != workspace.id,
-              let target = workspaces.first(where: { $0.id == workspaceID }) else {
+        guard workspaceID != workspace.id else {
+            workspaceOverviewVisible = false
+            commandPaletteVisible = false
+            return
+        }
+        guard let target = workspaces.first(where: { $0.id == workspaceID }) else {
             return
         }
         syncSelectedWorkspace()
         selectedWorkspaceID = workspaceID
         workspace = target
         commandPaletteVisible = false
+        workspaceOverviewVisible = false
     }
 
     func renameWorkspace(_ workspaceID: WorkspaceID, title: String) {
@@ -609,6 +619,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         commandPaletteVisible.toggle()
         if commandPaletteVisible {
             settingsPanelVisible = false
+            workspaceOverviewVisible = false
         }
     }
 
@@ -621,6 +632,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         if settingsPanelVisible {
             commandPaletteVisible = false
             notificationPanelVisible = false
+            workspaceOverviewVisible = false
         }
     }
 
@@ -628,11 +640,25 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         settingsPanelVisible = false
     }
 
+    func toggleWorkspaceOverview() {
+        workspaceOverviewVisible.toggle()
+        if workspaceOverviewVisible {
+            commandPaletteVisible = false
+            notificationPanelVisible = false
+            settingsPanelVisible = false
+        }
+    }
+
+    func hideWorkspaceOverview() {
+        workspaceOverviewVisible = false
+    }
+
     func toggleNotificationPanel() {
         notificationPanelVisible.toggle()
         if notificationPanelVisible {
             commandPaletteVisible = false
             settingsPanelVisible = false
+            workspaceOverviewVisible = false
         }
     }
 

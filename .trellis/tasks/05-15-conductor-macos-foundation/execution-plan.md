@@ -139,9 +139,10 @@ skip ahead to higher-level agent features until the terminal workspace feels dep
 
 ## Stage 10: Workspace Overview
 
-1. [pending] Add a Mission Control-style workspace overview for many workspaces.
-2. [pending] Show compact pane/tab geometry, active terminal titles, unread states, and running-agent status.
-3. [pending] Support keyboard search and direct jump without recreating terminal surfaces.
+1. [done] Add a Mission Control-style workspace overview for many workspaces.
+2. [done] Show compact pane/tab geometry, active terminal titles, and unread states.
+3. [done] Support keyboard search and direct jump without recreating terminal surfaces.
+4. [pending] Add running-agent status once agent lifecycle metadata is available as compact state.
 
 **Exit Criteria**:
 

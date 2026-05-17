@@ -211,6 +211,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
         let viewMenuItem = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(menuItem("Workspace Overview", "o", [], #selector(workspaceOverviewCommand)))
         viewMenu.addItem(menuItem("Command Palette", "k", [], #selector(commandPaletteCommand)))
         viewMenu.addItem(menuItem("Notifications", "", [], #selector(notificationCenterCommand)))
         viewMenu.addItem(menuItem("Reset Workspace", "", [], #selector(resetWorkspaceCommand)))
@@ -278,6 +279,9 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             return true
         case ("k", _):
             scheduleCommand { [model] in model.toggleCommandPalette() }
+            return true
+        case ("o", _):
+            scheduleCommand { [model] in model.toggleWorkspaceOverview() }
             return true
         case ("w", true):
             guard model.canCloseFocusedPane else { return true }
@@ -443,6 +447,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     @objc private func commandPaletteCommand() {
         scheduleCommand { [model] in model.toggleCommandPalette() }
+    }
+
+    @objc private func workspaceOverviewCommand() {
+        scheduleCommand { [model] in model.toggleWorkspaceOverview() }
     }
 
     @objc private func notificationCenterCommand() {

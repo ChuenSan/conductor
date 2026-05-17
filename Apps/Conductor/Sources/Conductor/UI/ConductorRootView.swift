@@ -48,10 +48,15 @@ struct ConductorRootView: View {
                     AppearanceSettingsPanel(model: model)
                         .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 }
+                if model.workspaceOverviewVisible {
+                    WorkspaceOverviewPanel(model: model)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
             }
         }
         .animation(ConductorMotion.standard, value: model.commandPaletteVisible)
         .animation(ConductorMotion.standard, value: model.settingsPanelVisible)
+        .animation(ConductorMotion.standard, value: model.workspaceOverviewVisible)
     }
 }
 
@@ -178,6 +183,11 @@ private struct CommandPaletteView: View {
             CommandPaletteItem(id: "equalize-splits", section: "视图", title: "均分分屏", shortcut: "Cmd-Shift-=", disabled: model.workspace.root.leaves.count <= 1, keywords: "equalize split layout") {
                 run {
                     model.equalizeSplits()
+                }
+            },
+            CommandPaletteItem(id: "workspace-overview", section: "视图", title: "工作区总览", shortcut: "Cmd-O", keywords: "workspace overview mission control") {
+                run {
+                    model.toggleWorkspaceOverview()
                 }
             },
             CommandPaletteItem(id: "appearance-settings", section: "视图", title: "外观设置", shortcut: "Theme", keywords: "appearance theme settings") {
@@ -660,6 +670,507 @@ private struct ThemeSwatch: View {
                 RoundedRectangle(cornerRadius: 2.5, style: .continuous)
                     .stroke(Color.white.opacity(0.36), lineWidth: 0.5)
             }
+    }
+}
+
+private struct WorkspaceOverviewPanel: View {
+    @ObservedObject var model: ConductorWindowModel
+    @State private var query = ""
+    @State private var highlightedWorkspaceID: WorkspaceID?
+    @FocusState private var searchFocused: Bool
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 214, maximum: 236), spacing: 10)
+    ]
+
+    private var filteredWorkspaces: [WorkspaceState] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedQuery.isEmpty else { return model.workspaces }
+        return model.workspaces.filter { workspace in
+            workspaceSearchText(workspace)
+                .lowercased()
+                .contains(normalizedQuery)
+        }
+    }
+
+    private var filteredWorkspaceIDs: [WorkspaceID] {
+        filteredWorkspaces.map(\.id)
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.18)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    model.hideWorkspaceOverview()
+                }
+
+            ConductorGlassSurface(style: .palette, interactive: true) {
+                VStack(alignment: .leading, spacing: 11) {
+                    header
+                    searchField
+
+                    if filteredWorkspaces.isEmpty {
+                        emptyState
+                    } else {
+                        ScrollView {
+                            LazyVGrid(columns: columns, alignment: .center, spacing: 10) {
+                                ForEach(filteredWorkspaces) { workspace in
+                                    WorkspaceOverviewCard(
+                                        workspace: workspace,
+                                        theme: model.theme,
+                                        selected: workspace.id == model.workspace.id,
+                                        highlighted: workspace.id == highlightedWorkspaceID,
+                                        unreadCount: model.notifications.snapshot.unreadCount(for: workspace.id),
+                                        unreadCountForPane: { paneID in
+                                            model.notifications.snapshot.unreadCount(for: paneID)
+                                        }
+                                    ) {
+                                        openWorkspace(workspace.id)
+                                    } onHover: {
+                                        highlightedWorkspaceID = workspace.id
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 2)
+                            .padding(.bottom, 2)
+                        }
+                        .scrollIndicators(.visible)
+                        .frame(maxHeight: 438)
+                    }
+                }
+                .padding(12)
+            }
+            .frame(width: 760)
+            .onAppear {
+                highlightedWorkspaceID = model.workspace.id
+                searchFocused = true
+                ensureHighlight()
+            }
+            .onChange(of: query) {
+                ensureHighlight()
+            }
+            .onChange(of: filteredWorkspaceIDs) {
+                ensureHighlight()
+            }
+            .onMoveCommand { direction in
+                switch direction {
+                case .left:
+                    moveHighlight(by: -1)
+                case .right:
+                    moveHighlight(by: 1)
+                case .up:
+                    moveHighlight(by: -3)
+                case .down:
+                    moveHighlight(by: 3)
+                default:
+                    break
+                }
+            }
+            .onSubmit {
+                openHighlightedWorkspace()
+            }
+            .onExitCommand {
+                model.hideWorkspaceOverview()
+            }
+            .animation(ConductorMotion.standard, value: highlightedWorkspaceID)
+            .animation(ConductorMotion.micro, value: query)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "rectangle.3.group")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 24, height: 24)
+                .background(Color.white.opacity(0.28))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("工作区总览")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                Text("\(model.workspaces.count) 个工作区")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+            }
+
+            Spacer()
+
+            Button {
+                ConductorMotion.perform {
+                    model.hideWorkspaceOverview()
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .frame(width: 24, height: 24)
+                    .background(Color.white.opacity(0.22))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help("关闭总览")
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+            TextField("搜索工作区", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13, weight: .medium))
+                .focused($searchFocused)
+            Text("↵")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 32)
+        .background(Color.white.opacity(0.34))
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup)
+                .stroke(Color.white.opacity(0.56), lineWidth: 1)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "rectangle.3.group")
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+            Text("没有匹配的工作区")
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(ConductorDesign.secondaryText)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 220)
+    }
+
+    private func workspaceSearchText(_ workspace: WorkspaceState) -> String {
+        let titles = workspace.panes.values.flatMap { pane in
+            pane.tabs.map(\.title)
+        }
+        let directories = workspace.panes.values.flatMap { pane in
+            pane.tabs.compactMap(\.workingDirectory)
+        }
+        return ([workspace.title] + titles + directories).joined(separator: " ")
+    }
+
+    private func ensureHighlight() {
+        guard !filteredWorkspaces.isEmpty else {
+            highlightedWorkspaceID = nil
+            return
+        }
+        if let highlightedWorkspaceID,
+           filteredWorkspaces.contains(where: { $0.id == highlightedWorkspaceID }) {
+            return
+        }
+        highlightedWorkspaceID = filteredWorkspaces.first(where: { $0.id == model.workspace.id })?.id ?? filteredWorkspaces.first?.id
+    }
+
+    private func moveHighlight(by offset: Int) {
+        guard !filteredWorkspaces.isEmpty else {
+            highlightedWorkspaceID = nil
+            return
+        }
+        let currentIndex = filteredWorkspaces.firstIndex { $0.id == highlightedWorkspaceID } ?? 0
+        let nextIndex = max(0, min(filteredWorkspaces.count - 1, currentIndex + offset))
+        highlightedWorkspaceID = filteredWorkspaces[nextIndex].id
+    }
+
+    private func openHighlightedWorkspace() {
+        ensureHighlight()
+        guard let highlightedWorkspaceID else { return }
+        openWorkspace(highlightedWorkspaceID)
+    }
+
+    private func openWorkspace(_ workspaceID: WorkspaceID) {
+        ConductorMotion.perform {
+            model.selectWorkspace(workspaceID)
+        }
+    }
+}
+
+private struct WorkspaceOverviewCard: View {
+    let workspace: WorkspaceState
+    let theme: TerminalTheme
+    let selected: Bool
+    let highlighted: Bool
+    let unreadCount: Int
+    let unreadCountForPane: (PaneID) -> Int
+    let action: () -> Void
+    let onHover: () -> Void
+    @State private var hovering = false
+
+    private var terminalCount: Int {
+        workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+    }
+
+    private var focusedTerminalTitle: String {
+        workspace.focusedPane?.selectedTab?.title ?? "终端"
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 9) {
+                WorkspaceMiniLayout(
+                    workspace: workspace,
+                    theme: theme,
+                    unreadCountForPane: unreadCountForPane
+                )
+                .frame(height: 114)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 7) {
+                        Image(systemName: selected ? "rectangle.3.group.fill" : "rectangle.3.group")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(selected ? theme.accent : ConductorDesign.secondaryText)
+                            .frame(width: 16)
+                        Text(workspace.title)
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundStyle(ConductorDesign.primaryText)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 0)
+                        if unreadCount > 0 {
+                            Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .frame(minWidth: 16, minHeight: 15)
+                                .background(theme.accent)
+                                .clipShape(Capsule())
+                        }
+                    }
+
+                    HStack(spacing: 6) {
+                        WorkspaceOverviewMetric(systemImage: "square.split.2x2", value: "\(workspace.panes.count)")
+                        WorkspaceOverviewMetric(systemImage: "terminal", value: "\(terminalCount)")
+                        if workspace.isZoomed {
+                            WorkspaceOverviewMetric(systemImage: "arrow.up.left.and.arrow.down.right", value: "Zoom")
+                        }
+                    }
+
+                    Text(focusedTerminalTitle)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .padding(9)
+            .background(cardFill)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(borderColor, lineWidth: selected || highlighted ? 1.5 : 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { value in
+            withAnimation(ConductorMotion.micro) {
+                hovering = value
+            }
+            if value {
+                onHover()
+            }
+        }
+        .animation(ConductorMotion.standard, value: selected)
+        .animation(ConductorMotion.standard, value: highlighted)
+        .animation(ConductorMotion.emphasized, value: unreadCount)
+        .help("\(workspace.title) · \(workspace.panes.count) 分屏 · \(terminalCount) 终端")
+    }
+
+    private var cardFill: Color {
+        if selected {
+            return Color.white.opacity(0.42)
+        }
+        if highlighted || hovering {
+            return Color.white.opacity(0.31)
+        }
+        return Color.white.opacity(0.20)
+    }
+
+    private var borderColor: Color {
+        if selected {
+            return theme.accent.opacity(0.88)
+        }
+        if highlighted {
+            return theme.accent.opacity(0.46)
+        }
+        return Color.white.opacity(0.38)
+    }
+}
+
+private struct WorkspaceOverviewMetric: View {
+    let systemImage: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: systemImage)
+                .font(.system(size: 9.5, weight: .semibold))
+            Text(value)
+                .font(.system(size: 10, weight: .semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(ConductorDesign.secondaryText)
+        .padding(.horizontal, 6)
+        .frame(height: 18)
+        .background(Color.white.opacity(0.22))
+        .clipShape(Capsule())
+    }
+}
+
+private struct WorkspaceMiniLayout: View {
+    let workspace: WorkspaceState
+    let theme: TerminalTheme
+    let unreadCountForPane: (PaneID) -> Int
+
+    var body: some View {
+        WorkspaceMiniNode(
+            node: workspace.root,
+            workspace: workspace,
+            theme: theme,
+            unreadCountForPane: unreadCountForPane
+        )
+        .padding(5)
+        .background(
+            LinearGradient(
+                colors: [
+                    theme.terminalChrome.opacity(0.96),
+                    theme.terminalRaisedBackground.opacity(0.98)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+        }
+    }
+}
+
+private struct WorkspaceMiniNode: View {
+    let node: SplitNode
+    let workspace: WorkspaceState
+    let theme: TerminalTheme
+    let unreadCountForPane: (PaneID) -> Int
+
+    var body: some View {
+        GeometryReader { proxy in
+            nodeView(node, size: proxy.size)
+        }
+    }
+
+    @ViewBuilder
+    private func nodeView(_ node: SplitNode, size: CGSize) -> some View {
+        switch node {
+        case let .leaf(paneID):
+            WorkspaceMiniPane(
+                pane: workspace.panes[paneID],
+                focused: paneID == workspace.focusedPaneID,
+                unreadCount: unreadCountForPane(paneID),
+                theme: theme
+            )
+        case let .split(axis, first, second, fraction):
+            let gap: CGFloat = 4
+            if axis == .horizontal {
+                HStack(spacing: gap) {
+                    WorkspaceMiniNode(node: first, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                        .frame(width: max(1, (size.width - gap) * fraction))
+                    WorkspaceMiniNode(node: second, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                        .frame(width: max(1, (size.width - gap) * (1 - fraction)))
+                }
+            } else {
+                VStack(spacing: gap) {
+                    WorkspaceMiniNode(node: first, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                        .frame(height: max(1, (size.height - gap) * fraction))
+                    WorkspaceMiniNode(node: second, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                        .frame(height: max(1, (size.height - gap) * (1 - fraction)))
+                }
+            }
+        }
+    }
+}
+
+private struct WorkspaceMiniPane: View {
+    let pane: PaneState?
+    let focused: Bool
+    let unreadCount: Int
+    let theme: TerminalTheme
+
+    private var title: String {
+        pane?.selectedTab?.title ?? "终端"
+    }
+
+    private var tabCount: Int {
+        pane?.tabs.count ?? 0
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(theme.terminalBackground)
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(theme.terminalChrome.opacity(0.92))
+                        .frame(height: 13)
+                }
+
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(focused ? theme.accent : Color.white.opacity(0.32))
+                    .frame(width: 4.5, height: 4.5)
+                Text(title)
+                    .font(.system(size: 7.5, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(focused ? 0.86 : 0.58))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                if tabCount > 1 {
+                    Text("\(tabCount)")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.70))
+                }
+            }
+            .padding(.horizontal, 5)
+            .frame(height: 13)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Spacer(minLength: 13)
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(Color.white.opacity(0.30))
+                    .frame(width: 32, height: 2)
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(theme.accent.opacity(focused ? 0.92 : 0.40))
+                    .frame(width: focused ? 44 : 25, height: 2)
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 22, height: 2)
+            }
+            .padding(6)
+
+            if unreadCount > 0 {
+                Circle()
+                    .fill(theme.accent)
+                    .frame(width: 6, height: 6)
+                    .offset(x: -1, y: -1)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(focused ? theme.accent.opacity(0.74) : Color.white.opacity(0.14), lineWidth: focused ? 1.3 : 1)
+        }
     }
 }
 
@@ -1371,6 +1882,10 @@ private struct ConductorSidebar: View {
                 finishWorkspaceRenameIfNeeded()
                 model.toggleCommandPalette()
             }
+            SidebarActionRow(icon: "rectangle.3.group", title: "工作区总览", showsTitle: showsLabels, help: "工作区总览 Cmd-O") {
+                finishWorkspaceRenameIfNeeded()
+                model.toggleWorkspaceOverview()
+            }
             SidebarActionRow(
                 icon: model.notifications.snapshot.unreadCount > 0 ? "bell.badge" : "bell",
                 title: "通知 \(model.notifications.snapshot.unreadCount)",
@@ -1793,6 +2308,16 @@ private struct ConductorToolbar: View {
                 }
 
                 ConductorPillGroup {
+                    ConductorIconButton(
+                        systemImage: "rectangle.3.group",
+                        help: "工作区总览 Cmd-O",
+                        title: nil,
+                        active: model.workspaceOverviewVisible
+                    ) {
+                        finishWorkspaceRenameIfNeeded()
+                        model.toggleWorkspaceOverview()
+                    }
+                    ConductorSegmentDivider()
                     ConductorIconButton(
                         systemImage: model.notifications.snapshot.unreadCount > 0 ? "bell.badge" : "bell",
                         help: "通知中心",

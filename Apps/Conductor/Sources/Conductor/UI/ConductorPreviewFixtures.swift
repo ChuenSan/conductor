@@ -8,7 +8,8 @@ enum ConductorPreviewFixtures {
         sidebarVisible: Bool = true,
         commandPaletteVisible: Bool = false,
         notificationPanelVisible: Bool = false,
-        settingsPanelVisible: Bool = false
+        settingsPanelVisible: Bool = false,
+        workspaceOverviewVisible: Bool = false
     ) -> ConductorWindowModel {
         let workspaceSet = previewWorkspaces()
         return ConductorWindowModel(
@@ -19,7 +20,8 @@ enum ConductorPreviewFixtures {
             sidebarVisible: sidebarVisible,
             commandPaletteVisible: commandPaletteVisible,
             notificationPanelVisible: notificationPanelVisible,
-            settingsPanelVisible: settingsPanelVisible
+            settingsPanelVisible: settingsPanelVisible,
+            workspaceOverviewVisible: workspaceOverviewVisible
         )
     }
 
@@ -99,6 +101,10 @@ struct ConductorGlassShellPreviews: PreviewProvider {
             ConductorRootView(model: ConductorPreviewFixtures.glassShellModel(settingsPanelVisible: true))
                 .frame(width: 1320, height: 860)
                 .previewDisplayName("Appearance Center Glass")
+
+            ConductorRootView(model: ConductorPreviewFixtures.glassShellModel(workspaceOverviewVisible: true))
+                .frame(width: 1320, height: 860)
+                .previewDisplayName("Workspace Overview Glass")
 
             ConductorRootView(model: ConductorPreviewFixtures.glassShellModel(sidebarVisible: false))
                 .frame(width: 1120, height: 760)
