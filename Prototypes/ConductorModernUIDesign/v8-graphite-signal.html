@@ -1,0 +1,1044 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conductor Graphite Signal</title>
+  <style>
+    :root {
+      --window: #dfe5ec;
+      --window-line: rgba(21, 28, 38, .16);
+      --graphite-0: #f2f5f8;
+      --graphite-1: #e8edf3;
+      --graphite-2: #d4dce6;
+      --graphite-3: #778397;
+      --graphite-4: #3d4656;
+      --ink: #141a23;
+      --muted: #6e798b;
+      --quiet: #98a3b3;
+      --signal: #1287ff;
+      --signal-2: #50b4ff;
+      --signal-soft: rgba(18, 135, 255, .13);
+      --ready: #34b96d;
+      --warn: #d9962c;
+      --term: #06080b;
+      --term-2: #090c11;
+      --term-3: #0e131a;
+      --term-line: rgba(221, 231, 245, .09);
+      --term-line-strong: rgba(133, 180, 255, .32);
+      --term-text: #e6edf7;
+      --term-muted: #747f92;
+      --radius-window: 22px;
+      --radius-panel: 16px;
+      --radius-control: 10px;
+      --radius-tight: 7px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(180deg, #eef2f6 0%, #d8e0ea 100%);
+      color: var(--ink);
+    }
+
+    .window {
+      width: min(1680px, calc(100vw - 28px));
+      height: min(980px, calc(100vh - 28px));
+      min-height: 760px;
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--radius-window);
+      border: 1px solid rgba(18, 24, 33, .20);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, .40), rgba(255, 255, 255, .12)),
+        var(--window);
+    }
+
+    .window::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(50, 60, 75, .045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(50, 60, 75, .045) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(90deg, rgba(0,0,0,.42), transparent 34%, transparent 100%);
+    }
+
+    .shell {
+      position: absolute;
+      inset: 8px;
+      display: grid;
+      grid-template-columns: 254px minmax(0, 1fr);
+      gap: 8px;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .sidebar {
+      display: grid;
+      grid-template-rows: 46px auto 1fr auto;
+      min-width: 0;
+      min-height: 0;
+      border-radius: 17px;
+      border: 1px solid rgba(255, 255, 255, .62);
+      background:
+        linear-gradient(180deg, rgba(247, 250, 253, .82), rgba(228, 235, 244, .72));
+      overflow: hidden;
+    }
+
+    .traffic-row {
+      height: 46px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+    }
+
+    .traffic {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .traffic i {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.10);
+    }
+
+    .red { background: #ff5f57; }
+    .yellow { background: #ffbd2e; }
+    .green { background: #28c840; }
+
+    .collapse {
+      margin-left: auto;
+      width: 27px;
+      height: 27px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      color: var(--graphite-3);
+      background: rgba(20, 27, 38, .055);
+      border: 1px solid rgba(20, 27, 38, .055);
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .brand {
+      padding: 4px 14px 10px;
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .mark {
+      width: 34px;
+      height: 34px;
+      position: relative;
+      border-radius: 10px;
+      background: #121a26;
+      border: 1px solid rgba(255,255,255,.72);
+    }
+
+    .mark span {
+      position: absolute;
+      border-radius: 3px;
+      background: var(--signal);
+    }
+
+    .mark span:nth-child(1) { width: 9px; height: 9px; left: 8px; top: 8px; }
+    .mark span:nth-child(2) { width: 9px; height: 17px; right: 8px; top: 8px; background: var(--signal-2); }
+    .mark span:nth-child(3) { width: 17px; height: 7px; left: 8px; bottom: 8px; opacity: .72; }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.1;
+      font-weight: 760;
+    }
+
+    .brand p {
+      margin: 4px 0 0;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 620;
+    }
+
+    .side-section {
+      padding: 11px 10px 6px;
+      color: var(--quiet);
+      font-size: 10px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+
+    .workspace-list {
+      display: grid;
+      gap: 4px;
+      padding: 0 10px 10px;
+    }
+
+    .workspace {
+      position: relative;
+      height: 40px;
+      display: grid;
+      grid-template-columns: 24px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 0 9px;
+      border-radius: 12px;
+      color: #303846;
+      font-size: 13px;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+
+    .workspace.active {
+      background:
+        linear-gradient(90deg, rgba(18, 135, 255, .15), rgba(255,255,255,.30));
+      border-color: rgba(18, 135, 255, .24);
+    }
+
+    .workspace.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 8px;
+      bottom: 8px;
+      width: 3px;
+      border-radius: 4px;
+      background: var(--signal);
+    }
+
+    .glyph {
+      width: 22px;
+      height: 22px;
+      position: relative;
+      border-radius: 7px;
+      border: 1px solid rgba(92, 104, 122, .20);
+      background: rgba(255,255,255,.46);
+    }
+
+    .glyph::before,
+    .glyph::after {
+      content: "";
+      position: absolute;
+      border-radius: 2px;
+      background: currentColor;
+      opacity: .72;
+    }
+
+    .glyph::before { width: 7px; height: 7px; left: 5px; top: 5px; }
+    .glyph::after { width: 8px; height: 12px; right: 5px; top: 5px; }
+
+    .workspace.active .glyph {
+      color: var(--signal);
+      background: rgba(18, 135, 255, .09);
+      border-color: rgba(18, 135, 255, .28);
+    }
+
+    .count {
+      min-width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: var(--muted);
+      background: rgba(255,255,255,.40);
+      font-size: 11px;
+      font-weight: 780;
+    }
+
+    .active .count {
+      color: #0b5fb8;
+      background: rgba(18,135,255,.13);
+    }
+
+    .inspector {
+      margin: 8px 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(39, 50, 66, .10);
+      background: rgba(255,255,255,.38);
+      overflow: hidden;
+    }
+
+    .metric {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(39,50,66,.075);
+      font-size: 12px;
+      font-weight: 690;
+      color: var(--muted);
+    }
+
+    .metric:last-child {
+      border-bottom: none;
+    }
+
+    .metric strong {
+      color: var(--ink);
+      font-weight: 780;
+    }
+
+    .signal-stack {
+      align-self: end;
+      padding: 0 10px 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .action {
+      height: 32px;
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      border-radius: 11px;
+      color: #536075;
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .action.hot {
+      color: #0f65bc;
+      background: var(--signal-soft);
+      border: 1px solid rgba(18, 135, 255, .19);
+    }
+
+    .icon {
+      font-size: 16px;
+      color: currentColor;
+      opacity: .92;
+    }
+
+    .theme-chip {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 10px;
+      border-radius: 13px;
+      color: var(--graphite-4);
+      background: rgba(255,255,255,.42);
+      border: 1px solid rgba(255,255,255,.46);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .swatch {
+      display: flex;
+      width: 34px;
+      height: 18px;
+      padding: 2px;
+      gap: 2px;
+      border-radius: 8px;
+      background: #101721;
+    }
+
+    .swatch i {
+      flex: 1;
+      border-radius: 5px;
+      background: var(--signal);
+    }
+
+    .swatch i:nth-child(2) { background: #e6edf5; }
+    .swatch i:nth-child(3) { background: #7c879a; }
+
+    .main {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 42px minmax(0, 1fr) 22px;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.18);
+      background: var(--term);
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px 0 10px;
+      background:
+        linear-gradient(180deg, rgba(22, 29, 39, .96), rgba(12, 16, 23, .96));
+      border-bottom: 1px solid var(--term-line);
+    }
+
+    .work-tabs {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .work-tab {
+      height: 29px;
+      min-width: 132px;
+      max-width: 188px;
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: 7px;
+      padding: 0 8px;
+      border-radius: 10px;
+      color: #8f99aa;
+      background: rgba(255,255,255,.035);
+      border: 1px solid rgba(255,255,255,.06);
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .work-tab.active {
+      color: var(--term-text);
+      background:
+        linear-gradient(180deg, rgba(18,135,255,.14), rgba(255,255,255,.055));
+      border-color: rgba(18,135,255,.34);
+    }
+
+    .work-tab b {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .mini-mark {
+      width: 16px;
+      height: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 2px;
+      color: currentColor;
+    }
+
+    .mini-mark i {
+      border-radius: 2px;
+      background: currentColor;
+      opacity: .72;
+    }
+
+    .badge {
+      min-width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      background: rgba(255,255,255,.06);
+      color: #a5b0c2;
+      font-size: 11px;
+      font-weight: 820;
+    }
+
+    .active .badge {
+      background: rgba(18,135,255,.16);
+      color: var(--signal-2);
+    }
+
+    .tools {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tool {
+      height: 29px;
+      min-width: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 0 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.075);
+      background: rgba(255,255,255,.035);
+      color: #a1acbd;
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .tool.primary {
+      color: #d7ecff;
+      background: rgba(18,135,255,.12);
+      border-color: rgba(18,135,255,.26);
+    }
+
+    .tool.icon-only {
+      padding: 0;
+      width: 30px;
+    }
+
+    .stage {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(360px, .72fr) 4px minmax(480px, 1fr);
+      background: var(--term);
+    }
+
+    .pane-column {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: minmax(300px, .58fr) 4px minmax(220px, .42fr);
+    }
+
+    .splitter {
+      position: relative;
+      background: #111821;
+      border-left: 1px solid rgba(255,255,255,.035);
+      border-right: 1px solid rgba(255,255,255,.035);
+    }
+
+    .splitter.horizontal {
+      border-left: none;
+      border-right: none;
+      border-top: 1px solid rgba(255,255,255,.035);
+      border-bottom: 1px solid rgba(255,255,255,.035);
+    }
+
+    .splitter::after {
+      content: "";
+      position: absolute;
+      inset: 22% auto;
+      left: 50%;
+      width: 1px;
+      transform: translateX(-50%);
+      border-radius: 2px;
+      background: rgba(18,135,255,.54);
+    }
+
+    .splitter.horizontal::after {
+      inset: auto 42%;
+      top: 50%;
+      width: auto;
+      height: 1px;
+      transform: translateY(-50%);
+    }
+
+    .pane {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 33px minmax(0, 1fr);
+      background: var(--term);
+      overflow: hidden;
+    }
+
+    .pane.focused::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border: 1px solid rgba(18, 135, 255, .68);
+      box-shadow: inset 0 0 0 1px rgba(18,135,255,.12);
+    }
+
+    .pane::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 33px;
+      bottom: 0;
+      width: 2px;
+      background: transparent;
+    }
+
+    .pane.focused::before {
+      background: var(--signal);
+    }
+
+    .pane-rail {
+      height: 33px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 6px;
+      background:
+        linear-gradient(180deg, rgba(18,24,34,.95), rgba(10,14,20,.95));
+      border-bottom: 1px solid var(--term-line);
+      min-width: 0;
+    }
+
+    .tab {
+      height: 24px;
+      min-width: 92px;
+      max-width: 176px;
+      display: grid;
+      grid-template-columns: 16px minmax(0, 1fr) 14px;
+      align-items: center;
+      gap: 6px;
+      padding: 0 7px;
+      border-radius: 8px;
+      color: #8893a6;
+      background: rgba(255,255,255,.032);
+      border: 1px solid rgba(255,255,255,.055);
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .tab.active {
+      color: #edf4ff;
+      background: rgba(255,255,255,.07);
+      border-color: rgba(255,255,255,.115);
+    }
+
+    .focused .tab.active {
+      background: rgba(18,135,255,.13);
+      border-color: rgba(18,135,255,.36);
+    }
+
+    .tab .title {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .term-icon {
+      width: 14px;
+      height: 12px;
+      border-radius: 3px;
+      border: 1px solid currentColor;
+      position: relative;
+      opacity: .82;
+    }
+
+    .term-icon::after {
+      content: "";
+      position: absolute;
+      left: 3px;
+      top: 3px;
+      width: 4px;
+      height: 1px;
+      background: currentColor;
+    }
+
+    .rail-spacer {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .rail-btn {
+      width: 23px;
+      height: 23px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: #8a96a8;
+      border: 1px solid rgba(255,255,255,.055);
+      background: rgba(255,255,255,.025);
+      font-size: 15px;
+      font-weight: 760;
+    }
+
+    .terminal {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      padding: 12px 14px;
+      color: var(--term-text);
+      font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.52;
+      background:
+        linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+        var(--term);
+      background-size: 100% 29px;
+    }
+
+    .terminal .muted {
+      color: var(--term-muted);
+    }
+
+    .terminal .prompt {
+      color: #8abfff;
+      font-weight: 760;
+    }
+
+    .terminal .ok {
+      color: #78d69a;
+    }
+
+    .terminal .warn {
+      color: #e0b15c;
+    }
+
+    .terminal .cmd {
+      color: #f1f6ff;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 16px;
+      margin-left: 5px;
+      vertical-align: -3px;
+      background: #eaf3ff;
+    }
+
+    .time {
+      position: absolute;
+      right: 15px;
+      top: 46px;
+      color: rgba(112, 126, 151, .76);
+      font-family: "SF Mono", ui-monospace, Menlo, monospace;
+      font-size: 13px;
+    }
+
+    .bottom-grid {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 4px 1fr;
+    }
+
+    .statusbar {
+      height: 22px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 10px;
+      color: #778397;
+      background: #070a0e;
+      border-top: 1px solid var(--term-line);
+      font-size: 11px;
+      font-weight: 700;
+      min-width: 0;
+    }
+
+    .statusbar span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .signal-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--signal);
+    }
+
+    .signal-dot.ready {
+      background: var(--ready);
+    }
+
+    .signal-dot.warn {
+      background: var(--warn);
+    }
+
+    .command-strip {
+      position: absolute;
+      right: 18px;
+      bottom: 38px;
+      width: 330px;
+      border-radius: 15px;
+      border: 1px solid rgba(197, 217, 245, .16);
+      background: rgba(11, 16, 23, .88);
+      overflow: hidden;
+    }
+
+    .command-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px;
+      color: #dce9fa;
+      border-bottom: 1px solid var(--term-line);
+      font-size: 12px;
+      font-weight: 780;
+    }
+
+    .search {
+      height: 30px;
+      margin: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      border-radius: 10px;
+      color: #8d9aac;
+      background: rgba(255,255,255,.045);
+      border: 1px solid rgba(255,255,255,.07);
+      font-size: 12px;
+      font-weight: 680;
+    }
+
+    .command-row {
+      height: 32px;
+      display: grid;
+      grid-template-columns: 22px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      color: #aeb9ca;
+      font-size: 12px;
+      font-weight: 680;
+    }
+
+    .command-row.active {
+      color: #f3f8ff;
+      background: rgba(18,135,255,.14);
+    }
+
+    .kbd {
+      color: #748196;
+      font-family: "SF Mono", ui-monospace, Menlo, monospace;
+      font-size: 11px;
+    }
+
+    @media (max-width: 1000px) {
+      .window {
+        width: calc(100vw - 16px);
+        height: calc(100vh - 16px);
+      }
+
+      .shell {
+        grid-template-columns: 72px minmax(0, 1fr);
+      }
+
+      .brand,
+      .workspace span.name,
+      .workspace .count,
+      .side-section,
+      .inspector,
+      .action span.label,
+      .theme-chip span {
+        display: none;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+        justify-items: center;
+      }
+
+      .signal-stack {
+        align-content: end;
+      }
+
+      .action {
+        grid-template-columns: 1fr;
+        justify-items: center;
+        padding: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="window" aria-label="Conductor Graphite Signal design mockup">
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="traffic-row">
+          <div class="traffic" aria-hidden="true">
+            <i class="red"></i>
+            <i class="yellow"></i>
+            <i class="green"></i>
+          </div>
+          <div class="collapse">‹</div>
+        </div>
+
+        <div>
+          <div class="brand">
+            <div class="mark" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <div>
+              <h1>Conductor</h1>
+              <p>Graphite Signal</p>
+            </div>
+          </div>
+
+          <div class="side-section">Workspaces</div>
+          <div class="workspace-list">
+            <div class="workspace active">
+              <div class="glyph"></div>
+              <span class="name">正式开发</span>
+              <span class="count">3</span>
+            </div>
+            <div class="workspace">
+              <div class="glyph"></div>
+              <span class="name">Agent Lab</span>
+              <span class="count">1</span>
+            </div>
+            <div class="workspace">
+              <div class="glyph"></div>
+              <span class="name">Release</span>
+              <span class="count">2</span>
+            </div>
+          </div>
+
+          <div class="side-section">Signal</div>
+          <div class="inspector">
+            <div class="metric"><span>分屏</span><strong>3</strong></div>
+            <div class="metric"><span>终端</span><strong>5</strong></div>
+            <div class="metric"><span>通知</span><strong>2</strong></div>
+            <div class="metric"><span>当前</span><strong>codex-agent</strong></div>
+          </div>
+        </div>
+
+        <div></div>
+
+        <div class="signal-stack">
+          <div class="action hot"><span class="icon">⌘</span><span class="label">命令中心</span></div>
+          <div class="action"><span class="icon">▥</span><span class="label">新分屏</span></div>
+          <div class="action"><span class="icon">▻</span><span class="label">新终端</span></div>
+          <div class="action"><span class="icon">◌</span><span class="label">通知中心</span></div>
+          <div class="theme-chip">
+            <div class="swatch" aria-hidden="true"><i></i><i></i><i></i></div>
+            <span>Graphite</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <nav class="work-tabs">
+            <div class="work-tab active">
+              <span class="mini-mark"><i></i><i></i><i></i><i></i></span>
+              <b>正式开发</b>
+              <span class="badge">3</span>
+              <span>×</span>
+            </div>
+            <div class="work-tab">
+              <span class="mini-mark"><i></i><i></i><i></i><i></i></span>
+              <b>Agent Lab</b>
+              <span class="badge">1</span>
+              <span>×</span>
+            </div>
+            <div class="work-tab">
+              <span class="mini-mark"><i></i><i></i><i></i><i></i></span>
+              <b>Release</b>
+              <span class="badge">2</span>
+              <span>×</span>
+            </div>
+          </nav>
+          <div class="tools">
+            <div class="tool primary">＋ 工作区</div>
+            <div class="tool">▣ 新终端</div>
+            <div class="tool">＋ 新标签</div>
+            <div class="tool">▥ 右分屏</div>
+            <div class="tool">▤ 下分屏</div>
+            <div class="tool icon-only">⌘</div>
+            <div class="tool icon-only">◌</div>
+          </div>
+        </header>
+
+        <section class="stage">
+          <div class="pane-column">
+            <article class="pane">
+              <div class="pane-rail">
+                <div class="tab active"><span class="term-icon"></span><span class="title">zsh</span><span>×</span></div>
+                <div class="tab"><span class="term-icon"></span><span class="title">swift build</span><span>×</span></div>
+                <div class="rail-spacer"></div>
+                <div class="rail-btn">＋</div>
+                <div class="rail-btn">×</div>
+              </div>
+              <div class="terminal">
+                <span class="muted">Last login: Sun May 17 22:18:31 on ttys000</span><br><br>
+                <span class="prompt">~/Desktop/conductor</span><br>
+                <span class="prompt">❯</span> <span class="cmd">git status --short</span><br>
+                <span class="muted">nothing to commit, working tree clean</span><br><br>
+                <span class="prompt">❯</span><span class="cursor"></span>
+                <div class="time">22:18</div>
+              </div>
+            </article>
+
+            <div class="splitter horizontal"></div>
+
+            <div class="bottom-grid">
+              <article class="pane">
+                <div class="pane-rail">
+                  <div class="tab active"><span class="term-icon"></span><span class="title">tests</span><span>×</span></div>
+                  <div class="rail-spacer"></div>
+                </div>
+                <div class="terminal">
+                  <span class="prompt">❯</span> <span class="cmd">./Scripts/check-conductor.sh</span><br>
+                  <span class="ok">Conductor checks passed</span><br><br>
+                  <span class="prompt">❯</span><span class="cursor"></span>
+                </div>
+              </article>
+
+              <div class="splitter"></div>
+
+              <article class="pane">
+                <div class="pane-rail">
+                  <div class="tab active"><span class="term-icon"></span><span class="title">logs</span><span>×</span></div>
+                  <div class="rail-spacer"></div>
+                </div>
+                <div class="terminal">
+                  <span class="muted">surface-host-swap</span><br>
+                  <span class="muted">resize-while-output</span> <span class="ok">ok</span><br>
+                  <span class="muted">ghostty surfaces</span> <span class="ok">4</span><br><br>
+                  <span class="prompt">❯</span><span class="cursor"></span>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="splitter"></div>
+
+          <article class="pane focused">
+            <div class="pane-rail">
+              <div class="tab active"><span class="term-icon"></span><span class="title">codex-agent</span><span>×</span></div>
+              <div class="tab"><span class="term-icon"></span><span class="title">preview</span><span>×</span></div>
+              <div class="rail-spacer"></div>
+              <div class="rail-btn">＋</div>
+              <div class="rail-btn">▥</div>
+            </div>
+            <div class="terminal">
+              <span class="muted">Last login: Sun May 17 22:19:03 on ttys001</span><br><br>
+              <span class="prompt">~/Desktop/conductor</span><br>
+              <span class="prompt">❯</span> <span class="cmd">codex "polish split interaction"</span><br>
+              <span class="muted">reading Trellis specs...</span><br>
+              <span class="muted">checking terminal host geometry...</span><br>
+              <span class="ok">fixed: split drag animation-free</span><br>
+              <span class="ok">fixed: single shared resize edge</span><br>
+              <span class="warn">next: define Conductor design language</span><br><br>
+              <span class="prompt">❯</span><span class="cursor"></span>
+              <div class="time">22:19</div>
+            </div>
+          </article>
+        </section>
+
+        <footer class="statusbar">
+          <span><i class="signal-dot ready"></i> GhosttyKit live</span>
+          <span><i class="signal-dot"></i> focused codex-agent</span>
+          <span><i class="signal-dot warn"></i> 2 notifications</span>
+          <span>3 panes</span>
+          <span>5 terminals</span>
+          <span>Graphite Signal</span>
+        </footer>
+      </main>
+    </div>
+
+    <aside class="command-strip">
+      <div class="command-head"><span class="signal-dot"></span><span>Command Center</span></div>
+      <div class="search">⌕ 搜索命令、工作区、终端</div>
+      <div class="command-row active"><span>▥</span><span>向右分屏</span><span class="kbd">⌘⇧→</span></div>
+      <div class="command-row"><span>▤</span><span>向下分屏</span><span class="kbd">⌘⇧↓</span></div>
+      <div class="command-row"><span>▻</span><span>新终端</span><span class="kbd">⌘N</span></div>
+      <div class="command-row"><span>◌</span><span>打开通知中心</span><span class="kbd">⌘0</span></div>
+    </aside>
+  </section>
+</body>
+</html>
