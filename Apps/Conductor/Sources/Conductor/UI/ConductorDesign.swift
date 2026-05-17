@@ -45,7 +45,7 @@ enum ConductorTokens {
         static let shellBottom: CGFloat = 8
         static let shellGap: CGFloat = 8
         static let sidebarWidth: CGFloat = 230
-        static let sidebarCollapsedWidth: CGFloat = 82
+        static let sidebarCollapsedWidth: CGFloat = 88
         static let sidebarX: CGFloat = 8
         static let sidebarTop: CGFloat = 0
         static let sidebarBottom: CGFloat = 0
