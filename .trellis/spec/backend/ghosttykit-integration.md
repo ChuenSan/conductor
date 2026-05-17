@@ -131,6 +131,79 @@ SwiftUI placeholder anchor
 
 Do not free terminal state or renderer resources during transient SwiftUI dismantle. Free only on actual pane close or app teardown.
 
+## Scenario: Surface Geometry And Navigation Refresh
+
+### 1. Scope / Trigger
+
+- Trigger: Any change that affects a live Ghostty surface's AppKit host view frame, backing scale, display, focus, selected tab, selected pane, workspace switch, split drag, or notification jump.
+- Scope: Keep Ghostty's Metal drawable geometry aligned with the real `NSView` without letting SwiftUI animation or repeated representable updates fight the renderer.
+
+### 2. Signatures
+
+- `TerminalHostView.setFrameSize(_:)`
+- `TerminalHostView.setBoundsSize(_:)`
+- `TerminalHostView.layout()`
+- `TerminalSurfaceContainerView.setSurface(_:theme:focused:)`
+- `TerminalSurface.syncGeometry(force:)`
+- `TerminalSurface.setFocused(_:force:)`
+- `ConductorWindowModel.focusTerminal(_:)`
+
+### 3. Contracts
+
+- The AppKit host view bounds are the source of truth for Ghostty pixel size.
+- Host/container layers used for Ghostty surfaces must disable implicit CoreAnimation `bounds`, `frame`, `position`, `contentsScale`, and `backgroundColor` animations.
+- `syncGeometry(force:)` must set content scale, display id, and backing pixel size only when changed or forced, then refresh the surface when geometry changed.
+- Focus changes must call Ghostty focus and refresh the surface.
+- SwiftUI `updateNSView` may schedule one coalesced post-layout sync, but must not force repeated layout/refresh loops on every SwiftUI update.
+- Split-divider drags must update split fractions inside a non-animated transaction.
+- Notification jumps or programmatic terminal navigation must focus the owning pane, select the tab, then force a current-run-loop and next-run-loop geometry refresh for the target surface if it already exists.
+
+### 4. Validation & Error Matrix
+
+- Surface receives stale pixel size after split drag -> text can clip, disappear, or draw into old rows.
+- SwiftUI layout animation wraps the live terminal host -> split resize can lag behind the pointer or show ghost frames.
+- Repeated forced refreshes from `updateNSView` -> tab switching and resize feel sticky under many panes/tabs.
+- Navigation selects a tab without focusing its pane -> first responder and Ghostty focus can disagree after notification jump.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Dragging a divider changes AppKit bounds immediately; Ghostty receives deduped pixel sizes and refreshes only on actual geometry changes.
+- Base: Selecting a terminal tab swaps one stable host view and schedules a single post-layout sync.
+- Bad: `updateNSView` calls `layoutSubtreeIfNeeded`, `syncGeometry(force: true)`, and `refresh()` several times for every unrelated SwiftUI metadata update.
+
+### 6. Tests Required
+
+- `swift build`
+- `ConductorModelCheck`
+- Focus automation must verify first-responder routing across tabs and panes.
+- Layout automation must verify split resize clamps/equalizes while keeping workspace invariants.
+- Manual smoke: jump from a notification into a terminal with existing output; text should remain visible, and divider dragging should not animate or flicker.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```swift
+func updateNSView(_ view: TerminalSurfaceContainerView, context: Context) {
+    view.layoutSubtreeIfNeeded()
+    surface.syncGeometry(force: true)
+    surface.refresh()
+    DispatchQueue.main.async { surface.refresh() }
+}
+```
+
+#### Correct
+
+```swift
+override func layout() {
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    super.layout()
+    CATransaction.commit()
+    surface?.syncGeometry()
+}
+```
+
 ## Input
 
 For the MVP surface path, use Ghostty surface input APIs:

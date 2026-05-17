@@ -146,10 +146,12 @@ final class TerminalSurface {
         }
 
         let backingScale = hostView.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        var didUpdateGeometry = false
         let scale = CGSize(width: backingScale, height: backingScale)
         if force || scale != lastScale {
             ghostty_surface_set_content_scale(surface, Double(backingScale), Double(backingScale))
             lastScale = scale
+            didUpdateGeometry = true
         }
 
         if let displayID = hostView.window?.screen?.conductorDisplayID,
@@ -157,6 +159,7 @@ final class TerminalSurface {
            force || displayID != lastDisplayID {
             ghostty_surface_set_display_id(surface, displayID)
             lastDisplayID = displayID
+            didUpdateGeometry = true
         }
 
         let backingSize = hostView.convertToBacking(NSRect(origin: .zero, size: hostView.bounds.size)).size
@@ -166,6 +169,11 @@ final class TerminalSurface {
         if force || pixelSize != lastPixelSize {
             ghostty_surface_set_size(surface, width, height)
             lastPixelSize = pixelSize
+            didUpdateGeometry = true
+        }
+
+        if didUpdateGeometry {
+            ghostty_surface_refresh(surface)
         }
     }
 
@@ -174,6 +182,7 @@ final class TerminalSurface {
         isFocused = focused
         guard let surface else { return }
         ghostty_surface_set_focus(surface, focused)
+        ghostty_surface_refresh(surface)
     }
 
     func requestWorkspaceFocus() {

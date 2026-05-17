@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 struct TerminalSurfaceRepresentable: NSViewRepresentable {
@@ -20,14 +21,19 @@ struct TerminalSurfaceRepresentable: NSViewRepresentable {
 @MainActor
 final class TerminalSurfaceContainerView: NSView {
     private var currentSurface: TerminalSurface?
+    private var currentTheme: TerminalTheme?
+    private var currentFocused = false
     private var currentConstraints: [NSLayoutConstraint] = []
     private var wantsTerminalFocus = false
+    private var pendingGeometrySync = false
+    private var pendingGeometryForce = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         clipsToBounds = true
         layer?.masksToBounds = true
+        configureLayerForTerminalHosting(layer)
     }
 
     @available(*, unavailable)
@@ -36,8 +42,11 @@ final class TerminalSurfaceContainerView: NSView {
     }
 
     func setSurface(_ surface: TerminalSurface, theme: TerminalTheme, focused: Bool) {
+        let surfaceChanged = currentSurface !== surface
+        let focusChanged = currentFocused != focused
         wantsTerminalFocus = focused
-        if currentSurface !== surface {
+        currentFocused = focused
+        if surfaceChanged {
             let signpost = ConductorSignpost.begin("surface-host-swap")
             defer { ConductorSignpost.end("surface-host-swap", signpost) }
             NSLayoutConstraint.deactivate(currentConstraints)
@@ -45,16 +54,19 @@ final class TerminalSurfaceContainerView: NSView {
             currentSurface?.setFocused(false)
             currentSurface?.hostView.removeFromSuperview()
             currentSurface = surface
+            currentTheme = nil
             installHostView(surface.hostView)
             ConductorLog.terminal.info("Visible terminal host swapped to \(surface.id.description)")
         }
 
+        let themeChanged = currentTheme != theme
         surface.applyTheme(theme)
-        syncCurrentSurface(force: true)
+        currentTheme = theme
         surface.attachIfPossible()
         surface.setFocused(focused)
+        syncCurrentSurface(force: surfaceChanged || themeChanged)
         restoreFocusIfNeeded()
-        schedulePostLayoutGeometrySync(for: surface, repeatCount: 3)
+        schedulePostLayoutGeometrySync(for: surface, force: surfaceChanged || themeChanged || focusChanged)
     }
 
     override func viewDidMoveToWindow() {
@@ -65,8 +77,11 @@ final class TerminalSurfaceContainerView: NSView {
     }
 
     override func layout() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         super.layout()
-        syncCurrentSurface(force: false)
+        CATransaction.commit()
+        syncCurrentSurface(force: false, layoutNow: false)
     }
 
     private func installHostView(_ hostView: TerminalHostView) {
@@ -83,24 +98,38 @@ final class TerminalSurfaceContainerView: NSView {
         NSLayoutConstraint.activate(currentConstraints)
     }
 
-    private func syncCurrentSurface(force: Bool) {
+    private func syncCurrentSurface(force: Bool, layoutNow: Bool = true) {
         guard let currentSurface else { return }
-        layoutSubtreeIfNeeded()
-        currentSurface.hostView.layoutSubtreeIfNeeded()
+        if layoutNow {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layoutSubtreeIfNeeded()
+            currentSurface.hostView.layoutSubtreeIfNeeded()
+            CATransaction.commit()
+        }
         currentSurface.syncGeometry(force: force)
-        currentSurface.refresh()
+        if force {
+            currentSurface.refresh()
+        }
     }
 
-    private func schedulePostLayoutGeometrySync(for surface: TerminalSurface, repeatCount: Int) {
-        guard repeatCount > 0 else { return }
-        DispatchQueue.main.async { [weak self, weak surface] in
-            guard let self,
-                  let surface,
+    private func schedulePostLayoutGeometrySync(for surface: TerminalSurface, force: Bool) {
+        pendingGeometryForce = pendingGeometryForce || force
+        guard !pendingGeometrySync else { return }
+        pendingGeometrySync = true
+        Task { @MainActor [weak self, weak surface] in
+            guard let self else {
+                return
+            }
+            let shouldForce = self.pendingGeometryForce
+            self.pendingGeometrySync = false
+            self.pendingGeometryForce = false
+            guard let surface,
                   self.currentSurface === surface else {
                 return
             }
-            self.syncCurrentSurface(force: true)
-            self.schedulePostLayoutGeometrySync(for: surface, repeatCount: repeatCount - 1)
+            self.syncCurrentSurface(force: shouldForce)
+            self.restoreFocusIfNeeded()
         }
     }
 
@@ -111,5 +140,15 @@ final class TerminalSurfaceContainerView: NSView {
             return
         }
         window?.makeFirstResponder(surface.hostView)
+    }
+
+    private func configureLayerForTerminalHosting(_ layer: CALayer?) {
+        layer?.actions = [
+            "bounds": NSNull(),
+            "position": NSNull(),
+            "frame": NSNull(),
+            "contentsScale": NSNull(),
+            "backgroundColor": NSNull()
+        ]
     }
 }

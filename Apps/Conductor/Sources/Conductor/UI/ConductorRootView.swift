@@ -26,8 +26,6 @@ struct ConductorRootView: View {
             .shadow(color: ConductorDesign.shadow(0.16), radius: 18, y: 8)
         }
         .animation(ConductorMotion.layout, value: model.sidebarVisible)
-        .animation(ConductorMotion.layout, value: model.workspace.root.leaves)
-        .animation(ConductorMotion.standard, value: model.workspace.focusedPaneID)
         .padding(.horizontal, ConductorDesign.shellHorizontalPadding)
         .padding(.top, ConductorDesign.shellTopPadding)
         .padding(.bottom, ConductorDesign.shellBottomPadding)

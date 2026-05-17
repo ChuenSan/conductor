@@ -58,7 +58,7 @@ private struct SplitPairView: View {
                                 dragStartFraction = fraction
                             }
                             let base = dragStartFraction ?? fraction
-                            model.setSplitFraction(path: path, fraction: base + value.translation.width / max(1, available))
+                            setSplitFractionDuringDrag(base + value.translation.width / max(1, available))
                         },
                         onEnded: { _ in
                             dragStartFraction = nil
@@ -88,7 +88,7 @@ private struct SplitPairView: View {
                                 dragStartFraction = fraction
                             }
                             let base = dragStartFraction ?? fraction
-                            model.setSplitFraction(path: path, fraction: base + value.translation.height / max(1, available))
+                            setSplitFractionDuringDrag(base + value.translation.height / max(1, available))
                         },
                         onEnded: { _ in
                             dragStartFraction = nil
@@ -104,6 +104,15 @@ private struct SplitPairView: View {
                         .frame(height: available - firstHeight)
                 }
             }
+        }
+    }
+
+    private func setSplitFractionDuringDrag(_ fraction: Double) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        transaction.animation = nil
+        withTransaction(transaction) {
+            model.setSplitFraction(path: path, fraction: fraction)
         }
     }
 }
@@ -186,8 +195,6 @@ private struct TerminalPaneView: View {
                 )
                 .allowsHitTesting(false)
         }
-        .animation(ConductorMotion.standard, value: isFocused)
-        .animation(ConductorMotion.emphasized, value: unreadCount)
     }
 
     private var tabBar: some View {
@@ -239,6 +246,10 @@ private struct TerminalPaneView: View {
                 isFocused: isFocused
             )
             .background(model.theme.terminalBackground)
+            .transaction { transaction in
+                transaction.disablesAnimations = true
+                transaction.animation = nil
+            }
             .onTapGesture {
                 ConductorMotion.perform {
                     model.focusPane(pane.id)

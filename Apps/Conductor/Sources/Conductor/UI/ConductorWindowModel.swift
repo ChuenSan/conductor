@@ -348,7 +348,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             selectWorkspace(workspaceID)
         }
         guard let paneID = workspace.paneID(containing: terminalID) else { return }
+        workspace.focusPane(paneID)
         workspace.selectTab(terminalID, in: paneID)
+        refreshSurfaceAfterNavigation(terminalID)
     }
 
     func newWorkspace() {
@@ -616,6 +618,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         focusTerminal(notification.terminalID)
         markNotificationRead(notificationID)
         notificationPanelVisible = false
+        refreshSurfaceAfterNavigation(notification.terminalID)
         return true
     }
 
@@ -706,6 +709,23 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let signpost = ConductorSignpost.begin("drag-split-divider")
         defer { ConductorSignpost.end("drag-split-divider", signpost) }
         workspace.setSplitFraction(path: path, fraction: fraction)
+    }
+
+    private func refreshSurfaceAfterNavigation(_ terminalID: TerminalID) {
+        guard let surface = surfaces[terminalID] else { return }
+        surface.attachIfPossible()
+        surface.setFocused(true, force: true)
+        surface.syncGeometry(force: true)
+        surface.refresh()
+        Task { @MainActor [weak self] in
+            guard let surface = self?.surfaces[terminalID] else { return }
+            surface.attachIfPossible()
+            surface.syncGeometry(force: true)
+            surface.refresh()
+            if surface.hostView.window?.firstResponder !== surface.hostView {
+                surface.hostView.window?.makeFirstResponder(surface.hostView)
+            }
+        }
     }
 
     func closeAllSurfaces() {

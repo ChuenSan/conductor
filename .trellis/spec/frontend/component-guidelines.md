@@ -114,6 +114,9 @@ rendering into SwiftUI work or making precision interactions lag behind the poin
   changes.
 - Do not attach a layout animation to split fractions during divider drag. Animate split
   creation, close, move, or equalize, but drag updates must stay immediate.
+- Do not attach broad implicit animations to ancestors of the live Ghostty host view for
+  focus changes, split-tree changes, or selected-tab changes. Animate separate chrome
+  overlays and controls, not the `NSViewRepresentable` that owns the terminal renderer.
 - Do not use directional slide transitions for workspace or terminal tab insertion. Tab strips
   are navigation chrome, so adding or restoring many tabs should not look like the entire strip
   is sliding in. Prefer opacity plus a tiny scale change for tab insertion/removal.
@@ -199,3 +202,7 @@ Forbidden patterns:
   `NSWindow.contentLayoutRect`, `contentView.safeAreaInsets`, and the root hosted view frame,
   then keep `ConductorTokens.Space.shellTop` as the compact titlebar clearance rather than
   compensating with negative padding.
+- Repeatedly forcing terminal host layout/refresh from `NSViewRepresentable.updateNSView`.
+  SwiftUI can call this for unrelated metadata changes, so live terminal hosts should coalesce
+  post-layout geometry syncs and let AppKit `layout`, `setFrameSize`, and `setBoundsSize`
+  drive resize-sensitive Ghostty updates.

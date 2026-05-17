@@ -14,6 +14,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         wantsLayer = true
         clipsToBounds = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
+        configureLayerForTerminalHosting(layer)
     }
 
     @available(*, unavailable)
@@ -29,15 +30,28 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         layer.isOpaque = true
         layer.backgroundColor = NSColor.black.cgColor
         layer.masksToBounds = true
+        configureLayerForTerminalHosting(layer)
         return layer
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         let changed = bounds.size != newSize
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         super.setFrameSize(newSize)
+        CATransaction.commit()
         guard changed else { return }
         surface?.syncGeometry()
-        surface?.refresh()
+    }
+
+    override func setBoundsSize(_ newSize: NSSize) {
+        let changed = bounds.size != newSize
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        super.setBoundsSize(newSize)
+        CATransaction.commit()
+        guard changed else { return }
+        surface?.syncGeometry()
     }
 
     override func viewDidMoveToWindow() {
@@ -50,11 +64,25 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         surface?.syncGeometry(force: true)
+        surface?.refresh()
     }
 
     override func layout() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         super.layout()
+        CATransaction.commit()
         surface?.syncGeometry()
+    }
+
+    private func configureLayerForTerminalHosting(_ layer: CALayer?) {
+        layer?.actions = [
+            "bounds": NSNull(),
+            "position": NSNull(),
+            "frame": NSNull(),
+            "contentsScale": NSNull(),
+            "backgroundColor": NSNull()
+        ]
     }
 
     override func mouseDown(with event: NSEvent) {
