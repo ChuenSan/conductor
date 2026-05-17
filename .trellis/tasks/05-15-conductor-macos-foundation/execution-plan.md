@@ -119,8 +119,51 @@ skip ahead to higher-level agent features until the terminal workspace feels dep
 2. [done] Add manual QA checklist for terminal basics and IME.
 3. [done] Add documentation for GhosttyKit preparation and app launch.
 4. [done] Add release gate checklist.
-5. Only then expand into agent/workflow features.
 
 **Exit Criteria**:
 
 - The app is boringly reliable for terminal workspace basics.
+
+## Stage 9: macOS 2026 Appearance System
+
+1. [in progress] Add a compact Settings / Appearance Center opened from the sidebar.
+2. [in progress] Make themes feel like whole-shell presets, not terminal-only color swaps.
+3. [pending] Add live preview coverage for shell chrome, terminal chrome, and backdrop behavior.
+4. [pending] Add persisted appearance preferences beyond theme: density, chrome clarity, font scale, and reduced motion.
+
+**Exit Criteria**:
+
+- Users can inspect and switch composed shell themes from a polished settings surface.
+- Theme changes update the full app backdrop, terminal chrome, accent, and Ghostty config together.
+- The settings surface is compact enough to keep the terminal workspace dominant.
+
+## Stage 10: Workspace Overview
+
+1. [pending] Add a Mission Control-style workspace overview for many workspaces.
+2. [pending] Show compact pane/tab geometry, active terminal titles, unread states, and running-agent status.
+3. [pending] Support keyboard search and direct jump without recreating terminal surfaces.
+
+**Exit Criteria**:
+
+- Large workspace sets are navigable without relying on the sidebar alone.
+- Overview state is derived from compact metadata only.
+
+## Stage 11: Command Center 2.0
+
+1. [pending] Expand the command palette into a searchable command center with grouped actions, recents, and state-aware suggestions.
+2. [pending] Add settings-driven shortcut discovery and future keybinding editing.
+3. [pending] Route all commands through model/service contracts, not view internals.
+
+**Exit Criteria**:
+
+- Common terminal, pane, workspace, notification, and integration workflows are keyboard-first.
+
+## Stage 12: Agent-Aware Chrome
+
+1. [pending] Add explicit agent status modules for long-running Codex or CLI sessions.
+2. [pending] Add notification jump affordances that preserve pane focus and terminal geometry.
+3. [pending] Keep agent events compact: status, title, cwd, lifecycle, and short notification bodies only.
+
+**Exit Criteria**:
+
+- Agent activity is visible and actionable without turning Conductor into a chat interface.

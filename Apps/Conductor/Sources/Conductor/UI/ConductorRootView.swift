@@ -39,12 +39,19 @@ struct ConductorRootView: View {
         .ignoresSafeArea(.container, edges: .top)
         .tint(model.theme.accent)
         .overlay {
-            if model.commandPaletteVisible {
-                CommandPaletteView(model: model)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            ZStack {
+                if model.commandPaletteVisible {
+                    CommandPaletteView(model: model)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
+                if model.settingsPanelVisible {
+                    AppearanceSettingsPanel(model: model)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
             }
         }
         .animation(ConductorMotion.standard, value: model.commandPaletteVisible)
+        .animation(ConductorMotion.standard, value: model.settingsPanelVisible)
     }
 }
 
@@ -171,6 +178,11 @@ private struct CommandPaletteView: View {
             CommandPaletteItem(id: "equalize-splits", section: "视图", title: "均分分屏", shortcut: "Cmd-Shift-=", disabled: model.workspace.root.leaves.count <= 1, keywords: "equalize split layout") {
                 run {
                     model.equalizeSplits()
+                }
+            },
+            CommandPaletteItem(id: "appearance-settings", section: "视图", title: "外观设置", shortcut: "Theme", keywords: "appearance theme settings") {
+                run {
+                    model.toggleSettingsPanel()
                 }
             },
             CommandPaletteItem(id: "duplicate-workspace", section: "视图", title: "复制工作区", shortcut: "Duplicate", keywords: "workspace duplicate") {
@@ -407,6 +419,247 @@ private struct CommandButton: View {
                 onHover()
             }
         }
+    }
+}
+
+private struct AppearanceSettingsPanel: View {
+    @ObservedObject var model: ConductorWindowModel
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 142, maximum: 168), spacing: 8)
+    ]
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.12)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    model.hideSettingsPanel()
+                }
+
+            ConductorGlassSurface(style: .panel, interactive: true) {
+                VStack(alignment: .leading, spacing: 12) {
+                    header
+
+                    Rectangle()
+                        .fill(Color.white.opacity(0.34))
+                        .frame(height: 1)
+                        .overlay(alignment: .bottom) {
+                            Rectangle()
+                                .fill(Color.black.opacity(0.045))
+                                .frame(height: 1)
+                        }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        SettingsSectionLabel("全壳主题")
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                            ForEach(TerminalTheme.allCases) { theme in
+                                ThemePreviewCard(
+                                    theme: theme,
+                                    selected: model.theme == theme
+                                ) {
+                                    ConductorMotion.perform {
+                                        model.theme = theme
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+                }
+            }
+            .frame(width: 524)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 24, height: 24)
+                .background(Color.white.opacity(0.28))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("外观")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                Text(model.theme.title)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+            }
+
+            Spacer()
+
+            Button {
+                ConductorMotion.perform {
+                    model.hideSettingsPanel()
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .frame(width: 24, height: 24)
+                    .background(Color.white.opacity(0.22))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help("关闭设置")
+        }
+        .padding(.top, 13)
+        .padding(.horizontal, 12)
+    }
+}
+
+private struct SettingsSectionLabel: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 10.5, weight: .semibold))
+            .foregroundStyle(ConductorDesign.tertiaryText)
+            .padding(.horizontal, 2)
+    }
+}
+
+private struct ThemePreviewCard: View {
+    let theme: TerminalTheme
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                previewWindow
+                footer
+            }
+            .padding(8)
+            .background(cardFill)
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(selected ? theme.accent.opacity(0.86) : Color.white.opacity(hovering ? 0.62 : 0.38), lineWidth: selected ? 1.5 : 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { value in
+            withAnimation(ConductorMotion.micro) {
+                hovering = value
+            }
+        }
+        .animation(ConductorMotion.micro, value: selected)
+        .help(theme.title)
+    }
+
+    private var previewWindow: some View {
+        ZStack(alignment: .topLeading) {
+            LinearGradient(
+                colors: theme.windowBackdropStops,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            VStack(spacing: 0) {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color.white.opacity(0.74))
+                        .frame(width: 5, height: 5)
+                    Circle()
+                        .fill(theme.accent.opacity(0.72))
+                        .frame(width: 5, height: 5)
+                    Circle()
+                        .fill(Color.black.opacity(0.24))
+                        .frame(width: 5, height: 5)
+                    Spacer()
+                }
+                .padding(.horizontal, 7)
+                .frame(height: 16)
+                .background(theme.terminalChrome.opacity(0.92))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    PreviewTerminalLine(prompt: "$", text: "swift build", accent: theme.accent)
+                    PreviewTerminalLine(prompt: ">", text: "Conductor", accent: theme.accent)
+                    Rectangle()
+                        .fill(theme.accent.opacity(0.86))
+                        .frame(width: 22, height: 2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(7)
+                .background(theme.terminalBackground)
+            }
+        }
+        .frame(height: 76)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(Color.white.opacity(0.24), lineWidth: 1)
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 7) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(theme.title)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    ThemeSwatch(color: theme.accent)
+                    ThemeSwatch(color: theme.terminalChrome)
+                    ThemeSwatch(color: theme.terminalBackground)
+                }
+            }
+            Spacer(minLength: 0)
+            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(selected ? theme.accent : ConductorDesign.tertiaryText.opacity(0.70))
+        }
+    }
+
+    private var cardFill: Color {
+        if selected {
+            return Color.white.opacity(0.38)
+        }
+        return Color.white.opacity(hovering ? 0.28 : 0.18)
+    }
+}
+
+private struct PreviewTerminalLine: View {
+    let prompt: String
+    let text: String
+    let accent: Color
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(prompt)
+                .foregroundStyle(accent)
+            Text(text)
+                .foregroundStyle(Color.white.opacity(0.78))
+                .lineLimit(1)
+        }
+        .font(.system(size: 8.5, weight: .medium, design: .monospaced))
+    }
+}
+
+private struct ThemeSwatch: View {
+    let color: Color
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+            .fill(color)
+            .frame(width: 16, height: 5)
+            .overlay {
+                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                    .stroke(Color.white.opacity(0.36), lineWidth: 0.5)
+            }
     }
 }
 
@@ -960,7 +1213,12 @@ private struct ConductorSidebar: View {
             .contextMenu {
                 themeMenuItems
             }
-            SidebarActionRow(icon: "gearshape", title: "设置", help: "设置") {}
+            SidebarActionRow(icon: "gearshape", title: "设置", help: "设置") {
+                finishWorkspaceRenameIfNeeded()
+                ConductorMotion.perform {
+                    model.toggleSettingsPanel()
+                }
+            }
         }
         .frame(maxHeight: .infinity)
     }
@@ -1067,7 +1325,12 @@ private struct ConductorSidebar: View {
             .contextMenu {
                 themeMenuItems
             }
-            SidebarRailButton(icon: "gearshape", help: "设置") {}
+            SidebarRailButton(icon: "gearshape", help: "设置") {
+                finishWorkspaceRenameIfNeeded()
+                ConductorMotion.perform {
+                    model.toggleSettingsPanel()
+                }
+            }
         }
     }
 

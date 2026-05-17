@@ -58,6 +58,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
     @Published var sidebarVisible = true
     @Published var commandPaletteVisible = false
+    @Published var settingsPanelVisible = false
 
     var onNotificationPanelVisibilityChange: ((Bool) -> Void)?
 
@@ -89,7 +90,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         notifications: TerminalNotificationState = TerminalNotificationState(),
         sidebarVisible: Bool = true,
         commandPaletteVisible: Bool = false,
-        notificationPanelVisible: Bool = false
+        notificationPanelVisible: Bool = false,
+        settingsPanelVisible: Bool = false
     ) {
         let resolvedWorkspaces = previewWorkspaces.isEmpty ? [WorkspaceState()] : previewWorkspaces
         let selectedID = selectedWorkspaceID ?? resolvedWorkspaces[0].id
@@ -101,6 +103,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.sidebarVisible = sidebarVisible
         self.commandPaletteVisible = commandPaletteVisible
         self.notificationPanelVisible = notificationPanelVisible
+        self.settingsPanelVisible = settingsPanelVisible
     }
     #endif
 
@@ -604,16 +607,32 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func toggleCommandPalette() {
         commandPaletteVisible.toggle()
+        if commandPaletteVisible {
+            settingsPanelVisible = false
+        }
     }
 
     func hideCommandPalette() {
         commandPaletteVisible = false
     }
 
+    func toggleSettingsPanel() {
+        settingsPanelVisible.toggle()
+        if settingsPanelVisible {
+            commandPaletteVisible = false
+            notificationPanelVisible = false
+        }
+    }
+
+    func hideSettingsPanel() {
+        settingsPanelVisible = false
+    }
+
     func toggleNotificationPanel() {
         notificationPanelVisible.toggle()
         if notificationPanelVisible {
             commandPaletteVisible = false
+            settingsPanelVisible = false
         }
     }
 

@@ -151,7 +151,69 @@ hours of real use.
 - Common workflows are keyboard-first.
 - Controls are discoverable without cluttering the terminal workspace.
 
-## Epic 9: Persistence and Recovery
+## Epic 9: macOS 2026 Appearance System
+
+### Tasks
+
+- Build a compact Settings / Appearance Center that opens from the sidebar settings
+  affordance.
+- Treat themes as whole-shell presets: backdrop, terminal chrome, terminal background,
+  accent color, and Ghostty config move together.
+- Add refined live previews for each theme so switching feels inspectable, not blind.
+- Add appearance controls for density, chrome clarity, font scale, and motion once the
+  first theme center is stable.
+- Keep decorative glass out of the live terminal character surface.
+
+### Acceptance
+
+- Theme changes are visibly composed across the full window, not just the terminal palette.
+- The settings surface is polished, compact, and does not steal focus unless explicitly opened.
+- Appearance state remains low-frequency SwiftUI product state.
+
+## Epic 10: Workspace Overview and Navigation
+
+### Tasks
+
+- Add a Mission Control-style workspace overview for many workspaces.
+- Show compact metadata for pane count, tab count, unread state, current cwd, and active agent status.
+- Support keyboard search, direct jump, and jump-to-unread from the overview.
+- Keep overview thumbnails abstract or metadata-driven until terminal surface snapshotting is
+  explicitly designed.
+
+### Acceptance
+
+- Users with many workspaces can navigate quickly without relying only on a long sidebar.
+- Overview does not recreate or snapshot live terminal renderers accidentally.
+
+## Epic 11: Command Center and Shortcut System
+
+### Tasks
+
+- Evolve the command palette into a command center with grouped commands, recent actions,
+  availability states, and lightweight context.
+- Add shortcut discovery and eventually editable keybindings.
+- Keep commands routed through stable model/service APIs.
+
+### Acceptance
+
+- Conductor remains keyboard-first as feature depth increases.
+- Every command is discoverable without adding clutter around the terminal.
+
+## Epic 12: Agent-Aware Chrome and Automation
+
+### Tasks
+
+- Add agent status modules for sessions that opt into compact lifecycle notifications.
+- Add notification jump and follow-up affordances for long-running tasks.
+- Add scriptable automation for workspace, tab, split, input, browser/tool panes, and focus.
+- Keep terminal transcripts and full agent conversations out of SwiftUI state.
+
+### Acceptance
+
+- Agent activity is visible and actionable without turning the product into a chat UI.
+- Automation uses stable service contracts and cannot mutate view internals directly.
+
+## Epic 13: Persistence and Recovery
 
 ### Tasks
 
@@ -164,7 +226,7 @@ hours of real use.
 
 - Restarting Conductor restores the workspace structure without corrupting terminal state.
 
-## Epic 10: Release-Quality Verification
+## Epic 14: Release-Quality Verification
 
 ### Tasks
 
