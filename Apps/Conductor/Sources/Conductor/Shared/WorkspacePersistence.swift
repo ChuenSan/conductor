@@ -5,16 +5,24 @@ struct PersistedWindowState: Codable {
     var workspaces: [WorkspaceState]
     var selectedWorkspaceID: WorkspaceID
     var theme: TerminalTheme
+    var appearance: AppearancePreferences
 
-    init(workspaces: [WorkspaceState], selectedWorkspaceID: WorkspaceID, theme: TerminalTheme) {
+    init(
+        workspaces: [WorkspaceState],
+        selectedWorkspaceID: WorkspaceID,
+        theme: TerminalTheme,
+        appearance: AppearancePreferences = AppearancePreferences()
+    ) {
         self.workspaces = workspaces
         self.selectedWorkspaceID = selectedWorkspaceID
         self.theme = theme
+        self.appearance = appearance
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.theme = try container.decode(TerminalTheme.self, forKey: .theme)
+        self.appearance = try container.decodeIfPresent(AppearancePreferences.self, forKey: .appearance) ?? AppearancePreferences()
 
         if let workspaces = try container.decodeIfPresent([WorkspaceState].self, forKey: .workspaces),
            !workspaces.isEmpty {
@@ -33,6 +41,7 @@ struct PersistedWindowState: Codable {
         try container.encode(workspaces, forKey: .workspaces)
         try container.encode(selectedWorkspaceID, forKey: .selectedWorkspaceID)
         try container.encode(theme, forKey: .theme)
+        try container.encode(appearance, forKey: .appearance)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -40,6 +49,7 @@ struct PersistedWindowState: Codable {
         case workspaces
         case selectedWorkspaceID
         case theme
+        case appearance
     }
 }
 
@@ -51,6 +61,7 @@ final class WorkspacePersistence {
             ProcessInfo.processInfo.environment["CONDUCTOR_FOCUS_AUTORUN"] != "1" &&
             ProcessInfo.processInfo.environment["CONDUCTOR_LAYOUT_AUTORUN"] != "1" &&
             ProcessInfo.processInfo.environment["CONDUCTOR_LIFECYCLE_AUTORUN"] != "1" &&
+            ProcessInfo.processInfo.environment["CONDUCTOR_SHELL_PANEL_AUTORUN"] != "1" &&
             ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_AUTORUN"] != "1" &&
             ProcessInfo.processInfo.environment["CONDUCTOR_RESIZE_STRESS_AUTORUN"] != "1" &&
             ProcessInfo.processInfo.environment["CONDUCTOR_WORKSPACE_AUTORUN"] != "1"
@@ -90,11 +101,17 @@ final class WorkspacePersistence {
         return PersistedWindowState(
             workspaces: validWorkspaces,
             selectedWorkspaceID: selectedWorkspaceID,
-            theme: state.theme
+            theme: state.theme,
+            appearance: state.appearance
         )
     }
 
-    func save(workspaces: [WorkspaceState], selectedWorkspaceID: WorkspaceID, theme: TerminalTheme) {
+    func save(
+        workspaces: [WorkspaceState],
+        selectedWorkspaceID: WorkspaceID,
+        theme: TerminalTheme,
+        appearance: AppearancePreferences
+    ) {
         guard isEnabled else { return }
         let persistedWorkspaces = workspaces.map(sanitizedWorkspace).filter(isValid)
         guard !persistedWorkspaces.isEmpty else { return }
@@ -104,7 +121,8 @@ final class WorkspacePersistence {
         let state = PersistedWindowState(
             workspaces: persistedWorkspaces,
             selectedWorkspaceID: selectedID,
-            theme: theme
+            theme: theme,
+            appearance: appearance
         )
         guard let data = try? JSONEncoder().encode(state) else { return }
         try? data.write(to: fileURL, options: [.atomic])

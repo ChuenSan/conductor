@@ -198,6 +198,7 @@ enum ConductorGlassSurfaceStyle: Equatable {
 
 struct ConductorGlassSurface<Content: View>: View {
     let style: ConductorGlassSurfaceStyle
+    var clarity = ChromeClarity.balanced
     var interactive = false
     @ViewBuilder var content: Content
 
@@ -209,14 +210,14 @@ struct ConductorGlassSurface<Content: View>: View {
             .clipShape(surfaceShape)
             .overlay {
                 surfaceShape
-                    .strokeBorder(style.stroke, lineWidth: 1)
+                    .strokeBorder(resolvedStroke, lineWidth: clarity == .crisp ? 1.15 : 1)
                     .allowsHitTesting(false)
             }
             .overlay(alignment: .topLeading) {
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(style == .terminalToolbar ? 0.08 : 0.34),
-                        Color.white.opacity(0.04),
+                        Color.white.opacity((style == .terminalToolbar ? 0.08 : 0.34) * clarity.highlightMultiplier),
+                        Color.white.opacity(0.04 * clarity.highlightMultiplier),
                         Color.clear
                     ],
                     startPoint: .topLeading,
@@ -231,12 +232,20 @@ struct ConductorGlassSurface<Content: View>: View {
         RoundedRectangle(cornerRadius: style.radius, style: .continuous)
     }
 
+    private var resolvedTint: Color {
+        style.tint.opacity(clarity.glassTintMultiplier)
+    }
+
+    private var resolvedStroke: Color {
+        style.stroke.opacity(clarity.strokeMultiplier)
+    }
+
     @ViewBuilder
     private var surfaceFill: some View {
         if #available(macOS 26.0, *) {
             Color.clear
                 .glassEffect(
-                    Glass.regular.tint(style.tint).interactive(interactive),
+                    Glass.regular.tint(resolvedTint).interactive(interactive),
                     in: surfaceShape
                 )
         } else {
@@ -244,7 +253,7 @@ struct ConductorGlassSurface<Content: View>: View {
                 .fill(style.fallbackMaterial)
                 .overlay {
                     surfaceShape
-                        .fill(style.tint)
+                        .fill(resolvedTint)
                 }
         }
     }
@@ -315,6 +324,14 @@ enum ConductorDesign {
     static let toolbarHeight = ConductorTokens.Space.toolbarHeight
     static let statusBarHeight = ConductorTokens.Space.statusHeight
     static let terminalCanvasInset = ConductorTokens.Space.terminalInset
+
+    static func sidebarWidth(for appearance: AppearancePreferences) -> CGFloat {
+        appearance.density.sidebarWidth
+    }
+
+    static func toolbarHeight(for appearance: AppearancePreferences) -> CGFloat {
+        appearance.density.toolbarHeight
+    }
 
     static func shadow(_ opacity: Double = 0.10, radius: CGFloat = 16, y: CGFloat = 8) -> Color {
         Color.black.opacity(opacity)

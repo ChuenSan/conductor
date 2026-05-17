@@ -1,5 +1,6 @@
 import ConductorCore
 import Foundation
+import SwiftUI
 
 enum TerminalProgressKind: String, Equatable {
     case removed
@@ -48,6 +49,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             persist()
         }
     }
+    @Published var appearance: AppearancePreferences {
+        didSet {
+            guard oldValue != appearance else { return }
+            persist()
+        }
+    }
     @Published private(set) var metadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
     @Published private(set) var notifications = TerminalNotificationState()
     @Published var notificationPanelVisible = false {
@@ -81,6 +88,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.selectedWorkspaceID = selectedID
         self.workspace = persistedWorkspaces.first { $0.id == selectedID } ?? persistedWorkspaces[0]
         self.theme = persisted?.theme ?? .codexDark
+        self.appearance = persisted?.appearance ?? AppearancePreferences()
     }
 
     #if DEBUG
@@ -88,6 +96,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         previewWorkspaces: [WorkspaceState],
         selectedWorkspaceID: WorkspaceID? = nil,
         theme: TerminalTheme = .codexDark,
+        appearance: AppearancePreferences = AppearancePreferences(),
         notifications: TerminalNotificationState = TerminalNotificationState(),
         sidebarVisible: Bool = true,
         commandPaletteVisible: Bool = false,
@@ -101,6 +110,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.selectedWorkspaceID = selectedID
         self.workspace = resolvedWorkspaces.first { $0.id == selectedID } ?? resolvedWorkspaces[0]
         self.theme = theme
+        self.appearance = appearance
         self.notifications = notifications
         self.sidebarVisible = sidebarVisible
         self.commandPaletteVisible = commandPaletteVisible
@@ -136,6 +146,35 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func cycleTheme() {
         theme = theme.next
+    }
+
+    func setAppearanceDensity(_ density: AppearanceDensity) {
+        guard appearance.density != density else { return }
+        appearance.density = density
+    }
+
+    func setChromeClarity(_ chromeClarity: ChromeClarity) {
+        guard appearance.chromeClarity != chromeClarity else { return }
+        appearance.chromeClarity = chromeClarity
+    }
+
+    func setReducedMotion(_ reducedMotion: Bool) {
+        guard appearance.reducedMotion != reducedMotion else { return }
+        appearance.reducedMotion = reducedMotion
+    }
+
+    func shellAnimation(_ animation: Animation) -> Animation? {
+        appearance.reducedMotion ? nil : animation
+    }
+
+    func performShellMotion(_ animation: Animation = ConductorMotion.standard, _ action: () -> Void) {
+        guard !appearance.reducedMotion else {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction, action)
+            return
+        }
+        withAnimation(animation, action)
     }
 
     var runtimeSurfaceCount: Int {
@@ -829,7 +868,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         pendingPersistence?.cancel()
         pendingPersistence = nil
         syncSelectedWorkspace()
-        persistence.save(workspaces: workspaces, selectedWorkspaceID: selectedWorkspaceID, theme: theme)
+        persistence.save(
+            workspaces: workspaces,
+            selectedWorkspaceID: selectedWorkspaceID,
+            theme: theme,
+            appearance: appearance
+        )
     }
 
     func resetWorkspace() {
@@ -951,8 +995,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let workspaces = workspaces
         let selectedWorkspaceID = selectedWorkspaceID
         let theme = theme
+        let appearance = appearance
         let item = DispatchWorkItem { [persistence] in
-            persistence.save(workspaces: workspaces, selectedWorkspaceID: selectedWorkspaceID, theme: theme)
+            persistence.save(
+                workspaces: workspaces,
+                selectedWorkspaceID: selectedWorkspaceID,
+                theme: theme,
+                appearance: appearance
+            )
         }
         pendingPersistence = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: item)

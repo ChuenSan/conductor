@@ -129,7 +129,7 @@ skip ahead to higher-level agent features until the terminal workspace feels dep
 1. [in progress] Add a compact Settings / Appearance Center opened from the sidebar.
 2. [in progress] Make themes feel like whole-shell presets, not terminal-only color swaps.
 3. [pending] Add live preview coverage for shell chrome, terminal chrome, and backdrop behavior.
-4. [pending] Add persisted appearance preferences beyond theme: density, chrome clarity, font scale, and reduced motion.
+4. [partial] Add persisted appearance preferences beyond theme: density, chrome clarity, font scale, and reduced motion.
 
 **Exit Criteria**:
 

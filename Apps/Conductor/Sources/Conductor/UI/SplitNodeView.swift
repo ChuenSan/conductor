@@ -250,7 +250,7 @@ private struct TerminalPaneView: View {
         }
         .padding(.leading, 8)
         .padding(.trailing, 4)
-        .frame(height: ConductorTokens.Space.paneTabRailHeight)
+        .frame(height: model.appearance.density.paneTabRailHeight)
         .background {
             ZStack(alignment: .bottom) {
                 model.theme.terminalChrome.opacity(0.96)
@@ -304,7 +304,6 @@ private struct StableTerminalTabStrip: View {
     let paneFocused: Bool
     @Binding var highlightedDropTabID: TerminalID?
 
-    private let tabWidth: CGFloat = ConductorTokens.Space.paneTabWidth
     private let tabSpacing: CGFloat = 4
     private let tabEdgePadding: CGFloat = 0
 
@@ -342,7 +341,7 @@ private struct StableTerminalTabStrip: View {
                 scrollToSelectedTab(proxy)
             }
         }
-        .frame(height: ConductorTokens.Space.paneTabHeight)
+        .frame(height: model.appearance.density.paneTabHeight)
         .clipped()
         .mask(ConductorHorizontalFadeMask())
         .transaction { transaction in
@@ -370,7 +369,7 @@ private struct StableTerminalTabStrip: View {
             model: model,
             paneID: pane.id
         )
-        .frame(width: tabWidth)
+        .frame(width: model.appearance.density.paneTabWidth)
         .id(tab.id)
         .onDrop(
             of: [UTType.text],
@@ -607,8 +606,12 @@ private struct TerminalTabButton: View {
         }
         .padding(.leading, 8)
         .padding(.trailing, 4)
-        .frame(height: ConductorTokens.Space.paneTabHeight)
-        .frame(minWidth: 72, idealWidth: ConductorTokens.Space.paneTabWidth, maxWidth: ConductorTokens.Space.paneTabWidth)
+        .frame(height: model.appearance.density.paneTabHeight)
+        .frame(
+            minWidth: 72,
+            idealWidth: model.appearance.density.paneTabWidth,
+            maxWidth: model.appearance.density.paneTabWidth
+        )
         .background(tabFill)
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
         .overlay(alignment: .bottom) {

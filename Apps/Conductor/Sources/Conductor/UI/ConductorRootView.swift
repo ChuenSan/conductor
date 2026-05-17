@@ -24,7 +24,7 @@ struct ConductorRootView: View {
                     .allowsHitTesting(false)
             }
         }
-        .animation(ConductorMotion.layout, value: model.sidebarVisible)
+        .animation(model.shellAnimation(ConductorMotion.layout), value: model.sidebarVisible)
         .padding(.horizontal, ConductorDesign.shellHorizontalPadding)
         .padding(.top, ConductorDesign.shellTopPadding)
         .padding(.bottom, ConductorDesign.shellBottomPadding)
@@ -54,9 +54,9 @@ struct ConductorRootView: View {
                 }
             }
         }
-        .animation(ConductorMotion.standard, value: model.commandPaletteVisible)
-        .animation(ConductorMotion.standard, value: model.settingsPanelVisible)
-        .animation(ConductorMotion.standard, value: model.workspaceOverviewVisible)
+        .animation(model.shellAnimation(ConductorMotion.standard), value: model.commandPaletteVisible)
+        .animation(model.shellAnimation(ConductorMotion.standard), value: model.settingsPanelVisible)
+        .animation(model.shellAnimation(ConductorMotion.standard), value: model.workspaceOverviewVisible)
     }
 }
 
@@ -256,7 +256,7 @@ private struct CommandPaletteView: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
-            ConductorGlassSurface(style: .palette, interactive: true) {
+            ConductorGlassSurface(style: .palette, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 10) {
                     commandHeader
                     CommandStatusStrip(
@@ -762,7 +762,7 @@ private struct AppearanceSettingsPanel: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
-            ConductorGlassSurface(style: .panel, interactive: true) {
+            ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 12) {
                     header
 
@@ -775,6 +775,52 @@ private struct AppearanceSettingsPanel: View {
                                 .frame(height: 1)
                         }
 
+                    VStack(alignment: .leading, spacing: 9) {
+                        SettingsSectionLabel("界面")
+                        AppearanceSegmentedControl(
+                            title: "密度",
+                            options: AppearanceDensity.allCases,
+                            selection: Binding(
+                                get: { model.appearance.density },
+                                set: { density in
+                                    model.performShellMotion {
+                                        model.setAppearanceDensity(density)
+                                    }
+                                }
+                            ),
+                            titleForOption: \.title,
+                            subtitleForOption: \.subtitle
+                        )
+                        AppearanceSegmentedControl(
+                            title: "清晰度",
+                            options: ChromeClarity.allCases,
+                            selection: Binding(
+                                get: { model.appearance.chromeClarity },
+                                set: { clarity in
+                                    model.performShellMotion {
+                                        model.setChromeClarity(clarity)
+                                    }
+                                }
+                            ),
+                            titleForOption: \.title,
+                            subtitleForOption: \.subtitle
+                        )
+                        AppearanceToggleRow(
+                            title: "降低动态效果",
+                            subtitle: "减少面板、tab 和选中反馈的过渡",
+                            isOn: Binding(
+                                get: { model.appearance.reducedMotion },
+                                set: { model.setReducedMotion($0) }
+                            )
+                        )
+                    }
+                    .padding(.horizontal, 12)
+
+                    Rectangle()
+                        .fill(Color.white.opacity(0.28))
+                        .frame(height: 1)
+                        .padding(.horizontal, 12)
+
                     VStack(alignment: .leading, spacing: 8) {
                         SettingsSectionLabel("全壳主题")
                         LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
@@ -783,7 +829,7 @@ private struct AppearanceSettingsPanel: View {
                                     theme: theme,
                                     selected: model.theme == theme
                                 ) {
-                                    ConductorMotion.perform {
+                                    model.performShellMotion {
                                         model.theme = theme
                                     }
                                 }
@@ -822,7 +868,7 @@ private struct AppearanceSettingsPanel: View {
             Spacer()
 
             Button {
-                ConductorMotion.perform {
+                model.performShellMotion {
                     model.hideSettingsPanel()
                 }
             } label: {
@@ -838,6 +884,78 @@ private struct AppearanceSettingsPanel: View {
         }
         .padding(.top, 13)
         .padding(.horizontal, 12)
+    }
+}
+
+private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View {
+    let title: String
+    let options: [Option]
+    @Binding var selection: Option
+    let titleForOption: (Option) -> String
+    let subtitleForOption: (Option) -> String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(ConductorDesign.secondaryText)
+
+            HStack(spacing: 5) {
+                ForEach(options) { option in
+                    Button {
+                        selection = option
+                    } label: {
+                        VStack(spacing: 2) {
+                            Text(titleForOption(option))
+                                .font(.system(size: 11, weight: selection == option ? .bold : .semibold))
+                                .foregroundStyle(selection == option ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
+                            Text(subtitleForOption(option))
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundStyle(ConductorDesign.tertiaryText)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .background(selection == option ? Color.white.opacity(0.42) : Color.white.opacity(0.16))
+                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .stroke(selection == option ? Color.accentColor.opacity(0.46) : Color.white.opacity(0.30), lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help(titleForOption(option))
+                }
+            }
+        }
+    }
+}
+
+private struct AppearanceToggleRow: View {
+    let title: String
+    let subtitle: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                Text(subtitle)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(1)
+            }
+        }
+        .toggleStyle(.switch)
+        .padding(.vertical, 7)
+        .padding(.horizontal, 9)
+        .background(Color.white.opacity(0.16))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.30), lineWidth: 1)
+        }
     }
 }
 
@@ -1021,7 +1139,7 @@ private struct WorkspaceOverviewPanel: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
-            ConductorGlassSurface(style: .palette, interactive: true) {
+            ConductorGlassSurface(style: .palette, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 11) {
                     header
                     searchField
@@ -1494,7 +1612,7 @@ struct NotificationPanelView: View {
     @ObservedObject var model: ConductorWindowModel
 
     var body: some View {
-        ConductorGlassSurface(style: .panel, interactive: true) {
+        ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
             VStack(alignment: .leading, spacing: 0) {
                 notificationHeader
 
@@ -1901,10 +2019,10 @@ private struct ConductorSidebar: View {
         .padding(.horizontal, model.sidebarVisible ? ConductorTokens.Space.sidebarX : 6)
         .padding(.top, ConductorTokens.Space.sidebarTop)
         .padding(.bottom, ConductorTokens.Space.sidebarBottom)
-        .frame(width: model.sidebarVisible ? ConductorDesign.sidebarWidth : ConductorDesign.sidebarCollapsedWidth)
+        .frame(width: model.sidebarVisible ? ConductorDesign.sidebarWidth(for: model.appearance) : ConductorDesign.sidebarCollapsedWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background {
-            ConductorGlassSurface(style: .sidebar, interactive: true) {
+            ConductorGlassSurface(style: .sidebar, clarity: model.appearance.chromeClarity, interactive: true) {
                 Color.clear
             }
         }
@@ -1914,9 +2032,10 @@ private struct ConductorSidebar: View {
                 collapsedTrafficLightShelf
             }
         }
-        .animation(ConductorMotion.layout, value: model.sidebarVisible)
-        .animation(ConductorMotion.standard, value: model.workspace.id)
-        .animation(ConductorMotion.layout, value: model.workspaces.map(\.id))
+        .animation(model.shellAnimation(ConductorMotion.layout), value: model.sidebarVisible)
+        .animation(model.shellAnimation(ConductorMotion.standard), value: model.workspace.id)
+        .animation(model.shellAnimation(ConductorMotion.layout), value: model.workspaces.map(\.id))
+        .animation(model.shellAnimation(ConductorMotion.layout), value: model.appearance.density)
         .alert("重命名标签", isPresented: Binding(
             get: { renamingTerminalID != nil },
             set: { if !$0 { renamingTerminalID = nil } }
@@ -2653,11 +2772,11 @@ private struct ConductorToolbar: View {
             .controlSize(.small)
             .padding(.leading, 10)
             .padding(.trailing, 6)
-            .frame(height: ConductorDesign.toolbarHeight)
+            .frame(height: ConductorDesign.toolbarHeight(for: model.appearance))
         }
         .padding(.top, 5)
         .padding(.bottom, 2)
-        .frame(height: ConductorDesign.toolbarHeight)
+        .frame(height: ConductorDesign.toolbarHeight(for: model.appearance))
         .background(model.theme.terminalChrome)
     }
 
@@ -2731,7 +2850,13 @@ private struct WorkspaceTabStrip: View {
         .onChange(of: workspaceIDs) {
             syncScrollTarget(animated: true)
         }
-        .frame(minWidth: WorkspaceTabMetrics.width, maxWidth: .infinity, minHeight: WorkspaceTabMetrics.height, maxHeight: WorkspaceTabMetrics.height, alignment: .leading)
+        .frame(
+            minWidth: WorkspaceTabMetrics.width(for: model.appearance),
+            maxWidth: .infinity,
+            minHeight: WorkspaceTabMetrics.height(for: model.appearance),
+            maxHeight: WorkspaceTabMetrics.height(for: model.appearance),
+            alignment: .leading
+        )
         .clipped()
         .mask(ConductorHorizontalFadeMask())
         .animation(ConductorMotion.layout, value: workspaceIDs)
@@ -2743,7 +2868,7 @@ private struct WorkspaceTabStrip: View {
             scrollTargetID = model.workspace.id
         }
         if animated {
-            ConductorMotion.perform(ConductorMotion.standard, update)
+            model.performShellMotion(ConductorMotion.standard, update)
         } else {
             update()
         }
@@ -2755,6 +2880,7 @@ private struct WorkspaceTabStrip: View {
             unreadCount: model.notifications.snapshot.unreadCount(for: workspace.id),
             selected: workspace.id == model.workspace.id,
             accent: model.theme.accent,
+            appearance: model.appearance,
             canClose: model.workspaces.count > 1,
             editing: editingWorkspaceID == workspace.id,
             titleDraft: $workspaceTitleDraft,
@@ -2815,8 +2941,14 @@ private struct WorkspaceTabStrip: View {
 }
 
 private enum WorkspaceTabMetrics {
-    static let width: CGFloat = 128
-    static let height: CGFloat = 23
+    static func width(for appearance: AppearancePreferences) -> CGFloat {
+        appearance.density.workspaceTabWidth
+    }
+
+    static func height(for appearance: AppearancePreferences) -> CGFloat {
+        appearance.density.workspaceTabHeight
+    }
+
     static let spacing: CGFloat = 8
     static let edgePadding: CGFloat = 2
 }
@@ -2826,6 +2958,7 @@ private struct WorkspaceTopTab: View {
     let unreadCount: Int
     let selected: Bool
     let accent: Color
+    let appearance: AppearancePreferences
     let canClose: Bool
     let editing: Bool
     @Binding var titleDraft: String
@@ -2907,20 +3040,23 @@ private struct WorkspaceTopTab: View {
         }
         .padding(.leading, 4)
         .padding(.trailing, editing ? 6 : 4)
-        .frame(width: WorkspaceTabMetrics.width, height: WorkspaceTabMetrics.height)
-        .background(selected ? accent.opacity(0.105) : (hovering ? Color.white.opacity(0.030) : Color.clear))
+        .frame(
+            width: WorkspaceTabMetrics.width(for: appearance),
+            height: WorkspaceTabMetrics.height(for: appearance)
+        )
+        .background(selected ? accent.opacity(0.105 * appearance.chromeClarity.accentFillMultiplier) : (hovering ? Color.white.opacity(0.030) : Color.clear))
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .overlay(alignment: .bottomLeading) {
             if selected {
                 Capsule()
-                    .fill(accent.opacity(0.92))
+                    .fill(accent.opacity(0.92 * appearance.chromeClarity.accentFillMultiplier))
                     .frame(width: 42, height: 2.5)
                     .padding(.leading, 22)
             }
         }
         .overlay {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(selected ? accent.opacity(0.36) : Color.clear, lineWidth: 1)
+                .stroke(selected ? accent.opacity(0.36 * appearance.chromeClarity.accentFillMultiplier) : Color.clear, lineWidth: 1)
         }
         .scaleEffect(hovering && !selected ? 0.992 : 1)
         .animation(nil, value: selected)
