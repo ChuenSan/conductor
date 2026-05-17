@@ -2357,14 +2357,7 @@ private struct ConductorSidebar: View {
         .clipShape(RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous)
-                .stroke(model.theme.shellStroke.opacity(1.65), lineWidth: 1.15)
-                .allowsHitTesting(false)
-        }
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(model.theme.shellStroke.opacity(1.45))
-                .frame(width: 1)
-                .padding(.vertical, 14)
+                .stroke(model.theme.shellStroke.opacity(0.82), lineWidth: 0.8)
                 .allowsHitTesting(false)
         }
         .overlay(alignment: .top) {
@@ -2783,10 +2776,10 @@ private struct SidebarSeparator: View {
 
     var body: some View {
         Rectangle()
-            .fill(theme.shellStroke.opacity(1.65))
+            .fill(theme.shellStroke.opacity(0.72))
             .frame(height: 1)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 4)
     }
 }
 
@@ -2919,10 +2912,6 @@ private struct WorkspaceSidebarRow: View {
         .frame(height: 32)
         .background(selected ? theme.shellSelectedFill : theme.shellHoverFill)
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
-        .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.row)
-                .stroke(theme.shellStroke.opacity(selected ? 1.70 : 1.15), lineWidth: 1)
-        }
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .onAppear {
             renameCancelled = false
@@ -2961,10 +2950,6 @@ private struct WorkspaceSidebarRow: View {
             .frame(height: 32)
             .background(selected ? theme.shellSelectedFill : (hovering ? theme.shellHoverFill : Color.clear))
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
-            .overlay {
-                RoundedRectangle(cornerRadius: ConductorTokens.Radius.row)
-                    .stroke(selected ? theme.shellStroke.opacity(1.70) : (hovering ? theme.shellStroke.opacity(1.05) : Color.clear), lineWidth: 1)
-            }
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         }
         .buttonStyle(ConductorPressButtonStyle())

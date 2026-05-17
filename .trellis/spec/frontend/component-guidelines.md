@@ -127,8 +127,9 @@ workspace overview, and compact status modules.
   theme environment. Leaf sidebar/settings rows should use `\.conductorTheme` so theme changes
   update chrome consistently without manually passing theme through every view.
 - The main window backdrop should remain translucent material plus a light theme wash, not an
-  opaque flat fill. The sidebar should carry clearer linework than the backdrop: a visible
-  rounded outline, right edge divider, section separators, and selected-row strokes.
+  opaque flat fill. Sidebar linework must stay quiet and intentional: use a soft rounded
+  outline and short section separators, not stacked hard vertical dividers or selected-row
+  strokes.
 - The top workspace toolbar should feel like a translucent command shelf, not a compressed
   black strip. Give it enough vertical room, use material plus theme tint, separate workspace
   navigation from command groups, and make action clusters read as floating capsules.
