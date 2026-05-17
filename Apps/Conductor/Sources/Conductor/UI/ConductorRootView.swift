@@ -191,6 +191,11 @@ private struct CommandPaletteView: View {
                     model.clearAllNotifications()
                 }
             },
+            CommandPaletteItem(id: "install-codex-hooks", section: "集成", title: "连接 Codex 完成通知", shortcut: "Codex", keywords: "codex hooks notification agent") {
+                run {
+                    model.installCodexNotificationHooks()
+                }
+            },
             CommandPaletteItem(id: "debug-notification", section: "调试", title: "模拟当前终端通知", shortcut: "Test", keywords: "notification test") {
                 run {
                     model.notifyFocusedTerminalForTesting()
@@ -417,93 +422,151 @@ struct NotificationPanelView: View {
     @ObservedObject var model: ConductorWindowModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: model.notifications.snapshot.unreadCount > 0 ? "bell.badge" : "bell")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                Text("通知")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                if model.notifications.snapshot.unreadCount > 0 {
-                    Text("\(model.notifications.snapshot.unreadCount)")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .frame(height: 16)
-                        .background(Color.accentColor)
-                        .clipShape(Capsule())
-                        .transition(.scale(scale: 0.82).combined(with: .opacity))
-                }
-                Spacer()
-                Button("跳转") {
-                    ConductorMotion.perform {
-                        _ = model.jumpToLatestUnread()
-                    }
-                }
-                .buttonStyle(ConductorPressButtonStyle())
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(model.notifications.snapshot.latestUnread == nil ? ConductorDesign.tertiaryText : Color.accentColor)
-                .disabled(model.notifications.snapshot.latestUnread == nil)
-                Button("清空") {
-                    ConductorMotion.perform(ConductorMotion.layout) {
-                        model.clearAllNotifications()
-                    }
-                }
-                .buttonStyle(ConductorPressButtonStyle())
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(model.notifications.records.isEmpty ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
-                .disabled(model.notifications.records.isEmpty)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 34)
+        ZStack {
+            RoundedRectangle(cornerRadius: 26)
+                .fill(.ultraThinMaterial)
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.30),
+                    Color.white.opacity(0.10),
+                    Color.black.opacity(0.04)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .allowsHitTesting(false)
 
-            Divider()
-                .opacity(0.45)
+            VStack(alignment: .leading, spacing: 0) {
+                notificationHeader
 
-            if model.notifications.records.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "bell.slash")
-                        .font(.system(size: 22, weight: .medium))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                    Text("暂无通知")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(ConductorDesign.secondaryText)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(maxHeight: .infinity)
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 6) {
-                        ForEach(model.notifications.records) { notification in
-                            NotificationRowView(
-                                notification: notification,
-                                terminalTitle: title(for: notification.terminalID),
-                                unread: !notification.isRead,
-                                onOpen: {
-                                    _ = model.openNotification(notification.id)
-                                },
-                                onClear: {
-                                    model.clearNotification(notification.id)
-                                }
-                            )
-                            .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .top)),
-                                removal: .opacity.combined(with: .scale(scale: 0.96))
-                            ))
+                Rectangle()
+                    .fill(Color.white.opacity(0.34))
+                    .frame(height: 1)
+                    .overlay(alignment: .bottom) {
+                        Rectangle()
+                            .fill(Color.black.opacity(0.045))
+                            .frame(height: 1)
+                    }
+
+                if model.notifications.records.isEmpty {
+                    emptyNotifications
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 7) {
+                            ForEach(model.notifications.records) { notification in
+                                NotificationRowView(
+                                    notification: notification,
+                                    terminalTitle: title(for: notification.terminalID),
+                                    unread: !notification.isRead,
+                                    onOpen: {
+                                        _ = model.openNotification(notification.id)
+                                    },
+                                    onClear: {
+                                        model.clearNotification(notification.id)
+                                    }
+                                )
+                                .transition(.asymmetric(
+                                    insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                                    removal: .opacity.combined(with: .scale(scale: 0.96))
+                                ))
+                            }
                         }
+                        .padding(10)
                     }
-                    .padding(8)
+                    .scrollIndicators(.visible)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .transition(.opacity)
             }
         }
         .frame(minWidth: 360, minHeight: 420)
-        .background(ConductorDesign.windowBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 26))
+        .overlay {
+            RoundedRectangle(cornerRadius: 26)
+                .strokeBorder(Color.white.opacity(0.62), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.16), radius: 28, y: 16)
         .animation(ConductorMotion.layout, value: model.notifications.records.map(\.id))
         .animation(ConductorMotion.emphasized, value: model.notifications.snapshot.unreadCount)
+    }
+
+    private var notificationHeader: some View {
+        HStack(spacing: 9) {
+            Image(systemName: model.notifications.snapshot.unreadCount > 0 ? "bell.badge.fill" : "bell")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 24, height: 24)
+                .background(Color.white.opacity(0.28))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            Text("通知")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(ConductorDesign.primaryText)
+            if model.notifications.snapshot.unreadCount > 0 {
+                Text("\(model.notifications.snapshot.unreadCount)")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .frame(height: 17)
+                    .background(Color.accentColor)
+                    .clipShape(Capsule())
+                    .transition(.scale(scale: 0.82).combined(with: .opacity))
+            }
+            Spacer()
+            Button("跳转") {
+                ConductorMotion.perform {
+                    _ = model.jumpToLatestUnread()
+                }
+            }
+            .buttonStyle(ConductorPressButtonStyle())
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(model.notifications.snapshot.latestUnread == nil ? ConductorDesign.tertiaryText : Color.accentColor)
+            .disabled(model.notifications.snapshot.latestUnread == nil)
+            Button("清空") {
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.clearAllNotifications()
+                }
+            }
+            .buttonStyle(ConductorPressButtonStyle())
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(model.notifications.records.isEmpty ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
+            .disabled(model.notifications.records.isEmpty)
+        }
+        .padding(.top, 34)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 10)
+        .background(.regularMaterial.opacity(0.72))
+    }
+
+    private var emptyNotifications: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "bell.slash")
+                .font(.system(size: 25, weight: .medium))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+            Text("暂无通知")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(ConductorDesign.secondaryText)
+            Text("Codex 完成、终端通知和响铃都会出现在这里")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .multilineTextAlignment(.center)
+            Button {
+                ConductorMotion.perform {
+                    model.installCodexNotificationHooks()
+                }
+            } label: {
+                Label("连接 Codex", systemImage: "bolt.horizontal.circle")
+                    .font(.system(size: 11, weight: .semibold))
+                    .padding(.horizontal, 10)
+                    .frame(height: 26)
+                    .background(Color.white.opacity(0.30))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(ConductorPressButtonStyle())
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(maxHeight: .infinity)
+        .transition(.opacity.combined(with: .scale(scale: 0.98)))
     }
 
     private func title(for terminalID: TerminalID) -> String {
@@ -579,11 +642,12 @@ private struct NotificationRowView: View {
             .help("清除通知")
         }
         .padding(9)
-        .background(hovering ? ConductorDesign.hoverFill : Color.white.opacity(unread ? 0.34 : 0.20))
+        .background(.thinMaterial)
+        .background(hovering ? Color.white.opacity(0.34) : Color.white.opacity(unread ? 0.24 : 0.14))
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.row)
-                .stroke(unread ? Color.accentColor.opacity(0.16) : ConductorDesign.sidebarStroke, lineWidth: 1)
+                .stroke(unread ? Color.accentColor.opacity(0.22) : Color.white.opacity(0.32), lineWidth: 1)
         }
         .scaleEffect(hovering ? 1.006 : 1)
         .animation(ConductorMotion.micro, value: hovering)

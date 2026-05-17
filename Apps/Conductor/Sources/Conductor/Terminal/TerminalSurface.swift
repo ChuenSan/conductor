@@ -76,11 +76,31 @@ final class TerminalSurface {
 
         let command = "/bin/zsh"
         let directory = workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser.path
+        let terminalID = id.description
+        let hookBridgePath = Bundle.main.executablePath ?? CommandLine.arguments.first ?? "Conductor"
+        let terminalIDKey = "CONDUCTOR_TERMINAL_ID"
+        let hookBridgeKey = "CONDUCTOR_HOOK_BRIDGE"
         command.withCString { commandPointer in
             directory.withCString { directoryPointer in
-                config.command = commandPointer
-                config.working_directory = directoryPointer
-                surface = ghostty_surface_new(app, &config)
+                terminalID.withCString { terminalIDPointer in
+                    hookBridgePath.withCString { hookBridgePathPointer in
+                        terminalIDKey.withCString { terminalIDKeyPointer in
+                            hookBridgeKey.withCString { hookBridgeKeyPointer in
+                                var envVars = [
+                                    ghostty_env_var_s(key: terminalIDKeyPointer, value: terminalIDPointer),
+                                    ghostty_env_var_s(key: hookBridgeKeyPointer, value: hookBridgePathPointer)
+                                ]
+                                envVars.withUnsafeMutableBufferPointer { envBuffer in
+                                    config.command = commandPointer
+                                    config.working_directory = directoryPointer
+                                    config.env_vars = envBuffer.baseAddress
+                                    config.env_var_count = envBuffer.count
+                                    surface = ghostty_surface_new(app, &config)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

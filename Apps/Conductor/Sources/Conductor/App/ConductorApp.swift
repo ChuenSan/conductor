@@ -9,6 +9,10 @@ struct ConductorApp {
 
     @MainActor
     static func main() {
+        if ConductorHookCLI.runIfNeeded(arguments: CommandLine.arguments) {
+            return
+        }
+
         let app = NSApplication.shared
         let delegate = ConductorAppDelegate()
         retainedDelegate = delegate
@@ -79,6 +83,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     private var window: ConductorWindow?
     private var notificationWindow: NSPanel?
     private var notificationWindowDelegate: NotificationWindowDelegate?
+    private var agentHookObserver: NSObjectProtocol?
     private let model = ConductorWindowModel()
     private var didStart = false
 
@@ -104,6 +109,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         model.onNotificationPanelVisibilityChange = { [weak self] visible in
             self?.setNotificationWindowVisible(visible)
         }
+        installAgentHookObserver()
         GhosttyAppRuntime.shared.actionDelegate = model
         let contentContainer = NSView()
         let hostingView = ConductorHostingView(rootView: ConductorRootView(model: model))
@@ -141,6 +147,9 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     func applicationWillTerminate(_ notification: Notification) {
         model.flushPersistence()
         notificationWindow?.close()
+        if let agentHookObserver {
+            DistributedNotificationCenter.default().removeObserver(agentHookObserver)
+        }
         model.closeAllSurfaces()
         GhosttyAppRuntime.shared.actionDelegate = nil
     }
@@ -448,13 +457,15 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
         let panel = NSPanel(
             contentRect: notificationWindowFrame(),
-            styleMask: [.titled, .closable, .resizable],
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         panel.title = "通知"
-        panel.titleVisibility = .visible
-        panel.titlebarAppearsTransparent = false
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
         panel.isReleasedWhenClosed = false
         panel.isFloatingPanel = false
         panel.hidesOnDeactivate = false
@@ -468,6 +479,8 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         notificationWindowDelegate = delegate
 
         let contentContainer = NSView()
+        contentContainer.wantsLayer = true
+        contentContainer.layer?.backgroundColor = NSColor.clear.cgColor
         let hostingView = ConductorHostingView(
             rootView: NotificationPanelView(model: model)
                 .frame(minWidth: 360, minHeight: 420)
@@ -484,6 +497,23 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
         notificationWindow = panel
         panel.makeKeyAndOrderFront(nil)
+    }
+
+    private func installAgentHookObserver() {
+        guard agentHookObserver == nil else { return }
+        agentHookObserver = DistributedNotificationCenter.default().addObserver(
+            forName: ConductorAgentHookBridge.notificationName,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let userInfo = notification.userInfo?.reduce(into: [String: String]()) { result, item in
+                guard let key = item.key as? String, let value = item.value as? String else { return }
+                result[key] = value
+            }
+            Task { @MainActor [weak self] in
+                self?.model.receiveAgentHookNotification(userInfo)
+            }
+        }
     }
 
     private func notificationWindowFrame() -> NSRect {

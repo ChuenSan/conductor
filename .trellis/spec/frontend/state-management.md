@@ -47,6 +47,11 @@ For runtime metadata extraction:
 - Coalesce frequent events into snapshots.
 - Publish snapshots at a bounded cadence, normally 10-30 Hz for visible UI.
 - Prefer explicit terminal escape sequences or hooks over scanning complete scrollback.
+- Agent hook bridges should pass only compact structured events into the app, such as
+  terminal ID, agent name, lifecycle action, cwd, title, and a short body. Do not pipe full
+  transcripts or raw conversation history through SwiftUI-observed state. For local CLI
+  hooks, use the terminal's injected stable ID and deliver a small notification event to the
+  running app, then let `ConductorWindowModel` resolve current workspace/pane ownership.
 
 ---
 

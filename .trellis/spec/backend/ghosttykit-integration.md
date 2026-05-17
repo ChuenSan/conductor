@@ -208,6 +208,10 @@ Callbacks can arrive during teardown. They must resolve by IDs and lifecycle sta
 - Model lookup: the delegate must resolve `TerminalID -> PaneID` before mutating layout.
 - UI mutation: route through `WorkspaceState` and `ConductorWindowModel`; do not mutate
   SwiftUI view structs or AppKit host subviews from the callback.
+- Hook identity: every Ghostty surface should expose a stable `CONDUCTOR_TERMINAL_ID`
+  environment variable to its child shell. Agent hooks such as Codex Stop hooks use this ID
+  to report compact lifecycle notifications back to Conductor without scanning terminal
+  output or depending on the focused pane at delivery time.
 - Threading: callback may be non-main; schedule model work onto `MainActor`.
 - Async payloads: do not capture `TerminalSurface`, `GhosttyAppRuntime`, or native callback
   userdata into `Task` closures. Resolve the target synchronously and pass value payloads.

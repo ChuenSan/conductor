@@ -646,6 +646,54 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         terminalIDs.forEach(refreshNotificationMetadata)
     }
 
+    func receiveAgentHookNotification(_ userInfo: [String: String]?) {
+        guard let userInfo,
+              let rawTerminalID = userInfo[ConductorAgentHookBridge.Key.terminalID],
+              let uuid = UUID(uuidString: rawTerminalID.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return
+        }
+
+        let terminalID = TerminalID(uuid)
+        let action = userInfo[ConductorAgentHookBridge.Key.action]?.lowercased() ?? ""
+        switch action {
+        case "prompt-submit", "session-start":
+            markTerminalNotificationsRead(terminalID)
+        case "stop", "agent-response":
+            let title = userInfo[ConductorAgentHookBridge.Key.title] ?? "Codex 完成"
+            let body = userInfo[ConductorAgentHookBridge.Key.body] ?? "Codex 对话已完成，等待下一步。"
+            _ = recordTerminalNotification(
+                terminalID: terminalID,
+                title: title,
+                body: body,
+                kind: .agent
+            )
+        default:
+            break
+        }
+    }
+
+    func installCodexNotificationHooks() {
+        guard let tab = workspace.focusedPane?.selectedTab else { return }
+        do {
+            let result = try CodexNotificationHookInstaller.install(
+                bridgePath: Bundle.main.executablePath ?? CommandLine.arguments.first ?? "Conductor"
+            )
+            _ = recordTerminalNotification(
+                terminalID: tab.id,
+                title: "Codex Hook 已连接",
+                body: result,
+                kind: .agent
+            )
+        } catch {
+            _ = recordTerminalNotification(
+                terminalID: tab.id,
+                title: "Codex Hook 安装失败",
+                body: error.localizedDescription,
+                kind: .agent
+            )
+        }
+    }
+
     func equalizeSplits() {
         workspace.equalizeSplits()
     }
