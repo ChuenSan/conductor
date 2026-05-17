@@ -174,15 +174,15 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     var floatingPanelBase: Color {
         switch self {
         case .codexDark:
-            Color(red: 0.945, green: 0.960, blue: 0.982).opacity(0.78)
+            Color(red: 0.944, green: 0.955, blue: 0.970).opacity(0.965)
         case .flexoki:
-            Color(red: 0.968, green: 0.940, blue: 0.875).opacity(0.78)
+            Color(red: 0.966, green: 0.940, blue: 0.884).opacity(0.965)
         case .aurora:
-            Color(red: 0.900, green: 0.966, blue: 0.972).opacity(0.78)
+            Color(red: 0.910, green: 0.962, blue: 0.966).opacity(0.965)
         case .graphite:
-            Color(red: 0.920, green: 0.928, blue: 0.940).opacity(0.78)
+            Color(red: 0.918, green: 0.924, blue: 0.936).opacity(0.965)
         case .ember:
-            Color(red: 0.984, green: 0.912, blue: 0.838).opacity(0.78)
+            Color(red: 0.976, green: 0.920, blue: 0.858).opacity(0.965)
         }
     }
 
@@ -202,33 +202,11 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     }
 
     var floatingControlFill: Color {
-        switch self {
-        case .codexDark:
-            Color.white.opacity(0.20)
-        case .flexoki:
-            Color(red: 1.0, green: 0.972, blue: 0.910).opacity(0.32)
-        case .aurora:
-            Color(red: 0.940, green: 1.0, blue: 1.0).opacity(0.26)
-        case .graphite:
-            Color.white.opacity(0.22)
-        case .ember:
-            Color(red: 1.0, green: 0.940, blue: 0.884).opacity(0.30)
-        }
+        Color.white.opacity(0.50)
     }
 
     var floatingControlStrongFill: Color {
-        switch self {
-        case .codexDark:
-            Color.white.opacity(0.30)
-        case .flexoki:
-            Color(red: 1.0, green: 0.972, blue: 0.910).opacity(0.44)
-        case .aurora:
-            Color(red: 0.940, green: 1.0, blue: 1.0).opacity(0.36)
-        case .graphite:
-            Color.white.opacity(0.32)
-        case .ember:
-            Color(red: 1.0, green: 0.940, blue: 0.884).opacity(0.42)
-        }
+        Color.white.opacity(0.68)
     }
 
     var floatingStroke: Color {
@@ -266,15 +244,15 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     }
 
     var floatingSelectedFill: Color {
-        floatingEmphasis.opacity(0.13)
+        Color.black.opacity(0.060)
     }
 
     var floatingHoverFill: Color {
-        floatingEmphasis.opacity(0.070)
+        Color.black.opacity(0.038)
     }
 
     var floatingSelectedStroke: Color {
-        floatingEmphasis.opacity(0.34)
+        Color.black.opacity(0.135)
     }
 
     var shellStroke: Color {

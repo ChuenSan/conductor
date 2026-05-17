@@ -147,6 +147,10 @@ workspace overview, and compact status modules.
   Settings, Workspace Overview, Notification Center, and file/tool previews match the sidebar's
   low-saturation glass language. The terminal `accent` remains appropriate for live terminal
   focus rings, terminal tabs, cursor/progress affordances, and explicit theme preview swatches.
+- Floating shell panels should be translucent in material feel, not transparent in readability.
+  `floatingPanelBase` must be strong enough that terminal text behind a modal panel does not
+  visibly bleed through body controls or selected rows. Use soft black/white control layers for
+  selected and hover states instead of colored translucent fills over live terminal content.
 - Floating shell panels should share one outer skeleton: `ConductorGlassSurface`, one
   `FloatingPanelHeader`, one `FloatingPanelDivider`, then the panel's specialized content.
   Settings may include an internal category sidebar, but it should not add a second competing
