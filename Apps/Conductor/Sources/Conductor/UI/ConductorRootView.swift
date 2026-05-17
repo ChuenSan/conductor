@@ -791,10 +791,11 @@ private struct CommandSuggestionButton: View {
 
 private struct AppearanceSettingsPanel: View {
     @ObservedObject var model: ConductorWindowModel
+    @State private var selectedSection: SettingsPanelSection = .interface
     @Environment(\.conductorFontScale) private var fontScale
 
     private let columns = [
-        GridItem(.adaptive(minimum: 142, maximum: 168), spacing: 8)
+        GridItem(.adaptive(minimum: 150, maximum: 178), spacing: 9)
     ]
 
     var body: some View {
@@ -804,129 +805,102 @@ private struct AppearanceSettingsPanel: View {
                 .allowsHitTesting(false)
 
             ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
-                VStack(alignment: .leading, spacing: 12) {
-                    header
+                HStack(spacing: 0) {
+                    sidebar
 
                     Rectangle()
-                        .fill(Color.white.opacity(0.34))
-                        .frame(height: 1)
-                        .overlay(alignment: .bottom) {
-                            Rectangle()
-                                .fill(Color.black.opacity(0.045))
-                                .frame(height: 1)
-                        }
+                        .fill(Color.white.opacity(0.22))
+                        .frame(width: 1)
 
-                    VStack(alignment: .leading, spacing: 9) {
-                        SettingsSectionLabel("界面")
-                        AppearanceSegmentedControl(
-                            title: "密度",
-                            options: AppearanceDensity.allCases,
-                            selection: Binding(
-                                get: { model.appearance.density },
-                                set: { density in
-                                    model.performShellMotion {
-                                        model.setAppearanceDensity(density)
-                                    }
-                                }
-                            ),
-                            titleForOption: \.title,
-                            subtitleForOption: \.subtitle
-                        )
-                        AppearanceSegmentedControl(
-                            title: "清晰度",
-                            options: ChromeClarity.allCases,
-                            selection: Binding(
-                                get: { model.appearance.chromeClarity },
-                                set: { clarity in
-                                    model.performShellMotion {
-                                        model.setChromeClarity(clarity)
-                                    }
-                                }
-                            ),
-                            titleForOption: \.title,
-                            subtitleForOption: \.subtitle
-                        )
-                        AppearanceSegmentedControl(
-                            title: "字体",
-                            options: AppearanceFontScale.allCases,
-                            selection: Binding(
-                                get: { model.appearance.fontScale },
-                                set: { fontScale in
-                                    model.performShellMotion {
-                                        model.setFontScale(fontScale)
-                                    }
-                                }
-                            ),
-                            titleForOption: \.title,
-                            subtitleForOption: \.subtitle
-                        )
-                        AppearanceToggleRow(
-                            title: "降低动态效果",
-                            subtitle: "减少面板、tab 和选中反馈的过渡",
-                            isOn: Binding(
-                                get: { model.appearance.reducedMotion },
-                                set: { model.setReducedMotion($0) }
-                            )
-                        )
-                    }
-                    .padding(.horizontal, 12)
-
-                    Rectangle()
-                        .fill(Color.white.opacity(0.28))
-                        .frame(height: 1)
-                        .padding(.horizontal, 12)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        SettingsSectionLabel("命令与快捷键")
-                        CommandShortcutGuide(model: model)
-                    }
-                    .padding(.horizontal, 12)
-
-                    Rectangle()
-                        .fill(Color.white.opacity(0.28))
-                        .frame(height: 1)
-                        .padding(.horizontal, 12)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        SettingsSectionLabel("全壳主题")
-                        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                            ForEach(TerminalTheme.allCases) { theme in
-                                ThemePreviewCard(
-                                    theme: theme,
-                                    selected: model.theme == theme
-                                ) {
-                                    model.performShellMotion {
-                                        model.theme = theme
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 12)
+                    contentPane
                 }
             }
-            .frame(width: 524)
+            .frame(width: 708, height: 500)
             .onExitCommand {
                 model.hideSettingsPanel()
             }
         }
     }
 
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "gearshape")
+                    .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 24, height: 24)
+                    .background(Color.white.opacity(0.20))
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("设置")
+                        .font(.conductorSystem(size: 13, weight: .bold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.primaryText)
+                    Text(model.theme.title)
+                        .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.bottom, 2)
+
+            VStack(spacing: 5) {
+                ForEach(SettingsPanelSection.allCases) { section in
+                    SettingsSidebarItem(
+                        section: section,
+                        selected: selectedSection == section
+                    ) {
+                        model.performShellMotion {
+                            selectedSection = section
+                        }
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(width: 168)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.white.opacity(0.07))
+    }
+
+    private var contentPane: some View {
+        VStack(spacing: 0) {
+            header
+
+            Rectangle()
+                .fill(Color.white.opacity(0.26))
+                .frame(height: 1)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.black.opacity(0.045))
+                        .frame(height: 1)
+                }
+
+            ScrollView {
+                detailContent
+                    .padding(14)
+            }
+            .scrollIndicators(.visible)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "slider.horizontal.3")
+        HStack(spacing: 9) {
+            Image(systemName: selectedSection.systemImage)
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 24, height: 24)
-                .background(Color.white.opacity(0.28))
+                .background(Color.white.opacity(0.20))
                 .clipShape(RoundedRectangle(cornerRadius: 7))
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("外观")
+                Text(selectedSection.title)
                     .font(.conductorSystem(size: 14, weight: .bold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
-                Text(model.theme.title)
+                Text(selectedSection.subtitle)
                     .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
                     .foregroundStyle(ConductorDesign.tertiaryText)
             }
@@ -948,8 +922,197 @@ private struct AppearanceSettingsPanel: View {
             .buttonStyle(.plain)
             .help("关闭设置")
         }
-        .padding(.top, 13)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+    }
+
+    @ViewBuilder
+    private var detailContent: some View {
+        switch selectedSection {
+        case .interface:
+            interfaceSettings
+        case .commands:
+            commandSettings
+        case .themes:
+            themeSettings
+        }
+    }
+
+    private var interfaceSettings: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SettingsSectionLabel("界面")
+            AppearanceSegmentedControl(
+                title: "密度",
+                options: AppearanceDensity.allCases,
+                selection: Binding(
+                    get: { model.appearance.density },
+                    set: { density in
+                        model.performShellMotion {
+                            model.setAppearanceDensity(density)
+                        }
+                    }
+                ),
+                titleForOption: \.title,
+                subtitleForOption: \.subtitle
+            )
+            AppearanceSegmentedControl(
+                title: "清晰度",
+                options: ChromeClarity.allCases,
+                selection: Binding(
+                    get: { model.appearance.chromeClarity },
+                    set: { clarity in
+                        model.performShellMotion {
+                            model.setChromeClarity(clarity)
+                        }
+                    }
+                ),
+                titleForOption: \.title,
+                subtitleForOption: \.subtitle
+            )
+            AppearanceSegmentedControl(
+                title: "字体",
+                options: AppearanceFontScale.allCases,
+                selection: Binding(
+                    get: { model.appearance.fontScale },
+                    set: { fontScale in
+                        model.performShellMotion {
+                            model.setFontScale(fontScale)
+                        }
+                    }
+                ),
+                titleForOption: \.title,
+                subtitleForOption: \.subtitle
+            )
+            AppearanceToggleRow(
+                title: "降低动态效果",
+                subtitle: "减少面板、tab 和选中反馈的过渡",
+                isOn: Binding(
+                    get: { model.appearance.reducedMotion },
+                    set: { model.setReducedMotion($0) }
+                )
+            )
+        }
+    }
+
+    private var commandSettings: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SettingsSectionLabel("命令与快捷键")
+            CommandShortcutGuide(model: model, height: 372)
+        }
+    }
+
+    private var themeSettings: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            SettingsSectionLabel("全壳主题")
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 9) {
+                ForEach(TerminalTheme.allCases) { theme in
+                    ThemePreviewCard(
+                        theme: theme,
+                        selected: model.theme == theme
+                    ) {
+                        model.performShellMotion {
+                            model.theme = theme
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum SettingsPanelSection: String, CaseIterable, Identifiable {
+    case interface
+    case commands
+    case themes
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .interface:
+            "界面"
+        case .commands:
+            "命令"
+        case .themes:
+            "主题"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .interface:
+            "密度、清晰度、字体和动态效果"
+        case .commands:
+            "Command Center 与快捷入口"
+        case .themes:
+            "整套窗口、终端和强调色"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .interface:
+            "rectangle.3.group"
+        case .commands:
+            "command"
+        case .themes:
+            "swatchpalette"
+        }
+    }
+}
+
+private struct SettingsSidebarItem: View {
+    let section: SettingsPanelSection
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: section.systemImage)
+                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
+                    .frame(width: 20, height: 20)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(section.title)
+                        .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(selected ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
+                    Text(section.subtitle)
+                        .font(.conductorSystem(size: 9, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 42)
+            .background(rowFill)
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(selected ? Color.accentColor.opacity(0.44) : Color.white.opacity(0.0), lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { value in
+            hovering = value
+        }
+        .help(section.title)
+    }
+
+    private var rowFill: Color {
+        if selected {
+            return Color.accentColor.opacity(0.16)
+        }
+        if hovering {
+            return Color.white.opacity(0.12)
+        }
+        return Color.clear
     }
 }
 
@@ -1029,6 +1192,7 @@ private struct AppearanceToggleRow: View {
 
 private struct CommandShortcutGuide: View {
     @ObservedObject var model: ConductorWindowModel
+    var height: CGFloat = 178
     @Environment(\.conductorFontScale) private var fontScale
 
     private var items: [CommandShortcutGuideItem] {
@@ -1052,7 +1216,7 @@ private struct CommandShortcutGuide: View {
             .padding(.vertical, 2)
         }
         .scrollIndicators(.visible)
-        .frame(height: 178)
+        .frame(height: height)
         .background(Color.white.opacity(0.14))
         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay {

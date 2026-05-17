@@ -339,6 +339,40 @@ private var shortcutRows: [CommandShortcutGuideItem] {
 }
 ```
 
+### Convention: Settings Panel Navigation
+
+**What**: Settings surfaces with three or more product areas should use a compact sidebar
+classifier and a single detail pane instead of stacking every section in one scroll column.
+
+**Why**: The settings surface is a long-lived shell tool, not a landing page. A categorized
+sidebar keeps the panel scannable as appearance, command, terminal, integration, and advanced
+settings grow, while preserving a stable right-side detail area.
+
+**Contract**:
+
+- Keep the selected settings category as local SwiftUI state unless multiple shell regions need
+  to observe it.
+- Keep category changes low-frequency and route them through shared shell motion helpers when
+  animation is appropriate.
+- The sidebar should use compact rows with icons, labels, and restrained selected fills. Avoid
+  high-contrast alternating blocks, heavy shadows, or large explanatory cards.
+- The detail pane may scroll, but each category should own a focused set of controls. Do not
+  reintroduce a single mixed list of unrelated settings inside the detail pane.
+- Settings categories may read compact product state such as appearance preferences, command
+  records, and theme metadata. They must not observe terminal output, scrollback, cursor state,
+  or runtime renderer details.
+
+**Correct**:
+
+```swift
+@State private var selectedSection: SettingsPanelSection = .interface
+
+HStack(spacing: 0) {
+    settingsSidebar
+    settingsDetailPane(for: selectedSection)
+}
+```
+
 ---
 
 ## Accessibility
