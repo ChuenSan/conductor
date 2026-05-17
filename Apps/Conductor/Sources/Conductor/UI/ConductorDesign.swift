@@ -45,7 +45,7 @@ enum ConductorTokens {
         static let shellBottom: CGFloat = 8
         static let shellGap: CGFloat = 8
         static let sidebarWidth: CGFloat = 230
-        static let sidebarCollapsedWidth: CGFloat = 48
+        static let sidebarCollapsedWidth: CGFloat = 82
         static let sidebarX: CGFloat = 8
         static let sidebarTop: CGFloat = 0
         static let sidebarBottom: CGFloat = 0
@@ -174,6 +174,27 @@ struct ConductorHorizontalFadeMask: View {
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
+            )
+        }
+    }
+}
+
+struct ConductorVerticalFadeMask: View {
+    var edgeHeight: CGFloat = 16
+
+    var body: some View {
+        GeometryReader { proxy in
+            let height = max(proxy.size.height, 1)
+            let stop = min(edgeHeight / height, 0.45)
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black, location: stop),
+                    .init(color: .black, location: 1 - stop),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
             )
         }
     }

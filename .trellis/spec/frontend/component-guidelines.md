@@ -142,6 +142,13 @@ Forbidden patterns:
 - Allowing sidebar intrinsic height to vertically reposition the terminal workbench. The root
   shell row must be top-aligned, and the sidebar must own its own height/scroll behavior so
   adding workspaces, notifications, or actions cannot move the terminal canvas.
+- Making the entire sidebar one scroll view. Workspace overflow should be isolated to the
+  workspace list region; status summaries, quick actions, theme, and settings remain stable
+  so a long workspace list does not drag a heavy scrollbar through unrelated controls.
+- Collapsing the sidebar narrower than the macOS traffic-light cluster. In a full-size-content
+  window, the standard close/minimize/zoom controls still occupy the top-left titlebar area;
+  collapsed sidebar width and header clearance must keep those controls visually inside the
+  sidebar instead of letting them float over the terminal canvas.
 - Guessing at root shell spacing when the window titlebar is involved. First measure
   `NSWindow.contentLayoutRect`, `contentView.safeAreaInsets`, and the root hosted view frame,
   then keep `ConductorTokens.Space.shellTop` as the compact titlebar clearance rather than

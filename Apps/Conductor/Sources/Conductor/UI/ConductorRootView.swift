@@ -574,6 +574,10 @@ private struct ConductorSidebar: View {
         model.workspace.focusedPane?.selectedTab?.title ?? "无"
     }
 
+    private var sidebarHeaderHeight: CGFloat {
+        model.sidebarVisible ? 56 : 72
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             sidebarHeader
@@ -633,56 +637,43 @@ private struct ConductorSidebar: View {
             .buttonStyle(.plain)
             .help(model.sidebarVisible ? "收起侧边栏" : "展开侧边栏")
         }
-        .frame(height: 56, alignment: .bottom)
+        .frame(height: sidebarHeaderHeight, alignment: .bottom)
     }
 
     private var expandedSidebar: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 8) {
-                    workspaceSection
+        VStack(alignment: .leading, spacing: 8) {
+            workspaceSection
+                .frame(maxHeight: .infinity)
 
-                    SidebarSeparator()
+            SidebarSeparator()
 
-                    SidebarSectionTitle("状态")
-                    VStack(spacing: 4) {
-                        MetricRow(title: "分屏", value: "\(model.workspace.panes.count)")
-                        MetricRow(title: "终端", value: "\(terminalCount)")
-                        MetricRow(title: "通知", value: "\(model.notifications.snapshot.unreadCount)")
-                        MetricRow(title: "当前", value: focusedTerminalTitle)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.45))
-                    .clipShape(RoundedRectangle(cornerRadius: 11))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 11)
-                            .stroke(ConductorDesign.sidebarStroke, lineWidth: 1)
-                    }
-
-                    SidebarSeparator()
-
-                    SidebarSectionTitle("快捷操作")
-                    quickActions(showsLabels: true)
-
-                    Spacer(minLength: 8)
-
-                    SidebarActionRow(icon: "paintpalette", title: model.theme.title, help: "切换终端配色") {
-                        model.theme = model.theme == .codexDark ? .flexoki : .codexDark
-                    }
-                    SidebarActionRow(icon: "gearshape", title: "设置", help: "设置") {}
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            SidebarSectionTitle("状态")
+            VStack(spacing: 4) {
+                MetricRow(title: "分屏", value: "\(model.workspace.panes.count)")
+                MetricRow(title: "终端", value: "\(terminalCount)")
+                MetricRow(title: "通知", value: "\(model.notifications.snapshot.unreadCount)")
+                MetricRow(title: "当前", value: focusedTerminalTitle)
             }
-            .onAppear {
-                scrollSidebarSelection(proxy)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(Color.white.opacity(0.45))
+            .clipShape(RoundedRectangle(cornerRadius: 11))
+            .overlay {
+                RoundedRectangle(cornerRadius: 11)
+                    .stroke(ConductorDesign.sidebarStroke, lineWidth: 1)
             }
-            .onChange(of: model.workspace.id) {
-                scrollSidebarSelection(proxy)
+
+            SidebarSeparator()
+
+            SidebarSectionTitle("快捷操作")
+            quickActions(showsLabels: true)
+
+            Spacer(minLength: 8)
+
+            SidebarActionRow(icon: "paintpalette", title: model.theme.title, help: "切换终端配色") {
+                model.theme = model.theme == .codexDark ? .flexoki : .codexDark
             }
-            .onChange(of: model.workspaces.map(\.id)) {
-                scrollSidebarSelection(proxy)
-            }
+            SidebarActionRow(icon: "gearshape", title: "设置", help: "设置") {}
         }
         .frame(maxHeight: .infinity)
     }
@@ -706,19 +697,35 @@ private struct ConductorSidebar: View {
             }
             .padding(.trailing, 5)
 
-            VStack(spacing: 3) {
-                ForEach(model.workspaces) { workspace in
-                    workspaceRow(for: workspace)
-                        .id(workspace.id)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 3) {
+                        ForEach(model.workspaces) { workspace in
+                            workspaceRow(for: workspace)
+                                .id(workspace.id)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                .mask(ConductorVerticalFadeMask())
+                .onAppear {
+                    scrollSidebarSelection(proxy)
+                }
+                .onChange(of: model.workspace.id) {
+                    scrollSidebarSelection(proxy)
+                }
+                .onChange(of: model.workspaces.map(\.id)) {
+                    scrollSidebarSelection(proxy)
                 }
             }
+            .frame(minHeight: 72, maxHeight: .infinity)
         }
     }
 
     private var collapsedSidebar: some View {
         VStack(spacing: 6) {
             ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: true) {
+                ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 6) {
                         ForEach(model.workspaces) { workspace in
                             SidebarRailButton(
@@ -732,7 +739,9 @@ private struct ConductorSidebar: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
                 }
+                .mask(ConductorVerticalFadeMask())
                 .onAppear {
                     scrollSidebarSelection(proxy)
                 }
