@@ -210,6 +210,44 @@ Rectangle()
     .allowsHitTesting(false)
 ```
 
+### Convention: Dense Tab Strip Scrolling
+
+**What**: Dense workspace and terminal tab strips should use complete-item scrolling with
+SwiftUI scroll targets when the deployment target supports it.
+
+**Why**: Trackpad and wheel scrolling should feel native, but the strip must not rest with
+half a title or only a close button visible at the edge. Programmatic selection should move
+the selected tab toward the center without animating the terminal surface or changing toolbar
+height.
+
+**Contract**:
+
+- Put tab IDs on the tab views and mark the stack with `.scrollTargetLayout()`.
+- Use `.scrollTargetBehavior(.viewAligned)` plus `.scrollPosition(id:anchor:)` for selected
+  tab centering instead of ad hoc `ScrollViewReader.scrollTo` when possible.
+- Keep scroll-position state local to the tab strip. Do not promote scroll offset or geometry
+  into the window model.
+- Animate only the scroll target update and insertion/removal chrome. Keep selected tab color,
+  icon, fill, and stroke changes atomic.
+- Keep native horizontal indicators hidden inside 21-25px tab rails; use fixed-height viewports
+  and edge fades or external affordances instead.
+
+**Correct**:
+
+```swift
+ScrollView(.horizontal, showsIndicators: false) {
+    HStack {
+        ForEach(workspaces) { workspace in
+            WorkspaceTopTab(workspace: workspace)
+                .id(workspace.id)
+        }
+    }
+    .scrollTargetLayout()
+}
+.scrollTargetBehavior(.viewAligned)
+.scrollPosition(id: $scrollTargetID, anchor: .center)
+```
+
 ### Convention: Auxiliary Panel Focus
 
 **What**: AppKit auxiliary panels such as the notification center must not leave the main

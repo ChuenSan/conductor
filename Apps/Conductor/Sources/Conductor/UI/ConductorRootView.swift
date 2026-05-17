@@ -2693,41 +2693,43 @@ private struct WorkspaceTabStrip: View {
     let onBeginRename: (WorkspaceState) -> Void
     let onCommitRename: () -> Void
     let onCancelRename: () -> Void
+    @State private var scrollTargetID: WorkspaceID?
 
     private var workspaceIDs: [WorkspaceID] {
         model.workspaces.map(\.id)
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: WorkspaceTabMetrics.spacing) {
-                    ForEach(model.workspaces) { workspace in
-                        workspaceTabView(for: workspace)
-                            .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .scale(scale: 0.96)),
-                                removal: .opacity.combined(with: .scale(scale: 0.92))
-                            ))
-                    }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: WorkspaceTabMetrics.spacing) {
+                ForEach(model.workspaces) { workspace in
+                    workspaceTabView(for: workspace)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.96)),
+                            removal: .opacity.combined(with: .scale(scale: 0.92))
+                        ))
                 }
-                .padding(.horizontal, WorkspaceTabMetrics.edgePadding)
             }
-            .onDrop(
-                of: [UTType.text],
-                delegate: WorkspaceTabDropDelegate(
-                    targetWorkspaceID: nil,
-                    model: model
-                )
+            .padding(.horizontal, WorkspaceTabMetrics.edgePadding)
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollPosition(id: $scrollTargetID, anchor: .center)
+        .onDrop(
+            of: [UTType.text],
+            delegate: WorkspaceTabDropDelegate(
+                targetWorkspaceID: nil,
+                model: model
             )
-            .onAppear {
-                scrollToSelectedWorkspace(proxy)
-            }
-            .onChange(of: model.workspace.id) {
-                scrollToSelectedWorkspace(proxy)
-            }
-            .onChange(of: workspaceIDs) {
-                scrollToSelectedWorkspace(proxy)
-            }
+        )
+        .onAppear {
+            syncScrollTarget(animated: false)
+        }
+        .onChange(of: model.workspace.id) {
+            syncScrollTarget(animated: true)
+        }
+        .onChange(of: workspaceIDs) {
+            syncScrollTarget(animated: true)
         }
         .frame(minWidth: WorkspaceTabMetrics.width, maxWidth: .infinity, minHeight: WorkspaceTabMetrics.height, maxHeight: WorkspaceTabMetrics.height, alignment: .leading)
         .clipped()
@@ -2735,9 +2737,15 @@ private struct WorkspaceTabStrip: View {
         .animation(ConductorMotion.layout, value: workspaceIDs)
     }
 
-    private func scrollToSelectedWorkspace(_ proxy: ScrollViewProxy) {
-        withAnimation(ConductorMotion.standard) {
-            proxy.scrollTo(model.workspace.id, anchor: .center)
+    private func syncScrollTarget(animated: Bool) {
+        guard workspaceIDs.contains(model.workspace.id) else { return }
+        let update = {
+            scrollTargetID = model.workspace.id
+        }
+        if animated {
+            ConductorMotion.perform(ConductorMotion.standard, update)
+        } else {
+            update()
         }
     }
 
@@ -2746,6 +2754,7 @@ private struct WorkspaceTabStrip: View {
             workspace: workspace,
             unreadCount: model.notifications.snapshot.unreadCount(for: workspace.id),
             selected: workspace.id == model.workspace.id,
+            accent: model.theme.accent,
             canClose: model.workspaces.count > 1,
             editing: editingWorkspaceID == workspace.id,
             titleDraft: $workspaceTitleDraft,
@@ -2816,6 +2825,7 @@ private struct WorkspaceTopTab: View {
     let workspace: WorkspaceState
     let unreadCount: Int
     let selected: Bool
+    let accent: Color
     let canClose: Bool
     let editing: Bool
     @Binding var titleDraft: String
@@ -2857,7 +2867,7 @@ private struct WorkspaceTopTab: View {
             } else {
                 Image(systemName: selected ? "rectangle.3.group.fill" : "rectangle.3.group")
                     .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(selected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
+                    .foregroundStyle(selected ? accent : ConductorDesign.terminalTextMuted)
                     .frame(width: 14)
                 Text(workspace.title)
                     .font(selected ? ConductorTokens.Typography.workspaceTabSelected : ConductorTokens.Typography.workspaceTab)
@@ -2867,10 +2877,10 @@ private struct WorkspaceTopTab: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text("\(terminalCount)")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(ConductorDesign.terminalTextMuted)
+                    .foregroundStyle(selected ? ConductorDesign.terminalText.opacity(0.86) : ConductorDesign.terminalTextMuted)
                     .padding(.horizontal, 4)
                     .frame(minWidth: 16, minHeight: 14)
-                    .background(Color.white.opacity(selected ? 0.055 : 0.030))
+                    .background(selected ? accent.opacity(0.16) : Color.white.opacity(0.030))
                     .clipShape(Capsule())
                 if unreadCount > 0 {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
@@ -2898,19 +2908,19 @@ private struct WorkspaceTopTab: View {
         .padding(.leading, 4)
         .padding(.trailing, editing ? 6 : 4)
         .frame(width: WorkspaceTabMetrics.width, height: WorkspaceTabMetrics.height)
-        .background(selected ? Color.white.opacity(0.040) : (hovering ? Color.white.opacity(0.030) : Color.clear))
+        .background(selected ? accent.opacity(0.105) : (hovering ? Color.white.opacity(0.030) : Color.clear))
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .overlay(alignment: .bottomLeading) {
             if selected {
                 Capsule()
-                    .fill(Color.accentColor.opacity(0.88))
-                    .frame(width: 36, height: 2.5)
+                    .fill(accent.opacity(0.92))
+                    .frame(width: 42, height: 2.5)
                     .padding(.leading, 22)
             }
         }
         .overlay {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(selected ? Color.white.opacity(0.14) : Color.clear, lineWidth: 1)
+                .stroke(selected ? accent.opacity(0.36) : Color.clear, lineWidth: 1)
         }
         .scaleEffect(hovering && !selected ? 0.992 : 1)
         .animation(nil, value: selected)
