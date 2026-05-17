@@ -1195,16 +1195,14 @@ private struct WorkspaceTabStrip: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: true) {
+            ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: WorkspaceTabMetrics.spacing) {
                     ForEach(model.workspaces) { workspace in
                         workspaceTabView(for: workspace)
                     }
                 }
-                .padding(.horizontal, 6)
-                .scrollTargetLayout()
+                .padding(.horizontal, WorkspaceTabMetrics.edgePadding)
             }
-            .scrollTargetBehavior(.viewAligned)
             .onDrop(
                 of: [UTType.text],
                 delegate: WorkspaceTabDropDelegate(
@@ -1224,11 +1222,12 @@ private struct WorkspaceTabStrip: View {
         }
         .frame(minWidth: WorkspaceTabMetrics.width, maxWidth: .infinity, minHeight: WorkspaceTabMetrics.height, maxHeight: WorkspaceTabMetrics.height, alignment: .leading)
         .clipped()
+        .mask(ConductorHorizontalFadeMask())
     }
 
     private func scrollToSelectedWorkspace(_ proxy: ScrollViewProxy) {
         withAnimation(.easeOut(duration: 0.12)) {
-            proxy.scrollTo(model.workspace.id, anchor: .trailing)
+            proxy.scrollTo(model.workspace.id, anchor: .center)
         }
     }
 
@@ -1276,6 +1275,7 @@ private enum WorkspaceTabMetrics {
     static let width: CGFloat = 132
     static let height: CGFloat = 25
     static let spacing: CGFloat = 4
+    static let edgePadding: CGFloat = 6
 }
 
 private struct WorkspaceTopTab: View {

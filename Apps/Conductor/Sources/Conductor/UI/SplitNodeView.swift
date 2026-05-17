@@ -239,6 +239,7 @@ private struct StableTerminalTabStrip: View {
 
     private let tabWidth: CGFloat = 112
     private let tabSpacing: CGFloat = 3
+    private let tabEdgePadding: CGFloat = 4
 
     private var tabIDs: [TerminalID] {
         pane.tabs.map(\.id)
@@ -246,15 +247,14 @@ private struct StableTerminalTabStrip: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: true) {
+            ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: tabSpacing) {
                     ForEach(pane.tabs) { tab in
                         tabView(for: tab)
                     }
                 }
-                .scrollTargetLayout()
+                .padding(.horizontal, tabEdgePadding)
             }
-            .scrollTargetBehavior(.viewAligned)
             .onDrop(
                 of: [UTType.text],
                 delegate: TerminalTabDropDelegate(
@@ -276,11 +276,12 @@ private struct StableTerminalTabStrip: View {
         }
         .frame(height: 21)
         .clipped()
+        .mask(ConductorHorizontalFadeMask())
     }
 
     private func scrollToSelectedTab(_ proxy: ScrollViewProxy) {
         withAnimation(.easeOut(duration: 0.12)) {
-            proxy.scrollTo(pane.selectedTabID, anchor: .trailing)
+            proxy.scrollTo(pane.selectedTabID, anchor: .center)
         }
     }
 

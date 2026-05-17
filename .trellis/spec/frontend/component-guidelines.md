@@ -130,6 +130,12 @@ Forbidden patterns:
 - Hiding overflow affordances on scrollable navigation. Workspace, sidebar, and terminal tab
   scroll regions should expose scroll indicators when content can overflow, and selected items
   should be scrolled into view after creation, selection, or restoration.
+- Putting native horizontal scrollbars inside dense 21-25px tab strips. On macOS, the scrollbar
+  can participate in the tiny strip's layout and make tabs look vertically clipped or offset
+  when many items exist. Workspace and terminal tab strips should keep a fixed-height scroll
+  viewport, avoid native indicators inside that viewport, provide stable edge fades or external
+  overflow controls, and scroll selected tabs toward the center instead of pinning them against
+  fixed command buttons.
 - Letting scrollable tab strips compress fixed toolbar commands. In the main toolbar, command
   groups keep their icon+label affordances and fixed horizontal size; the workspace tab strip is
   the flexible/scrollable region that absorbs narrow-window pressure.

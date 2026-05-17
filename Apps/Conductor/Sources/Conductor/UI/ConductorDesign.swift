@@ -158,6 +158,27 @@ struct ConductorIconButton: View {
     }
 }
 
+struct ConductorHorizontalFadeMask: View {
+    var edgeWidth: CGFloat = 18
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = max(proxy.size.width, 1)
+            let stop = min(edgeWidth / width, 0.45)
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black, location: stop),
+                    .init(color: .black, location: 1 - stop),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+    }
+}
+
 struct ConductorPillGroup<Content: View>: View {
     @ViewBuilder var content: Content
 
