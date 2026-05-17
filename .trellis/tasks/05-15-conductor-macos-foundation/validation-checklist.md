@@ -3,6 +3,57 @@
 Use this checklist for the next human pass. Automated checks prove model and smoke routes;
 human validation still matters for real Ghostty/AppKit interaction.
 
+## Release Gate
+
+This foundation can be treated as release-ready for the next product layer only when all
+required items below are true.
+
+### Required Automated Gate
+
+- [ ] `./Scripts/check-conductor.sh` passes from `Apps/Conductor`.
+- [ ] `swift run ConductorModelCheck` passes.
+- [ ] Smoke automation passes without modifying `~/Library/Application Support/Conductor/window-state.json`.
+- [ ] Long-output stress reports `stress=long-output`.
+- [ ] Resize-while-output stress reports `stress=resize-while-output`.
+- [ ] `.build/Conductor.app` is produced by `./Scripts/build-app-bundle.sh`.
+- [ ] No `Conductor` process is left behind after the full gate.
+- [ ] Trellis context validation passes for `05-15-conductor-macos-foundation`.
+
+### Required Human Gate
+
+- [ ] Fresh launch with an empty state file.
+- [ ] Relaunch with existing saved workspaces.
+- [ ] Recovery launch with `CONDUCTOR_RESET_STATE=1`.
+- [ ] Terminal input, paste, scroll, selection, and shell control keys behave normally.
+- [ ] IME composition works in at least one CJK input method.
+- [ ] Split creation, drag resize, equalize, zoom, close, and collapse feel responsive.
+- [ ] Tab creation, selection, close, reorder, cross-pane drag, and move-to-new-split work.
+- [ ] Focus chrome, keyboard destination, and first responder agree after tab/pane changes.
+- [ ] Notifications, unread badges, jump-to-unread, and clear actions work without stealing focus.
+- [ ] Theme switching updates terminal palette, shell chrome, and window backdrop.
+- [ ] Command palette and native menu commands agree on availability and behavior.
+- [ ] `Cmd`/`Option`/`Ctrl` shortcuts route intentionally between app chrome and Ghostty.
+
+### Release Blockers
+
+- Any terminal transcript, scrollback, ANSI render state, or cell grid entering SwiftUI state.
+- Workspace switch, tab switch, split resize, or close recreating unrelated Ghostty surfaces.
+- Hidden terminal receiving keyboard input.
+- Full local gate mutating user persistence.
+- Full local gate leaving a running Conductor process.
+- Crash or hang during long-output or resize-while-output stress.
+- Invalid saved layout that cannot be recovered through the reset path.
+
+### Non-Blocking Follow-Ups
+
+- Full Instruments trace is still required before a public release candidate. The current
+  environment lacks `xcrun xctrace`; see `performance-resize-stress-findings.md`.
+- Directional pane focus should become fully frame/position-aware for complex uneven layouts.
+- Resize split action amounts should be tuned against Ghostty's expected amount semantics.
+- Process/session restoration is intentionally not implemented; saved tabs restart as fresh shells.
+- Startup-sensitive Ghostty actions such as cell size, color/config change, and bell remain deferred
+  until a dedicated lifecycle validation proves they can be claimed safely.
+
 ## Automated Checks
 
 Run:

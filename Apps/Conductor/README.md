@@ -68,6 +68,20 @@ zoomed=false
 
 `Vendor/GhosttyKit.xcframework/` is prepared locally and ignored by Git.
 
+## Release Gate
+
+Before expanding beyond the terminal foundation, run the full local gate and then complete
+the manual pass in:
+
+```text
+.trellis/tasks/05-15-conductor-macos-foundation/validation-checklist.md
+```
+
+The automated gate must pass without modifying the user's persisted window state or leaving
+behind a running `Conductor` process. Manual release blockers include hidden terminals
+receiving input, unrelated Ghostty surfaces being recreated by tab/split operations, or any
+terminal transcript/scrollback entering SwiftUI state.
+
 ## Boundaries
 
 - `ConductorCore` owns testable workspace, pane, split, and terminal-tab state.

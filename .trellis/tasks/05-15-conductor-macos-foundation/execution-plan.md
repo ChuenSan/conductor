@@ -118,7 +118,7 @@ skip ahead to higher-level agent features until the terminal workspace feels dep
 1. [done] Add smoke launch checks.
 2. [done] Add manual QA checklist for terminal basics and IME.
 3. [done] Add documentation for GhosttyKit preparation and app launch.
-4. [partial] Add release gate checklist.
+4. [done] Add release gate checklist.
 5. Only then expand into agent/workflow features.
 
 **Exit Criteria**:
