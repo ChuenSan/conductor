@@ -9,6 +9,9 @@ DerivedData/
 # Local evidence archives. Keep them on disk, but do not commit them.
 Backups/
 
+# Packaged apps and DMGs generated locally.
+Artifacts/
+
 # macOS filesystem metadata
 .DS_Store
 **/.DS_Store
