@@ -162,9 +162,17 @@ final class GhosttyAppRuntime {
         Task { @MainActor in
             let handled = GhosttyAppRuntime.shared.actionDelegate?
                 .ghosttyRuntimeDidRequestOpenURL(terminalID: terminalID, url: url) ?? false
-            if !handled {
-                NSWorkspace.shared.open(url)
+            guard !handled else { return }
+            guard !url.isFileURL else {
+                let fileURL = url.standardizedFileURL
+                if FileManager.default.fileExists(atPath: fileURL.path) {
+                    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                } else {
+                    ConductorLog.terminal.warning("Ignoring unhandled local file URL: \(fileURL.path)")
+                }
+                return
             }
+            NSWorkspace.shared.open(url)
         }
     }
 

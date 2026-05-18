@@ -272,8 +272,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         var isDirectory = ObjCBool(false)
         let expandedURL = url.standardizedFileURL
         guard FileManager.default.fileExists(atPath: expandedURL.path, isDirectory: &isDirectory) else {
-            filePreview.isVisible = true
-            filePreview.lastError = "路径不存在：\(expandedURL.path)"
+            filePreview = FilePreviewPanelState(
+                isVisible: true,
+                rootURL: expandedURL.deletingLastPathComponent(),
+                selectedURL: nil,
+                sourceTerminalID: sourceTerminalID,
+                lastError: "路径不存在：\(expandedURL.path)"
+            )
             return
         }
 
@@ -310,14 +315,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func ghosttyRuntimeDidRequestOpenURL(terminalID: TerminalID?, url: URL) -> Bool {
         guard url.isFileURL else { return false }
-        var isDirectory = ObjCBool(false)
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
-            return false
-        }
-        let kind = FilePreviewContentKind(url: url, isDirectory: isDirectory.boolValue)
-        guard kind == .directory || kind == .markdown || kind == .image else {
-            return false
-        }
         openFilePreview(url, sourceTerminalID: terminalID)
         return true
     }

@@ -260,10 +260,8 @@ struct FilePreviewPanel: View {
     }
 
     private func revealInFinder() {
-        if let selectedURL {
-            NSWorkspace.shared.activateFileViewerSelecting([selectedURL])
-        } else if let rootURL {
-            NSWorkspace.shared.open(rootURL)
+        if let targetURL = selectedURL ?? rootURL {
+            NSWorkspace.shared.activateFileViewerSelecting([targetURL.standardizedFileURL])
         }
     }
 }

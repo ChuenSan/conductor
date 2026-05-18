@@ -117,6 +117,12 @@ Custom overlays are allowed and expected:
 
 Overlays that must track terminal geometry should live in the same renderer/host coordinate system, not in a separate SwiftUI hierarchy that can drift during resize.
 
+Ghostty open-url actions are a shell integration boundary. Remote URLs may fall through to
+`NSWorkspace.open`, but local `file://` URLs must first be routed through app-owned preview,
+reveal, or error UI. Do not pass arbitrary local file URLs directly to LaunchServices from the
+terminal action callback; it can produce system alerts such as `-50` and breaks the intended
+right-side preview workflow.
+
 ## SwiftUI Bridge
 
 SwiftUI should see a stable terminal host component, not the terminal transcript or per-cell model.
