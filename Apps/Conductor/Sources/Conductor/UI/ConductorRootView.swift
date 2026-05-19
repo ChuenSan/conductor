@@ -179,7 +179,7 @@ private struct TerminalContextSearchBar: View {
                 .frame(width: 168)
                 .focused($searchFocused)
                 .onSubmit {
-                    model.navigateTerminalSearch(previous: false)
+                    model.performCommand(.findNext)
                 }
 
             Text(matchText)
@@ -193,7 +193,7 @@ private struct TerminalContextSearchBar: View {
                 help: L("上一个结果 Shift-Cmd-G", "Previous result Shift-Cmd-G"),
                 disabled: !hasQuery
             ) {
-                model.navigateTerminalSearch(previous: true)
+                model.performCommand(.findPrevious)
             }
 
             TerminalSearchIconButton(
@@ -201,7 +201,7 @@ private struct TerminalContextSearchBar: View {
                 help: L("下一个结果 Cmd-G", "Next result Cmd-G"),
                 disabled: !hasQuery
             ) {
-                model.navigateTerminalSearch(previous: false)
+                model.performCommand(.findNext)
             }
 
             TerminalSearchIconButton(
@@ -691,228 +691,162 @@ private enum ConductorCommandCatalog {
         model: ConductorWindowModel,
         run: @escaping (@escaping () -> Void) -> Void
     ) -> [CommandPaletteItem] {
-        [
+        func perform(_ command: ConductorShellCommand) {
+            run {
+                _ = model.performCommand(command)
+            }
+        }
+
+        func canPerform(_ command: ConductorShellCommand) -> Bool {
+            model.canPerformCommand(command)
+        }
+
+        return [
             CommandPaletteItem(id: "new-workspace", section: L("创建", "Create"), title: L("新建工作区", "New Workspace"), shortcut: "Cmd-N", keywords: "workspace new") {
-                run {
-                    model.newWorkspace()
-                }
+                perform(.newWorkspace)
             },
             CommandPaletteItem(id: "new-terminal", section: L("创建", "Create"), title: L("新开终端", "New Terminal"), shortcut: "Cmd-T", keywords: "terminal pane shell") {
-                run {
-                    model.newTerminal()
-                }
+                perform(.newTerminal)
             },
             CommandPaletteItem(id: "duplicate-tab", section: L("创建", "Create"), title: L("复制当前标签", "Duplicate Current Tab"), shortcut: "Duplicate", keywords: "copy tab duplicate") {
-                run {
-                    model.duplicateSelectedTab()
-                }
+                perform(.duplicateSelectedTab)
             },
-            CommandPaletteItem(id: "split-right", section: L("创建", "Create"), title: L("向右分屏", "Split Right"), shortcut: "Cmd-D", disabled: !model.canSplit, disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split right vertical") {
-                run {
-                    model.splitRight()
-                }
+            CommandPaletteItem(id: "split-right", section: L("创建", "Create"), title: L("向右分屏", "Split Right"), shortcut: "Cmd-D", disabled: !canPerform(.splitRight), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split right vertical") {
+                perform(.splitRight)
             },
-            CommandPaletteItem(id: "split-down", section: L("创建", "Create"), title: L("向下分屏", "Split Down"), shortcut: "Cmd-Shift-D", disabled: !model.canSplit, disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split down horizontal") {
-                run {
-                    model.splitDown()
-                }
+            CommandPaletteItem(id: "split-down", section: L("创建", "Create"), title: L("向下分屏", "Split Down"), shortcut: "Cmd-Shift-D", disabled: !canPerform(.splitDown), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split down horizontal") {
+                perform(.splitDown)
             },
             CommandPaletteItem(id: "next-tab", section: L("导航", "Navigate"), title: L("下一个标签", "Next Tab"), shortcut: "Cmd-]", keywords: "next tab") {
-                run {
-                    model.selectNextTab()
-                }
+                perform(.selectNextTab)
             },
             CommandPaletteItem(id: "previous-tab", section: L("导航", "Navigate"), title: L("上一个标签", "Previous Tab"), shortcut: "Cmd-[", keywords: "previous tab") {
-                run {
-                    model.selectPreviousTab()
-                }
+                perform(.selectPreviousTab)
             },
             CommandPaletteItem(id: "next-pane", section: L("导航", "Navigate"), title: L("下一个分屏", "Next Pane"), shortcut: "Cmd-Shift-]", keywords: "next pane focus") {
-                run {
-                    model.focusNextPane()
-                }
+                perform(.focusNextPane)
             },
             CommandPaletteItem(id: "previous-pane", section: L("导航", "Navigate"), title: L("上一个分屏", "Previous Pane"), shortcut: "Cmd-Shift-[", keywords: "previous pane focus") {
-                run {
-                    model.focusPreviousPane()
-                }
+                perform(.focusPreviousPane)
             },
             CommandPaletteItem(id: "notifications", section: L("导航", "Navigate"), title: L("通知中心", "Notification Center"), shortcut: "Cmd-Opt-N", keywords: "notification unread agent") {
-                run {
-                    model.toggleNotificationPanel()
-                }
+                perform(.toggleNotifications)
             },
             CommandPaletteItem(
                 id: "jump-unread",
                 section: L("导航", "Navigate"),
                 title: L("跳到最新未读", "Jump to Latest Unread"),
                 shortcut: "Cmd-Opt-J",
-                disabled: model.notifications.snapshot.latestUnread == nil,
+                disabled: !canPerform(.jumpToLatestUnread),
                 disabledReason: L("没有未读通知", "No unread notifications"),
                 keywords: "notification unread jump"
             ) {
-                run {
-                    _ = model.jumpToLatestUnread()
-                }
+                perform(.jumpToLatestUnread)
             },
             CommandPaletteItem(id: "context-search", section: L("导航", "Navigate"), title: L("上下文搜索", "Context Search"), shortcut: "Cmd-F", keywords: "find search terminal context") {
-                run {
-                    model.showTerminalSearch()
-                }
+                perform(.showTerminalSearch)
             },
             CommandPaletteItem(
                 id: "find-next",
                 section: L("导航", "Navigate"),
                 title: L("下一个搜索结果", "Find Next"),
                 shortcut: "Cmd-G",
-                disabled: !model.terminalSearchVisible,
+                disabled: !canPerform(.findNext),
                 disabledReason: L("先打开上下文搜索", "Open Context Search first"),
                 keywords: "find next search result"
             ) {
-                run {
-                    model.navigateTerminalSearch(previous: false)
-                }
+                perform(.findNext)
             },
             CommandPaletteItem(
                 id: "find-previous",
                 section: L("导航", "Navigate"),
                 title: L("上一个搜索结果", "Find Previous"),
                 shortcut: "Cmd-Shift-G",
-                disabled: !model.terminalSearchVisible,
+                disabled: !canPerform(.findPrevious),
                 disabledReason: L("先打开上下文搜索", "Open Context Search first"),
                 keywords: "find previous search result"
             ) {
-                run {
-                    model.navigateTerminalSearch(previous: true)
-                }
+                perform(.findPrevious)
             },
             CommandPaletteItem(id: "focus-left", section: L("导航", "Navigate"), title: L("聚焦左侧分屏", "Focus Pane Left"), shortcut: "Cmd-Opt-←", keywords: "focus pane left") {
-                run {
-                    model.focusPane(direction: .left)
-                }
+                perform(.focusPaneLeft)
             },
             CommandPaletteItem(id: "focus-right", section: L("导航", "Navigate"), title: L("聚焦右侧分屏", "Focus Pane Right"), shortcut: "Cmd-Opt-→", keywords: "focus pane right") {
-                run {
-                    model.focusPane(direction: .right)
-                }
+                perform(.focusPaneRight)
             },
             CommandPaletteItem(id: "focus-up", section: L("导航", "Navigate"), title: L("聚焦上方分屏", "Focus Pane Up"), shortcut: "Cmd-Opt-↑", keywords: "focus pane up") {
-                run {
-                    model.focusPane(direction: .up)
-                }
+                perform(.focusPaneUp)
             },
             CommandPaletteItem(id: "focus-down", section: L("导航", "Navigate"), title: L("聚焦下方分屏", "Focus Pane Down"), shortcut: "Cmd-Opt-↓", keywords: "focus pane down") {
-                run {
-                    model.focusPane(direction: .down)
-                }
+                perform(.focusPaneDown)
             },
             CommandPaletteItem(id: "close-tab", section: L("整理", "Organize"), title: L("关闭标签", "Close Tab"), shortcut: "Cmd-W", keywords: "close tab") {
-                run {
-                    model.closeSelectedTab()
-                }
+                perform(.closeSelectedTab)
             },
-            CommandPaletteItem(id: "close-pane", section: L("整理", "Organize"), title: L("关闭分屏", "Close Pane"), shortcut: "Cmd-Shift-W", disabled: !model.canCloseFocusedPane, disabledReason: L("至少保留一个分屏", "Keep at least one pane"), keywords: "close pane split") {
-                run {
-                    model.closePane(model.workspace.focusedPaneID)
-                }
+            CommandPaletteItem(id: "close-pane", section: L("整理", "Organize"), title: L("关闭分屏", "Close Pane"), shortcut: "Cmd-Shift-W", disabled: !canPerform(.closeFocusedPane), disabledReason: L("至少保留一个分屏", "Keep at least one pane"), keywords: "close pane split") {
+                perform(.closeFocusedPane)
             },
-            CommandPaletteItem(id: "move-tab-left", section: L("整理", "Organize"), title: L("标签左移", "Move Tab Left"), shortcut: "Cmd-Shift-,", disabled: !model.canMoveSelectedTabLeft, disabledReason: L("已经在最左侧", "Already on the left"), keywords: "move tab left") {
-                run {
-                    model.moveSelectedTabLeft()
-                }
+            CommandPaletteItem(id: "move-tab-left", section: L("整理", "Organize"), title: L("标签左移", "Move Tab Left"), shortcut: "Cmd-Shift-,", disabled: !canPerform(.moveTabLeft), disabledReason: L("已经在最左侧", "Already on the left"), keywords: "move tab left") {
+                perform(.moveTabLeft)
             },
-            CommandPaletteItem(id: "move-tab-right", section: L("整理", "Organize"), title: L("标签右移", "Move Tab Right"), shortcut: "Cmd-Shift-.", disabled: !model.canMoveSelectedTabRight, disabledReason: L("已经在最右侧", "Already on the right"), keywords: "move tab right") {
-                run {
-                    model.moveSelectedTabRight()
-                }
+            CommandPaletteItem(id: "move-tab-right", section: L("整理", "Organize"), title: L("标签右移", "Move Tab Right"), shortcut: "Cmd-Shift-.", disabled: !canPerform(.moveTabRight), disabledReason: L("已经在最右侧", "Already on the right"), keywords: "move tab right") {
+                perform(.moveTabRight)
             },
-            CommandPaletteItem(id: "move-tab-next-pane", section: L("整理", "Organize"), title: L("移到下一个分屏", "Move to Next Pane"), shortcut: "Cmd-Opt-M", disabled: !model.canMoveSelectedTabToNextPane, disabledReason: L("需要另一个分屏", "Requires another pane"), keywords: "move tab pane") {
-                run {
-                    model.moveSelectedTabToNextPane()
-                }
+            CommandPaletteItem(id: "move-tab-next-pane", section: L("整理", "Organize"), title: L("移到下一个分屏", "Move to Next Pane"), shortcut: "Cmd-Opt-M", disabled: !canPerform(.moveTabToNextPane), disabledReason: L("需要另一个分屏", "Requires another pane"), keywords: "move tab pane") {
+                perform(.moveTabToNextPane)
             },
-            CommandPaletteItem(id: "move-tab-new-split", section: L("整理", "Organize"), title: L("移到右侧新分屏", "Move to New Right Split"), shortcut: "Cmd-Opt-Shift-M", disabled: !model.canMoveSelectedTabToNewSplit, disabledReason: L("需要可移动标签和可用分屏空间", "Requires a movable tab and split space"), keywords: "move tab new split") {
-                run {
-                    model.moveSelectedTabToNewSplit(.right)
-                }
+            CommandPaletteItem(id: "move-tab-new-split", section: L("整理", "Organize"), title: L("移到右侧新分屏", "Move to New Right Split"), shortcut: "Cmd-Opt-Shift-M", disabled: !canPerform(.moveTabToNewRightSplit), disabledReason: L("需要可移动标签和可用分屏空间", "Requires a movable tab and split space"), keywords: "move tab new split") {
+                perform(.moveTabToNewRightSplit)
             },
-            CommandPaletteItem(id: "resize-left", section: L("整理", "Organize"), title: L("向左调整分屏", "Resize Pane Left"), shortcut: "Cmd-Shift-←", disabled: model.workspace.root.leaves.count <= 1, disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split left") {
-                run {
-                    model.resizeFocusedSplit(direction: .left)
-                }
+            CommandPaletteItem(id: "resize-left", section: L("整理", "Organize"), title: L("向左调整分屏", "Resize Pane Left"), shortcut: "Cmd-Shift-←", disabled: !canPerform(.resizePaneLeft), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split left") {
+                perform(.resizePaneLeft)
             },
-            CommandPaletteItem(id: "resize-right", section: L("整理", "Organize"), title: L("向右调整分屏", "Resize Pane Right"), shortcut: "Cmd-Shift-→", disabled: model.workspace.root.leaves.count <= 1, disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split right") {
-                run {
-                    model.resizeFocusedSplit(direction: .right)
-                }
+            CommandPaletteItem(id: "resize-right", section: L("整理", "Organize"), title: L("向右调整分屏", "Resize Pane Right"), shortcut: "Cmd-Shift-→", disabled: !canPerform(.resizePaneRight), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split right") {
+                perform(.resizePaneRight)
             },
-            CommandPaletteItem(id: "resize-up", section: L("整理", "Organize"), title: L("向上调整分屏", "Resize Pane Up"), shortcut: "Cmd-Shift-↑", disabled: model.workspace.root.leaves.count <= 1, disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split up") {
-                run {
-                    model.resizeFocusedSplit(direction: .up)
-                }
+            CommandPaletteItem(id: "resize-up", section: L("整理", "Organize"), title: L("向上调整分屏", "Resize Pane Up"), shortcut: "Cmd-Shift-↑", disabled: !canPerform(.resizePaneUp), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split up") {
+                perform(.resizePaneUp)
             },
-            CommandPaletteItem(id: "resize-down", section: L("整理", "Organize"), title: L("向下调整分屏", "Resize Pane Down"), shortcut: "Cmd-Shift-↓", disabled: model.workspace.root.leaves.count <= 1, disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split down") {
-                run {
-                    model.resizeFocusedSplit(direction: .down)
-                }
+            CommandPaletteItem(id: "resize-down", section: L("整理", "Organize"), title: L("向下调整分屏", "Resize Pane Down"), shortcut: "Cmd-Shift-↓", disabled: !canPerform(.resizePaneDown), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split down") {
+                perform(.resizePaneDown)
             },
             CommandPaletteItem(
                 id: "toggle-zoom",
                 section: L("视图", "View"),
                 title: model.workspace.isZoomed ? L("还原当前分屏", "Restore Current Pane") : L("放大当前分屏", "Zoom Current Pane"),
                 shortcut: "Cmd-Opt-Z",
-                disabled: model.workspace.root.leaves.count <= 1,
+                disabled: !canPerform(.toggleZoom),
                 disabledReason: L("需要多个分屏", "Requires multiple panes"),
                 keywords: "zoom pane"
             ) {
-                run {
-                    model.toggleZoom()
-                }
+                perform(.toggleZoom)
             },
-            CommandPaletteItem(id: "equalize-splits", section: L("视图", "View"), title: L("均分分屏", "Equalize Splits"), shortcut: "Cmd-Shift-=", disabled: model.workspace.root.leaves.count <= 1, disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "equalize split layout") {
-                run {
-                    model.equalizeSplits()
-                }
+            CommandPaletteItem(id: "equalize-splits", section: L("视图", "View"), title: L("均分分屏", "Equalize Splits"), shortcut: "Cmd-Shift-=", disabled: !canPerform(.equalizeSplits), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "equalize split layout") {
+                perform(.equalizeSplits)
             },
             CommandPaletteItem(id: "flash-focused-pane", section: L("视图", "View"), title: L("闪烁当前分屏", "Flash Focused Pane"), shortcut: "Cmd-Shift-H", keywords: "flash highlight focused pane") {
-                run {
-                    model.flashFocusedPane()
-                }
+                perform(.flashFocusedPane)
             },
             CommandPaletteItem(id: "workspace-overview", section: L("视图", "View"), title: L("工作区总览", "Workspace Overview"), shortcut: "Cmd-O", keywords: "workspace overview mission control") {
-                run {
-                    model.toggleWorkspaceOverview()
-                }
+                perform(.toggleWorkspaceOverview)
             },
             CommandPaletteItem(id: "toggle-fullscreen", section: L("视图", "View"), title: L("切换全屏", "Toggle Full Screen"), shortcut: "Ctrl-Cmd-F", keywords: "fullscreen window mac") {
-                run {
-                    NSApp.keyWindow?.toggleFullScreen(nil)
-                }
+                perform(.toggleFullScreen)
             },
             CommandPaletteItem(id: "appearance-settings", section: L("视图", "View"), title: L("外观设置", "Appearance Settings"), shortcut: "Cmd-,", keywords: "appearance theme settings") {
-                run {
-                    model.toggleSettingsPanel()
-                }
+                perform(.toggleSettings)
             },
             CommandPaletteItem(id: "duplicate-workspace", section: L("视图", "View"), title: L("复制工作区", "Duplicate Workspace"), shortcut: "Duplicate", keywords: "workspace duplicate") {
-                run {
-                    model.duplicateWorkspace(model.workspace.id)
-                }
+                perform(.duplicateWorkspace)
             },
             CommandPaletteItem(id: "reset-workspace", section: L("视图", "View"), title: L("重置工作区", "Reset Workspace"), shortcut: "Reset", keywords: "workspace reset") {
-                run {
-                    model.resetWorkspace()
-                }
+                perform(.resetWorkspace)
             },
-            CommandPaletteItem(id: "clear-notifications", section: L("整理", "Organize"), title: L("清空通知", "Clear Notifications"), shortcut: "Clear", disabled: model.notifications.records.isEmpty, disabledReason: L("通知中心为空", "Notification Center is empty"), keywords: "notification clear") {
-                run {
-                    model.clearAllNotifications()
-                }
+            CommandPaletteItem(id: "clear-notifications", section: L("整理", "Organize"), title: L("清空通知", "Clear Notifications"), shortcut: "Clear", disabled: !canPerform(.clearNotifications), disabledReason: L("通知中心为空", "Notification Center is empty"), keywords: "notification clear") {
+                perform(.clearNotifications)
             },
             CommandPaletteItem(id: "debug-notification", section: L("通知", "Notifications"), title: L("发送测试通知", "Send Test Notification"), shortcut: "Test", keywords: "notification test") {
-                run {
-                    model.notifyFocusedTerminalForTesting()
-                }
+                perform(.testNotification)
             }
         ]
     }
@@ -2312,22 +2246,22 @@ struct NotificationPanelView: View {
         } trailing: {
             Button(L("跳转", "Jump")) {
                 ConductorMotion.perform(ConductorMotion.selection) {
-                    _ = model.jumpToLatestUnread()
+                    model.performCommand(.jumpToLatestUnread)
                 }
             }
             .buttonStyle(ConductorPressButtonStyle())
             .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
             .foregroundStyle(model.notifications.snapshot.latestUnread == nil ? ConductorDesign.tertiaryText : theme.floatingEmphasis)
-            .disabled(model.notifications.snapshot.latestUnread == nil)
+            .disabled(!model.canPerformCommand(.jumpToLatestUnread))
             Button(L("清空", "Clear")) {
                 ConductorMotion.perform(ConductorMotion.list) {
-                    model.clearAllNotifications()
+                    model.performCommand(.clearNotifications)
                 }
             }
             .buttonStyle(ConductorPressButtonStyle())
             .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
             .foregroundStyle(model.notifications.records.isEmpty ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
-            .disabled(model.notifications.records.isEmpty)
+            .disabled(!model.canPerformCommand(.clearNotifications))
         }
         .padding(.top, 12)
         .padding(.horizontal, 12)
@@ -2348,7 +2282,7 @@ struct NotificationPanelView: View {
                 .multilineTextAlignment(.center)
             Button {
                 ConductorMotion.perform(ConductorMotion.emphasized) {
-                    model.notifyFocusedTerminalForTesting()
+                    model.performCommand(.testNotification)
                 }
             } label: {
                 Label(L("发送测试通知", "Send Test Notification"), systemImage: "bell.badge")
@@ -2765,7 +2699,7 @@ private struct ConductorSidebar: View {
             SidebarActionRow(icon: "gearshape", title: L("设置", "Settings"), help: L("设置", "Settings")) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.panel) {
-                    model.toggleSettingsPanel()
+                    model.performCommand(.toggleSettings)
                 }
             }
         }
@@ -2780,7 +2714,7 @@ private struct ConductorSidebar: View {
                 Button {
                     ConductorMotion.perform(ConductorMotion.list) {
                         finishWorkspaceRenameIfNeeded()
-                        model.newWorkspace()
+                        model.performCommand(.newWorkspace)
                     }
                 } label: {
                     Image(systemName: "plus")
@@ -2857,7 +2791,7 @@ private struct ConductorSidebar: View {
             SidebarRailButton(icon: "gearshape", help: L("设置", "Settings")) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.panel) {
-                    model.toggleSettingsPanel()
+                    model.performCommand(.toggleSettings)
                 }
             }
         }
@@ -2881,23 +2815,23 @@ private struct ConductorSidebar: View {
         Group {
             SidebarActionRow(icon: "plus.rectangle.on.rectangle", title: L("新开终端", "New Terminal"), showsTitle: showsLabels, help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
                 finishWorkspaceRenameIfNeeded()
-                model.newTerminal()
+                model.performCommand(.newTerminal)
             }
-            SidebarActionRow(icon: "rectangle.split.2x1", title: L("向右分屏", "Split Right"), showsTitle: showsLabels, disabled: !model.canSplit, help: L("向右分屏 Cmd-D", "Split Right Cmd-D")) {
+            SidebarActionRow(icon: "rectangle.split.2x1", title: L("向右分屏", "Split Right"), showsTitle: showsLabels, disabled: !model.canPerformCommand(.splitRight), help: L("向右分屏 Cmd-D", "Split Right Cmd-D")) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.layout) {
-                    model.splitRight()
+                    model.performCommand(.splitRight)
                 }
             }
-            SidebarActionRow(icon: "rectangle.split.1x2", title: L("向下分屏", "Split Down"), showsTitle: showsLabels, disabled: !model.canSplit, help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D")) {
+            SidebarActionRow(icon: "rectangle.split.1x2", title: L("向下分屏", "Split Down"), showsTitle: showsLabels, disabled: !model.canPerformCommand(.splitDown), help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D")) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.layout) {
-                    model.splitDown()
+                    model.performCommand(.splitDown)
                 }
             }
             SidebarActionRow(icon: "command", title: L("命令面板", "Command Center"), showsTitle: showsLabels, help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
                 finishWorkspaceRenameIfNeeded()
-                model.toggleCommandPalette()
+                model.performCommand(.toggleCommandPalette)
             }
         }
     }
@@ -3516,29 +3450,29 @@ private struct ConductorToolbar: View {
                 ConductorPillGroup {
                     ConductorIconButton(systemImage: "plus", help: L("新建工作区 Cmd-N", "New Workspace Cmd-N"), title: L("工作区", "Workspace")) {
                         finishWorkspaceRenameIfNeeded()
-                        model.newWorkspace()
+                        model.performCommand(.newWorkspace)
                     }
                 }
 
                 ConductorPillGroup {
                     ConductorIconButton(systemImage: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T"), title: L("终端", "Terminal")) {
                         finishWorkspaceRenameIfNeeded()
-                        model.newTerminal()
+                        model.performCommand(.newTerminal)
                     }
                 }
 
                 ConductorPillGroup {
-                    ConductorIconButton(systemImage: "rectangle.split.2x1", help: L("向右分屏 Cmd-D", "Split Right Cmd-D"), title: L("右分屏", "Right"), disabled: !model.canSplit) {
+                    ConductorIconButton(systemImage: "rectangle.split.2x1", help: L("向右分屏 Cmd-D", "Split Right Cmd-D"), title: L("右分屏", "Right"), disabled: !model.canPerformCommand(.splitRight)) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {
-                            model.splitRight()
+                            model.performCommand(.splitRight)
                         }
                     }
                     ConductorSegmentDivider()
-                    ConductorIconButton(systemImage: "rectangle.split.1x2", help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D"), title: L("下分屏", "Down"), disabled: !model.canSplit) {
+                    ConductorIconButton(systemImage: "rectangle.split.1x2", help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D"), title: L("下分屏", "Down"), disabled: !model.canPerformCommand(.splitDown)) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {
-                            model.splitDown()
+                            model.performCommand(.splitDown)
                         }
                     }
                     ConductorSegmentDivider()
@@ -3546,12 +3480,12 @@ private struct ConductorToolbar: View {
                         systemImage: "arrow.up.left.and.arrow.down.right",
                         help: model.workspace.isZoomed ? L("还原当前分屏 Cmd-Opt-Z", "Restore Current Pane Cmd-Opt-Z") : L("放大当前分屏 Cmd-Opt-Z", "Zoom Current Pane Cmd-Opt-Z"),
                         title: model.workspace.isZoomed ? L("还原", "Restore") : L("放大", "Zoom"),
-                        disabled: model.workspace.root.leaves.count <= 1,
+                        disabled: !model.canPerformCommand(.toggleZoom),
                         active: model.workspace.isZoomed
                     ) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {
-                            model.toggleZoom()
+                            model.performCommand(.toggleZoom)
                         }
                     }
                 }
@@ -3564,7 +3498,7 @@ private struct ConductorToolbar: View {
                         active: model.terminalSearchVisible
                     ) {
                         finishWorkspaceRenameIfNeeded()
-                        model.showTerminalSearch()
+                        model.performCommand(.showTerminalSearch)
                     }
                     ConductorSegmentDivider()
                     ConductorIconButton(
@@ -3574,7 +3508,7 @@ private struct ConductorToolbar: View {
                         active: model.workspaceOverviewVisible
                     ) {
                         finishWorkspaceRenameIfNeeded()
-                        model.toggleWorkspaceOverview()
+                        model.performCommand(.toggleWorkspaceOverview)
                     }
                     ConductorSegmentDivider()
                     ConductorIconButton(
@@ -3584,12 +3518,12 @@ private struct ConductorToolbar: View {
                         active: model.notificationPanelVisible
                     ) {
                         finishWorkspaceRenameIfNeeded()
-                        model.toggleNotificationPanel()
+                        model.performCommand(.toggleNotifications)
                     }
                     ConductorSegmentDivider()
                     ConductorIconButton(systemImage: "ellipsis", help: L("命令面板 Cmd-K", "Command Center Cmd-K"), title: L("命令", "Command")) {
                         finishWorkspaceRenameIfNeeded()
-                        model.toggleCommandPalette()
+                        model.performCommand(.toggleCommandPalette)
                     }
                 }
             }

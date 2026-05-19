@@ -86,7 +86,7 @@ private struct SplitPairView: View {
                             },
                             onDoubleClick: {
                                 ConductorMotion.perform(ConductorMotion.layout) {
-                                    model.equalizeSplits()
+                                    model.performCommand(.equalizeSplits)
                                 }
                             }
                         )
@@ -137,7 +137,7 @@ private struct SplitPairView: View {
                             },
                             onDoubleClick: {
                                 ConductorMotion.perform(ConductorMotion.layout) {
-                                    model.equalizeSplits()
+                                    model.performCommand(.equalizeSplits)
                                 }
                             }
                         )
@@ -1217,26 +1217,28 @@ private struct TerminalTabButton: View {
             }
             Button(L("复制标签", "Duplicate Tab")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
-                    model.duplicateTab(tab.id, in: paneID)
+                    model.selectTab(tab.id, in: paneID)
+                    model.performCommand(.duplicateSelectedTab)
                 }
             }
             Divider()
             Button(L("关闭标签", "Close Tab")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
-                    model.closeTab(tab.id, in: paneID)
+                    model.selectTab(tab.id, in: paneID)
+                    model.performCommand(.closeSelectedTab)
                 }
             }
             Button(L("关闭其他标签", "Close Other Tabs")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
-                    model.closeOtherTabs(in: paneID)
+                    model.performCommand(.closeOtherTabs)
                 }
             }
             .disabled(!model.workspace.canCloseOtherTabs(in: paneID))
             Button(L("关闭右侧标签", "Close Tabs to the Right")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
-                    model.closeTabsToRight(in: paneID)
+                    model.performCommand(.closeTabsToRight)
                 }
             }
             .disabled(!model.workspace.canCloseTabsToRight(of: tab.id, in: paneID))
@@ -1244,14 +1246,14 @@ private struct TerminalTabButton: View {
             Button(L("标签左移", "Move Tab Left")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
-                    model.moveSelectedTabLeft()
+                    model.performCommand(.moveTabLeft)
                 }
             }
             .disabled(tabIndex == nil || tabIndex == 0)
             Button(L("标签右移", "Move Tab Right")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
-                    model.moveSelectedTabRight()
+                    model.performCommand(.moveTabRight)
                 }
             }
             .disabled(tabIndex == nil || tabIndex == tabCount - 1)
@@ -1259,21 +1261,21 @@ private struct TerminalTabButton: View {
             Button(L("移动到下一个分屏", "Move to Next Pane")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
-                    model.moveSelectedTabToNextPane()
+                    model.performCommand(.moveTabToNextPane)
                 }
             }
             .disabled(!canMoveTargetTabToNextPane)
             Button(L("移动到右侧新分屏", "Move to New Right Split")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
-                    model.moveSelectedTabToNewSplit(.right)
+                    model.performCommand(.moveTabToNewRightSplit)
                 }
             }
             .disabled(!canMoveTargetTabToNewSplit)
             Button(L("移动到下方新分屏", "Move to New Down Split")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
-                    model.moveSelectedTabToNewSplit(.down)
+                    model.performCommand(.moveTabToNewDownSplit)
                 }
             }
             .disabled(!canMoveTargetTabToNewSplit)

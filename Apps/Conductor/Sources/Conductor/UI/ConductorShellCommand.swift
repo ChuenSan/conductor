@@ -7,6 +7,8 @@ enum ConductorShellCommand: String, CaseIterable {
     case newWorkspace
     case newTerminal
     case closeSelectedTab
+    case closeOtherTabs
+    case closeTabsToRight
     case closeFocusedPane
     case splitRight
     case splitDown
@@ -28,6 +30,7 @@ enum ConductorShellCommand: String, CaseIterable {
     case moveTabRight
     case moveTabToNextPane
     case moveTabToNewRightSplit
+    case moveTabToNewDownSplit
     case toggleCommandPalette
     case toggleWorkspaceOverview
     case toggleSettings
@@ -41,11 +44,20 @@ enum ConductorShellCommand: String, CaseIterable {
     case flashFocusedPane
     case duplicateSelectedTab
     case duplicateWorkspace
+    case closeCurrentWorkspace
     case clearNotifications
     case testNotification
 
     func canPerform(model: ConductorWindowModel) -> Bool {
         switch self {
+        case .closeOtherTabs:
+            model.workspace.canCloseOtherTabs(in: model.workspace.focusedPaneID)
+        case .closeTabsToRight:
+            if let pane = model.workspace.focusedPane {
+                model.workspace.canCloseTabsToRight(of: pane.selectedTabID, in: pane.id)
+            } else {
+                false
+            }
         case .closeFocusedPane:
             model.canCloseFocusedPane
         case .splitRight, .splitDown:
@@ -59,7 +71,7 @@ enum ConductorShellCommand: String, CaseIterable {
             model.canMoveSelectedTabRight
         case .moveTabToNextPane:
             model.canMoveSelectedTabToNextPane
-        case .moveTabToNewRightSplit:
+        case .moveTabToNewRightSplit, .moveTabToNewDownSplit:
             model.canMoveSelectedTabToNewSplit
         case .jumpToLatestUnread:
             model.notifications.snapshot.latestUnread != nil
@@ -67,6 +79,8 @@ enum ConductorShellCommand: String, CaseIterable {
             model.terminalSearchVisible
         case .clearNotifications:
             !model.notifications.records.isEmpty
+        case .closeCurrentWorkspace:
+            model.workspaces.count > 1
         default:
             true
         }
@@ -82,6 +96,10 @@ enum ConductorShellCommand: String, CaseIterable {
             model.newTerminal()
         case .closeSelectedTab:
             model.closeSelectedTab()
+        case .closeOtherTabs:
+            model.closeOtherTabs(in: model.workspace.focusedPaneID)
+        case .closeTabsToRight:
+            model.closeTabsToRight(in: model.workspace.focusedPaneID)
         case .closeFocusedPane:
             model.closePane(model.workspace.focusedPaneID)
         case .splitRight:
@@ -124,6 +142,8 @@ enum ConductorShellCommand: String, CaseIterable {
             model.moveSelectedTabToNextPane()
         case .moveTabToNewRightSplit:
             model.moveSelectedTabToNewSplit(.right)
+        case .moveTabToNewDownSplit:
+            model.moveSelectedTabToNewSplit(.down)
         case .toggleCommandPalette:
             model.toggleCommandPalette()
         case .toggleWorkspaceOverview:
@@ -150,6 +170,8 @@ enum ConductorShellCommand: String, CaseIterable {
             model.duplicateSelectedTab()
         case .duplicateWorkspace:
             model.duplicateWorkspace(model.workspace.id)
+        case .closeCurrentWorkspace:
+            model.closeWorkspace(model.workspace.id)
         case .clearNotifications:
             model.clearAllNotifications()
         case .testNotification:

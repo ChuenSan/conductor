@@ -718,43 +718,46 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             }
         }
         addItem(L("复制当前终端", "Duplicate Current Terminal")) { [weak self] in
-            self?.duplicateTab(terminalID, in: target.paneID)
+            self?.focusTerminal(terminalID)
+            self?.performCommand(.duplicateSelectedTab, window: view.window)
         }
         addItem(L("上下文搜索", "Context Search")) { [weak self] in
             self?.focusTerminal(terminalID)
-            self?.showTerminalSearch()
+            self?.performCommand(.showTerminalSearch, window: view.window)
         }
 
         addSeparator()
 
         addItem(L("新开终端", "New Terminal")) { [weak self] in
             self?.focusTerminal(terminalID)
-            self?.newTerminal()
+            self?.performCommand(.newTerminal, window: view.window)
         }
         addItem(L("向右分屏", "Split Right"), enabled: target.workspace.canSplit()) { [weak self] in
             self?.focusTerminal(terminalID)
-            self?.splitRight()
+            self?.performCommand(.splitRight, window: view.window)
         }
         addItem(L("向下分屏", "Split Down"), enabled: target.workspace.canSplit()) { [weak self] in
             self?.focusTerminal(terminalID)
-            self?.splitDown()
+            self?.performCommand(.splitDown, window: view.window)
         }
         addItem(L("关闭当前分屏", "Close Current Pane"), enabled: target.workspace.canClosePane(target.paneID)) { [weak self] in
-            self?.closePane(target.paneID)
+            self?.focusTerminal(terminalID)
+            self?.performCommand(.closeFocusedPane, window: view.window)
         }
 
         addSeparator()
 
         addItem(L("关闭当前终端", "Close Current Terminal")) { [weak self] in
-            self?.closeTab(terminalID, in: target.paneID)
+            self?.focusTerminal(terminalID)
+            self?.performCommand(.closeSelectedTab, window: view.window)
         }
         addItem(L("关闭其他终端", "Close Other Terminals"), enabled: target.workspace.canCloseOtherTabs(in: target.paneID)) { [weak self] in
             self?.focusTerminal(terminalID)
-            self?.closeOtherTabs(in: target.paneID)
+            self?.performCommand(.closeOtherTabs, window: view.window)
         }
         addItem(L("关闭右侧终端", "Close Terminals to the Right"), enabled: target.workspace.canCloseTabsToRight(of: terminalID, in: target.paneID)) { [weak self] in
             self?.focusTerminal(terminalID)
-            self?.closeTabsToRight(in: target.paneID)
+            self?.performCommand(.closeTabsToRight, window: view.window)
         }
 
         addSeparator()
@@ -763,10 +766,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             self?.promptRenameWorkspace(target.workspaceID, window: view.window)
         }
         addItem(L("复制当前工作区", "Duplicate Current Workspace")) { [weak self] in
-            self?.duplicateWorkspace(target.workspaceID)
+            self?.focusTerminal(terminalID)
+            self?.performCommand(.duplicateWorkspace, window: view.window)
         }
         addItem(L("关闭当前工作区", "Close Current Workspace"), enabled: workspaces.count > 1) { [weak self] in
-            self?.closeWorkspace(target.workspaceID)
+            self?.focusTerminal(terminalID)
+            self?.performCommand(.closeCurrentWorkspace, window: view.window)
         }
 
         NSMenu.popUpContextMenu(menu, with: event, for: view)
