@@ -361,6 +361,9 @@ struct ConductorGlassSurface<Content: View>: View {
     }
 
     private var topHighlightOpacity: Double {
+        if style == .settings || style == .palette || style == .panel {
+            return theme.usesDarkChrome ? 0.018 : 0.028
+        }
         if theme.usesDarkChrome {
             if style == .sidebar {
                 return 0.020
@@ -374,6 +377,9 @@ struct ConductorGlassSurface<Content: View>: View {
     }
 
     private var midHighlightOpacity: Double {
+        if style == .settings || style == .palette || style == .panel {
+            return theme.usesDarkChrome ? 0.006 : 0.010
+        }
         if theme.usesDarkChrome {
             return 0.012
         }
@@ -391,7 +397,7 @@ struct ConductorGlassSurface<Content: View>: View {
                 }
                 .overlay {
                     surfaceShape
-                        .fill(Color.white.opacity((theme.usesDarkChrome ? 0.012 : 0.04) * clarity.highlightMultiplier))
+                        .fill(Color.white.opacity((theme.usesDarkChrome ? 0.004 : 0.010) * clarity.highlightMultiplier))
                 }
         } else if style == .sidebar {
             surfaceShape
@@ -533,6 +539,18 @@ enum ConductorMotion {
         reducedMotion ? nil : .easeOut(duration: 0.045)
     }
 
+    static var reveal: Animation? {
+        reducedMotion ? nil : .smooth(duration: 0.16, extraBounce: 0.02)
+    }
+
+    static var search: Animation? {
+        reducedMotion ? nil : .smooth(duration: 0.14, extraBounce: 0.015)
+    }
+
+    static var scroll: Animation? {
+        reducedMotion ? nil : .smooth(duration: 0.20, extraBounce: 0.0)
+    }
+
     static var selection: Animation? {
         navigation
     }
@@ -546,7 +564,7 @@ enum ConductorMotion {
     }
 
     static var panel: Animation? {
-        magnetic(duration: 0.20)
+        reducedMotion ? nil : .smooth(duration: 0.16, extraBounce: 0.018)
     }
 
     static var list: Animation? {
@@ -566,7 +584,17 @@ enum ConductorMotion {
     }
 
     static var panelTransition: AnyTransition {
-        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.982, anchor: .topTrailing))
+        reducedMotion ? .identity : .modifier(
+            active: ConductorPanelRevealModifier(opacity: 0, scale: 0.984, y: -5, blur: 3),
+            identity: ConductorPanelRevealModifier(opacity: 1, scale: 1, y: 0, blur: 0)
+        )
+    }
+
+    static var searchTransition: AnyTransition {
+        reducedMotion ? .identity : .modifier(
+            active: ConductorPanelRevealModifier(opacity: 0, scale: 0.988, y: -6, blur: 2),
+            identity: ConductorPanelRevealModifier(opacity: 1, scale: 1, y: 0, blur: 0)
+        )
     }
 
     static var tabTransition: AnyTransition {
@@ -574,7 +602,7 @@ enum ConductorMotion {
     }
 
     static var rowTransition: AnyTransition {
-        reducedMotion ? .identity : .opacity
+        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.992, anchor: .center))
     }
 
     static func setReducedMotion(_ value: Bool) {
@@ -609,6 +637,21 @@ enum ConductorMotion {
             transaction.disablesAnimations = true
         }
         return transaction
+    }
+}
+
+private struct ConductorPanelRevealModifier: ViewModifier {
+    let opacity: Double
+    let scale: CGFloat
+    let y: CGFloat
+    let blur: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(opacity)
+            .scaleEffect(scale, anchor: .topTrailing)
+            .offset(y: y)
+            .blur(radius: blur)
     }
 }
 
@@ -672,16 +715,16 @@ struct ConductorIconButton: View {
 
     private var buttonStroke: Color {
         if theme.usesDarkChrome {
-            return Color.white.opacity(active ? 0.14 : (hovering ? 0.10 : 0.045))
+            return Color.white.opacity(active ? 0.13 : (hovering ? 0.09 : 0.038))
         }
-        return theme.shellStroke.opacity(active ? 0.92 : (hovering ? 0.72 : 0.46))
+        return theme.shellStroke.opacity(active ? 0.72 : (hovering ? 0.52 : 0.34))
     }
 
     private var buttonFill: Color {
         if theme.usesDarkChrome {
-            return Color.white.opacity(active ? 0.072 : (hovering ? 0.050 : 0.014))
+            return Color.white.opacity(active ? 0.066 : (hovering ? 0.042 : 0.010))
         }
-        return active ? theme.shellSelectedFill : (hovering ? theme.shellHoverFill : theme.shellControlFill)
+        return active ? theme.shellSelectedFill.opacity(0.80) : (hovering ? theme.shellHoverFill.opacity(0.76) : theme.shellControlFill.opacity(0.54))
     }
 
     var body: some View {
@@ -701,7 +744,7 @@ struct ConductorIconButton: View {
             }
             .foregroundStyle(foreground)
             .padding(.horizontal, title == nil ? 0 : 8)
-            .frame(width: title == nil ? 24 : nil, height: 24)
+            .frame(width: title == nil ? 23 : nil, height: 23)
             .background(buttonFill)
             .overlay {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.control, style: .continuous)
@@ -774,12 +817,12 @@ struct ConductorPillGroup<Content: View>: View {
         HStack(spacing: 1) {
             content
         }
-        .padding(3)
-        .background(theme.usesDarkChrome ? theme.terminalRaisedBackground.opacity(0.88) : theme.shellControlFill.opacity(0.86))
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+        .padding(2)
+        .background(theme.usesDarkChrome ? theme.terminalRaisedBackground.opacity(0.64) : theme.shellControlFill.opacity(0.46))
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup - 2, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
-                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.075) : theme.shellStroke.opacity(0.74), lineWidth: 1)
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup - 2, style: .continuous)
+                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.060) : theme.shellStroke.opacity(0.42), lineWidth: 1)
         }
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)
@@ -791,7 +834,7 @@ struct ConductorSegmentDivider: View {
 
     var body: some View {
         Rectangle()
-            .fill(theme.usesDarkChrome ? Color.white.opacity(0.038) : theme.shellStroke.opacity(0.58))
+            .fill(theme.usesDarkChrome ? Color.white.opacity(0.032) : theme.shellStroke.opacity(0.34))
             .frame(width: 1, height: 14)
     }
 }
@@ -805,19 +848,19 @@ struct ConductorTerminalToolbarSurface<Content: View>: View {
             .background {
                 ZStack {
                     Rectangle()
-                        .fill(theme.terminalChrome)
+                        .fill(theme.terminalRaisedBackground)
                     LinearGradient(
                         colors: [
-                            theme.terminalRaisedBackground.opacity(0.98),
-                            theme.terminalChrome,
-                            theme.terminalBackground.opacity(0.98)
+                            theme.terminalRaisedBackground.opacity(0.96),
+                            theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.94 : 0.78),
+                            theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.82 : 0.68)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(theme.usesDarkChrome ? 0.026 : 0.10),
+                            Color.white.opacity(theme.usesDarkChrome ? 0.016 : 0.030),
                             Color.clear
                         ],
                         startPoint: .top,
@@ -829,8 +872,8 @@ struct ConductorTerminalToolbarSurface<Content: View>: View {
                 LinearGradient(
                     colors: [
                         Color.clear,
-                        Color.white.opacity(theme.usesDarkChrome ? 0.045 : 0.16),
-                        Color.black.opacity(theme.usesDarkChrome ? 0.24 : 0.08),
+                        Color.white.opacity(theme.usesDarkChrome ? 0.030 : 0.060),
+                        Color.black.opacity(theme.usesDarkChrome ? 0.20 : 0.055),
                         Color.clear
                     ],
                     startPoint: .leading,

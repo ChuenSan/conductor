@@ -33,11 +33,11 @@ enum AppearanceDensity: String, CaseIterable, Codable, Identifiable {
     var toolbarHeight: CGFloat {
         switch self {
         case .compact:
-            42
+            40
         case .standard:
-            46
+            42
         case .spacious:
-            50
+            46
         }
     }
 
@@ -55,11 +55,11 @@ enum AppearanceDensity: String, CaseIterable, Codable, Identifiable {
     var workspaceTabHeight: CGFloat {
         switch self {
         case .compact:
-            28
+            26
         case .standard:
-            30
+            28
         case .spacious:
-            32
+            30
         }
     }
 
@@ -342,6 +342,7 @@ struct AppearancePreferences: Codable, Equatable {
     var language: AppearanceLanguage
     var fontFamily: AppearanceFontFamily
     var reducedMotion: Bool
+    var agentNotifications: AgentNotificationPreferences
 
     init(
         density: AppearanceDensity = .standard,
@@ -349,7 +350,8 @@ struct AppearancePreferences: Codable, Equatable {
         fontScale: AppearanceFontScale = .standard,
         language: AppearanceLanguage = .system,
         fontFamily: AppearanceFontFamily = .system,
-        reducedMotion: Bool = false
+        reducedMotion: Bool = false,
+        agentNotifications: AgentNotificationPreferences = AgentNotificationPreferences()
     ) {
         self.density = density
         self.chromeClarity = chromeClarity
@@ -357,6 +359,7 @@ struct AppearancePreferences: Codable, Equatable {
         self.language = language
         self.fontFamily = fontFamily
         self.reducedMotion = reducedMotion
+        self.agentNotifications = agentNotifications
     }
 
     init(from decoder: Decoder) throws {
@@ -367,6 +370,7 @@ struct AppearancePreferences: Codable, Equatable {
         self.language = try container.decodeIfPresent(AppearanceLanguage.self, forKey: .language) ?? .system
         self.fontFamily = try container.decodeIfPresent(AppearanceFontFamily.self, forKey: .fontFamily) ?? .system
         self.reducedMotion = try container.decodeIfPresent(Bool.self, forKey: .reducedMotion) ?? false
+        self.agentNotifications = try container.decodeIfPresent(AgentNotificationPreferences.self, forKey: .agentNotifications) ?? AgentNotificationPreferences()
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -376,5 +380,39 @@ struct AppearancePreferences: Codable, Equatable {
         case language
         case fontFamily
         case reducedMotion
+        case agentNotifications
+    }
+}
+
+struct AgentNotificationPreferences: Codable, Equatable {
+    var codex: Bool
+    var claudeCode: Bool
+
+    init(codex: Bool = true, claudeCode: Bool = false) {
+        self.codex = codex
+        self.claudeCode = claudeCode
+    }
+
+    func isEnabled(for provider: AgentHookProvider) -> Bool {
+        switch provider {
+        case .codex:
+            codex
+        case .claudeCode:
+            claudeCode
+        }
+    }
+
+    func isEnabled(forAgentName agent: String) -> Bool {
+        guard let provider = AgentHookProvider(cliName: agent) else { return false }
+        return isEnabled(for: provider)
+    }
+
+    mutating func setEnabled(_ enabled: Bool, for provider: AgentHookProvider) {
+        switch provider {
+        case .codex:
+            codex = enabled
+        case .claudeCode:
+            claudeCode = enabled
+        }
     }
 }

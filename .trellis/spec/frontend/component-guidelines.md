@@ -202,6 +202,15 @@ rendering into SwiftUI work or making precision interactions lag behind the poin
   Avoid stacking a selected-tab underline with the pane rail separator below it; selected
   state should come from fill, stroke, text weight, and glyph emphasis instead. Keep inactive
   workspace tabs visible but low-contrast so the terminal surface remains dominant.
+- Keep motion tokens intent-specific. Use `ConductorMotion.search` for the context-search
+  chip, `ConductorMotion.panel` / `panelTransition` for floating panels, `ConductorMotion.list`
+  / `rowTransition` for filtered command, overview, and notification rows, and
+  `ConductorMotion.scroll` for scroll-to-visible behavior in tab strips. Do not reuse
+  selection motion for scroll positioning; it makes tab navigation feel sticky and hides
+  whether the state changed immediately.
+- Defer search-field focus until the floating surface has entered the view tree. Command
+  Center, Workspace Overview, and terminal context search should set their `FocusState` from
+  the next main-actor turn so the first responder does not race panel insertion animation.
 
 **Correct**:
 

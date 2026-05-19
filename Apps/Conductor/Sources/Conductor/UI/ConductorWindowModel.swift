@@ -46,16 +46,41 @@ struct TerminalDisplayMetadata: Equatable {
     var bellCount = 0
 }
 
-@MainActor
-private final class TerminalContextMenuActionTarget: NSObject {
-    private let action: @MainActor () -> Void
+private final class TerminalContextMenuController: NSObject, NSMenuDelegate {
+    private var nextActionTag = 1
+    private var actions: [Int: () -> Void] = [:]
+    var onClose: (() -> Void)?
 
-    init(action: @escaping @MainActor () -> Void) {
-        self.action = action
+    func makeItem(
+        title: String,
+        enabled: Bool,
+        action: @escaping @MainActor () -> Void
+    ) -> NSMenuItem {
+        let actionTag = nextActionTag
+        nextActionTag += 1
+        actions[actionTag] = {
+            Task { @MainActor in
+                action()
+            }
+        }
+
+        let item = NSMenuItem(
+            title: title,
+            action: #selector(performMenuAction(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        item.tag = actionTag
+        item.isEnabled = enabled
+        return item
     }
 
-    @objc func perform(_ sender: NSMenuItem) {
-        action()
+    @objc private func performMenuAction(_ sender: NSMenuItem) {
+        actions[sender.tag]?()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        onClose?()
     }
 }
 
@@ -109,6 +134,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published var workspaceOverviewVisible = false
     @Published var terminalSearchVisible = false
     @Published var terminalSearchQuery = ""
+    @Published private(set) var agentHookSettingsMessage: String?
     @Published private(set) var terminalSearchFocusGeneration = 0
     @Published private(set) var terminalSearchTargetID: TerminalID?
     @Published private(set) var paneFlashTokens: [PaneID: UInt64] = [:]
@@ -120,7 +146,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var pendingPersistence: DispatchWorkItem?
     private var pendingMetadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
     private var pendingMetadataPublish: DispatchWorkItem?
-    private var activeTerminalContextMenuTargets: [TerminalContextMenuActionTarget] = []
+    private var activeTerminalContextMenuController: TerminalContextMenuController?
     private var selectedWorkspaceID: WorkspaceID
 
     init() {
@@ -234,6 +260,25 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func setReducedMotion(_ reducedMotion: Bool) {
         guard appearance.reducedMotion != reducedMotion else { return }
         appearance.reducedMotion = reducedMotion
+    }
+
+    func setAgentNotificationsEnabled(_ enabled: Bool, for provider: AgentHookProvider) {
+        if enabled {
+            do {
+                let bridgePath = Bundle.main.executablePath ?? CommandLine.arguments.first ?? "Conductor"
+                agentHookSettingsMessage = try AgentNotificationHookInstaller.install(provider: provider, bridgePath: bridgePath)
+            } catch {
+                agentHookSettingsMessage = error.localizedDescription
+                return
+            }
+        } else {
+            agentHookSettingsMessage = "\(provider.title) \(L("通知已关闭", "notifications disabled"))"
+        }
+
+        var next = appearance.agentNotifications
+        next.setEnabled(enabled, for: provider)
+        guard next != appearance.agentNotifications else { return }
+        appearance.agentNotifications = next
     }
 
     func shellAnimation(_ animation: Animation?) -> Animation? {
@@ -618,23 +663,28 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
         let menu = NSMenu(title: target.tab.title)
         menu.autoenablesItems = false
-        activeTerminalContextMenuTargets = []
+        let controller = TerminalContextMenuController()
+        controller.onClose = { [weak self, weak controller] in
+            DispatchQueue.main.async {
+                guard let self, let controller else { return }
+                if self.activeTerminalContextMenuController === controller {
+                    self.activeTerminalContextMenuController = nil
+                }
+            }
+        }
+        menu.delegate = controller
+        activeTerminalContextMenuController = controller
 
         func addItem(
             _ title: String,
             enabled: Bool = true,
             action: @escaping @MainActor () -> Void
         ) {
-            let actionTarget = TerminalContextMenuActionTarget(action: action)
-            let item = NSMenuItem(
+            let item = controller.makeItem(
                 title: title,
-                action: #selector(TerminalContextMenuActionTarget.perform(_:)),
-                keyEquivalent: ""
+                enabled: enabled,
+                action: action
             )
-            item.target = actionTarget
-            item.representedObject = actionTarget
-            item.isEnabled = enabled
-            activeTerminalContextMenuTargets.append(actionTarget)
             menu.addItem(item)
         }
 
@@ -1080,13 +1130,15 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
               let uuid = UUID(uuidString: rawTerminalID.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             return
         }
+        let agent = userInfo[ConductorAgentHookBridge.Key.agent] ?? ""
+        guard appearance.agentNotifications.isEnabled(forAgentName: agent) else { return }
 
         let terminalID = TerminalID(uuid)
         let action = userInfo[ConductorAgentHookBridge.Key.action]?.lowercased() ?? ""
         switch action {
         case "prompt-submit", "session-start":
             markTerminalNotificationsRead(terminalID)
-        case "stop", "agent-response":
+        case "stop", "agent-response", "subagent-stop", "notification":
             let title = userInfo[ConductorAgentHookBridge.Key.title] ?? "任务完成"
             let body = userInfo[ConductorAgentHookBridge.Key.body] ?? "终端任务已完成，等待下一步。"
             _ = recordTerminalNotification(

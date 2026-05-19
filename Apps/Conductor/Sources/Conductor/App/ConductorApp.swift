@@ -38,6 +38,10 @@ final class ConductorWindow: NSWindow {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if performTextEditingKeyEquivalent(with: event) {
+            return true
+        }
+
         if let terminalHost = Self.owningTerminalHost(for: firstResponder) {
             if routeAppShortcut?(event) == true {
                 return true
@@ -55,6 +59,32 @@ final class ConductorWindow: NSWindow {
             return true
         }
         return routeAppShortcut?(event) == true
+    }
+
+    private func performTextEditingKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.type == .keyDown,
+              let responder = firstResponder,
+              Self.owningTerminalHost(for: responder) == nil else {
+            return false
+        }
+        let flags = event.modifierFlags
+            .intersection(.deviceIndependentFlagsMask)
+            .subtracting([.numericPad, .function, .capsLock])
+        guard flags == .command,
+              event.charactersIgnoringModifiers?.lowercased() == "a" else {
+            return false
+        }
+
+        if let textView = responder as? NSTextView {
+            textView.selectAll(nil)
+            return true
+        }
+        if let control = responder as? NSControl,
+           let editor = control.currentEditor() as? NSTextView {
+            editor.selectAll(nil)
+            return true
+        }
+        return NSApp.sendAction(#selector(NSResponder.selectAll(_:)), to: nil, from: self)
     }
 
     private func isChromeBorderDoubleClick(_ event: NSEvent) -> Bool {

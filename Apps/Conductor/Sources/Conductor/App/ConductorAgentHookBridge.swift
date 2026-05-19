@@ -1,5 +1,59 @@
 import Foundation
 
+enum AgentHookProvider: String, CaseIterable, Codable, Identifiable {
+    case codex
+    case claudeCode
+
+    var id: String { rawValue }
+
+    init?(cliName: String) {
+        switch cliName.lowercased() {
+        case "codex":
+            self = .codex
+        case "claude", "claude-code", "cc":
+            self = .claudeCode
+        default:
+            return nil
+        }
+    }
+
+    var cliName: String {
+        switch self {
+        case .codex:
+            "codex"
+        case .claudeCode:
+            "claude"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .codex:
+            "Codex"
+        case .claudeCode:
+            "Claude Code / cc"
+        }
+    }
+
+    var settingsSubtitle: String {
+        switch self {
+        case .codex:
+            ConductorLocalization.text(zh: "接收 Codex 完成通知", en: "Receive Codex completion notifications")
+        case .claudeCode:
+            ConductorLocalization.text(zh: "接收 Claude Code/cc 通知", en: "Receive Claude Code/cc notifications")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .codex:
+            "sparkles"
+        case .claudeCode:
+            "text.bubble"
+        }
+    }
+}
+
 enum ConductorAgentHookBridge {
     static let notificationName = Notification.Name("com.conductor.agent-hook")
 
@@ -22,15 +76,14 @@ enum ConductorHookCLI {
 
         let agent = args[1].lowercased()
         let action = args[2].lowercased()
-        guard agent == "codex" else {
-            print("{}")
+        guard let provider = AgentHookProvider(cliName: agent) else {
             return true
         }
 
         if action == "install" {
             do {
                 let bridgePath = Bundle.main.executablePath ?? CommandLine.arguments.first ?? "Conductor"
-                print(try CodexNotificationHookInstaller.install(bridgePath: bridgePath))
+                print(try AgentNotificationHookInstaller.install(provider: provider, bridgePath: bridgePath))
             } catch {
                 FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
                 Foundation.exit(1)
@@ -39,8 +92,10 @@ enum ConductorHookCLI {
         }
 
         let payload = readHookPayload()
-        postCodexEvent(action: action, payload: payload)
-        print("{}")
+        postAgentEvent(provider: provider, action: action, payload: payload)
+        if provider == .codex {
+            print("{}")
+        }
         return true
     }
 
@@ -53,7 +108,7 @@ enum ConductorHookCLI {
         return object
     }
 
-    private static func postCodexEvent(action: String, payload: [String: Any]) {
+    private static func postAgentEvent(provider: AgentHookProvider, action: String, payload: [String: Any]) {
         guard let terminalID = ProcessInfo.processInfo.environment["CONDUCTOR_TERMINAL_ID"],
               !terminalID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return
@@ -61,7 +116,7 @@ enum ConductorHookCLI {
 
         var userInfo: [String: String] = [
             ConductorAgentHookBridge.Key.terminalID: terminalID,
-            ConductorAgentHookBridge.Key.agent: "codex",
+            ConductorAgentHookBridge.Key.agent: provider.cliName,
             ConductorAgentHookBridge.Key.action: action
         ]
 
@@ -75,7 +130,10 @@ enum ConductorHookCLI {
             userInfo[ConductorAgentHookBridge.Key.turnID] = turnID
         }
 
-        if action == "stop" || action == "agent-response" {
+        if action == "notification" {
+            userInfo[ConductorAgentHookBridge.Key.title] = provider.title
+            userInfo[ConductorAgentHookBridge.Key.body] = firstString(in: payload, keys: ["message", "notification", "body", "summary"]) ?? "Agent 等待你的处理。"
+        } else if action == "stop" || action == "agent-response" || action == "subagent-stop" {
             let cwd = userInfo[ConductorAgentHookBridge.Key.cwd]
             userInfo[ConductorAgentHookBridge.Key.title] = "任务完成"
             userInfo[ConductorAgentHookBridge.Key.body] = completionBody(payload: payload, cwd: cwd)

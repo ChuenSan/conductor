@@ -1,11 +1,20 @@
 import CryptoKit
 import Foundation
 
-enum CodexNotificationHookInstaller {
+enum AgentNotificationHookInstaller {
     private static let trustBegin = "# BEGIN CONDUCTOR CODEX HOOK TRUST"
     private static let trustEnd = "# END CONDUCTOR CODEX HOOK TRUST"
 
-    static func install(bridgePath: String) throws -> String {
+    static func install(provider: AgentHookProvider, bridgePath: String) throws -> String {
+        switch provider {
+        case .codex:
+            return try installCodex(bridgePath: bridgePath)
+        case .claudeCode:
+            return try installClaudeCode(bridgePath: bridgePath)
+        }
+    }
+
+    private static func installCodex(bridgePath: String) throws -> String {
         let fileManager = FileManager.default
         let codexHome = resolvedCodexHome()
         try fileManager.createDirectory(at: codexHome, withIntermediateDirectories: true)
@@ -20,10 +29,10 @@ enum CodexNotificationHookInstaller {
             ("Stop", "stop")
         ]
         for (eventName, action) in events {
-            let command = hookCommand(bridgePath: bridgePath, action: action)
+            let command = hookCommand(provider: .codex, bridgePath: bridgePath, action: action)
             var groups = hooks[eventName] as? [[String: Any]] ?? []
             groups = groups.compactMap { group in
-                removingOwnedHooks(from: group)
+                removingOwnedHooks(from: group, provider: .codex)
             }
             groups.append([
                 "hooks": [
@@ -54,6 +63,45 @@ enum CodexNotificationHookInstaller {
         return "已写入 \(hooksURL.path)，Codex Stop 后会发送 Conductor 通知。"
     }
 
+    private static func installClaudeCode(bridgePath: String) throws -> String {
+        let fileManager = FileManager.default
+        let claudeHome = resolvedClaudeHome()
+        try fileManager.createDirectory(at: claudeHome, withIntermediateDirectories: true)
+
+        let settingsURL = claudeHome.appendingPathComponent("settings.json")
+        var root = try readJSONObject(at: settingsURL)
+        var hooks = root["hooks"] as? [String: Any] ?? [:]
+        let events = [
+            ("UserPromptSubmit", "prompt-submit"),
+            ("Stop", "stop"),
+            ("SubagentStop", "subagent-stop"),
+            ("Notification", "notification")
+        ]
+
+        for (eventName, action) in events {
+            let command = hookCommand(provider: .claudeCode, bridgePath: bridgePath, action: action)
+            var groups = hooks[eventName] as? [[String: Any]] ?? []
+            groups = groups.compactMap { group in
+                removingOwnedHooks(from: group, provider: .claudeCode)
+            }
+            groups.append([
+                "hooks": [
+                    [
+                        "type": "command",
+                        "command": command,
+                        "timeout": 5
+                    ] as [String: Any]
+                ]
+            ] as [String: Any])
+            hooks[eventName] = groups
+        }
+
+        root["hooks"] = hooks
+        let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: settingsURL, options: .atomic)
+        return "已写入 \(settingsURL.path)，Claude Code/cc 会发送 Conductor 通知。"
+    }
+
     private static func resolvedCodexHome() -> URL {
         if let override = ProcessInfo.processInfo.environment["CODEX_HOME"],
            !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -62,12 +110,20 @@ enum CodexNotificationHookInstaller {
         return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex", isDirectory: true)
     }
 
+    private static func resolvedClaudeHome() -> URL {
+        if let override = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"],
+           !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return URL(fileURLWithPath: NSString(string: override).expandingTildeInPath, isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude", isDirectory: true)
+    }
+
     private static func readJSONObject(at url: URL) throws -> [String: Any] {
         guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
         let data = try Data(contentsOf: url)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw NSError(
-                domain: "Conductor.CodexHooks",
+                domain: "Conductor.AgentHooks",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "\(url.path) 不是有效 JSON，未自动修改。"]
             )
@@ -75,11 +131,11 @@ enum CodexNotificationHookInstaller {
         return object
     }
 
-    private static func removingOwnedHooks(from group: [String: Any]) -> [String: Any]? {
+    private static func removingOwnedHooks(from group: [String: Any], provider: AgentHookProvider) -> [String: Any]? {
         guard var hookList = group["hooks"] as? [[String: Any]] else { return group }
         hookList.removeAll { hook in
             guard let command = hook["command"] as? String else { return false }
-            return isOwnedCommand(command)
+            return isOwnedCommand(command, provider: provider)
         }
         guard !hookList.isEmpty else { return nil }
         var next = group
@@ -87,13 +143,24 @@ enum CodexNotificationHookInstaller {
         return next
     }
 
-    private static func isOwnedCommand(_ command: String) -> Bool {
-        command.contains("CONDUCTOR_TERMINAL_ID") &&
-            command.contains(" hooks codex ")
+    private static func isOwnedCommand(_ command: String, provider: AgentHookProvider) -> Bool {
+        guard command.contains("CONDUCTOR_TERMINAL_ID") else { return false }
+        switch provider {
+        case .codex:
+            return command.contains(" hooks codex ")
+        case .claudeCode:
+            return command.contains(" hooks claude ") || command.contains(" hooks cc ")
+        }
     }
 
-    private static func hookCommand(bridgePath: String, action: String) -> String {
-        "[ -n \"$CONDUCTOR_TERMINAL_ID\" ] && [ \"$CONDUCTOR_CODEX_HOOKS_DISABLED\" != \"1\" ] && \(shellQuoted(bridgePath)) hooks codex \(action) || echo '{}'"
+    private static func hookCommand(provider: AgentHookProvider, bridgePath: String, action: String) -> String {
+        let bridge = shellQuoted(bridgePath)
+        switch provider {
+        case .codex:
+            return "[ -n \"$CONDUCTOR_TERMINAL_ID\" ] && [ \"$CONDUCTOR_AGENT_HOOKS_DISABLED\" != \"1\" ] && [ \"$CONDUCTOR_CODEX_HOOKS_DISABLED\" != \"1\" ] && \(bridge) hooks codex \(action) || echo '{}'"
+        case .claudeCode:
+            return "[ -n \"$CONDUCTOR_TERMINAL_ID\" ] && [ \"$CONDUCTOR_AGENT_HOOKS_DISABLED\" != \"1\" ] && [ \"$CONDUCTOR_CLAUDE_HOOKS_DISABLED\" != \"1\" ] && \(bridge) hooks claude \(action) >/dev/null 2>&1 || true"
+        }
     }
 
     private static func shellQuoted(_ value: String) -> String {
@@ -187,7 +254,7 @@ enum CodexNotificationHookInstaller {
             for (groupIndex, group) in groups.enumerated() {
                 guard let hookList = group["hooks"] as? [[String: Any]] else { continue }
                 for (handlerIndex, hook) in hookList.enumerated() {
-                    guard let command = hook["command"] as? String, isOwnedCommand(command) else { continue }
+                    guard let command = hook["command"] as? String, isOwnedCommand(command, provider: .codex) else { continue }
                     let timeout = hook["timeout"] as? Int ?? 5_000
                     let key = "\(source):\(eventLabel):\(groupIndex):\(handlerIndex)"
                     let hash = codexCommandHookHash(eventLabel: eventLabel, command: command, timeout: timeout)

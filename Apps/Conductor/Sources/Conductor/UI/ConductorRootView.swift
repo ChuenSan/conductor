@@ -87,9 +87,10 @@ struct ConductorRootView: View {
                         TerminalContextSearchBar(model: model)
                             .padding(.top, 8)
                             .padding(.trailing, 12)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .transition(ConductorMotion.searchTransition)
                     }
                 }
+                .animation(model.shellAnimation(ConductorMotion.search), value: model.terminalSearchVisible)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(model.theme.terminalBackground)
@@ -224,10 +225,10 @@ private struct TerminalContextSearchBar: View {
         }
         .onAppear {
             query = model.terminalSearchQuery
-            searchFocused = true
+            focusSearchField()
         }
         .onChange(of: model.terminalSearchFocusGeneration) { _, _ in
-            searchFocused = true
+            focusSearchField()
         }
         .onChange(of: query) { _, next in
             model.setTerminalSearchQuery(next)
@@ -235,6 +236,12 @@ private struct TerminalContextSearchBar: View {
         .onChange(of: model.terminalSearchQuery) { _, next in
             guard next != query else { return }
             query = next
+        }
+    }
+
+    private func focusSearchField() {
+        Task { @MainActor in
+            searchFocused = true
         }
     }
 }
@@ -429,6 +436,10 @@ private struct CommandPaletteView: View {
         }
     }
 
+    private var filteredCommandIDs: [String] {
+        filteredCommands.map(\.id)
+    }
+
     var body: some View {
         ZStack {
             ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
@@ -442,7 +453,7 @@ private struct CommandPaletteView: View {
             }
             .frame(width: 690, height: 486)
             .onAppear {
-                searchFocused = true
+                focusSearchField()
                 ensureSelection()
             }
             .onChange(of: query) {
@@ -532,9 +543,11 @@ private struct CommandPaletteView: View {
                                     }
                                 }
                             )
+                            .transition(ConductorMotion.rowTransition)
                         }
                     }
                     .padding(.vertical, 1)
+                    .animation(ConductorMotion.list, value: filteredCommandIDs)
                 }
                 .scrollIndicators(.visible)
             }
@@ -579,6 +592,12 @@ private struct CommandPaletteView: View {
             return
         }
         command.action()
+    }
+
+    private func focusSearchField() {
+        Task { @MainActor in
+            searchFocused = true
+        }
     }
 }
 
@@ -1042,8 +1061,12 @@ private struct AppearanceSettingsPanel: View {
     @State private var selectedSection: SettingsPanelSection = .themes
     @Environment(\.conductorTheme) private var theme
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 150, maximum: 178), spacing: 9)
+    private let optionColumns = [
+        GridItem(.adaptive(minimum: 162, maximum: 224), spacing: 10)
+    ]
+
+    private let themeColumns = [
+        GridItem(.adaptive(minimum: 142, maximum: 168), spacing: 10)
     ]
 
     var body: some View {
@@ -1082,7 +1105,7 @@ private struct AppearanceSettingsPanel: View {
                     .stroke(theme.floatingStroke.opacity(0.82), lineWidth: 0.8)
                     .allowsHitTesting(false)
             }
-            .frame(width: 690, height: 486)
+            .frame(width: 760, height: 520)
             .onExitCommand {
                 model.hideSettingsPanel()
             }
@@ -1090,7 +1113,9 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
+            SettingsSidebarSummary(theme: model.theme, appearance: model.appearance)
+
             SidebarSectionTitle(L("分类", "Categories"))
 
             VStack(spacing: 3) {
@@ -1108,38 +1133,91 @@ private struct AppearanceSettingsPanel: View {
 
             Spacer(minLength: 0)
         }
-        .padding(12)
-        .frame(width: 164)
+        .padding(14)
+        .frame(width: 178)
         .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var contentPane: some View {
-        ScrollView {
-            detailContent
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
+        ZStack {
+            theme.floatingControlFill.opacity(0.16)
+
+            ScrollView {
+                detailContent
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+            }
+            .scrollIndicators(.visible)
         }
-        .scrollIndicators(.visible)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
     private var detailContent: some View {
-        switch selectedSection {
-        case .interface:
-            interfaceSettings
-        case .commands:
-            commandSettings
-        case .themes:
-            themeSettings
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsPaneHeading(section: selectedSection)
+
+            switch selectedSection {
+            case .interface:
+                interfaceSettings
+            case .commands:
+                commandSettings
+            case .themes:
+                themeSettings
+            }
         }
     }
 
     private var interfaceSettings: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 9) {
-                SettingsSectionLabel(L("语言", "Language"))
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsPreferenceGroup(
+                title: L("窗口密度", "Window Density"),
+                subtitle: L("控制工具栏、标签和侧边栏的空间节奏", "Controls spacing across toolbars, tabs, and the sidebar"),
+                systemImage: "rectangle.compress.vertical"
+            ) {
+                LazyVGrid(columns: optionColumns, alignment: .leading, spacing: 10) {
+                    ForEach(AppearanceDensity.allCases) { density in
+                        SettingsOptionCard(
+                            title: density.title,
+                            subtitle: density.subtitle,
+                            systemImage: "rectangle.3.group",
+                            selected: model.appearance.density == density
+                        ) {
+                            model.performShellMotion(ConductorMotion.selection) {
+                                model.setAppearanceDensity(density)
+                            }
+                        }
+                    }
+                }
+            }
+
+            SettingsPreferenceGroup(
+                title: L("浮层清晰度", "Layer Clarity"),
+                subtitle: L("调整玻璃浮层的边界和对比度", "Tunes glass-panel boundaries and contrast"),
+                systemImage: "square.stack.3d.up"
+            ) {
+                LazyVGrid(columns: optionColumns, alignment: .leading, spacing: 10) {
+                    ForEach(ChromeClarity.allCases) { clarity in
+                        SettingsOptionCard(
+                            title: clarity.title,
+                            subtitle: clarity.subtitle,
+                            systemImage: "sparkle.magnifyingglass",
+                            selected: model.appearance.chromeClarity == clarity
+                        ) {
+                            model.performShellMotion(ConductorMotion.selection) {
+                                model.setChromeClarity(clarity)
+                            }
+                        }
+                    }
+                }
+            }
+
+            SettingsPreferenceGroup(
+                title: L("语言", "Language"),
+                subtitle: L("设置整个应用的显示语言", "Sets the display language across the app"),
+                systemImage: "character.bubble"
+            ) {
+                LazyVGrid(columns: optionColumns, alignment: .leading, spacing: 10) {
                     ForEach(AppearanceLanguage.allCases) { language in
                         SettingsOptionCard(
                             title: language.title,
@@ -1155,9 +1233,12 @@ private struct AppearanceSettingsPanel: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 9) {
-                SettingsSectionLabel(L("字体", "Font"))
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 9) {
+            SettingsPreferenceGroup(
+                title: L("字体", "Font"),
+                subtitle: L("选择设置、侧边栏和工具栏使用的字体气质", "Chooses the voice for settings, sidebars, and toolbars"),
+                systemImage: "textformat"
+            ) {
+                LazyVGrid(columns: optionColumns, alignment: .leading, spacing: 10) {
                     ForEach(AppearanceFontFamily.allCases) { family in
                         SettingsOptionCard(
                             title: family.title,
@@ -1174,9 +1255,12 @@ private struct AppearanceSettingsPanel: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 9) {
-                SettingsSectionLabel(L("字号", "Font Size"))
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 9) {
+            SettingsPreferenceGroup(
+                title: L("字号", "Font Size"),
+                subtitle: L("改变低频界面文字，不影响终端渲染", "Changes shell text without affecting terminal rendering"),
+                systemImage: "textformat.size"
+            ) {
+                LazyVGrid(columns: optionColumns, alignment: .leading, spacing: 10) {
                     ForEach(AppearanceFontScale.allCases) { scale in
                         SettingsOptionCard(
                             title: scale.title,
@@ -1195,23 +1279,64 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var commandSettings: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SettingsSectionLabel(L("命令与快捷键", "Commands and Shortcuts"))
-            CommandShortcutGuide(model: model, height: 372)
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsPreferenceGroup(
+                title: L("Agent 通知", "Agent Notifications"),
+                subtitle: L("为本地 agent hook 打开通知桥接", "Enables notification bridges for local agent hooks"),
+                systemImage: "bell.badge"
+            ) {
+                LazyVGrid(columns: optionColumns, alignment: .leading, spacing: 10) {
+                    ForEach(AgentHookProvider.allCases) { provider in
+                        let enabled = model.appearance.agentNotifications.isEnabled(for: provider)
+                        SettingsOptionCard(
+                            title: provider.title,
+                            subtitle: enabled ? L("已开启", "Enabled") : L("已关闭", "Disabled"),
+                            systemImage: provider.systemImage,
+                            selected: enabled
+                        ) {
+                            model.performShellMotion(ConductorMotion.selection) {
+                                model.setAgentNotificationsEnabled(!enabled, for: provider)
+                            }
+                        }
+                    }
+                }
+                if let message = model.agentHookSettingsMessage {
+                    Text(message)
+                        .font(.conductorSystem(size: 10.5, weight: .medium, scale: model.appearance.fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            SettingsPreferenceGroup(
+                title: L("命令与快捷键", "Commands and Shortcuts"),
+                subtitle: L("按工作流分组的可用命令", "Available commands grouped by workflow"),
+                systemImage: "keyboard"
+            ) {
+                CommandShortcutGuide(model: model, height: 260)
+            }
         }
     }
 
     private var themeSettings: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            SettingsSectionLabel(L("全壳主题", "Shell Themes"))
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 9) {
-                ForEach(TerminalTheme.allCases) { theme in
-                    ThemePreviewCard(
-                        theme: theme,
-                        selected: model.theme == theme
-                    ) {
-                        model.performShellMotion(ConductorMotion.selection) {
-                            model.theme = theme
+        VStack(alignment: .leading, spacing: 16) {
+            SelectedThemeShowcase(theme: model.theme)
+
+            SettingsPreferenceGroup(
+                title: L("主题库", "Theme Library"),
+                subtitle: L("主题同时控制窗口、浮层、终端和强调色", "Themes coordinate the window, panels, terminal, and accent color"),
+                systemImage: "swatchpalette"
+            ) {
+                LazyVGrid(columns: themeColumns, alignment: .leading, spacing: 10) {
+                    ForEach(TerminalTheme.allCases) { theme in
+                        ThemePreviewCard(
+                            theme: theme,
+                            selected: model.theme == theme
+                        ) {
+                            model.performShellMotion(ConductorMotion.selection) {
+                                model.theme = theme
+                            }
                         }
                     }
                 }
@@ -1243,7 +1368,7 @@ private enum SettingsPanelSection: String, CaseIterable, Identifiable {
         case .interface:
             L("语言、字体和字号", "Language, font, and size")
         case .commands:
-            L("Command Center 与快捷入口", "Command Center and shortcuts")
+            L("Agent 通知与快捷入口", "Agent notifications and shortcuts")
         case .themes:
             L("整套窗口、终端和强调色", "Window, terminal, and accent colors")
         }
@@ -1700,10 +1825,12 @@ private struct WorkspaceOverviewPanel: View {
                                     } onHover: {
                                         highlightedWorkspaceID = workspace.id
                                     }
+                                    .transition(ConductorMotion.rowTransition)
                                 }
                             }
                             .padding(.horizontal, 2)
                             .padding(.bottom, 2)
+                            .animation(ConductorMotion.list, value: filteredWorkspaceIDs)
                         }
                         .scrollIndicators(.visible)
                         .frame(maxHeight: .infinity)
@@ -1714,7 +1841,7 @@ private struct WorkspaceOverviewPanel: View {
             .frame(width: 690, height: 486)
             .onAppear {
                 highlightedWorkspaceID = model.workspace.id
-                searchFocused = true
+                focusSearchField()
                 ensureHighlight()
             }
             .onChange(of: query) {
@@ -1834,6 +1961,12 @@ private struct WorkspaceOverviewPanel: View {
 
     private func openWorkspace(_ workspaceID: WorkspaceID) {
         model.selectWorkspace(workspaceID)
+    }
+
+    private func focusSearchField() {
+        Task { @MainActor in
+            searchFocused = true
+        }
     }
 }
 
@@ -2149,10 +2282,7 @@ struct NotificationPanelView: View {
                                         model.clearNotification(notification.id)
                                     }
                                 )
-                                .transition(.asymmetric(
-                                    insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                                    removal: .opacity.combined(with: .scale(scale: 0.96))
-                                ))
+                                .transition(ConductorMotion.rowTransition)
                             }
                         }
                         .padding(8)
@@ -2484,7 +2614,6 @@ private struct ConductorSidebar: View {
     @State private var renamingWorkspaceID: WorkspaceID?
     @State private var workspaceTitleDraft = ""
     @State private var sidebarToggleHovering = false
-    @Namespace private var workspaceSelectionNamespace
     @Environment(\.conductorFontScale) private var fontScale
 
     private var terminalCount: Int {
@@ -2780,7 +2909,6 @@ private struct ConductorSidebar: View {
             unreadCount: row.unreadCount,
             selected: row.selected,
             editing: renamingWorkspaceID == row.id,
-            selectionNamespace: workspaceSelectionNamespace,
             titleDraft: $workspaceTitleDraft,
             onCommitRename: commitWorkspaceRename,
             onCancelRename: cancelWorkspaceRename
@@ -3176,7 +3304,6 @@ private struct WorkspaceSidebarRow: View {
     let unreadCount: Int
     let selected: Bool
     let editing: Bool
-    let selectionNamespace: Namespace.ID
     @Binding var titleDraft: String
     let onCommitRename: () -> Void
     let onCancelRename: () -> Void
@@ -3240,8 +3367,7 @@ private struct WorkspaceSidebarRow: View {
                 terminalCount: terminalCount,
                 unreadCount: unreadCount,
                 selected: selected,
-                hovering: hovering,
-                selectionNamespace: selectionNamespace
+                hovering: hovering
             )
             .equatable()
         }
@@ -3261,7 +3387,6 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
     let unreadCount: Int
     let selected: Bool
     let hovering: Bool
-    let selectionNamespace: Namespace.ID
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -3282,16 +3407,16 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                 .background(selected ? theme.shellControlRaisedFill.opacity(0.84) : (hovering ? theme.shellHoverFill.opacity(0.62) : Color.clear))
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             Text(title)
-                .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
+                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.primaryText)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
             Text("\(terminalCount)")
-                .font(.conductorSystem(size: 10, weight: selected ? .bold : .medium, scale: fontScale))
-                .foregroundStyle(selected ? ConductorDesign.primaryText.opacity(0.86) : ConductorDesign.tertiaryText)
-                .padding(.horizontal, selected ? 5 : 0)
-                .frame(minHeight: 17)
+                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .padding(.horizontal, 5)
+                .frame(minWidth: 17, minHeight: 17)
                 .background(selected ? theme.shellHoverFill.opacity(0.82) : Color.clear)
                 .clipShape(Capsule())
             if unreadCount > 0 {
@@ -3313,15 +3438,13 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
             if selected {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
                     .fill(theme.shellSelectedFill)
-                    .matchedGeometryEffect(id: "workspace-sidebar-selection", in: selectionNamespace)
             }
-        }
-        .overlay {
-            ConductorMagneticGlow(cornerRadius: ConductorTokens.Radius.row, active: selected, lineWidth: 0.75)
-                .opacity(selected ? 0.55 : 0)
         }
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
+        .transaction { transaction in
+            transaction.animation = nil
+        }
     }
 }
 
@@ -3472,7 +3595,7 @@ private struct ConductorToolbar: View {
             }
             .controlSize(.small)
             .padding(.leading, 12)
-            .padding(.trailing, 10)
+            .padding(.trailing, 12)
             .frame(height: ConductorDesign.toolbarHeight(for: model.appearance))
         }
         .frame(height: ConductorDesign.toolbarHeight(for: model.appearance))
@@ -3511,7 +3634,6 @@ private struct WorkspaceTabStrip: View {
     let onCommitRename: () -> Void
     let onCancelRename: () -> Void
     @State private var scrollTargetID: WorkspaceID?
-    @Namespace private var selectionNamespace
 
     private var workspaceRows: [WorkspaceChromeDisplayModel] {
         let selectedWorkspaceID = model.workspace.id
@@ -3572,7 +3694,7 @@ private struct WorkspaceTabStrip: View {
             scrollTargetID = model.workspace.id
         }
         if animated {
-            model.performShellMotion(ConductorMotion.selection, update)
+            model.performShellMotion(ConductorMotion.scroll, update)
         } else {
             update()
         }
@@ -3584,7 +3706,6 @@ private struct WorkspaceTabStrip: View {
             appearance: model.appearance,
             canClose: model.workspaces.count > 1,
             editing: editingWorkspaceID == row.id,
-            selectionNamespace: selectionNamespace,
             titleDraft: $workspaceTitleDraft,
             onSelect: {
                 finishWorkspaceRenameIfNeeded(except: row.id)
@@ -3648,8 +3769,8 @@ private enum WorkspaceTabMetrics {
         appearance.density.workspaceTabHeight
     }
 
-    static let spacing: CGFloat = 5
-    static let edgePadding: CGFloat = 2
+    static let spacing: CGFloat = 4
+    static let edgePadding: CGFloat = 0
 }
 
 private struct WorkspaceTopTab: View {
@@ -3657,7 +3778,6 @@ private struct WorkspaceTopTab: View {
     let appearance: AppearancePreferences
     let canClose: Bool
     let editing: Bool
-    let selectionNamespace: Namespace.ID
     @Binding var titleDraft: String
     let onSelect: () -> Void
     let onRename: () -> Void
@@ -3686,22 +3806,25 @@ private struct WorkspaceTopTab: View {
     }
 
     private var baseFill: Color {
-        hovering ? theme.shellHoverFill : (theme.usesDarkChrome ? theme.shellControlFill.opacity(0.18) : theme.shellControlFill)
+        if theme.usesDarkChrome {
+            return hovering ? theme.shellHoverFill.opacity(0.76) : theme.shellControlFill.opacity(0.14)
+        }
+        return hovering ? theme.shellHoverFill.opacity(0.78) : theme.shellControlFill.opacity(0.52)
     }
 
     private var selectedFill: Color {
-        theme.usesDarkChrome ? theme.shellSelectedFill : theme.shellSelectedFill.opacity(0.92)
+        theme.usesDarkChrome ? theme.shellSelectedFill.opacity(0.92) : theme.shellSelectedFill.opacity(0.78)
     }
 
     private var tabStroke: Color {
         if selected {
-            return theme.shellStroke.opacity(0.82 * appearance.chromeClarity.strokeMultiplier)
+            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.70 : 0.52) * appearance.chromeClarity.strokeMultiplier)
         }
-        return theme.shellStroke.opacity(hovering ? 0.54 : 0.32)
+        return theme.shellStroke.opacity(hovering ? 0.44 : 0.24)
     }
 
     private var titleColor: Color {
-        selected ? theme.shellChromeText : theme.shellChromeTextMuted
+        selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86)
     }
 
     var body: some View {
@@ -3724,15 +3847,15 @@ private struct WorkspaceTopTab: View {
                 HStack(spacing: 7) {
                     WorkspaceTabGlyph(selected: selected)
                     Text(row.title)
-                        .font(.conductorSystem(size: 11.5, weight: selected ? .semibold : .medium, scale: fontScale))
+                        .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
                         .foregroundStyle(titleColor)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("\(row.terminalCount)")
-                        .font(.conductorSystem(size: 10.5, weight: selected ? .semibold : .medium, scale: fontScale))
-                        .foregroundStyle(selected ? theme.shellChromeText.opacity(0.78) : theme.shellChromeTextMuted.opacity(0.78))
-                        .frame(minWidth: 18, minHeight: 18)
+                        .font(.conductorSystem(size: 10.2, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(selected ? theme.shellChromeText.opacity(0.72) : theme.shellChromeTextMuted.opacity(0.70))
+                        .frame(minWidth: 17, minHeight: 17)
                     if unreadCount > 0 {
                         Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
                             .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
@@ -3770,25 +3893,19 @@ private struct WorkspaceTopTab: View {
             if selected {
                 tabShape
                     .fill(selectedFill)
-                    .matchedGeometryEffect(id: "workspace-tab-selection", in: selectionNamespace)
             } else {
                 tabShape
                     .fill(baseFill)
             }
-        }
-        .overlay {
-            ConductorMagneticGlow(cornerRadius: ConductorTokens.Radius.workspaceTab, active: selected, lineWidth: 0.9)
-                .opacity(selected ? 0.72 : 0)
         }
         .clipShape(tabShape)
         .overlay {
             tabShape
                 .stroke(tabStroke, lineWidth: 1)
         }
-        .scaleEffect(hovering && !selected ? 1.012 : 1)
+        .scaleEffect(hovering && !selected ? 1.006 : 1)
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.selection, value: editing)
-        .animation(ConductorMotion.selection, value: selected)
         .animation(ConductorMotion.emphasized, value: unreadCount)
         .onHover { value in
             ConductorMotion.perform(ConductorMotion.hover) {
@@ -3838,11 +3955,9 @@ private struct WorkspaceTabGlyph: View {
 
     var body: some View {
         Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
-            .font(.system(size: 11, weight: selected ? .bold : .semibold))
+            .font(.system(size: 10.8, weight: .semibold))
             .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(selected ? theme.shellChromeText.opacity(0.92) : theme.shellChromeTextMuted.opacity(0.74))
-            .frame(width: 19, height: 19)
-            .background(selected ? theme.shellHoverFill : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
+            .frame(width: 17, height: 17)
     }
 }

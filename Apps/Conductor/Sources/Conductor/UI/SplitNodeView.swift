@@ -503,37 +503,12 @@ private struct TerminalPaneView: View {
             !model.terminalSearchVisible
     }
 
-    private var unreadCount: Int {
-        model.notifications.snapshot.unreadCount(for: pane.id)
-    }
-
-    private var paneBorderColor: Color {
-        if unreadCount > 0 {
-            return model.theme.accent.opacity(0.72)
-        }
-        return Color.clear
-    }
-
-    private var paneBorderWidth: CGFloat {
-        if unreadCount > 0 {
-            return 1.5
-        }
-        return 0
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             tabBar
             selectedTerminal
         }
         .background(model.theme.terminalBackground)
-        .overlay {
-            TerminalPaneBorderOverlay(
-                color: paneBorderColor,
-                lineWidth: paneBorderWidth
-            )
-            .allowsHitTesting(false)
-        }
         .overlay {
             TerminalPaneFlashOverlay(
                 color: model.theme.accent,
@@ -571,16 +546,16 @@ private struct TerminalPaneView: View {
                 }
             }
         }
-        .padding(.leading, 8)
-        .padding(.trailing, 4)
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
         .frame(height: model.appearance.density.paneTabRailHeight)
         .background {
             ZStack(alignment: .bottom) {
                 model.theme.terminalBackground
-                model.theme.terminalChrome.opacity(isFocused ? 0.24 : 0.16)
+                model.theme.terminalChrome.opacity(isFocused ? 0.18 : 0.12)
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isFocused ? 0.026 : 0.014),
+                        Color.white.opacity(isFocused ? 0.014 : 0.008),
                         Color.clear
                     ],
                     startPoint: .top,
@@ -740,24 +715,6 @@ private struct TerminalDetachDropOverlay: View {
     }
 }
 
-private struct TerminalPaneBorderOverlay: View {
-    let color: Color
-    let lineWidth: CGFloat
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = max(lineWidth, 0)
-            let size = proxy.size
-            if width > 0 {
-                Rectangle()
-                    .stroke(color, lineWidth: width)
-                    .frame(width: max(0, size.width - width), height: max(0, size.height - width))
-                    .position(x: size.width / 2, y: size.height / 2)
-            }
-        }
-    }
-}
-
 private struct TerminalPaneFlashOverlay: View {
     let color: Color
     let visible: Bool
@@ -805,29 +762,28 @@ private struct StableTerminalTabStrip: View {
                 )
             )
             .onAppear {
-                scrollToSelectedTab(proxy)
+                scrollToSelectedTab(proxy, animated: false)
             }
             .onChange(of: pane.selectedTabID) {
-                scrollToSelectedTab(proxy)
+                scrollToSelectedTab(proxy, animated: true)
             }
             .onChange(of: tabIDs) {
-                scrollToSelectedTab(proxy)
+                scrollToSelectedTab(proxy, animated: true)
             }
         }
         .frame(height: model.appearance.density.paneTabHeight)
         .clipped()
         .mask(ConductorHorizontalFadeMask())
-        .transaction { transaction in
-            transaction.disablesAnimations = true
-            transaction.animation = nil
-        }
     }
 
-    private func scrollToSelectedTab(_ proxy: ScrollViewProxy) {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
+    private func scrollToSelectedTab(_ proxy: ScrollViewProxy, animated: Bool) {
+        let update = {
             proxy.scrollTo(pane.selectedTabID, anchor: .center)
+        }
+        if animated {
+            model.performShellMotion(ConductorMotion.scroll, update)
+        } else {
+            ConductorMotion.withoutAnimation(update)
         }
     }
 
@@ -1081,11 +1037,14 @@ private struct TerminalTabButton: View {
     }
 
     private var tabFill: Color {
-        hovering ? theme.shellHoverFill : (theme.usesDarkChrome ? theme.shellControlFill.opacity(0.18) : theme.shellControlFill)
+        if theme.usesDarkChrome {
+            return hovering ? theme.shellHoverFill.opacity(0.72) : theme.shellControlFill.opacity(0.12)
+        }
+        return hovering ? theme.shellHoverFill.opacity(0.76) : theme.shellControlFill.opacity(0.50)
     }
 
     private var selectedFill: Color {
-        theme.shellSelectedFill.opacity(paneFocused ? (theme.usesDarkChrome ? 1.0 : 0.92) : 0.72)
+        theme.shellSelectedFill.opacity(paneFocused ? (theme.usesDarkChrome ? 0.90 : 0.76) : 0.62)
     }
 
     private var tabStroke: Color {
@@ -1093,9 +1052,9 @@ private struct TerminalTabButton: View {
             return theme.floatingSelectedStroke.opacity(0.95)
         }
         if isSelected {
-            return theme.shellStroke.opacity(paneFocused ? 0.92 : 0.58)
+            return theme.shellStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.70 : 0.52) : 0.42)
         }
-        return theme.shellStroke.opacity(hovering ? 0.54 : 0.32)
+        return theme.shellStroke.opacity(hovering ? 0.44 : 0.24)
     }
 
     private var terminalDetailLabel: String? {
@@ -1151,7 +1110,7 @@ private struct TerminalTabButton: View {
                         .font(.conductorSystem(size: 10, scale: fontScale))
                         .foregroundStyle(isSelected ? theme.shellChromeText : theme.shellChromeTextMuted)
                     Text(tab.title)
-                        .font(.conductorSystem(size: 10.5, weight: isSelected ? .semibold : .medium, scale: fontScale))
+                        .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                         .foregroundStyle(isSelected ? theme.shellChromeText : theme.shellChromeTextMuted)
                         .lineLimit(1)
                         .layoutPriority(1)
@@ -1217,8 +1176,8 @@ private struct TerminalTabButton: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
-                .stroke(tabStroke, lineWidth: isDropTarget || (isSelected && paneFocused) ? 1.35 : 1)
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
+                .stroke(tabStroke, lineWidth: isDropTarget ? 1.25 : 1)
         }
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.micro, value: isDropTarget)
