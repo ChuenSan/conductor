@@ -9,6 +9,7 @@ final class TerminalSurface {
     let hostView: TerminalHostView
     var onFocusRequest: (@MainActor (TerminalID) -> Void)?
     var onContextMenuRequest: (@MainActor (TerminalID, NSEvent, NSView) -> Bool)?
+    var onTerminalTabDropRequest: (@MainActor (TerminalID, TerminalID, TerminalTabDropTarget) -> Bool)?
 
     private var surface: ghostty_surface_t?
     private var lastPixelSize = CGSize(width: -1, height: -1)
@@ -36,6 +37,10 @@ final class TerminalSurface {
 
     var isReadyForInput: Bool {
         lifecycle == .attached && surface != nil && hostView.window != nil
+    }
+
+    var terminalTabDropAccentColor: NSColor {
+        NSColor(currentTheme.accent)
     }
 
     nonisolated static func fromGhosttySurface(_ surface: ghostty_surface_t?) -> TerminalSurface? {
@@ -210,6 +215,11 @@ final class TerminalSurface {
     @discardableResult
     func requestContextMenu(event: NSEvent, in view: NSView) -> Bool {
         onContextMenuRequest?(id, event, view) ?? false
+    }
+
+    @discardableResult
+    func performTerminalTabDrop(draggedTerminalID: TerminalID, target: TerminalTabDropTarget) -> Bool {
+        onTerminalTabDropRequest?(id, draggedTerminalID, target) ?? false
     }
 
     func refresh() {

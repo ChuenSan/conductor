@@ -415,6 +415,22 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         surface.onContextMenuRequest = { [weak self] terminalID, event, view in
             self?.showTerminalContextMenu(terminalID: terminalID, event: event, in: view) ?? false
         }
+        surface.onTerminalTabDropRequest = { [weak self] targetTerminalID, draggedTerminalID, target in
+            guard let self,
+                  let targetPaneID = self.workspace.paneID(containing: targetTerminalID) else {
+                return false
+            }
+            ConductorMotion.perform(ConductorMotion.layout) {
+                if target == .center {
+                    guard self.workspace.paneID(containing: draggedTerminalID) != targetPaneID else { return }
+                    self.moveTabToEnd(draggedTerminalID, in: targetPaneID)
+                } else {
+                    self.moveTabToSplit(draggedTerminalID, targetPaneID: targetPaneID, direction: target.direction)
+                }
+            }
+            self.endTerminalTabDrag()
+            return true
+        }
         surfaces[tab.id] = surface
         return surface
     }

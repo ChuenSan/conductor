@@ -291,6 +291,10 @@ terminal.
   providers can match surprisingly broad data representations.
 - Split placeholders and tab insertion highlights may only appear for that private internal
   tab-drag type.
+- When a live `NSViewRepresentable` terminal surface covers the pane, terminal-tab split drops
+  should be handled by the stable AppKit host as well: register the private tab type, draw the
+  split placeholder in an AppKit overlay above the Ghostty surface, and route the final drop
+  back through `ConductorWindowModel`.
 - External `.fileURL`/`.URL`/legacy filename drops on a live terminal surface should be
   handled by the stable AppKit `TerminalHostView`, focus the target terminal, and insert
   shell-escaped file paths as terminal input without pressing Return. Decode file URLs first,
