@@ -1,0 +1,1282 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conductor V11 Command Map</title>
+  <style>
+    :root {
+      --window: #e8edf3;
+      --window-2: #dbe3ec;
+      --glass: rgba(250, 253, 255, .72);
+      --glass-strong: rgba(255, 255, 255, .86);
+      --line: rgba(26, 35, 48, .11);
+      --line-strong: rgba(26, 35, 48, .18);
+      --ink: #17202d;
+      --ink-soft: #5e6878;
+      --ink-muted: #8b96a8;
+      --blue: #1677ff;
+      --cyan: #14a8bd;
+      --mint: #2cab77;
+      --amber: #d78a22;
+      --rose: #df5b67;
+      --violet: #7357ff;
+      --term: #070a0f;
+      --term-2: #0b1017;
+      --term-3: #101722;
+      --term-line: rgba(224, 234, 249, .085);
+      --term-line-strong: rgba(91, 158, 255, .34);
+      --term-text: #dfe7f2;
+      --term-soft: #8a95a8;
+      --mono: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+      --ui: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      font-family: var(--ui);
+      color: var(--ink);
+      letter-spacing: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(90deg, rgba(22, 119, 255, .045) 1px, transparent 1px),
+        linear-gradient(rgba(23, 32, 45, .045) 1px, transparent 1px),
+        linear-gradient(180deg, #f7f9fc 0%, var(--window-2) 100%);
+      background-size: 32px 32px, 32px 32px, 100% 100%;
+    }
+
+    .window {
+      width: min(2048px, calc(100vw - 18px));
+      height: min(1336px, calc(100vh - 18px));
+      min-height: 760px;
+      overflow: hidden;
+      position: relative;
+      border-radius: 22px;
+      border: 1px solid rgba(18, 28, 42, .19);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, .46), rgba(255, 255, 255, .10)),
+        var(--window);
+      box-shadow:
+        0 34px 92px rgba(15, 25, 38, .18),
+        inset 0 1px 0 rgba(255, 255, 255, .82);
+    }
+
+    .shell {
+      position: absolute;
+      inset: 12px;
+      display: grid;
+      grid-template-columns: 304px minmax(0, 1fr) 292px;
+      gap: 10px;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .sidebar,
+    .map-rail {
+      min-width: 0;
+      min-height: 0;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, .66);
+      background:
+        linear-gradient(180deg, rgba(250, 253, 255, .78), rgba(232, 239, 248, .70));
+      box-shadow:
+        0 18px 34px rgba(29, 43, 62, .08),
+        inset 0 1px 0 rgba(255, 255, 255, .82);
+      overflow: hidden;
+      backdrop-filter: blur(28px) saturate(1.25);
+    }
+
+    .sidebar {
+      display: grid;
+      grid-template-rows: 58px 82px minmax(188px, 250px) 150px 1fr auto;
+    }
+
+    .traffic-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 18px;
+    }
+
+    .traffic {
+      display: flex;
+      gap: 9px;
+      align-items: center;
+    }
+
+    .traffic i {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .10);
+    }
+
+    .red { background: #ff5f57; }
+    .yellow { background: #ffbd2e; }
+    .green { background: #28c840; }
+
+    .collapse {
+      margin-left: auto;
+      width: 32px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      color: #758195;
+      background: rgba(23, 32, 45, .055);
+      border: 1px solid rgba(23, 32, 45, .055);
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .brand {
+      padding: 6px 18px 14px;
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      gap: 12px;
+      align-items: center;
+      border-bottom: 1px solid rgba(33, 45, 63, .07);
+    }
+
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      position: relative;
+      border-radius: 13px;
+      background:
+        linear-gradient(135deg, #101824, #182537);
+      box-shadow: 0 12px 24px rgba(17, 34, 55, .20);
+      overflow: hidden;
+    }
+
+    .brand-mark::before,
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      inset: 9px;
+      border: 2px solid rgba(255, 255, 255, .32);
+      border-radius: 8px;
+    }
+
+    .brand-mark::after {
+      inset: 14px 9px 9px 14px;
+      border-color: var(--cyan);
+      background: rgba(20, 168, 189, .38);
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.1;
+      font-weight: 780;
+    }
+
+    .brand p {
+      margin: 5px 0 0;
+      color: var(--ink-soft);
+      font-size: 11px;
+      line-height: 1.2;
+      font-weight: 640;
+    }
+
+    .section-head {
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      color: var(--ink-muted);
+      font-size: 10px;
+      font-weight: 780;
+      text-transform: uppercase;
+    }
+
+    .plus {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: var(--ink-soft);
+      background: rgba(23, 32, 45, .055);
+      font-size: 17px;
+      font-weight: 540;
+    }
+
+    .workspace-panel {
+      padding: 13px 0 10px;
+    }
+
+    .workspace-list {
+      display: grid;
+      gap: 8px;
+      padding: 8px 12px 0;
+    }
+
+    .workspace {
+      height: 46px;
+      position: relative;
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 0 10px;
+      border-radius: 13px;
+      color: #2c3747;
+      font-size: 14px;
+      font-weight: 760;
+      border: 1px solid transparent;
+    }
+
+    .workspace.active {
+      background:
+        linear-gradient(90deg, rgba(22, 119, 255, .13), rgba(20, 168, 189, .10));
+      border-color: rgba(22, 119, 255, .18);
+      box-shadow: inset 4px 0 0 var(--blue);
+    }
+
+    .signal-icon {
+      width: 26px;
+      height: 26px;
+      position: relative;
+      border-radius: 9px;
+      background: rgba(23, 32, 45, .060);
+    }
+
+    .signal-icon span {
+      position: absolute;
+      left: 7px;
+      right: 7px;
+      height: 3px;
+      border-radius: 3px;
+      background: #7f8b9e;
+    }
+
+    .signal-icon span:nth-child(1) { top: 7px; width: 7px; }
+    .signal-icon span:nth-child(2) { top: 12px; width: 13px; }
+    .signal-icon span:nth-child(3) { top: 17px; width: 9px; }
+
+    .active .signal-icon {
+      background: #112033;
+    }
+
+    .active .signal-icon span:nth-child(1) { background: var(--blue); }
+    .active .signal-icon span:nth-child(2) { background: var(--cyan); }
+    .active .signal-icon span:nth-child(3) { background: var(--mint); }
+
+    .workspace small {
+      display: block;
+      margin-top: 2px;
+      color: var(--ink-muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 680;
+    }
+
+    .count {
+      min-width: 24px;
+      height: 22px;
+      padding: 0 7px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: rgba(23, 32, 45, .06);
+      color: var(--ink-soft);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .active .count {
+      color: var(--blue);
+      background: rgba(22, 119, 255, .11);
+    }
+
+    .spine {
+      margin: 0 18px;
+      padding: 14px 0 14px 18px;
+      border-top: 1px solid rgba(33, 45, 63, .09);
+      border-bottom: 1px solid rgba(33, 45, 63, .09);
+      position: relative;
+    }
+
+    .spine::before {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 18px;
+      bottom: 18px;
+      width: 2px;
+      border-radius: 2px;
+      background: linear-gradient(180deg, var(--blue), var(--cyan), var(--amber));
+    }
+
+    .spine-row {
+      height: 28px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 690;
+    }
+
+    .spine-row b {
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .quick-actions {
+      padding: 14px 12px;
+      display: grid;
+      gap: 7px;
+    }
+
+    .action {
+      height: 32px;
+      display: grid;
+      grid-template-columns: 25px 1fr auto;
+      align-items: center;
+      gap: 9px;
+      padding: 0 9px;
+      border-radius: 10px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .action:hover,
+    .action.primary {
+      background: rgba(255, 255, 255, .66);
+      box-shadow: inset 0 0 0 1px rgba(23, 32, 45, .06);
+    }
+
+    .key {
+      color: var(--ink-muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 720;
+    }
+
+    .ico {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: rgba(23, 32, 45, .06);
+      color: #657287;
+      font-size: 15px;
+      line-height: 1;
+    }
+
+    .footer {
+      display: grid;
+      grid-template-columns: 1fr 34px;
+      align-items: center;
+      gap: 10px;
+      padding: 14px;
+      border-top: 1px solid rgba(33, 45, 63, .08);
+    }
+
+    .theme-name {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .palette {
+      width: 24px;
+      height: 24px;
+      position: relative;
+      border-radius: 50%;
+      background:
+        conic-gradient(from 25deg, var(--blue), var(--cyan), var(--mint), var(--amber), var(--rose), var(--blue));
+      box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .72);
+    }
+
+    .gear {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      background: rgba(23, 32, 45, .06);
+      color: var(--ink-soft);
+      font-size: 18px;
+    }
+
+    .workbench {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 56px minmax(0, 1fr) 48px;
+      border-radius: 18px;
+      border: 1px solid rgba(18, 28, 42, .22);
+      background: var(--term);
+      overflow: hidden;
+      box-shadow:
+        0 22px 42px rgba(10, 16, 24, .20),
+        inset 0 1px 0 rgba(255, 255, 255, .07);
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+      background:
+        linear-gradient(180deg, #101722, #0c1118);
+      border-bottom: 1px solid rgba(219, 232, 249, .08);
+    }
+
+    .route-tabs {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .route-tab {
+      height: 34px;
+      min-width: 154px;
+      display: grid;
+      grid-template-columns: 22px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      border-radius: 12px;
+      color: #aab5c6;
+      background: rgba(255, 255, 255, .035);
+      border: 1px solid rgba(255, 255, 255, .055);
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    .route-tab.active {
+      color: var(--term-text);
+      background:
+        linear-gradient(90deg, rgba(22, 119, 255, .24), rgba(20, 168, 189, .14)),
+        rgba(255, 255, 255, .05);
+      border-color: rgba(111, 174, 255, .34);
+      box-shadow: inset 0 -2px 0 var(--blue);
+    }
+
+    .tab-glyph {
+      width: 20px;
+      height: 20px;
+      border-radius: 7px;
+      background:
+        linear-gradient(90deg, currentColor 2px, transparent 2px),
+        linear-gradient(currentColor 2px, transparent 2px);
+      background-size: 7px 7px;
+      opacity: .75;
+    }
+
+    .route-tab .index {
+      min-width: 22px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      color: #7f8aa0;
+      background: rgba(255, 255, 255, .055);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .route-tab.active .index {
+      color: #9ad4ff;
+      background: rgba(22, 119, 255, .18);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .tool {
+      height: 32px;
+      min-width: 32px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 11px;
+      border: 1px solid rgba(255, 255, 255, .06);
+      background: rgba(255, 255, 255, .035);
+      color: #9aa6ba;
+      font-size: 15px;
+      font-weight: 720;
+    }
+
+    .tool.wide {
+      grid-auto-flow: column;
+      gap: 7px;
+      padding: 0 10px;
+      color: #b7c2d4;
+      font-size: 12px;
+    }
+
+    .terminal-area {
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+      display: grid;
+      grid-template-rows: 38px minmax(0, 1fr);
+      background:
+        linear-gradient(90deg, rgba(22, 119, 255, .035) 1px, transparent 1px),
+        linear-gradient(rgba(224, 234, 249, .030) 1px, transparent 1px),
+        var(--term);
+      background-size: 42px 42px, 42px 42px, 100% 100%;
+    }
+
+    .pane-tabs {
+      display: flex;
+      align-items: end;
+      gap: 6px;
+      padding: 5px 9px 0;
+      background: var(--term-2);
+      border-bottom: 1px solid var(--term-line);
+    }
+
+    .pane-tab {
+      height: 28px;
+      min-width: 132px;
+      display: grid;
+      grid-template-columns: 18px 1fr 16px;
+      align-items: center;
+      gap: 7px;
+      padding: 0 8px;
+      border-radius: 9px 9px 0 0;
+      color: #8994a8;
+      background: rgba(255, 255, 255, .03);
+      border: 1px solid rgba(255, 255, 255, .055);
+      border-bottom: none;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .pane-tab.active {
+      color: #e6edf8;
+      background: #111923;
+      border-color: rgba(91, 158, 255, .30);
+    }
+
+    .shell-icon {
+      color: #76a7ff;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .terminal {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      padding: 18px 22px;
+      color: var(--term-text);
+      font-family: var(--mono);
+      font-size: 16px;
+      line-height: 1.55;
+      overflow: hidden;
+    }
+
+    .terminal::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border: 1px solid var(--term-line-strong);
+      border-top: none;
+      pointer-events: none;
+    }
+
+    .ghostty-surface-label {
+      position: absolute;
+      right: 18px;
+      top: 16px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #70809b;
+      font-size: 11px;
+      font-family: var(--ui);
+      font-weight: 740;
+      letter-spacing: 0;
+    }
+
+    .surface-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 0 4px rgba(44, 171, 119, .12);
+    }
+
+    .prompt { color: #88b7ff; }
+    .muted-line { color: var(--term-soft); }
+    .ok { color: #75d39b; }
+    .warn { color: #f2bd6b; }
+    .cursor {
+      display: inline-block;
+      width: 9px;
+      height: 18px;
+      margin-left: 3px;
+      vertical-align: -3px;
+      border-radius: 2px;
+      background: #8cbcff;
+      animation: blink 1.15s steps(2, start) infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: .18; }
+    }
+
+    .statusbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+      background: #0c1118;
+      border-top: 1px solid rgba(219, 232, 249, .075);
+      color: #7d899d;
+      font-size: 11px;
+      font-weight: 720;
+    }
+
+    .status-left,
+    .status-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .status-chip {
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 9px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .035);
+      border: 1px solid rgba(255, 255, 255, .050);
+      white-space: nowrap;
+    }
+
+    .command-dock {
+      position: absolute;
+      left: 50%;
+      bottom: 72px;
+      transform: translateX(-50%);
+      width: min(720px, calc(100% - 56px));
+      height: 58px;
+      display: grid;
+      grid-template-columns: 42px 1fr auto;
+      align-items: center;
+      gap: 12px;
+      padding: 0 10px 0 14px;
+      border-radius: 17px;
+      background: rgba(16, 23, 34, .86);
+      border: 1px solid rgba(136, 186, 255, .20);
+      box-shadow:
+        0 26px 60px rgba(0, 0, 0, .34),
+        inset 0 1px 0 rgba(255, 255, 255, .10);
+      backdrop-filter: blur(22px) saturate(1.25);
+    }
+
+    .dock-mark {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      color: #cfe5ff;
+      background:
+        linear-gradient(135deg, rgba(22, 119, 255, .36), rgba(20, 168, 189, .22));
+      font-family: var(--mono);
+      font-size: 19px;
+      font-weight: 780;
+    }
+
+    .dock-title {
+      min-width: 0;
+      color: #dfe8f6;
+      font-size: 14px;
+      font-weight: 760;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dock-title span {
+      color: #7f8da3;
+      font-weight: 650;
+    }
+
+    .dock-actions {
+      display: flex;
+      gap: 7px;
+    }
+
+    .dock-button {
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 11px;
+      border-radius: 11px;
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid rgba(255, 255, 255, .07);
+      color: #b9c6d8;
+      font-size: 12px;
+      font-weight: 730;
+      white-space: nowrap;
+    }
+
+    .map-rail {
+      display: grid;
+      grid-template-rows: 58px 176px 1fr 190px;
+    }
+
+    .rail-title {
+      height: 58px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      border-bottom: 1px solid rgba(33, 45, 63, .08);
+    }
+
+    .rail-title h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 780;
+    }
+
+    .rail-title p {
+      margin: 3px 0 0;
+      color: var(--ink-muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 720;
+    }
+
+    .rail-toggle {
+      width: 32px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      color: var(--ink-soft);
+      background: rgba(23, 32, 45, .055);
+      font-size: 14px;
+    }
+
+    .score-board {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid rgba(33, 45, 63, .08);
+    }
+
+    .score-ring {
+      height: 92px;
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .ring {
+      width: 92px;
+      height: 92px;
+      border-radius: 50%;
+      background:
+        conic-gradient(var(--mint) 0 58%, var(--amber) 58% 76%, rgba(23, 32, 45, .08) 76% 100%);
+      display: grid;
+      place-items: center;
+      box-shadow: inset 0 0 0 1px rgba(23, 32, 45, .08);
+    }
+
+    .ring::before {
+      content: "72";
+      width: 68px;
+      height: 68px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(249, 252, 255, .90);
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 23px;
+      font-weight: 820;
+    }
+
+    .score-copy b {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .score-copy span {
+      display: block;
+      color: var(--ink-soft);
+      font-size: 11px;
+      line-height: 1.45;
+      font-weight: 650;
+    }
+
+    .mini-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 7px;
+      margin-top: 13px;
+    }
+
+    .mini {
+      height: 42px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .52);
+      border: 1px solid rgba(23, 32, 45, .06);
+      display: grid;
+      place-items: center;
+      color: var(--ink-soft);
+      font-size: 10px;
+      font-weight: 760;
+    }
+
+    .mini b {
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+
+    .timeline {
+      min-height: 0;
+      padding: 14px 16px;
+      overflow: hidden;
+    }
+
+    .timeline-list {
+      position: relative;
+      display: grid;
+      gap: 12px;
+      padding-left: 18px;
+    }
+
+    .timeline-list::before {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 9px;
+      bottom: 9px;
+      width: 2px;
+      border-radius: 2px;
+      background: rgba(23, 32, 45, .10);
+    }
+
+    .event {
+      position: relative;
+      min-height: 66px;
+      padding: 10px 10px 9px;
+      border-radius: 13px;
+      background: rgba(255, 255, 255, .56);
+      border: 1px solid rgba(23, 32, 45, .06);
+    }
+
+    .event::before {
+      content: "";
+      position: absolute;
+      left: -18px;
+      top: 15px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 0 4px rgba(22, 119, 255, .12);
+    }
+
+    .event:nth-child(2)::before { background: var(--mint); box-shadow: 0 0 0 4px rgba(44, 171, 119, .12); }
+    .event:nth-child(3)::before { background: var(--amber); box-shadow: 0 0 0 4px rgba(215, 138, 34, .12); }
+    .event:nth-child(4)::before { background: var(--violet); box-shadow: 0 0 0 4px rgba(115, 87, 255, .12); }
+
+    .event-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 790;
+    }
+
+    .event-time {
+      color: var(--ink-muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 720;
+      white-space: nowrap;
+    }
+
+    .event p {
+      margin: 6px 0 0;
+      color: var(--ink-soft);
+      font-size: 11px;
+      line-height: 1.35;
+      font-weight: 640;
+    }
+
+    .agent-stack {
+      padding: 14px 16px 16px;
+      border-top: 1px solid rgba(33, 45, 63, .08);
+    }
+
+    .agent-row {
+      height: 40px;
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      gap: 9px;
+      align-items: center;
+      padding: 0 8px;
+      border-radius: 12px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 730;
+    }
+
+    .agent-row + .agent-row {
+      margin-top: 7px;
+    }
+
+    .agent-row.active {
+      background: rgba(255, 255, 255, .62);
+      box-shadow: inset 0 0 0 1px rgba(23, 32, 45, .06);
+      color: var(--ink);
+    }
+
+    .agent-avatar {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      color: white;
+      background: #182638;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 820;
+    }
+
+    .agent-row:nth-child(2) .agent-avatar { background: var(--cyan); }
+    .agent-row:nth-child(3) .agent-avatar { background: var(--amber); }
+
+    .state {
+      height: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--ink-muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 720;
+      white-space: nowrap;
+    }
+
+    .state::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .state.run { color: var(--mint); }
+    .state.wait { color: var(--amber); }
+
+    @media (max-width: 1280px) {
+      .shell {
+        grid-template-columns: 260px minmax(0, 1fr);
+      }
+
+      .map-rail {
+        display: none;
+      }
+    }
+
+    @media (max-width: 820px) {
+      .window {
+        width: 100vw;
+        height: 100vh;
+        min-height: 0;
+        border-radius: 0;
+      }
+
+      .shell {
+        inset: 8px;
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .workbench {
+        border-radius: 16px;
+      }
+
+      .toolbar .wide {
+        display: none;
+      }
+
+      .route-tab {
+        min-width: 124px;
+      }
+
+      .command-dock {
+        width: calc(100% - 28px);
+        grid-template-columns: 34px 1fr;
+      }
+
+      .dock-actions {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="window" aria-label="Conductor Command Map prototype">
+    <section class="shell">
+      <aside class="sidebar" aria-label="工作区侧栏">
+        <div class="traffic-row">
+          <div class="traffic" aria-hidden="true">
+            <i class="red"></i>
+            <i class="yellow"></i>
+            <i class="green"></i>
+          </div>
+          <div class="collapse" aria-label="收起侧栏">‹</div>
+        </div>
+
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div>
+            <h1>Conductor</h1>
+            <p>Command map for active terminal work</p>
+          </div>
+        </div>
+
+        <div class="workspace-panel">
+          <div class="section-head">
+            <span>Signal Spine</span>
+            <span class="plus">+</span>
+          </div>
+          <div class="workspace-list">
+            <div class="workspace">
+              <div class="signal-icon" aria-hidden="true"><span></span><span></span><span></span></div>
+              <div>Core Runtime<small>main · 4 panes</small></div>
+              <div class="count">4</div>
+            </div>
+            <div class="workspace active">
+              <div class="signal-icon" aria-hidden="true"><span></span><span></span><span></span></div>
+              <div>Ghostty Surface<small>feat/surface · live</small></div>
+              <div class="count">2</div>
+            </div>
+            <div class="workspace">
+              <div class="signal-icon" aria-hidden="true"><span></span><span></span><span></span></div>
+              <div>Release Gate<small>qa · 1 notice</small></div>
+              <div class="count">1</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="spine" aria-label="当前工作区状态">
+          <div class="spine-row"><span>terminal surfaces</span><b>2</b></div>
+          <div class="spine-row"><span>agent sessions</span><b>3</b></div>
+          <div class="spine-row"><span>unread signals</span><b>1</b></div>
+          <div class="spine-row"><span>ports</span><b>5173</b></div>
+        </div>
+
+        <nav class="quick-actions" aria-label="快捷操作">
+          <div class="section-head" style="padding:0 6px 4px;">
+            <span>Commands</span>
+          </div>
+          <div class="action primary"><span class="ico">⌘</span><span>打开命令地图</span><span class="key">⌘K</span></div>
+          <div class="action"><span class="ico">＋</span><span>新终端</span><span class="key">⌘T</span></div>
+          <div class="action"><span class="ico">▥</span><span>右分屏</span><span class="key">⌘D</span></div>
+          <div class="action"><span class="ico">▤</span><span>下分屏</span><span class="key">⇧⌘D</span></div>
+          <div class="action"><span class="ico">◎</span><span>跳到通知</span><span class="key">⌘J</span></div>
+        </nav>
+
+        <div></div>
+
+        <footer class="footer">
+          <div class="theme-name"><span class="palette"></span><span>Signal Glass</span></div>
+          <div class="gear">⌾</div>
+        </footer>
+      </aside>
+
+      <section class="workbench" aria-label="终端工作区">
+        <header class="topbar">
+          <div class="route-tabs">
+            <div class="route-tab">
+              <span class="tab-glyph" aria-hidden="true"></span>
+              <span>工作区 2</span>
+              <span class="index">1</span>
+            </div>
+            <div class="route-tab active">
+              <span class="tab-glyph" aria-hidden="true"></span>
+              <span>Ghostty Surface</span>
+              <span class="index">2</span>
+            </div>
+            <div class="route-tab">
+              <span class="tab-glyph" aria-hidden="true"></span>
+              <span>Release Gate</span>
+              <span class="index">1</span>
+            </div>
+          </div>
+          <div class="toolbar" aria-label="工具栏">
+            <div class="tool wide">＋ 工作区</div>
+            <div class="tool wide">▣ 新终端</div>
+            <div class="tool">▥</div>
+            <div class="tool">▤</div>
+            <div class="tool">◎</div>
+            <div class="tool wide">⌘ 命令</div>
+          </div>
+        </header>
+
+        <div class="terminal-area">
+          <div class="pane-tabs" aria-label="终端标签">
+            <div class="pane-tab active"><span class="shell-icon">›_</span><span>zsh</span><span>×</span></div>
+            <div class="pane-tab"><span class="shell-icon">›_</span><span>build</span><span>×</span></div>
+            <div class="pane-tab"><span class="shell-icon">›_</span><span>agent</span><span>×</span></div>
+          </div>
+
+          <div class="terminal" aria-label="Ghostty terminal surface placeholder">
+            <div class="ghostty-surface-label"><span class="surface-dot"></span>GhosttyKit surface · AppKit host</div>
+            <div class="muted-line">Last login: Sun May 17 22:37:14 on ttys001</div>
+            <br />
+            <div><span class="prompt">conductor</span> on <span class="ok">feat/surface</span> via <span class="warn">swift 6</span></div>
+            <div>❯ ./Scripts/check-conductor.sh</div>
+            <div class="muted-line">prepare ghosttykit ................. cached</div>
+            <div class="muted-line">swift build ........................ ok</div>
+            <div class="muted-line">model checks ....................... running</div>
+            <br />
+            <div><span class="prompt">surface</span> resize sync: deduped pixel updates · 60 fps guard</div>
+            <div><span class="prompt">agent</span> codex-stop hook delivered compact notification</div>
+            <br />
+            <div>❯ <span class="cursor"></span></div>
+
+            <div class="command-dock" aria-label="命令地图">
+              <div class="dock-mark">⌘</div>
+              <div class="dock-title">Command Map <span>/ split, focus, notify, ask agent, open tool pane</span></div>
+              <div class="dock-actions">
+                <div class="dock-button">▥ Split</div>
+                <div class="dock-button">◎ Notify</div>
+                <div class="dock-button">↵ Run</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="statusbar">
+          <div class="status-left">
+            <span class="status-chip">Ghostty surface alive</span>
+            <span class="status-chip">cwd ~/Desktop/conductor</span>
+            <span class="status-chip">branch feat/surface</span>
+          </div>
+          <div class="status-right">
+            <span class="status-chip">72 ms metadata</span>
+            <span class="status-chip">22:37</span>
+          </div>
+        </footer>
+      </section>
+
+      <aside class="map-rail" aria-label="命令地图侧栏">
+        <header class="rail-title">
+          <div>
+            <h2>Command Map</h2>
+            <p>current workspace route</p>
+          </div>
+          <div class="rail-toggle">⌁</div>
+        </header>
+
+        <section class="score-board" aria-label="工作状态评分">
+          <div class="score-ring">
+            <div class="ring" aria-hidden="true"></div>
+            <div class="score-copy">
+              <b>Workspace Pulse</b>
+              <span>构建、通知、Agent 生命周期汇成一个低频状态快照。</span>
+            </div>
+          </div>
+          <div class="mini-metrics">
+            <div class="mini"><b>2</b><span>panes</span></div>
+            <div class="mini"><b>3</b><span>agents</span></div>
+            <div class="mini"><b>1</b><span>notice</span></div>
+          </div>
+        </section>
+
+        <section class="timeline" aria-label="事件时间线">
+          <div class="section-head" style="padding:0 0 12px;">
+            <span>Live Route</span>
+            <span>Now</span>
+          </div>
+          <div class="timeline-list">
+            <article class="event">
+              <div class="event-head"><span>Build started</span><span class="event-time">22:35</span></div>
+              <p>ConductorModelCheck 正在验证 split tree 和 tab move。</p>
+            </article>
+            <article class="event">
+              <div class="event-head"><span>Agent ready</span><span class="event-time">22:34</span></div>
+              <p>Codex hook 只上报 terminal id、状态和短消息。</p>
+            </article>
+            <article class="event">
+              <div class="event-head"><span>Notification</span><span class="event-time">22:31</span></div>
+              <p>Release Gate 有一个可跳转的失败项。</p>
+            </article>
+            <article class="event">
+              <div class="event-head"><span>Surface attached</span><span class="event-time">22:27</span></div>
+              <p>AppKit host view 已附着窗口并同步 backing scale。</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="agent-stack" aria-label="Agent 状态">
+          <div class="section-head" style="padding:0 0 10px;">
+            <span>Agents</span>
+          </div>
+          <div class="agent-row active">
+            <div class="agent-avatar">C</div>
+            <span>Codex</span>
+            <span class="state run">run</span>
+          </div>
+          <div class="agent-row">
+            <div class="agent-avatar">B</div>
+            <span>Build</span>
+            <span class="state wait">wait</span>
+          </div>
+          <div class="agent-row">
+            <div class="agent-avatar">Q</div>
+            <span>QA Gate</span>
+            <span class="state">idle</span>
+          </div>
+        </section>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>
