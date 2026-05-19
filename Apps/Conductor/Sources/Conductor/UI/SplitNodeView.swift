@@ -1333,13 +1333,11 @@ private struct TerminalTabButton: View {
             model.renameTerminal(tab.id, title: titleDraft)
             editingTitle = false
         }
-        model.restoreFocusedTerminalFocusSoon()
     }
 
     private func cancelRename() {
         ConductorMotion.perform(ConductorMotion.selection) {
             editingTitle = false
         }
-        model.restoreFocusedTerminalFocusSoon()
     }
 }

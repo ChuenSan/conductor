@@ -553,10 +553,6 @@ enum ConductorMotion {
         magnetic(duration: 0.16)
     }
 
-    static var tabScroll: Animation? {
-        reducedMotion ? nil : .smooth(duration: 0.24, extraBounce: 0)
-    }
-
     static var layout: Animation? {
         spatial
     }
@@ -872,8 +868,10 @@ struct RenameTextField: NSViewRepresentable {
         field.cell?.wraps = false
         field.cell?.isScrollable = true
         context.coordinator.attach(field)
-        context.coordinator.claimInitialFocusIfNeeded {
-            claimInitialFocus(for: field)
+        DispatchQueue.main.async {
+            field.window?.makeFirstResponder(field)
+            applyTextAppearance(to: field)
+            field.currentEditor()?.selectAll(nil)
         }
         return field
     }
@@ -889,9 +887,6 @@ struct RenameTextField: NSViewRepresentable {
         context.coordinator.onCommit = onCommit
         context.coordinator.onCancel = onCancel
         context.coordinator.attach(field)
-        context.coordinator.claimInitialFocusIfNeeded {
-            claimInitialFocus(for: field)
-        }
     }
 
     private func applyTextAppearance(to field: NSTextField) {
@@ -899,26 +894,6 @@ struct RenameTextField: NSViewRepresentable {
         guard let editor = field.currentEditor() as? NSTextView else { return }
         editor.textColor = textColor
         editor.insertionPointColor = textColor
-        editor.selectedTextAttributes = [
-            .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.34),
-            .foregroundColor: textColor
-        ]
-    }
-
-    private func claimInitialFocus(for field: NSTextField) {
-        DispatchQueue.main.async {
-            focusAndSelectAll(field)
-            DispatchQueue.main.async {
-                focusAndSelectAll(field)
-            }
-        }
-    }
-
-    private func focusAndSelectAll(_ field: NSTextField) {
-        guard field.window != nil else { return }
-        field.window?.makeFirstResponder(field)
-        applyTextAppearance(to: field)
-        field.currentEditor()?.selectAll(nil)
     }
 
     static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) {
@@ -930,7 +905,6 @@ struct RenameTextField: NSViewRepresentable {
         var onCommit: () -> Void
         var onCancel: () -> Void
         private var handledEndEditing = false
-        private var claimedInitialFocus = false
         private weak var field: NSTextField?
         private var mouseMonitor: Any?
 
@@ -947,12 +921,6 @@ struct RenameTextField: NSViewRepresentable {
         func attach(_ field: NSTextField) {
             self.field = field
             installMouseMonitorIfNeeded()
-        }
-
-        func claimInitialFocusIfNeeded(_ claim: () -> Void) {
-            guard !claimedInitialFocus else { return }
-            claimedInitialFocus = true
-            claim()
         }
 
         func detach() {
