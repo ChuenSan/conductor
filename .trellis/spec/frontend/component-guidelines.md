@@ -273,6 +273,38 @@ Rectangle()
     .allowsHitTesting(false)
 ```
 
+### Convention: Terminal Drag And Drop
+
+**What**: Internal terminal-tab dragging and external Finder/file dragging must use different
+drop types and different visual feedback.
+
+**Why**: Finder file drags often advertise text-compatible payloads in addition to file URLs.
+If split-pane/tab-reorder drops accept broad text types, dragging a file over a terminal can
+show the split placeholder even though the user intent is to paste the file path into the
+terminal.
+
+**Contract**:
+
+- Internal tab drag/reorder/split operations must use a private app UTType, not `UTType.text`.
+- Split placeholders and tab insertion highlights may only appear for that private internal
+  tab-drag type.
+- External `.fileURL` drops on a live terminal surface should focus the target terminal and
+  send shell-quoted paths as terminal input without pressing Return.
+- Do not route dropped file contents or path lists through observable SwiftUI transcript state.
+
+**Correct**:
+
+```swift
+.onDrop(of: [terminalTabDragType], delegate: TerminalDetachDropDelegate(...))
+.onDrop(of: [.fileURL], delegate: TerminalFileDropDelegate(...))
+```
+
+**Wrong**:
+
+```swift
+.onDrop(of: [UTType.text], delegate: TerminalDetachDropDelegate(...))
+```
+
 ### Convention: Dense Tab Strip Scrolling
 
 **What**: Dense workspace and terminal tab strips should use complete-item scrolling with

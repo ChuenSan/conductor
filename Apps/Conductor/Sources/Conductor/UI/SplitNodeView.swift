@@ -610,11 +610,18 @@ private struct TerminalPaneView: View {
                 .contentShape(Rectangle())
                 .clipped()
                 .onDrop(
-                    of: [UTType.text],
+                    of: [terminalTabDragType],
                     delegate: TerminalDetachDropDelegate(
                         paneID: pane.id,
                         size: proxy.size,
                         target: $detachDropTarget,
+                        model: model
+                    )
+                )
+                .onDrop(
+                    of: [.fileURL],
+                    delegate: TerminalFileDropDelegate(
+                        terminalID: selected.id,
                         model: model
                     )
                 )
@@ -753,7 +760,7 @@ private struct StableTerminalTabStrip: View {
                 .padding(.horizontal, tabEdgePadding)
             }
             .onDrop(
-                of: [UTType.text],
+                of: [terminalTabDragType],
                 delegate: TerminalTabDropDelegate(
                     targetTabID: nil,
                     paneID: pane.id,
@@ -802,7 +809,7 @@ private struct StableTerminalTabStrip: View {
         .frame(width: model.appearance.density.paneTabWidth)
         .id(tab.id)
         .onDrop(
-            of: [UTType.text],
+            of: [terminalTabDragType],
             delegate: TerminalTabDropDelegate(
                 targetTabID: tab.id,
                 paneID: pane.id,
@@ -813,10 +820,20 @@ private struct StableTerminalTabStrip: View {
     }
 }
 
+private let terminalTabDragType = UTType(exportedAs: "app.conductor.terminal-tab")
 private let terminalTabDragPrefix = "terminal:"
 
-private func terminalTabDragPayload(for tabID: TerminalID) -> NSString {
-    "\(terminalTabDragPrefix)\(tabID.description)" as NSString
+private func terminalTabDragPayload(for tabID: TerminalID) -> NSItemProvider {
+    let provider = NSItemProvider()
+    let data = Data("\(terminalTabDragPrefix)\(tabID.description)".utf8)
+    provider.registerDataRepresentation(
+        forTypeIdentifier: terminalTabDragType.identifier,
+        visibility: .ownProcess
+    ) { completion in
+        completion(data, nil)
+        return nil
+    }
+    return provider
 }
 
 private func terminalID(fromDroppedText text: String) -> TerminalID? {
@@ -841,17 +858,48 @@ private func stringFromDropItem(_ item: NSSecureCoding?) -> String? {
     return nil
 }
 
+private func droppedFileURL(from item: NSSecureCoding?) -> URL? {
+    if let url = item as? URL, url.isFileURL {
+        return url.standardizedFileURL
+    }
+    guard let value = stringFromDropItem(item)?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !value.isEmpty else {
+        return nil
+    }
+    if let url = URL(string: value), url.isFileURL {
+        return url.standardizedFileURL
+    }
+    return URL(fileURLWithPath: NSString(string: value).expandingTildeInPath).standardizedFileURL
+}
+
+private func shellQuotedPath(_ path: String) -> String {
+    "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
+}
+
+private func terminalTabDropProvider(in info: DropInfo) -> NSItemProvider? {
+    info.itemProviders(for: [terminalTabDragType]).first
+}
+
 private struct TerminalDetachDropDelegate: DropDelegate {
     let paneID: PaneID
     let size: CGSize
     @Binding var target: TerminalDetachTarget?
     let model: ConductorWindowModel
 
+    func validateDrop(info: DropInfo) -> Bool {
+        terminalTabDropProvider(in: info) != nil
+    }
+
     func dropEntered(info: DropInfo) {
+        guard validateDrop(info: info) else { return }
         target = target(for: info.location)
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard validateDrop(info: info) else {
+            target = nil
+            return nil
+        }
         target = target(for: info.location)
         return DropProposal(operation: .move)
     }
@@ -863,8 +911,8 @@ private struct TerminalDetachDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         let resolvedTarget = target(for: info.location)
         target = nil
-        guard let item = info.itemProviders(for: [UTType.text]).first else { return false }
-        item.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { item, _ in
+        guard let item = terminalTabDropProvider(in: info) else { return false }
+        item.loadItem(forTypeIdentifier: terminalTabDragType.identifier, options: nil) { item, _ in
             guard let text = stringFromDropItem(item),
                   let draggedTabID = terminalID(fromDroppedText: text) else {
                 return
@@ -911,7 +959,12 @@ private struct TerminalTabDropDelegate: DropDelegate {
     @Binding var highlightedTabID: TerminalID?
     let model: ConductorWindowModel
 
+    func validateDrop(info: DropInfo) -> Bool {
+        terminalTabDropProvider(in: info) != nil
+    }
+
     func dropEntered(info: DropInfo) {
+        guard validateDrop(info: info) else { return }
         highlightedTabID = targetTabID
     }
 
@@ -923,8 +976,8 @@ private struct TerminalTabDropDelegate: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         highlightedTabID = nil
-        guard let item = info.itemProviders(for: [UTType.text]).first else { return false }
-        item.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { item, _ in
+        guard let item = terminalTabDropProvider(in: info) else { return false }
+        item.loadItem(forTypeIdentifier: terminalTabDragType.identifier, options: nil) { item, _ in
             guard let text = stringFromDropItem(item),
                   let draggedTabID = terminalID(fromDroppedText: text) else {
                 return
@@ -941,6 +994,57 @@ private struct TerminalTabDropDelegate: DropDelegate {
             }
         }
         return true
+    }
+}
+
+private struct TerminalFileDropDelegate: DropDelegate {
+    let terminalID: TerminalID
+    let model: ConductorWindowModel
+
+    func validateDrop(info: DropInfo) -> Bool {
+        !info.itemProviders(for: [.fileURL]).isEmpty
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        validateDrop(info: info) ? DropProposal(operation: .copy) : nil
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let providers = info.itemProviders(for: [.fileURL])
+        guard !providers.isEmpty else { return false }
+
+        Task {
+            let urls = await loadFileURLs(from: providers)
+            guard !urls.isEmpty else { return }
+            await MainActor.run {
+                model.focusTerminal(terminalID)
+                let text = urls
+                    .map { shellQuotedPath($0.path) }
+                    .joined(separator: " ") + " "
+                if let tab = model.workspace.focusedPane?.selectedTab {
+                    model.surface(for: tab).sendText(text)
+                }
+            }
+        }
+        return true
+    }
+
+    private func loadFileURLs(from providers: [NSItemProvider]) async -> [URL] {
+        var urls: [URL] = []
+        for provider in providers {
+            if let url = await loadFileURL(from: provider) {
+                urls.append(url)
+            }
+        }
+        return urls
+    }
+
+    private func loadFileURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { continuation in
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                continuation.resume(returning: droppedFileURL(from: item))
+            }
+        }
     }
 }
 
@@ -1200,7 +1304,7 @@ private struct TerminalTabButton: View {
         )
         .onDrag {
             model.selectTab(tab.id, in: paneID)
-            return NSItemProvider(object: terminalTabDragPayload(for: tab.id))
+            return terminalTabDragPayload(for: tab.id)
         }
         .contextMenu {
             Button(L("重命名标签...", "Rename Tab...")) {
