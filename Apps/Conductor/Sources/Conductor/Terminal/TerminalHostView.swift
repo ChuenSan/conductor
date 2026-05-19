@@ -4,6 +4,15 @@ import QuartzCore
 
 @MainActor
 final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
+    private static let legacyFilenamesPboardType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+    private static let internalTerminalTabDragType = NSPasteboard.PasteboardType("app.conductor.terminal-tab")
+    private static let dropTypes: Set<NSPasteboard.PasteboardType> = [
+        .fileURL,
+        .URL,
+        .string,
+        legacyFilenamesPboardType
+    ]
+
     weak var surface: TerminalSurface?
     var suspendsGeometrySync = false
     private var keyTextAccumulator: [String]?
@@ -17,6 +26,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         clipsToBounds = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         configureLayerForTerminalHosting(layer)
+        registerForDraggedTypes(Array(Self.dropTypes))
     }
 
     @available(*, unavailable)
@@ -147,6 +157,23 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
 
     override func scrollWheel(with event: NSEvent) {
         surface?.scroll(deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY, modifiers: event.modifierFlags)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        dropOperation(for: sender.draggingPasteboard)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        dropOperation(for: sender.draggingPasteboard)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let text = droppedTerminalText(from: sender.draggingPasteboard) else { return false }
+        window?.makeFirstResponder(self)
+        surface?.requestWorkspaceFocus()
+        surface?.setFocused(true)
+        insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+        return true
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -345,5 +372,90 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         guard !text.isEmpty else { return false }
         guard text.count == 1, let scalar = text.unicodeScalars.first else { return true }
         return scalar.value >= 0x20 && scalar.value != 0x7F
+    }
+
+    private func dropOperation(for pasteboard: NSPasteboard) -> NSDragOperation {
+        guard let types = pasteboard.types,
+              !types.contains(Self.internalTerminalTabDragType),
+              !Set(types).isDisjoint(with: Self.dropTypes),
+              droppedTerminalText(from: pasteboard) != nil else {
+            return []
+        }
+        return .copy
+    }
+
+    private func droppedTerminalText(from pasteboard: NSPasteboard) -> String? {
+        guard let types = pasteboard.types,
+              !types.contains(Self.internalTerminalTabDragType) else {
+            return nil
+        }
+
+        let urls = fileURLs(from: pasteboard)
+        if !urls.isEmpty {
+            return urls
+                .map { shellEscapedText($0.path) }
+                .joined(separator: " ") + " "
+        }
+
+        if let rawURL = pasteboard.string(forType: .URL),
+           !rawURL.isEmpty {
+            return shellEscapedText(rawURL) + " "
+        }
+
+        if let string = pasteboard.string(forType: .string),
+           !string.isEmpty {
+            return string
+        }
+
+        return nil
+    }
+
+    private func fileURLs(from pasteboard: NSPasteboard) -> [URL] {
+        var fileURLs: [URL] = []
+
+        let objects = pasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) ?? []
+        for object in objects {
+            if let url = object as? URL, url.isFileURL {
+                fileURLs.append(url.standardizedFileURL)
+            }
+        }
+
+        if let filePaths = pasteboard.propertyList(forType: Self.legacyFilenamesPboardType) as? [String] {
+            fileURLs.append(
+                contentsOf: filePaths
+                    .filter { !$0.isEmpty }
+                    .map { URL(fileURLWithPath: $0).standardizedFileURL }
+            )
+        }
+
+        if let value = pasteboard.string(forType: .fileURL),
+           let url = URL(string: value),
+           url.isFileURL {
+            fileURLs.append(url.standardizedFileURL)
+        }
+
+        var seen: Set<String> = []
+        return fileURLs.filter { url in
+            seen.insert(url.path).inserted
+        }
+    }
+
+    private func shellEscapedText(_ value: String) -> String {
+        if value.contains(where: { $0 == "\n" || $0 == "\r" }) {
+            return shellSingleQuoted(value)
+        }
+
+        var result = value
+        for character in "\\ ()[]{}<>\"'`!#$&;|*?\t" {
+            result = result.replacingOccurrences(of: String(character), with: "\\\(character)")
+        }
+        return result
+    }
+
+    private func shellSingleQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 }

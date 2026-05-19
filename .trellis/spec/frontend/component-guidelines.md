@@ -291,21 +291,31 @@ terminal.
   providers can match surprisingly broad data representations.
 - Split placeholders and tab insertion highlights may only appear for that private internal
   tab-drag type.
-- External `.fileURL` drops on a live terminal surface should focus the target terminal and
-  send shell-quoted paths as terminal input without pressing Return.
+- External `.fileURL`/`.URL`/`.string` drops on a live terminal surface should be handled by
+  the stable AppKit `TerminalHostView`, focus the target terminal, and insert shell-escaped
+  file paths as terminal input without pressing Return. Decode file URLs first, then fall back
+  to URL/string payloads, matching Ghostty/cmux drag-destination behavior.
+- Terminal host file/text drop handling must reject the private internal terminal-tab drag
+  pasteboard type so dragging tabs cannot be inserted into the shell as text.
 - Do not route dropped file contents or path lists through observable SwiftUI transcript state.
 
 **Correct**:
 
 ```swift
 .onDrop(of: [terminalTabDragType], delegate: TerminalDetachDropDelegate(...))
-.onDrop(of: [.fileURL], delegate: TerminalFileDropDelegate(...))
+
+final class TerminalHostView: NSView {
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        surface?.sendText(shellQuotedPaths + " ")
+    }
+}
 ```
 
 **Wrong**:
 
 ```swift
 .onDrop(of: [UTType.text], delegate: TerminalDetachDropDelegate(...))
+.onDrop(of: [.fileURL], delegate: TerminalFileDropDelegate(...)) // wrapped around NSViewRepresentable
 ```
 
 ### Convention: Dense Tab Strip Scrolling

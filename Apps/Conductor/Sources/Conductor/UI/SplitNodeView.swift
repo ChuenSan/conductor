@@ -618,13 +618,6 @@ private struct TerminalPaneView: View {
                         model: model
                     )
                 )
-                .onDrop(
-                    of: [.fileURL],
-                    delegate: TerminalFileDropDelegate(
-                        terminalID: selected.id,
-                        model: model
-                    )
-                )
             }
         }
     }
@@ -858,24 +851,6 @@ private func stringFromDropItem(_ item: NSSecureCoding?) -> String? {
     return nil
 }
 
-private func droppedFileURL(from item: NSSecureCoding?) -> URL? {
-    if let url = item as? URL, url.isFileURL {
-        return url.standardizedFileURL
-    }
-    guard let value = stringFromDropItem(item)?.trimmingCharacters(in: .whitespacesAndNewlines),
-          !value.isEmpty else {
-        return nil
-    }
-    if let url = URL(string: value), url.isFileURL {
-        return url.standardizedFileURL
-    }
-    return URL(fileURLWithPath: NSString(string: value).expandingTildeInPath).standardizedFileURL
-}
-
-private func shellQuotedPath(_ path: String) -> String {
-    "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
-}
-
 private func terminalTabDropProvider(in info: DropInfo) -> NSItemProvider? {
     info.itemProviders(for: [terminalTabDragType]).first
 }
@@ -998,57 +973,6 @@ private struct TerminalTabDropDelegate: DropDelegate {
             }
         }
         return true
-    }
-}
-
-private struct TerminalFileDropDelegate: DropDelegate {
-    let terminalID: TerminalID
-    let model: ConductorWindowModel
-
-    func validateDrop(info: DropInfo) -> Bool {
-        !info.itemProviders(for: [.fileURL]).isEmpty
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        validateDrop(info: info) ? DropProposal(operation: .copy) : nil
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        let providers = info.itemProviders(for: [.fileURL])
-        guard !providers.isEmpty else { return false }
-
-        Task {
-            let urls = await loadFileURLs(from: providers)
-            guard !urls.isEmpty else { return }
-            await MainActor.run {
-                model.focusTerminal(terminalID)
-                let text = urls
-                    .map { shellQuotedPath($0.path) }
-                    .joined(separator: " ") + " "
-                if let tab = model.workspace.focusedPane?.selectedTab {
-                    model.surface(for: tab).sendText(text)
-                }
-            }
-        }
-        return true
-    }
-
-    private func loadFileURLs(from providers: [NSItemProvider]) async -> [URL] {
-        var urls: [URL] = []
-        for provider in providers {
-            if let url = await loadFileURL(from: provider) {
-                urls.append(url)
-            }
-        }
-        return urls
-    }
-
-    private func loadFileURL(from provider: NSItemProvider) async -> URL? {
-        await withCheckedContinuation { continuation in
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                continuation.resume(returning: droppedFileURL(from: item))
-            }
-        }
     }
 }
 
