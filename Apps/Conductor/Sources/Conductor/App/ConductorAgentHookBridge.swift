@@ -77,8 +77,8 @@ enum ConductorHookCLI {
 
         if action == "stop" || action == "agent-response" {
             let cwd = userInfo[ConductorAgentHookBridge.Key.cwd]
-            userInfo[ConductorAgentHookBridge.Key.title] = "Codex 完成"
-            userInfo[ConductorAgentHookBridge.Key.body] = codexCompletionBody(payload: payload, cwd: cwd)
+            userInfo[ConductorAgentHookBridge.Key.title] = "任务完成"
+            userInfo[ConductorAgentHookBridge.Key.body] = completionBody(payload: payload, cwd: cwd)
         }
 
         DistributedNotificationCenter.default().postNotificationName(
@@ -89,7 +89,7 @@ enum ConductorHookCLI {
         )
     }
 
-    private static func codexCompletionBody(payload: [String: Any], cwd: String?) -> String {
+    private static func completionBody(payload: [String: Any], cwd: String?) -> String {
         if let message = firstString(in: payload, keys: ["last_assistant_message", "lastAssistantMessage", "message", "summary"]) {
             let normalized = normalizedSingleLine(message)
             if !normalized.isEmpty {
@@ -100,10 +100,10 @@ enum ConductorHookCLI {
         if let cwd, !cwd.isEmpty {
             let project = URL(fileURLWithPath: NSString(string: cwd).expandingTildeInPath).lastPathComponent
             if !project.isEmpty {
-                return "\(project) 的 Codex 对话已完成，等待下一步。"
+                return "\(project) 的终端任务已完成，等待下一步。"
             }
         }
-        return "Codex 对话已完成，等待下一步。"
+        return "终端任务已完成，等待下一步。"
     }
 
     private static func firstString(in object: [String: Any], keys: [String]) -> String? {

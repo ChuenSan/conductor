@@ -5,9 +5,11 @@ import QuartzCore
 @MainActor
 final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     weak var surface: TerminalSurface?
+    var suspendsGeometrySync = false
     private var keyTextAccumulator: [String]?
     private var markedText = NSMutableAttributedString()
     private var markedSelectedRange = NSRange(location: NSNotFound, length: 0)
+    private var consumedRightMouseForMenu = false
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 900, height: 620))
@@ -41,7 +43,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         super.setFrameSize(newSize)
         CATransaction.commit()
         guard changed else { return }
-        surface?.syncGeometry()
+        syncGeometryIfWindowAttached()
     }
 
     override func setBoundsSize(_ newSize: NSSize) {
@@ -51,19 +53,22 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         super.setBoundsSize(newSize)
         CATransaction.commit()
         guard changed else { return }
-        surface?.syncGeometry()
+        syncGeometryIfWindowAttached()
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        surface?.attachIfPossible()
-        surface?.syncGeometry(force: true)
+        guard window != nil else { return }
+        if !suspendsGeometrySync {
+            surface?.attachIfPossible()
+        }
+        syncGeometryIfWindowAttached(force: true)
         surface?.refresh()
     }
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        surface?.syncGeometry(force: true)
+        syncGeometryIfWindowAttached(force: true)
         surface?.refresh()
     }
 
@@ -72,7 +77,13 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         CATransaction.setDisableActions(true)
         super.layout()
         CATransaction.commit()
-        surface?.syncGeometry()
+        syncGeometryIfWindowAttached()
+    }
+
+    private func syncGeometryIfWindowAttached(force: Bool = false) {
+        guard window != nil,
+              !suspendsGeometrySync else { return }
+        surface?.syncGeometry(force: force)
     }
 
     private func configureLayerForTerminalHosting(_ layer: CALayer?) {
@@ -100,10 +111,18 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         window?.makeFirstResponder(self)
         surface?.requestWorkspaceFocus()
         surface?.setFocused(true)
+        if surface?.requestContextMenu(event: event, in: self) == true {
+            consumedRightMouseForMenu = true
+            return
+        }
         surface?.sendMouseButton(GHOSTTY_MOUSE_RIGHT, state: GHOSTTY_MOUSE_PRESS, event: event)
     }
 
     override func rightMouseUp(with event: NSEvent) {
+        if consumedRightMouseForMenu {
+            consumedRightMouseForMenu = false
+            return
+        }
         surface?.sendMouseButton(GHOSTTY_MOUSE_RIGHT, state: GHOSTTY_MOUSE_RELEASE, event: event)
     }
 

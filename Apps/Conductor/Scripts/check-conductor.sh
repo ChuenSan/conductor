@@ -5,6 +5,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$ROOT/../.." && pwd)"
 cd "$ROOT"
 
+if [[ -x /usr/local/opt/swift/bin/swift ]]; then
+  export PATH="/usr/local/opt/swift/bin:$PATH"
+fi
+
 ./Scripts/prepare-ghosttykit.sh
 swift build
 swift run ConductorModelCheck
@@ -23,6 +27,18 @@ with open(sys.argv[1], "r", encoding="utf-8") as handle:
     data = json.load(handle)
 print(json.dumps(data, sort_keys=True, separators=(",", ":")))
 PY
+}
+
+wait_for_conductor_exit() {
+  local pattern="$ROOT/.build/x86_64-apple-macosx/debug/Conductor|$ROOT/.build/debug/Conductor|$ROOT/.build/Conductor.app/Contents/MacOS/Conductor"
+  for _ in {1..40}; do
+    if ! pgrep -fl "$pattern" >/tmp/conductor-wait-pids.txt; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  cat /tmp/conductor-wait-pids.txt >&2
+  return 1
 }
 
 STATE_BEFORE="$(state_hash)"
@@ -113,6 +129,8 @@ grep -qx 'settings=true' /tmp/conductor-shell-panel-ok.txt
 grep -qx 'command=true' /tmp/conductor-shell-panel-ok.txt
 grep -qx 'overview=true' /tmp/conductor-shell-panel-ok.txt
 
+wait_for_conductor_exit
+
 rm -f /tmp/conductor-stress-ok.txt
 CONDUCTOR_STRESS_AUTORUN=1 \
 CONDUCTOR_STRESS_OUTPUT=/tmp/conductor-stress-ok.txt \
@@ -124,6 +142,8 @@ grep -qx 'stress=long-output' /tmp/conductor-stress-ok.txt
 grep -qx 'panes=3' /tmp/conductor-stress-ok.txt
 grep -qx 'terminals=4' /tmp/conductor-stress-ok.txt
 grep -qx 'zoomed=false' /tmp/conductor-stress-ok.txt
+
+wait_for_conductor_exit
 
 rm -f /tmp/conductor-resize-stress-ok.txt
 CONDUCTOR_RESIZE_STRESS_AUTORUN=1 \

@@ -5,6 +5,10 @@ private struct ConductorFontScaleKey: EnvironmentKey {
     static let defaultValue = AppearanceFontScale.standard
 }
 
+private struct ConductorFontFamilyKey: EnvironmentKey {
+    static let defaultValue = AppearanceFontFamily.system
+}
+
 private struct ConductorThemeKey: EnvironmentKey {
     static let defaultValue = TerminalTheme.codexDark
 }
@@ -24,6 +28,11 @@ extension EnvironmentValues {
         set { self[ConductorThemeKey.self] = newValue }
     }
 
+    var conductorFontFamily: AppearanceFontFamily {
+        get { self[ConductorFontFamilyKey.self] }
+        set { self[ConductorFontFamilyKey.self] = newValue }
+    }
+
     var conductorSplitResizeActive: Bool {
         get { self[ConductorSplitResizeActiveKey.self] }
         set { self[ConductorSplitResizeActiveKey.self] = newValue }
@@ -35,9 +44,10 @@ extension Font {
         size: CGFloat,
         weight: Font.Weight = .regular,
         design: Font.Design = .default,
+        family: AppearanceFontFamily = ConductorAppearanceRuntime.fontFamily,
         scale: AppearanceFontScale
     ) -> Font {
-        .system(size: scale.size(size), weight: weight, design: design)
+        .system(size: scale.size(size), weight: weight, design: family.fontDesign(fallback: design))
     }
 }
 
@@ -45,9 +55,10 @@ extension NSFont {
     static func conductorSystemFont(
         ofSize size: CGFloat,
         weight: NSFont.Weight = .regular,
+        family: AppearanceFontFamily = ConductorAppearanceRuntime.fontFamily,
         scale: AppearanceFontScale
     ) -> NSFont {
-        .systemFont(ofSize: scale.size(size), weight: weight)
+        family.systemFont(ofSize: scale.size(size), weight: weight)
     }
 
     static func conductorMonospacedSystemFont(
@@ -56,6 +67,37 @@ extension NSFont {
         scale: AppearanceFontScale
     ) -> NSFont {
         .monospacedSystemFont(ofSize: scale.size(size), weight: weight)
+    }
+}
+
+extension AppearanceFontFamily {
+    func fontDesign(fallback: Font.Design = .default) -> Font.Design {
+        switch self {
+        case .system:
+            fallback
+        case .rounded:
+            .rounded
+        case .serif:
+            .serif
+        case .monospaced:
+            .monospaced
+        }
+    }
+
+    func systemFont(ofSize size: CGFloat, weight: NSFont.Weight) -> NSFont {
+        switch self {
+        case .system:
+            return .systemFont(ofSize: size, weight: weight)
+        case .monospaced:
+            return .monospacedSystemFont(ofSize: size, weight: weight)
+        case .rounded, .serif:
+            let base = NSFont.systemFont(ofSize: size, weight: weight)
+            let design: NSFontDescriptor.SystemDesign = self == .rounded ? .rounded : .serif
+            guard let descriptor = base.fontDescriptor.withDesign(design) else {
+                return base
+            }
+            return NSFont(descriptor: descriptor, size: size) ?? base
+        }
     }
 }
 
@@ -78,9 +120,9 @@ enum ConductorTokens {
         static let terminalTextMuted = Color(red: 0.494, green: 0.537, blue: 0.612)
         static let splitGutter = Color(red: 0.063, green: 0.090, blue: 0.125)
 
-        static let textPrimary = Color(red: 0.110, green: 0.130, blue: 0.170)
-        static let textSecondary = Color(red: 0.405, green: 0.443, blue: 0.505)
-        static let textTertiary = Color(red: 0.604, green: 0.631, blue: 0.678)
+        static let textPrimary = Color.primary
+        static let textSecondary = Color.secondary
+        static let textTertiary = Color.secondary.opacity(0.68)
 
         static let selectedFill = Color.black.opacity(0.042)
         static let inactiveFill = Color.white.opacity(0.58)
@@ -94,7 +136,7 @@ enum ConductorTokens {
     }
 
     enum Radius {
-        static let sidebar: CGFloat = 22
+        static let sidebar: CGFloat = 20
         static let panel: CGFloat = 26
         static let commandPalette: CGFloat = 24
         static let card: CGFloat = 16
@@ -107,10 +149,12 @@ enum ConductorTokens {
     }
 
     enum Space {
-        static let shellX: CGFloat = 8
-        static let shellTop: CGFloat = 8
-        static let shellBottom: CGFloat = 8
-        static let shellGap: CGFloat = 8
+        static let shellLeading: CGFloat = 2
+        static let shellTrailing: CGFloat = 0
+        static let shellTop: CGFloat = 0
+        static let shellBottom: CGFloat = 0
+        static let shellGap: CGFloat = 0
+        static let shellJoinerWidth: CGFloat = 0
         static let sidebarWidth: CGFloat = 230
         static let sidebarCollapsedWidth: CGFloat = 88
         static let sidebarX: CGFloat = 8
@@ -120,7 +164,7 @@ enum ConductorTokens {
         static let toolbarX: CGFloat = 0
         static let toolbarGap: CGFloat = 5
         static let terminalInset: CGFloat = 0
-        static let splitGutter: CGFloat = 4
+        static let splitGutter: CGFloat = 10
         static let paneTabRailHeight: CGFloat = 26
         static let paneTabHeight: CGFloat = 21
         static let paneTabWidth: CGFloat = 118
@@ -129,7 +173,6 @@ enum ConductorTokens {
         static let notificationPanelHeight: CGFloat = 360
         static let notificationPanelMinWidth: CGFloat = 280
         static let notificationPanelMinHeight: CGFloat = 300
-        static let filePreviewPanelWidth: CGFloat = 390
     }
 
     enum Typography {
@@ -279,8 +322,8 @@ struct ConductorGlassSurface<Content: View>: View {
             .overlay(alignment: .topLeading) {
                 LinearGradient(
                     colors: [
-                        Color.white.opacity((style == .terminalToolbar ? 0.08 : 0.34) * clarity.highlightMultiplier),
-                        Color.white.opacity(0.04 * clarity.highlightMultiplier),
+                        Color.white.opacity(topHighlightOpacity * clarity.highlightMultiplier),
+                        Color.white.opacity(midHighlightOpacity * clarity.highlightMultiplier),
                         Color.clear
                     ],
                     startPoint: .topLeading,
@@ -309,12 +352,32 @@ struct ConductorGlassSurface<Content: View>: View {
     private var resolvedStroke: Color {
         switch style {
         case .sidebar:
-            theme.shellStroke.opacity(clarity.strokeMultiplier)
+            theme.shellStroke.opacity((theme.usesDarkChrome ? 0.42 : 0.50) * clarity.strokeMultiplier)
         case .settings, .palette, .panel:
             theme.floatingStroke.opacity(clarity.strokeMultiplier)
         case .card, .controlGroup, .terminalToolbar:
             style.stroke.opacity(clarity.strokeMultiplier)
         }
+    }
+
+    private var topHighlightOpacity: Double {
+        if theme.usesDarkChrome {
+            if style == .sidebar {
+                return 0.020
+            }
+            return style == .terminalToolbar ? 0.045 : 0.075
+        }
+        if style == .sidebar {
+            return 0.040
+        }
+        return style == .terminalToolbar ? 0.08 : 0.34
+    }
+
+    private var midHighlightOpacity: Double {
+        if theme.usesDarkChrome {
+            return 0.012
+        }
+        return style == .sidebar ? 0.014 : 0.04
     }
 
     @ViewBuilder
@@ -328,14 +391,31 @@ struct ConductorGlassSurface<Content: View>: View {
                 }
                 .overlay {
                     surfaceShape
-                        .fill(Color.white.opacity(0.04 * clarity.highlightMultiplier))
+                        .fill(Color.white.opacity((theme.usesDarkChrome ? 0.012 : 0.04) * clarity.highlightMultiplier))
                 }
-        } else if #available(macOS 26.0, *) {
-            Color.clear
-                .glassEffect(
-                    Glass.regular.tint(resolvedTint).interactive(interactive),
-                    in: surfaceShape
-                )
+        } else if style == .sidebar {
+            surfaceShape
+                .fill(theme.shellPanelBackground)
+                .overlay {
+                    surfaceShape
+                        .fill(resolvedTint)
+                }
+                .overlay {
+                    surfaceShape
+                        .fill(theme.usesDarkChrome ? theme.terminalBackground.opacity(0.18) : Color.white.opacity(0.16))
+                }
+                .overlay {
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(theme.usesDarkChrome ? 0.018 : 0.20),
+                            Color.clear,
+                            theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.16 : 0.030)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(surfaceShape)
+                }
         } else {
             surfaceShape
                 .fill(style.fallbackMaterial)
@@ -355,9 +435,9 @@ struct ConductorWindowBackdrop: View {
             Rectangle()
                 .fill(.regularMaterial)
             theme.windowBackdropStops[1]
-                .opacity(0.42)
+                .opacity(theme.usesDarkChrome ? 0.82 : 0.42)
             LinearGradient(
-                colors: theme.windowBackdropStops.map { $0.opacity(0.58) },
+                colors: theme.windowBackdropStops.map { $0.opacity(theme.usesDarkChrome ? 0.90 : 0.58) },
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -372,9 +452,9 @@ struct ConductorWindowBackdrop: View {
             )
             LinearGradient(
                 colors: [
-                    Color.white.opacity(0.26),
+                    Color.white.opacity(theme.usesDarkChrome ? 0.045 : 0.26),
                     Color.clear,
-                    Color.black.opacity(0.035)
+                    Color.black.opacity(theme.usesDarkChrome ? 0.18 : 0.035)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -405,10 +485,12 @@ enum ConductorDesign {
     static let splitGutter = ConductorTokens.Palette.splitGutter
     static let warmAccent = ConductorTokens.Palette.warmAccent
 
-    static let shellHorizontalPadding = ConductorTokens.Space.shellX
+    static let shellLeadingPadding = ConductorTokens.Space.shellLeading
+    static let shellTrailingPadding = ConductorTokens.Space.shellTrailing
     static let shellTopPadding = ConductorTokens.Space.shellTop
     static let shellBottomPadding = ConductorTokens.Space.shellBottom
     static let shellGap = ConductorTokens.Space.shellGap
+    static let shellJoinerWidth = ConductorTokens.Space.shellJoinerWidth
     static let sidebarWidth = ConductorTokens.Space.sidebarWidth
     static let sidebarCollapsedWidth = ConductorTokens.Space.sidebarCollapsedWidth
     static let sidebarCornerRadius = ConductorTokens.Radius.sidebar
@@ -430,27 +512,116 @@ enum ConductorDesign {
 }
 
 enum ConductorMotion {
-    static let micro = Animation.easeOut(duration: 0.12)
-    static let standard = Animation.spring(response: 0.24, dampingFraction: 0.86, blendDuration: 0)
-    static let layout = Animation.spring(response: 0.32, dampingFraction: 0.88, blendDuration: 0)
-    static let emphasized = Animation.spring(response: 0.38, dampingFraction: 0.78, blendDuration: 0)
+    nonisolated(unsafe) private static var reducedMotion = false
 
-    static func perform(_ action: () -> Void) {
-        withAnimation(standard, action)
+    // Motion is part of the interaction model: feedback is local, navigation
+    // preserves continuity, spatial motion changes layout, and reveal motion
+    // introduces transient panels. Terminal surfaces opt out of all of these.
+    static var micro: Animation? {
+        reducedMotion ? nil : .easeOut(duration: 0.055)
     }
 
-    static func perform(_ animation: Animation = ConductorMotion.standard, _ action: () -> Void) {
-        withAnimation(animation, action)
+    static var hover: Animation? {
+        feedback
+    }
+
+    static var feedback: Animation? {
+        reducedMotion ? nil : .easeOut(duration: 0.05)
+    }
+
+    static var press: Animation? {
+        nil
+    }
+
+    static var selection: Animation? {
+        navigation
+    }
+
+    static var navigation: Animation? {
+        reducedMotion ? nil : .easeOut(duration: 0.12)
+    }
+
+    static var standard: Animation? {
+        reducedMotion ? nil : .easeOut(duration: 0.12)
+    }
+
+    static var panel: Animation? {
+        reducedMotion ? nil : .easeOut(duration: 0.15)
+    }
+
+    static var list: Animation? {
+        reducedMotion ? nil : .easeOut(duration: 0.12)
+    }
+
+    static var layout: Animation? {
+        spatial
+    }
+
+    static var spatial: Animation? {
+        reducedMotion ? nil : .easeOut(duration: 0.16)
+    }
+
+    static var emphasized: Animation? {
+        reducedMotion ? nil : .easeOut(duration: 0.18)
+    }
+
+    static var panelTransition: AnyTransition {
+        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.995, anchor: .top))
+    }
+
+    static var tabTransition: AnyTransition {
+        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.995))
+    }
+
+    static var rowTransition: AnyTransition {
+        reducedMotion ? .identity : .opacity
+    }
+
+    static func setReducedMotion(_ value: Bool) {
+        reducedMotion = value
+    }
+
+    static func perform(_ action: () -> Void) {
+        perform(standard, action)
+    }
+
+    static func perform(_ animation: Animation? = ConductorMotion.standard, _ action: () -> Void) {
+        if let animation {
+            withAnimation(animation, action)
+        } else {
+            withoutAnimation(action)
+        }
+    }
+
+    static func withoutAnimation(_ action: () -> Void) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction, action)
+    }
+
+    static func transaction(_ animation: Animation?) -> Transaction {
+        var transaction = Transaction(animation: animation)
+        if animation == nil {
+            transaction.disablesAnimations = true
+        }
+        return transaction
     }
 }
 
 struct ConductorPressButtonStyle: ButtonStyle {
-    var pressedScale: CGFloat = 0.96
+    var pressedScale: CGFloat = 1.0
+
+    private var effectivePressedScale: CGFloat {
+        max(pressedScale, 0.985)
+    }
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? pressedScale : 1)
-            .animation(ConductorMotion.micro, value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? effectivePressedScale : 1)
+            .transaction { transaction in
+                transaction.animation = ConductorMotion.press
+                transaction.disablesAnimations = ConductorMotion.press == nil
+            }
     }
 }
 
@@ -461,33 +632,62 @@ struct ConductorIconButton: View {
     var disabled = false
     var active = false
     let action: () -> Void
+    @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorFontFamily) private var fontFamily
+    @Environment(\.conductorTheme) private var theme
+
+    private var foreground: Color {
+        active ? theme.shellChromeText : theme.shellChromeText.opacity(hovering ? 0.82 : 0.64)
+    }
+
+    private var buttonStroke: Color {
+        if theme.usesDarkChrome {
+            return Color.white.opacity(active ? 0.14 : (hovering ? 0.10 : 0.045))
+        }
+        return theme.shellStroke.opacity(active ? 0.92 : (hovering ? 0.72 : 0.46))
+    }
+
+    private var buttonFill: Color {
+        if theme.usesDarkChrome {
+            return Color.white.opacity(active ? 0.072 : (hovering ? 0.050 : 0.014))
+        }
+        return active ? theme.shellSelectedFill : (hovering ? theme.shellHoverFill : theme.shellControlFill)
+    }
 
     var body: some View {
-        HStack(spacing: title == nil ? 0 : 5) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
-            if let title {
-                Text(title)
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-        }
-        .foregroundStyle(active ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
-        .padding(.horizontal, title == nil ? 0 : 9)
-        .frame(width: title == nil ? 24 : nil, height: 24)
-        .background(active ? Color.white.opacity(0.060) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
-        .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control))
-        .opacity(disabled ? 0.38 : 1)
-        .onTapGesture {
+        Button {
             guard !disabled else { return }
-            ConductorMotion.perform(.easeOut(duration: 0.10), action)
+            action()
+        } label: {
+            HStack(spacing: title == nil ? 0 : 5) {
+                Image(systemName: systemImage)
+                    .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
+                if let title {
+                    Text(title)
+                        .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+            .foregroundStyle(foreground)
+            .padding(.horizontal, title == nil ? 0 : 8)
+            .frame(width: title == nil ? 24 : nil, height: 24)
+            .background(buttonFill)
+            .overlay {
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.control, style: .continuous)
+                    .stroke(buttonStroke, lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control, style: .continuous))
         }
-        .accessibilityAddTraits(.isButton)
-        .animation(ConductorMotion.standard, value: active)
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.97))
+        .disabled(disabled)
+        .opacity(disabled ? 0.34 : 1)
+        .animation(ConductorMotion.selection, value: active)
         .animation(ConductorMotion.micro, value: disabled)
+        .animation(ConductorMotion.hover, value: hovering)
+        .onHover { hovering = $0 }
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)
         .help(help)
@@ -503,7 +703,7 @@ struct ConductorHorizontalFadeMask: View {
             let stop = min(edgeWidth / width, 0.45)
             LinearGradient(
                 stops: [
-                    .init(color: .clear, location: 0),
+                    .init(color: .black, location: 0),
                     .init(color: .black, location: stop),
                     .init(color: .black, location: 1 - stop),
                     .init(color: .clear, location: 1)
@@ -538,17 +738,18 @@ struct ConductorVerticalFadeMask: View {
 
 struct ConductorPillGroup<Content: View>: View {
     @ViewBuilder var content: Content
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         HStack(spacing: 1) {
             content
         }
         .padding(3)
-        .background(Color.white.opacity(0.040))
+        .background(theme.usesDarkChrome ? theme.terminalRaisedBackground.opacity(0.88) : theme.shellControlFill.opacity(0.86))
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
-                .stroke(ConductorTokens.Palette.strokeOnDark.opacity(0.34), lineWidth: 1)
+                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.075) : theme.shellStroke.opacity(0.74), lineWidth: 1)
         }
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)
@@ -556,10 +757,12 @@ struct ConductorPillGroup<Content: View>: View {
 }
 
 struct ConductorSegmentDivider: View {
+    @Environment(\.conductorTheme) private var theme
+
     var body: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.075))
-            .frame(width: 1, height: 15)
+            .fill(theme.usesDarkChrome ? Color.white.opacity(0.038) : theme.shellStroke.opacity(0.58))
+            .frame(width: 1, height: 14)
     }
 }
 
@@ -572,24 +775,38 @@ struct ConductorTerminalToolbarSurface<Content: View>: View {
             .background {
                 ZStack {
                     Rectangle()
-                        .fill(.ultraThinMaterial)
+                        .fill(theme.terminalChrome)
                     LinearGradient(
                         colors: [
-                            theme.terminalChrome.opacity(0.82),
-                            theme.terminalRaisedBackground.opacity(0.72)
+                            theme.terminalRaisedBackground.opacity(0.98),
+                            theme.terminalChrome,
+                            theme.terminalBackground.opacity(0.98)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.070),
+                            Color.white.opacity(theme.usesDarkChrome ? 0.026 : 0.10),
                             Color.clear
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 }
+            }
+            .overlay(alignment: .bottom) {
+                LinearGradient(
+                    colors: [
+                        Color.clear,
+                        Color.white.opacity(theme.usesDarkChrome ? 0.045 : 0.16),
+                        Color.black.opacity(theme.usesDarkChrome ? 0.24 : 0.08),
+                        Color.clear
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                    .frame(height: 1)
             }
     }
 }
@@ -614,7 +831,7 @@ struct RenameTextField: NSViewRepresentable {
         field.focusRingType = .none
         field.placeholderString = placeholder
         field.font = font
-        field.textColor = textColor
+        applyTextAppearance(to: field)
         field.delegate = context.coordinator
         field.lineBreakMode = .byTruncatingTail
         field.usesSingleLineMode = true
@@ -623,6 +840,7 @@ struct RenameTextField: NSViewRepresentable {
         context.coordinator.attach(field)
         DispatchQueue.main.async {
             field.window?.makeFirstResponder(field)
+            applyTextAppearance(to: field)
             field.currentEditor()?.selectAll(nil)
         }
         return field
@@ -634,11 +852,18 @@ struct RenameTextField: NSViewRepresentable {
         }
         field.placeholderString = placeholder
         field.font = font
-        field.textColor = textColor
+        applyTextAppearance(to: field)
         context.coordinator.text = $text
         context.coordinator.onCommit = onCommit
         context.coordinator.onCancel = onCancel
         context.coordinator.attach(field)
+    }
+
+    private func applyTextAppearance(to field: NSTextField) {
+        field.textColor = textColor
+        guard let editor = field.currentEditor() as? NSTextView else { return }
+        editor.textColor = textColor
+        editor.insertionPointColor = textColor
     }
 
     static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) {

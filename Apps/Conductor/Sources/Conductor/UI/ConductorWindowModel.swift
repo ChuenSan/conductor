@@ -1,7 +1,12 @@
+import AppKit
 import ConductorCore
 import Foundation
+import QuartzCore
 import SwiftUI
-import UniformTypeIdentifiers
+
+private func L(_ zh: String, _ en: String) -> String {
+    ConductorLocalization.text(zh: zh, en: en)
+}
 
 enum TerminalProgressKind: String, Equatable {
     case removed
@@ -16,6 +21,13 @@ struct TerminalSearchMetadata: Equatable {
     var needle: String?
     var total: Int?
     var selected: Int?
+}
+
+struct TerminalSearchTargetDisplay: Identifiable, Equatable {
+    let id: TerminalID
+    let title: String
+    let subtitle: String
+    let isActive: Bool
 }
 
 struct TerminalDisplayMetadata: Equatable {
@@ -34,56 +46,37 @@ struct TerminalDisplayMetadata: Equatable {
     var bellCount = 0
 }
 
-struct FilePreviewPanelState: Equatable {
-    var isVisible = false
-    var rootURL: URL?
-    var selectedURL: URL?
-    var sourceTerminalID: TerminalID?
-    var lastError: String?
-}
+@MainActor
+private final class TerminalContextMenuActionTarget: NSObject {
+    private let action: @MainActor () -> Void
 
-enum FilePreviewContentKind: Equatable, Sendable {
-    case directory
-    case markdown
-    case image
-    case text
-    case unsupported
-
-    init(url: URL, isDirectory: Bool) {
-        if isDirectory {
-            self = .directory
-            return
-        }
-
-        let fileExtension = url.pathExtension.lowercased()
-        if Self.markdownExtensions.contains(fileExtension) {
-            self = .markdown
-            return
-        }
-
-        if let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType {
-            if contentType.conforms(to: .image) {
-                self = .image
-                return
-            }
-            if contentType.conforms(to: .plainText) || contentType.conforms(to: .text) {
-                self = .text
-                return
-            }
-        }
-
-        self = .unsupported
+    init(action: @escaping @MainActor () -> Void) {
+        self.action = action
     }
 
-    static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd"]
+    @objc func perform(_ sender: NSMenuItem) {
+        action()
+    }
+}
+
+private struct TerminalContextMenuTarget {
+    let workspaceID: WorkspaceID
+    let workspace: WorkspaceState
+    let paneID: PaneID
+    let tab: TerminalTabState
 }
 
 @MainActor
 final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDelegate {
     @Published var workspace: WorkspaceState {
         didSet {
+            let previousWorkspace = oldValue
             selectedWorkspaceID = workspace.id
-            syncSelectedWorkspace()
+            if previousWorkspace.id == workspace.id {
+                syncSelectedWorkspace()
+            } else {
+                syncWorkspace(previousWorkspace)
+            }
             persist()
         }
     }
@@ -97,6 +90,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published var appearance: AppearancePreferences {
         didSet {
             guard oldValue != appearance else { return }
+            ConductorAppearanceRuntime.apply(appearance)
+            ConductorMotion.setReducedMotion(appearance.reducedMotion)
             persist()
         }
     }
@@ -112,7 +107,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published var commandPaletteVisible = false
     @Published var settingsPanelVisible = false
     @Published var workspaceOverviewVisible = false
-    @Published var filePreview = FilePreviewPanelState()
+    @Published var terminalSearchVisible = false
+    @Published var terminalSearchQuery = ""
+    @Published private(set) var terminalSearchFocusGeneration = 0
+    @Published private(set) var terminalSearchTargetID: TerminalID?
+    @Published private(set) var paneFlashTokens: [PaneID: UInt64] = [:]
 
     var onNotificationPanelVisibilityChange: ((Bool) -> Void)?
 
@@ -121,6 +120,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var pendingPersistence: DispatchWorkItem?
     private var pendingMetadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
     private var pendingMetadataPublish: DispatchWorkItem?
+    private var activeTerminalContextMenuTargets: [TerminalContextMenuActionTarget] = []
     private var selectedWorkspaceID: WorkspaceID
 
     init() {
@@ -135,6 +135,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.workspace = persistedWorkspaces.first { $0.id == selectedID } ?? persistedWorkspaces[0]
         self.theme = persisted?.theme ?? .codexDark
         self.appearance = persisted?.appearance ?? AppearancePreferences()
+        ConductorAppearanceRuntime.apply(self.appearance)
+        ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
     }
 
     #if DEBUG
@@ -163,6 +165,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.notificationPanelVisible = notificationPanelVisible
         self.settingsPanelVisible = settingsPanelVisible
         self.workspaceOverviewVisible = workspaceOverviewVisible
+        ConductorAppearanceRuntime.apply(self.appearance)
+        ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
     }
     #endif
 
@@ -190,6 +194,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspace.canMoveSelectedTabToNewSplit()
     }
 
+    func canMoveTabToNewSplit(_ tabID: TerminalID) -> Bool {
+        workspace.canMoveTabToNewSplit(tabID)
+    }
+
+    func canMoveTabToSplit(_ tabID: TerminalID, targetPaneID: PaneID) -> Bool {
+        workspace.canMoveTabToSplit(tabID, targetPaneID: targetPaneID)
+    }
+
     func cycleTheme() {
         theme = theme.next
     }
@@ -209,23 +221,33 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         appearance.fontScale = fontScale
     }
 
+    func setLanguage(_ language: AppearanceLanguage) {
+        guard appearance.language != language else { return }
+        appearance.language = language
+    }
+
+    func setFontFamily(_ fontFamily: AppearanceFontFamily) {
+        guard appearance.fontFamily != fontFamily else { return }
+        appearance.fontFamily = fontFamily
+    }
+
     func setReducedMotion(_ reducedMotion: Bool) {
         guard appearance.reducedMotion != reducedMotion else { return }
         appearance.reducedMotion = reducedMotion
     }
 
-    func shellAnimation(_ animation: Animation) -> Animation? {
+    func shellAnimation(_ animation: Animation?) -> Animation? {
         appearance.reducedMotion ? nil : animation
     }
 
-    func performShellMotion(_ animation: Animation = ConductorMotion.standard, _ action: () -> Void) {
+    func performShellMotion(_ animation: Animation? = ConductorMotion.standard, _ action: () -> Void) {
         guard !appearance.reducedMotion else {
             var transaction = Transaction(animation: nil)
             transaction.disablesAnimations = true
             withTransaction(transaction, action)
             return
         }
-        withAnimation(animation, action)
+        ConductorMotion.perform(animation, action)
     }
 
     var runtimeSurfaceCount: Int {
@@ -234,6 +256,45 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     var runtimeMetadataCount: Int {
         metadataByTerminalID.count + pendingMetadataByTerminalID.count
+    }
+
+    var focusedTerminalID: TerminalID? {
+        workspace.focusedPane?.selectedTabID
+    }
+
+    var focusedTerminalSearchMetadata: TerminalSearchMetadata {
+        guard let terminalID = terminalSearchTargetID ?? focusedTerminalID else {
+            return TerminalSearchMetadata()
+        }
+        return metadata(for: terminalID).search
+    }
+
+    var terminalSearchTargets: [TerminalSearchTargetDisplay] {
+        let leafPaneIDs = workspace.root.leaves.filter { workspace.panes[$0] != nil }
+        let remainingPaneIDs = workspace.panes.keys
+            .filter { !leafPaneIDs.contains($0) }
+            .sorted { $0.description < $1.description }
+        let paneIDs = leafPaneIDs + remainingPaneIDs
+
+        return paneIDs.enumerated().flatMap { paneIndex, paneID in
+            guard let pane = workspace.panes[paneID] else {
+                return [TerminalSearchTargetDisplay]()
+            }
+            return pane.tabs.enumerated().map { tabIndex, tab in
+                let subtitle: String
+                if pane.tabs.count > 1 {
+                    subtitle = L("分屏 \(paneIndex + 1) · 终端 \(tabIndex + 1)", "Pane \(paneIndex + 1) · Terminal \(tabIndex + 1)")
+                } else {
+                    subtitle = L("分屏 \(paneIndex + 1)", "Pane \(paneIndex + 1)")
+                }
+                return TerminalSearchTargetDisplay(
+                    id: tab.id,
+                    title: tab.title,
+                    subtitle: subtitle,
+                    isActive: tab.id == focusedTerminalID
+                )
+            }
+        }
     }
 
     func runtimeHasSurface(for terminalID: TerminalID) -> Bool {
@@ -248,6 +309,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         surface.onFocusRequest = { [weak self] terminalID in
             self?.focusTerminal(terminalID)
         }
+        surface.onContextMenuRequest = { [weak self] terminalID, event, view in
+            self?.showTerminalContextMenu(terminalID: terminalID, event: event, in: view) ?? false
+        }
         surfaces[tab.id] = surface
         return surface
     }
@@ -258,77 +322,20 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspace.newTerminal(title: nextTerminalTitle(prefix: "zsh"))
     }
 
-    func openCurrentPathForFocusedTerminal() {
-        openCurrentPath(for: workspace.focusedPaneID)
-    }
-
-    func openCurrentPath(for paneID: PaneID) {
-        let terminalID = workspace.panes[paneID]?.selectedTabID
-        let url = workingDirectoryURL(for: terminalID) ?? FileManager.default.homeDirectoryForCurrentUser
-        openFilePreview(url, sourceTerminalID: terminalID)
-    }
-
-    func openFilePreview(_ url: URL, sourceTerminalID: TerminalID? = nil) {
-        var isDirectory = ObjCBool(false)
-        let expandedURL = url.standardizedFileURL
-        guard FileManager.default.fileExists(atPath: expandedURL.path, isDirectory: &isDirectory) else {
-            filePreview = FilePreviewPanelState(
-                isVisible: true,
-                rootURL: expandedURL.deletingLastPathComponent(),
-                selectedURL: nil,
-                sourceTerminalID: sourceTerminalID,
-                lastError: "路径不存在：\(expandedURL.path)"
-            )
-            return
-        }
-
-        let directoryURL = isDirectory.boolValue ? expandedURL : expandedURL.deletingLastPathComponent()
-        let selectedURL = isDirectory.boolValue ? nil : expandedURL
-        filePreview = FilePreviewPanelState(
-            isVisible: true,
-            rootURL: directoryURL,
-            selectedURL: selectedURL,
-            sourceTerminalID: sourceTerminalID,
-            lastError: nil
-        )
-    }
-
-    func selectFilePreviewURL(_ url: URL) {
-        var isDirectory = ObjCBool(false)
-        let expandedURL = url.standardizedFileURL
-        guard FileManager.default.fileExists(atPath: expandedURL.path, isDirectory: &isDirectory) else {
-            filePreview.lastError = "路径不存在：\(expandedURL.path)"
-            return
-        }
-
-        if isDirectory.boolValue {
-            openFilePreview(expandedURL, sourceTerminalID: filePreview.sourceTerminalID)
-        } else {
-            filePreview.selectedURL = expandedURL
-            filePreview.lastError = nil
-        }
-    }
-
-    func closeFilePreview() {
-        filePreview.isVisible = false
-    }
-
     func ghosttyRuntimeDidRequestOpenURL(terminalID: TerminalID?, url: URL) -> Bool {
-        guard url.isFileURL else { return false }
-        openFilePreview(url, sourceTerminalID: terminalID)
-        return true
+        false
     }
 
     func splitRight() {
         let signpost = ConductorSignpost.begin("split-right")
         defer { ConductorSignpost.end("split-right", signpost) }
-        workspace.splitWorkspaceEdge(.right, title: nextTerminalTitle(prefix: "zsh"))
+        performWorkspaceEdgeSplit(.right)
     }
 
     func splitDown() {
         let signpost = ConductorSignpost.begin("split-down")
         defer { ConductorSignpost.end("split-down", signpost) }
-        workspace.splitWorkspaceEdge(.down, title: nextTerminalTitle(prefix: "zsh"))
+        performWorkspaceEdgeSplit(.down)
     }
 
     func ghosttyRuntimeDidRequestNewTab(terminalID: TerminalID) -> Bool {
@@ -378,13 +385,17 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func ghosttyRuntimeDidRequestSplit(terminalID: TerminalID, direction: SplitDirection) -> Bool {
         guard let paneID = workspace.paneID(containing: terminalID) else { return false }
         workspace.focusPane(paneID)
-        return workspace.splitWorkspaceEdge(direction, title: nextTerminalTitle(prefix: "zsh")) != nil
+        return performWorkspaceEdgeSplit(direction) != nil
     }
 
     func ghosttyRuntimeDidRequestFocus(terminalID: TerminalID, direction: FocusDirection) -> Bool {
         guard let paneID = workspace.paneID(containing: terminalID) else { return false }
         workspace.focusPane(paneID)
-        return workspace.focusAdjacentPane(direction) != nil
+        let didFocus = workspace.focusAdjacentPane(direction) != nil
+        if didFocus {
+            reconcileSurfaceFocus()
+        }
+        return didFocus
     }
 
     func ghosttyRuntimeDidRequestResize(terminalID: TerminalID, direction: ResizeSplitDirection, amount: UInt16) -> Bool {
@@ -513,10 +524,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         defer { ConductorSignpost.end("select-tab", signpost) }
         workspace.selectTab(terminalID, in: paneID)
         markTerminalNotificationsRead(terminalID)
+        reconcileSurfaceFocus()
     }
 
     func focusPane(_ paneID: PaneID) {
         workspace.focusPane(paneID)
+        reconcileSurfaceFocus()
     }
 
     func focusTerminal(_ terminalID: TerminalID) {
@@ -527,13 +540,176 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         guard let paneID = workspace.paneID(containing: terminalID) else { return }
         workspace.focusPane(paneID)
         workspace.selectTab(terminalID, in: paneID)
+        reconcileSurfaceFocus()
         refreshSurfaceAfterNavigation(terminalID)
+    }
+
+    func flashFocusedPane() {
+        let paneID = workspace.focusedPaneID
+        paneFlashTokens[paneID, default: 0] &+= 1
+    }
+
+    func showTerminalSearch() {
+        guard let terminalID = focusedTerminalID,
+              let target = terminalSearchTarget(for: terminalID) else { return }
+        commandPaletteVisible = false
+        settingsPanelVisible = false
+        workspaceOverviewVisible = false
+        terminalSearchTargetID = terminalID
+        terminalSearchQuery = metadata(for: terminalID).search.needle ?? ""
+        terminalSearchVisible = true
+        terminalSearchFocusGeneration &+= 1
+        let surface = surface(for: target.tab)
+        _ = surface.startSearchPrompt()
+        if !terminalSearchQuery.isEmpty {
+            _ = surface.search(terminalSearchQuery)
+        }
+    }
+
+    func selectTerminalSearchTarget(_ terminalID: TerminalID) {
+        guard terminalSearchVisible,
+              terminalSearchTargetID != terminalID,
+              terminalSearchTarget(for: terminalID) != nil else { return }
+
+        if let current = terminalSearchTargetTab() {
+            _ = surface(for: current).endSearch()
+        }
+
+        terminalSearchTargetID = terminalID
+        focusTerminal(terminalID)
+
+        let query = terminalSearchQuery
+        activateTerminalSearchSurface(terminalID: terminalID, query: query)
+        Task { @MainActor [weak self] in
+            self?.activateTerminalSearchSurface(terminalID: terminalID, query: query)
+        }
+    }
+
+    func setTerminalSearchQuery(_ query: String) {
+        guard terminalSearchQuery != query else { return }
+        terminalSearchQuery = query
+        applyTerminalSearchQuery(query)
+    }
+
+    func applyTerminalSearchQuery(_ query: String) {
+        guard let tab = terminalSearchTargetTab() else { return }
+        _ = surface(for: tab).search(query)
+    }
+
+    func navigateTerminalSearch(previous: Bool) {
+        guard terminalSearchVisible,
+              let tab = terminalSearchTargetTab() else { return }
+        _ = surface(for: tab).navigateSearch(previous: previous)
+    }
+
+    func closeTerminalSearch() {
+        if terminalSearchVisible, let tab = terminalSearchTargetTab() {
+            _ = surface(for: tab).endSearch()
+        }
+        terminalSearchVisible = false
+        terminalSearchQuery = ""
+        terminalSearchTargetID = nil
+    }
+
+    @discardableResult
+    func showTerminalContextMenu(terminalID: TerminalID, event: NSEvent, in view: NSView) -> Bool {
+        guard let target = terminalContextMenuTarget(for: terminalID) else { return false }
+        focusTerminal(terminalID)
+
+        let menu = NSMenu(title: target.tab.title)
+        menu.autoenablesItems = false
+        activeTerminalContextMenuTargets = []
+
+        func addItem(
+            _ title: String,
+            enabled: Bool = true,
+            action: @escaping @MainActor () -> Void
+        ) {
+            let actionTarget = TerminalContextMenuActionTarget(action: action)
+            let item = NSMenuItem(
+                title: title,
+                action: #selector(TerminalContextMenuActionTarget.perform(_:)),
+                keyEquivalent: ""
+            )
+            item.target = actionTarget
+            item.representedObject = actionTarget
+            item.isEnabled = enabled
+            activeTerminalContextMenuTargets.append(actionTarget)
+            menu.addItem(item)
+        }
+
+        func addSeparator() {
+            menu.addItem(.separator())
+        }
+
+        addItem(L("重命名当前终端...", "Rename Current Terminal...")) { [weak self] in
+            self?.promptRenameTerminal(terminalID, window: view.window)
+        }
+        if target.tab.userTitle != nil {
+            addItem(L("恢复终端标题", "Restore Terminal Title")) { [weak self] in
+                self?.clearUserTerminalTitle(terminalID)
+            }
+        }
+        addItem(L("复制当前终端", "Duplicate Current Terminal")) { [weak self] in
+            self?.duplicateTab(terminalID, in: target.paneID)
+        }
+        addItem(L("上下文搜索", "Context Search")) { [weak self] in
+            self?.focusTerminal(terminalID)
+            self?.showTerminalSearch()
+        }
+
+        addSeparator()
+
+        addItem(L("新开终端", "New Terminal")) { [weak self] in
+            self?.focusTerminal(terminalID)
+            self?.newTerminal()
+        }
+        addItem(L("向右分屏", "Split Right"), enabled: target.workspace.canSplit()) { [weak self] in
+            self?.focusTerminal(terminalID)
+            self?.splitRight()
+        }
+        addItem(L("向下分屏", "Split Down"), enabled: target.workspace.canSplit()) { [weak self] in
+            self?.focusTerminal(terminalID)
+            self?.splitDown()
+        }
+        addItem(L("关闭当前分屏", "Close Current Pane"), enabled: target.workspace.canClosePane(target.paneID)) { [weak self] in
+            self?.closePane(target.paneID)
+        }
+
+        addSeparator()
+
+        addItem(L("关闭当前终端", "Close Current Terminal")) { [weak self] in
+            self?.closeTab(terminalID, in: target.paneID)
+        }
+        addItem(L("关闭其他终端", "Close Other Terminals"), enabled: target.workspace.canCloseOtherTabs(in: target.paneID)) { [weak self] in
+            self?.focusTerminal(terminalID)
+            self?.closeOtherTabs(in: target.paneID)
+        }
+        addItem(L("关闭右侧终端", "Close Terminals to the Right"), enabled: target.workspace.canCloseTabsToRight(of: terminalID, in: target.paneID)) { [weak self] in
+            self?.focusTerminal(terminalID)
+            self?.closeTabsToRight(in: target.paneID)
+        }
+
+        addSeparator()
+
+        addItem(L("重命名当前工作区...", "Rename Current Workspace...")) { [weak self] in
+            self?.promptRenameWorkspace(target.workspaceID, window: view.window)
+        }
+        addItem(L("复制当前工作区", "Duplicate Current Workspace")) { [weak self] in
+            self?.duplicateWorkspace(target.workspaceID)
+        }
+        addItem(L("关闭当前工作区", "Close Current Workspace"), enabled: workspaces.count > 1) { [weak self] in
+            self?.closeWorkspace(target.workspaceID)
+        }
+
+        NSMenu.popUpContextMenu(menu, with: event, for: view)
+        return true
     }
 
     func newWorkspace() {
         let signpost = ConductorSignpost.begin("new-workspace")
         defer { ConductorSignpost.end("new-workspace", signpost) }
-        syncSelectedWorkspace()
+        closeTerminalSearch()
         let next = WorkspaceState(title: nextWorkspaceTitle())
         workspaces.append(next)
         selectedWorkspaceID = next.id
@@ -545,9 +721,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func duplicateWorkspace(_ workspaceID: WorkspaceID) {
         let signpost = ConductorSignpost.begin("duplicate-workspace")
         defer { ConductorSignpost.end("duplicate-workspace", signpost) }
-        syncSelectedWorkspace()
+        closeTerminalSearch()
         guard let index = workspaces.firstIndex(where: { $0.id == workspaceID }) else { return }
-        let duplicate = workspaces[index].duplicated(title: nextCopyTitle(for: workspaces[index].title))
+        let source = workspace.id == workspaceID ? workspace : workspaces[index]
+        let duplicate = source.duplicated(title: nextCopyTitle(for: source.title))
         workspaces.insert(duplicate, at: index + 1)
         selectedWorkspaceID = duplicate.id
         workspace = duplicate
@@ -557,18 +734,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func selectWorkspace(_ workspaceID: WorkspaceID) {
         guard workspaceID != workspace.id else {
-            workspaceOverviewVisible = false
-            commandPaletteVisible = false
+            closeWorkspaceTransientPanels()
             return
         }
         guard let target = workspaces.first(where: { $0.id == workspaceID }) else {
             return
         }
-        syncSelectedWorkspace()
+        closeTerminalSearch()
         selectedWorkspaceID = workspaceID
         workspace = target
-        commandPaletteVisible = false
-        workspaceOverviewVisible = false
+        closeWorkspaceTransientPanels()
     }
 
     func renameWorkspace(_ workspaceID: WorkspaceID, title: String) {
@@ -721,6 +896,20 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspace.moveSelectedTabToNewSplit(direction)
     }
 
+    func moveTabToNewSplit(_ tabID: TerminalID, direction: SplitDirection) {
+        guard workspace.canMoveTabToNewSplit(tabID) else { return }
+        workspace.moveTabToNewSplit(tabID, direction)
+        reconcileSurfaceFocus()
+        refreshSurfaceAfterNavigation(tabID)
+    }
+
+    func moveTabToSplit(_ tabID: TerminalID, targetPaneID: PaneID, direction: SplitDirection) {
+        guard workspace.canMoveTabToSplit(tabID, targetPaneID: targetPaneID) else { return }
+        workspace.moveTabToSplit(tabID, targetPaneID: targetPaneID, direction)
+        reconcileSurfaceFocus()
+        refreshSurfaceAfterNavigation(tabID)
+    }
+
     func reorderTab(_ tabID: TerminalID, before targetTabID: TerminalID, in paneID: PaneID) {
         workspace.reorderTab(tabID, before: targetTabID, in: paneID)
     }
@@ -762,9 +951,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func toggleCommandPalette() {
         commandPaletteVisible.toggle()
         if commandPaletteVisible {
-            notificationPanelVisible = false
             settingsPanelVisible = false
             workspaceOverviewVisible = false
+            closeTerminalSearch()
         }
     }
 
@@ -776,8 +965,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         settingsPanelVisible.toggle()
         if settingsPanelVisible {
             commandPaletteVisible = false
-            notificationPanelVisible = false
             workspaceOverviewVisible = false
+            closeTerminalSearch()
         }
     }
 
@@ -789,8 +978,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspaceOverviewVisible.toggle()
         if workspaceOverviewVisible {
             commandPaletteVisible = false
-            notificationPanelVisible = false
             settingsPanelVisible = false
+            closeTerminalSearch()
         }
     }
 
@@ -800,6 +989,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     @discardableResult
     func dismissVisibleShellPanel() -> Bool {
+        if terminalSearchVisible {
+            closeTerminalSearch()
+            return true
+        }
         if commandPaletteVisible {
             commandPaletteVisible = false
             return true
@@ -812,20 +1005,15 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             workspaceOverviewVisible = false
             return true
         }
-        if filePreview.isVisible {
-            filePreview.isVisible = false
-            return true
-        }
         return false
     }
 
     func toggleNotificationPanel() {
-        notificationPanelVisible.toggle()
         if notificationPanelVisible {
-            commandPaletteVisible = false
-            settingsPanelVisible = false
-            workspaceOverviewVisible = false
+            onNotificationPanelVisibilityChange?(true)
+            return
         }
+        notificationPanelVisible = true
     }
 
     func hideNotificationPanel() {
@@ -836,8 +1024,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         guard let tab = workspace.focusedPane?.selectedTab else { return }
         _ = recordTerminalNotification(
             terminalID: tab.id,
-            title: "Agent",
-            body: "Conductor notification route is wired.",
+            title: "测试通知",
+            body: "当前终端的通知通道可用。",
             kind: .agent
         )
     }
@@ -855,7 +1043,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
         focusTerminal(notification.terminalID)
         markNotificationRead(notificationID)
-        notificationPanelVisible = false
         refreshSurfaceAfterNavigation(notification.terminalID)
         return true
     }
@@ -900,8 +1087,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         case "prompt-submit", "session-start":
             markTerminalNotificationsRead(terminalID)
         case "stop", "agent-response":
-            let title = userInfo[ConductorAgentHookBridge.Key.title] ?? "Codex 完成"
-            let body = userInfo[ConductorAgentHookBridge.Key.body] ?? "Codex 对话已完成，等待下一步。"
+            let title = userInfo[ConductorAgentHookBridge.Key.title] ?? "任务完成"
+            let body = userInfo[ConductorAgentHookBridge.Key.body] ?? "终端任务已完成，等待下一步。"
             _ = recordTerminalNotification(
                 terminalID: terminalID,
                 title: title,
@@ -910,28 +1097,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             )
         default:
             break
-        }
-    }
-
-    func installCodexNotificationHooks() {
-        guard let tab = workspace.focusedPane?.selectedTab else { return }
-        do {
-            let result = try CodexNotificationHookInstaller.install(
-                bridgePath: Bundle.main.executablePath ?? CommandLine.arguments.first ?? "Conductor"
-            )
-            _ = recordTerminalNotification(
-                terminalID: tab.id,
-                title: "Codex Hook 已连接",
-                body: result,
-                kind: .agent
-            )
-        } catch {
-            _ = recordTerminalNotification(
-                terminalID: tab.id,
-                title: "Codex Hook 安装失败",
-                body: error.localizedDescription,
-                kind: .agent
-            )
         }
     }
 
@@ -951,8 +1116,67 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspace.root = nextRoot
     }
 
+    @discardableResult
+    private func performWorkspaceEdgeSplit(_ direction: SplitDirection) -> PaneID? {
+        let previouslyVisibleTerminalIDs = selectedVisibleTerminalIDs(in: workspace)
+        let title = nextTerminalTitle(prefix: "zsh")
+        guard let newPaneID = workspace.splitWorkspaceEdge(direction, title: title) else {
+            return nil
+        }
+
+        let visibleTerminalIDs = orderedUniqueTerminalIDs(
+            previouslyVisibleTerminalIDs + selectedVisibleTerminalIDs(in: workspace)
+        )
+        reconcileSurfaceFocus()
+        refreshSurfacesAfterSplit(visibleTerminalIDs)
+        return newPaneID
+    }
+
+    private func selectedVisibleTerminalIDs(in workspace: WorkspaceState) -> [TerminalID] {
+        workspace.visibleRoot.leaves.compactMap { paneID in
+            workspace.panes[paneID]?.selectedTabID
+        }
+    }
+
+    private func orderedUniqueTerminalIDs(_ terminalIDs: [TerminalID]) -> [TerminalID] {
+        var seen = Set<TerminalID>()
+        var unique: [TerminalID] = []
+        for terminalID in terminalIDs where seen.insert(terminalID).inserted {
+            unique.append(terminalID)
+        }
+        return unique
+    }
+
+    private func refreshSurfacesAfterSplit(_ terminalIDs: [TerminalID]) {
+        guard !terminalIDs.isEmpty else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                self?.refreshSurfacesAfterSplitPass(terminalIDs)
+            }
+        }
+    }
+
+    private func refreshSurfacesAfterSplitPass(_ terminalIDs: [TerminalID]) {
+        let focusedTerminalID = workspace.focusedPane?.selectedTabID
+        for terminalID in terminalIDs {
+            guard let surface = surfaces[terminalID] else { continue }
+            let focused = terminalID == focusedTerminalID
+            surface.attachIfPossible()
+            surface.setFocused(focused, force: true)
+            surface.syncGeometry(force: true)
+            surface.refresh()
+            if focused,
+               let window = surface.hostView.window,
+               window.firstResponder !== surface.hostView {
+                window.makeFirstResponder(surface.hostView)
+            }
+        }
+    }
+
     private func refreshSurfaceAfterNavigation(_ terminalID: TerminalID) {
         guard let surface = surfaces[terminalID] else { return }
+        reconcileSurfaceFocus()
         surface.attachIfPossible()
         surface.setFocused(true, force: true)
         surface.syncGeometry(force: true)
@@ -965,6 +1189,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             if surface.hostView.window?.firstResponder !== surface.hostView {
                 surface.hostView.window?.makeFirstResponder(surface.hostView)
             }
+        }
+    }
+
+    private func reconcileSurfaceFocus() {
+        let focusedTerminalID = workspace.focusedPane?.selectedTabID
+        for (terminalID, surface) in surfaces {
+            surface.setFocused(terminalID == focusedTerminalID)
         }
     }
 
@@ -995,6 +1226,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func closeSurfaces(for terminalIDs: [TerminalID]) {
+        if let targetID = terminalSearchTargetID, terminalIDs.contains(targetID) {
+            terminalSearchVisible = false
+            terminalSearchQuery = ""
+            terminalSearchTargetID = nil
+        }
         for terminalID in terminalIDs {
             metadataByTerminalID.removeValue(forKey: terminalID)
             pendingMetadataByTerminalID.removeValue(forKey: terminalID)
@@ -1069,30 +1305,111 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         return nil
     }
 
-    private func workingDirectoryURL(for terminalID: TerminalID?) -> URL? {
-        guard let terminalID else { return nil }
-        let rawDirectory = metadata(for: terminalID).workingDirectory
-            ?? terminalTab(for: terminalID)?.workingDirectory
-        guard let rawDirectory,
-              !rawDirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
+    private func terminalContextMenuTarget(for terminalID: TerminalID) -> TerminalContextMenuTarget? {
+        if let paneID = workspace.paneID(containing: terminalID),
+           let pane = workspace.panes[paneID],
+           let tab = pane.tabs.first(where: { $0.id == terminalID }) {
+            return TerminalContextMenuTarget(
+                workspaceID: workspace.id,
+                workspace: workspace,
+                paneID: paneID,
+                tab: tab
+            )
         }
-        let expandedPath = (rawDirectory as NSString).expandingTildeInPath
-        return URL(fileURLWithPath: expandedPath, isDirectory: true).standardizedFileURL
+
+        for candidate in workspaces {
+            guard let paneID = candidate.paneID(containing: terminalID),
+                  let pane = candidate.panes[paneID],
+                  let tab = pane.tabs.first(where: { $0.id == terminalID }) else {
+                continue
+            }
+            return TerminalContextMenuTarget(
+                workspaceID: candidate.id,
+                workspace: candidate,
+                paneID: paneID,
+                tab: tab
+            )
+        }
+
+        return nil
     }
 
-    private func terminalTab(for terminalID: TerminalID) -> TerminalTabState? {
-        if let paneID = workspace.paneID(containing: terminalID),
-           let tab = workspace.panes[paneID]?.tabs.first(where: { $0.id == terminalID }) {
-            return tab
+    private func terminalSearchTarget(for terminalID: TerminalID) -> (paneID: PaneID, tab: TerminalTabState)? {
+        guard let paneID = workspace.paneID(containing: terminalID),
+              let pane = workspace.panes[paneID],
+              let tab = pane.tabs.first(where: { $0.id == terminalID }) else {
+            return nil
         }
-        for candidate in workspaces {
-            if let paneID = candidate.paneID(containing: terminalID),
-               let tab = candidate.panes[paneID]?.tabs.first(where: { $0.id == terminalID }) {
-                return tab
-            }
+        return (paneID, tab)
+    }
+
+    private func terminalSearchTargetTab() -> TerminalTabState? {
+        guard let terminalID = terminalSearchTargetID ?? focusedTerminalID else { return nil }
+        return terminalSearchTarget(for: terminalID)?.tab
+    }
+
+    private func activateTerminalSearchSurface(terminalID: TerminalID, query: String) {
+        guard let target = terminalSearchTarget(for: terminalID) else { return }
+        let targetSurface = surface(for: target.tab)
+        _ = targetSurface.startSearchPrompt()
+        if !query.isEmpty {
+            _ = targetSurface.search(query)
         }
-        return nil
+    }
+
+    private func promptRenameTerminal(_ terminalID: TerminalID, window: NSWindow?) {
+        guard let target = terminalContextMenuTarget(for: terminalID),
+              let title = promptForTitle(
+                message: L("重命名当前终端", "Rename Current Terminal"),
+                currentTitle: target.tab.title,
+                placeholder: L("终端名称", "Terminal Name"),
+                window: window
+              ) else {
+            return
+        }
+        renameTerminal(terminalID, title: title)
+    }
+
+    private func promptRenameWorkspace(_ workspaceID: WorkspaceID, window: NSWindow?) {
+        guard let target = workspaces.first(where: { $0.id == workspaceID }),
+              let title = promptForTitle(
+                message: L("重命名当前工作区", "Rename Current Workspace"),
+                currentTitle: target.title,
+                placeholder: L("工作区名称", "Workspace Name"),
+                window: window
+              ) else {
+            return
+        }
+        renameWorkspace(workspaceID, title: title)
+    }
+
+    private func promptForTitle(
+        message: String,
+        currentTitle: String,
+        placeholder: String,
+        window: NSWindow?
+    ) -> String? {
+        let field = NSTextField(string: currentTitle)
+        field.placeholderString = placeholder
+        field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
+        field.lineBreakMode = .byTruncatingTail
+        field.selectText(nil)
+
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = L("输入一个短名称，方便在标签和工作区里快速识别。", "Enter a short name that is easy to scan in tabs and workspaces.")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L("重命名", "Rename"))
+        alert.addButton(withTitle: L("取消", "Cancel"))
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        if let window {
+            alert.window.appearance = window.appearance
+        }
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let title = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? nil : title
     }
 
     private func metadata(for terminalID: TerminalID) -> TerminalDisplayMetadata {
@@ -1181,10 +1498,27 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func syncSelectedWorkspace() {
-        if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) {
-            workspaces[index] = workspace
+        syncWorkspace(workspace)
+    }
+
+    private func syncWorkspace(_ snapshot: WorkspaceState) {
+        if let index = workspaces.firstIndex(where: { $0.id == snapshot.id }) {
+            guard workspaces[index] != snapshot else { return }
+            workspaces[index] = snapshot
         } else {
-            workspaces.append(workspace)
+            workspaces.append(snapshot)
+        }
+    }
+
+    private func closeWorkspaceTransientPanels() {
+        if terminalSearchVisible {
+            closeTerminalSearch()
+        }
+        if commandPaletteVisible {
+            commandPaletteVisible = false
+        }
+        if workspaceOverviewVisible {
+            workspaceOverviewVisible = false
         }
     }
 

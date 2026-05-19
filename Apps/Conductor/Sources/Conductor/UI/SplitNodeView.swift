@@ -4,6 +4,10 @@ import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 
+private func L(_ zh: String, _ en: String) -> String {
+    ConductorLocalization.text(zh: zh, en: en)
+}
+
 struct SplitNodeView: View {
     let node: SplitNode
     @ObservedObject var model: ConductorWindowModel
@@ -14,8 +18,9 @@ struct SplitNodeView: View {
         case let .leaf(paneID):
             if let pane = model.workspace.panes[paneID] {
                 TerminalPaneView(pane: pane, model: model)
-                    .frame(minWidth: 180, minHeight: 150)
-                    .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                    .frame(minWidth: 0, minHeight: 0)
+                    .clipped()
+                    .transition(.identity)
             }
         case let .split(axis, first, second, fraction):
             SplitPairView(
@@ -26,7 +31,7 @@ struct SplitNodeView: View {
                 path: path,
                 model: model
             )
-            .transition(.opacity)
+            .transition(.identity)
         }
     }
 }
@@ -39,6 +44,7 @@ private struct SplitPairView: View {
     let path: [SplitPathElement]
     @ObservedObject var model: ConductorWindowModel
     @State private var dragStartFraction: Double?
+    @State private var dragPreviewFraction: Double?
 
     private var isDragging: Bool {
         dragStartFraction != nil
@@ -50,34 +56,48 @@ private struct SplitPairView: View {
             let divider = ConductorTokens.Space.splitGutter
             if axis == .horizontal {
                 let available = max(1, size.width - divider)
-                let minPane = min(180, available / 2)
-                let firstWidth = min(max(minPane, available * fraction), available - minPane)
-                HStack(spacing: 0) {
-                    SplitNodeView(node: first, model: model, path: path + [.first])
-                        .frame(width: firstWidth)
-                    SplitDivider(
-                        axis: axis,
-                        active: dragStartFraction != nil,
-                        onChanged: { value in
-                            if dragStartFraction == nil {
-                                dragStartFraction = fraction
+                let activeFraction = dragPreviewFraction ?? fraction
+                let firstMinimum = first.minimumLength(along: .horizontal, divider: divider)
+                let secondMinimum = second.minimumLength(along: .horizontal, divider: divider)
+                let firstWidth = splitLength(
+                    fraction: activeFraction,
+                    available: available,
+                    firstMinimum: firstMinimum,
+                    secondMinimum: secondMinimum
+                )
+                ZStack(alignment: .topLeading) {
+                    HStack(spacing: 0) {
+                        SplitNodeView(node: first, model: model, path: path + [.first])
+                            .frame(width: firstWidth)
+                            .clipped()
+                        SplitDivider(
+                            axis: axis,
+                            active: dragStartFraction != nil,
+                            showsIndicator: true,
+                            onDragStarted: {
+                                beginSplitDrag()
+                            },
+                            onDragChanged: { delta in
+                                let base = dragStartFraction ?? fraction
+                                setSplitFractionPreview(base + delta / max(1, available))
+                            },
+                            onDragEnded: {
+                                finishSplitDrag()
+                            },
+                            onDoubleClick: {
+                                ConductorMotion.perform(ConductorMotion.layout) {
+                                    model.equalizeSplits()
+                                }
                             }
-                            let base = dragStartFraction ?? fraction
-                            setSplitFractionDuringDrag(base + value.translation.width / max(1, available))
-                        },
-                        onEnded: { _ in
-                            dragStartFraction = nil
-                        },
-                        onDoubleClick: {
-                            ConductorMotion.perform(ConductorMotion.layout) {
-                                model.equalizeSplits()
-                            }
-                        }
-                    )
-                    .frame(width: divider)
-                    SplitNodeView(node: second, model: model, path: path + [.second])
-                        .frame(width: available - firstWidth)
+                        )
+                        .frame(width: divider)
+                        .zIndex(2)
+                        SplitNodeView(node: second, model: model, path: path + [.second])
+                            .frame(width: available - firstWidth)
+                            .clipped()
+                    }
                 }
+                .clipped()
                 .environment(\.conductorSplitResizeActive, isDragging)
                 .transaction { transaction in
                     if isDragging {
@@ -87,34 +107,48 @@ private struct SplitPairView: View {
                 }
             } else {
                 let available = max(1, size.height - divider)
-                let minPane = min(150, available / 2)
-                let firstHeight = min(max(minPane, available * fraction), available - minPane)
-                VStack(spacing: 0) {
-                    SplitNodeView(node: first, model: model, path: path + [.first])
-                        .frame(height: firstHeight)
-                    SplitDivider(
-                        axis: axis,
-                        active: dragStartFraction != nil,
-                        onChanged: { value in
-                            if dragStartFraction == nil {
-                                dragStartFraction = fraction
+                let activeFraction = dragPreviewFraction ?? fraction
+                let firstMinimum = first.minimumLength(along: .vertical, divider: divider)
+                let secondMinimum = second.minimumLength(along: .vertical, divider: divider)
+                let firstHeight = splitLength(
+                    fraction: activeFraction,
+                    available: available,
+                    firstMinimum: firstMinimum,
+                    secondMinimum: secondMinimum
+                )
+                ZStack(alignment: .topLeading) {
+                    VStack(spacing: 0) {
+                        SplitNodeView(node: first, model: model, path: path + [.first])
+                            .frame(height: firstHeight)
+                            .clipped()
+                        SplitDivider(
+                            axis: axis,
+                            active: dragStartFraction != nil,
+                            showsIndicator: true,
+                            onDragStarted: {
+                                beginSplitDrag()
+                            },
+                            onDragChanged: { delta in
+                                let base = dragStartFraction ?? fraction
+                                setSplitFractionPreview(base + delta / max(1, available))
+                            },
+                            onDragEnded: {
+                                finishSplitDrag()
+                            },
+                            onDoubleClick: {
+                                ConductorMotion.perform(ConductorMotion.layout) {
+                                    model.equalizeSplits()
+                                }
                             }
-                            let base = dragStartFraction ?? fraction
-                            setSplitFractionDuringDrag(base + value.translation.height / max(1, available))
-                        },
-                        onEnded: { _ in
-                            dragStartFraction = nil
-                        },
-                        onDoubleClick: {
-                            ConductorMotion.perform(ConductorMotion.layout) {
-                                model.equalizeSplits()
-                            }
-                        }
-                    )
-                    .frame(height: divider)
-                    SplitNodeView(node: second, model: model, path: path + [.second])
-                        .frame(height: available - firstHeight)
+                        )
+                        .frame(height: divider)
+                        .zIndex(2)
+                        SplitNodeView(node: second, model: model, path: path + [.second])
+                            .frame(height: available - firstHeight)
+                            .clipped()
+                    }
                 }
+                .clipped()
                 .environment(\.conductorSplitResizeActive, isDragging)
                 .transaction { transaction in
                     if isDragging {
@@ -126,12 +160,105 @@ private struct SplitPairView: View {
         }
     }
 
-    private func setSplitFractionDuringDrag(_ fraction: Double) {
+    private func beginSplitDrag() {
+        guard dragStartFraction == nil else { return }
         var transaction = Transaction()
         transaction.disablesAnimations = true
         transaction.animation = nil
         withTransaction(transaction) {
-            model.setSplitFraction(path: path, fraction: fraction)
+            dragStartFraction = fraction
+            dragPreviewFraction = fraction
+        }
+    }
+
+    private func setSplitFractionPreview(_ fraction: Double) {
+        let nextFraction = clampedSplitFraction(fraction)
+        if let dragPreviewFraction,
+           abs(dragPreviewFraction - nextFraction) < 0.0001 {
+            return
+        }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        transaction.animation = nil
+        withTransaction(transaction) {
+            dragPreviewFraction = nextFraction
+        }
+    }
+
+    private func finishSplitDrag() {
+        let finalFraction = dragPreviewFraction
+        if let finalFraction,
+           abs(finalFraction - fraction) >= 0.0008 {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            transaction.animation = nil
+            withTransaction(transaction) {
+                model.setSplitFraction(path: path, fraction: finalFraction)
+            }
+        }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        transaction.animation = nil
+        withTransaction(transaction) {
+            dragStartFraction = nil
+        }
+        DispatchQueue.main.async {
+            var clearTransaction = Transaction()
+            clearTransaction.disablesAnimations = true
+            clearTransaction.animation = nil
+            withTransaction(clearTransaction) {
+                dragPreviewFraction = nil
+            }
+        }
+    }
+
+    private func clampedSplitFraction(_ fraction: Double) -> Double {
+        min(0.85, max(0.15, fraction))
+    }
+
+    private func splitLength(
+        fraction: Double,
+        available: CGFloat,
+        firstMinimum: CGFloat,
+        secondMinimum: CGFloat
+    ) -> CGFloat {
+        let minimumSum = firstMinimum + secondMinimum
+        if minimumSum >= available {
+            let firstShare = firstMinimum / max(1, minimumSum)
+            return pixelAligned(max(0, min(available, available * firstShare)))
+        }
+        let rawLength = min(
+            max(firstMinimum, available * clampedSplitFraction(fraction)),
+            available - secondMinimum
+        )
+        return pixelAligned(rawLength)
+    }
+
+    private func pixelAligned(_ value: CGFloat) -> CGFloat {
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        return (value * scale).rounded(.toNearestOrAwayFromZero) / scale
+    }
+}
+
+private extension SplitNode {
+    static let desiredLeafMinimumWidth: CGFloat = 92
+    static let desiredLeafMinimumHeight: CGFloat = 72
+
+    func minimumLength(along axis: SplitAxis, divider: CGFloat) -> CGFloat {
+        switch self {
+        case .leaf:
+            return axis == .horizontal ? Self.desiredLeafMinimumWidth : Self.desiredLeafMinimumHeight
+        case let .split(splitAxis, first, second, _):
+            if splitAxis == axis {
+                return first.minimumLength(along: axis, divider: divider) +
+                    second.minimumLength(along: axis, divider: divider) +
+                    divider
+            }
+            return max(
+                first.minimumLength(along: axis, divider: divider),
+                second.minimumLength(along: axis, divider: divider)
+            )
         }
     }
 }
@@ -139,8 +266,10 @@ private struct SplitPairView: View {
 private struct SplitDivider: View {
     let axis: SplitAxis
     let active: Bool
-    let onChanged: (DragGesture.Value) -> Void
-    let onEnded: (DragGesture.Value) -> Void
+    var showsIndicator = true
+    let onDragStarted: () -> Void
+    let onDragChanged: (CGFloat) -> Void
+    let onDragEnded: () -> Void
     let onDoubleClick: () -> Void
     @State private var hovering = false
     @Environment(\.conductorTheme) private var theme
@@ -148,46 +277,209 @@ private struct SplitDivider: View {
     var body: some View {
         ZStack {
             Rectangle()
-                .fill(theme.terminalChrome.opacity(active ? 0.98 : 0.82))
-            Rectangle()
-                .fill(theme.accent.opacity(active ? 0.12 : hovering ? 0.055 : 0.0))
+                .fill(Color.clear)
+            if showsIndicator {
+                Rectangle()
+                    .fill(resizeRailFill)
+                    .frame(
+                        width: axis == .horizontal ? 8 : nil,
+                        height: axis == .vertical ? 8 : nil
+                    )
 
-            Capsule()
-                .fill(active || hovering ? theme.accent.opacity(0.78) : theme.terminalOuterStroke.opacity(0.62))
-                .frame(width: axis == .horizontal ? (active ? 2 : 1) : nil, height: axis == .vertical ? (active ? 2 : 1) : nil)
-                .frame(width: axis == .horizontal ? nil : 32, height: axis == .vertical ? nil : 32)
+                Rectangle()
+                    .fill(resizeRailLine)
+                    .frame(
+                        width: axis == .horizontal ? (active || hovering ? 2 : 1) : nil,
+                        height: axis == .vertical ? (active || hovering ? 2 : 1) : nil
+                    )
+            }
         }
             .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged(onChanged)
-                    .onEnded(onEnded)
-            )
-            .simultaneousGesture(
-                TapGesture(count: 2).onEnded(onDoubleClick)
-            )
-            .onHover { isHovering in
-                updateCursor(hovering: isHovering)
+            .overlay {
+                SplitDividerTrackingView(
+                    axis: axis,
+                    onHoverChanged: { hovering = $0 },
+                    onDragStarted: onDragStarted,
+                    onDragChanged: onDragChanged,
+                    onDragEnded: onDragEnded,
+                    onDoubleClick: onDoubleClick
+                )
             }
-            .animation(ConductorMotion.micro, value: active)
-            .animation(ConductorMotion.micro, value: hovering)
-            .onDisappear {
-                if hovering {
-                    hovering = false
-                    NSCursor.pop()
+            .transaction { transaction in
+                if active {
+                    transaction.disablesAnimations = true
+                    transaction.animation = nil
                 }
             }
+            .animation(active ? nil : ConductorMotion.micro, value: active)
+            .animation(active ? nil : ConductorMotion.hover, value: hovering)
             .help("拖拽调整分屏")
     }
 
-    private func updateCursor(hovering isHovering: Bool) {
-        guard hovering != isHovering else { return }
-        hovering = isHovering
-        if isHovering {
-            (axis == .horizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push()
-        } else {
-            NSCursor.pop()
+    private var resizeRailFill: Color {
+        if active {
+            return theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.72 : 0.92)
         }
+        if hovering {
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.62 : 0.88)
+        }
+        return Color.clear
+    }
+
+    private var resizeRailLine: Color {
+        if active || hovering {
+            return theme.shellChromeTextMuted.opacity(theme.usesDarkChrome ? 0.82 : 0.72)
+        }
+        return theme.terminalOuterStroke.opacity(0.58)
+    }
+}
+
+private struct SplitDragGuide: View {
+    let axis: SplitAxis
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.76 : 0.92))
+            Rectangle()
+                .fill(theme.shellChromeTextMuted.opacity(theme.usesDarkChrome ? 0.88 : 0.76))
+                .frame(
+                    width: axis == .horizontal ? 2 : nil,
+                    height: axis == .vertical ? 2 : nil
+                )
+        }
+        .transaction { transaction in
+            transaction.disablesAnimations = true
+            transaction.animation = nil
+        }
+    }
+}
+
+private struct SplitDividerTrackingView: NSViewRepresentable {
+    let axis: SplitAxis
+    let onHoverChanged: (Bool) -> Void
+    let onDragStarted: () -> Void
+    let onDragChanged: (CGFloat) -> Void
+    let onDragEnded: () -> Void
+    let onDoubleClick: () -> Void
+
+    func makeNSView(context: Context) -> SplitDividerTrackingNSView {
+        let view = SplitDividerTrackingNSView()
+        view.axis = axis
+        view.onHoverChanged = onHoverChanged
+        view.onDragStarted = onDragStarted
+        view.onDragChanged = onDragChanged
+        view.onDragEnded = onDragEnded
+        view.onDoubleClick = onDoubleClick
+        return view
+    }
+
+    func updateNSView(_ view: SplitDividerTrackingNSView, context: Context) {
+        view.axis = axis
+        view.onHoverChanged = onHoverChanged
+        view.onDragStarted = onDragStarted
+        view.onDragChanged = onDragChanged
+        view.onDragEnded = onDragEnded
+        view.onDoubleClick = onDoubleClick
+        view.needsDisplay = true
+    }
+}
+
+private final class SplitDividerTrackingNSView: NSView {
+    var axis: SplitAxis = .horizontal {
+        didSet {
+            discardCursorRects()
+        }
+    }
+    var onHoverChanged: (Bool) -> Void = { _ in }
+    var onDragStarted: () -> Void = {}
+    var onDragChanged: (CGFloat) -> Void = { _ in }
+    var onDragEnded: () -> Void = {}
+    var onDoubleClick: () -> Void = {}
+
+    private var trackingAreaToken: NSTrackingArea?
+    private var dragStartWindowLocation: NSPoint?
+    private var isDragging = false
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func updateTrackingAreas() {
+        if let trackingAreaToken {
+            removeTrackingArea(trackingAreaToken)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        trackingAreaToken = trackingArea
+        super.updateTrackingAreas()
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: cursor)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        cursor.set()
+        onHoverChanged(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard !isDragging else { return }
+        onHoverChanged(false)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 {
+            onDoubleClick()
+            return
+        }
+        window?.makeFirstResponder(self)
+        cursor.set()
+        isDragging = true
+        dragStartWindowLocation = event.locationInWindow
+        onHoverChanged(true)
+        onDragStarted()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard isDragging, let dragStartWindowLocation else { return }
+        cursor.set()
+        let location = event.locationInWindow
+        let delta: CGFloat
+        switch axis {
+        case .horizontal:
+            delta = location.x - dragStartWindowLocation.x
+        case .vertical:
+            delta = dragStartWindowLocation.y - location.y
+        }
+        onDragChanged(delta)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard isDragging else { return }
+        isDragging = false
+        dragStartWindowLocation = nil
+        onDragEnded()
+        let localLocation = convert(event.locationInWindow, from: nil)
+        onHoverChanged(bounds.contains(localLocation))
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            isDragging = false
+            dragStartWindowLocation = nil
+            onHoverChanged(false)
+        }
+    }
+
+    private var cursor: NSCursor {
+        axis == .horizontal ? .resizeLeftRight : .resizeUpDown
     }
 }
 
@@ -195,6 +487,8 @@ private struct TerminalPaneView: View {
     let pane: PaneState
     @ObservedObject var model: ConductorWindowModel
     @State private var highlightedDropTabID: TerminalID?
+    @State private var detachDropTarget: TerminalDetachTarget?
+    @State private var flashVisible = false
     @Environment(\.conductorSplitResizeActive) private var splitResizeActive
 
     private var isFocused: Bool {
@@ -205,7 +499,8 @@ private struct TerminalPaneView: View {
         isFocused &&
             !model.commandPaletteVisible &&
             !model.settingsPanelVisible &&
-            !model.workspaceOverviewVisible
+            !model.workspaceOverviewVisible &&
+            !model.terminalSearchVisible
     }
 
     private var unreadCount: Int {
@@ -213,26 +508,17 @@ private struct TerminalPaneView: View {
     }
 
     private var paneBorderColor: Color {
-        if splitResizeActive && !isFocused && unreadCount == 0 {
-            return Color.clear
-        }
-        if splitResizeActive && isFocused {
-            return model.theme.accent.opacity(0.62)
-        }
         if unreadCount > 0 {
             return model.theme.accent.opacity(0.72)
         }
-        return isFocused ? model.theme.accent.opacity(0.82) : Color.white.opacity(0.075)
+        return Color.clear
     }
 
     private var paneBorderWidth: CGFloat {
-        if splitResizeActive {
-            return isFocused || unreadCount > 0 ? 1.2 : 0
-        }
         if unreadCount > 0 {
             return 1.5
         }
-        return isFocused ? 1.5 : 1
+        return 0
     }
 
     var body: some View {
@@ -244,13 +530,22 @@ private struct TerminalPaneView: View {
         .overlay {
             TerminalPaneBorderOverlay(
                 color: paneBorderColor,
-                lineWidth: paneBorderWidth,
-                focused: isFocused && !splitResizeActive,
-                accent: model.theme.accent
+                lineWidth: paneBorderWidth
             )
             .allowsHitTesting(false)
         }
-        .animation(splitResizeActive ? nil : ConductorMotion.micro, value: isFocused)
+        .overlay {
+            TerminalPaneFlashOverlay(
+                color: model.theme.accent,
+                visible: flashVisible
+            )
+            .allowsHitTesting(false)
+        }
+        .clipped()
+        .onChange(of: model.paneFlashTokens[pane.id] ?? 0) { _, token in
+            guard token > 0 else { return }
+            triggerFocusFlash()
+        }
     }
 
     private var tabBar: some View {
@@ -265,20 +560,11 @@ private struct TerminalPaneView: View {
             .layoutPriority(1)
 
             PaneBarButton(
-                systemImage: "folder",
-                title: "路径",
-                showsTitle: false,
-                help: "打开当前路径"
-            ) {
-                model.openCurrentPath(for: pane.id)
-            }
-
-            PaneBarButton(
                 systemImage: "xmark",
-                title: "关闭",
+                title: L("关闭", "Close"),
                 showsTitle: false,
                 disabled: !model.workspace.canClosePane(pane.id),
-                help: "关闭这个分屏 Cmd-Shift-W"
+                help: L("关闭这个分屏 Cmd-Shift-W", "Close this pane Cmd-Shift-W")
             ) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.closePane(pane.id)
@@ -290,10 +576,11 @@ private struct TerminalPaneView: View {
         .frame(height: model.appearance.density.paneTabRailHeight)
         .background {
             ZStack(alignment: .bottom) {
-                model.theme.terminalChrome.opacity(0.96)
+                model.theme.terminalBackground
+                model.theme.terminalChrome.opacity(isFocused ? 0.24 : 0.16)
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isFocused ? 0.075 : 0.045),
+                        Color.white.opacity(isFocused ? 0.026 : 0.014),
                         Color.clear
                     ],
                     startPoint: .top,
@@ -302,28 +589,151 @@ private struct TerminalPaneView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Color.white.opacity(isFocused ? 0.080 : 0.045))
+            LinearGradient(
+                colors: [
+                    Color.clear,
+                    model.theme.terminalOuterStroke.opacity(isFocused ? 0.48 : 0.32),
+                    Color.clear
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
                 .frame(height: 1)
         }
+        .animation(splitResizeActive ? nil : ConductorMotion.micro, value: isFocused)
     }
 
     @ViewBuilder
     private var selectedTerminal: some View {
-        if let selected = pane.selectedTab {
-            TerminalSurfaceRepresentable(
-                surface: model.surface(for: selected),
-                theme: model.theme,
-                isFocused: terminalAcceptsInputFocus
-            )
-            .background(model.theme.terminalBackground)
-            .transaction { transaction in
-                transaction.disablesAnimations = true
-                transaction.animation = nil
+        if let selected = pane.selectedTab,
+           model.workspace.panes[pane.id]?.selectedTabID == selected.id {
+            GeometryReader { proxy in
+                ZStack {
+                    TerminalSurfaceRepresentable(
+                        surface: model.surface(for: selected),
+                        theme: model.theme,
+                        isFocused: terminalAcceptsInputFocus,
+                        suspendsGeometrySync: false
+                    )
+                    .background(model.theme.terminalBackground)
+                    .transaction { transaction in
+                        transaction.disablesAnimations = true
+                        transaction.animation = nil
+                    }
+                    .onTapGesture {
+                        ConductorMotion.perform(ConductorMotion.selection) {
+                            model.focusPane(pane.id)
+                        }
+                    }
+
+                    if let detachDropTarget {
+                        TerminalDetachDropOverlay(target: detachDropTarget)
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
+                    }
+                }
+                .contentShape(Rectangle())
+                .clipped()
+                .onDrop(
+                    of: [UTType.text],
+                    delegate: TerminalDetachDropDelegate(
+                        paneID: pane.id,
+                        size: proxy.size,
+                        target: $detachDropTarget,
+                        model: model
+                    )
+                )
             }
-            .onTapGesture {
-                ConductorMotion.perform {
-                    model.focusPane(pane.id)
+        }
+    }
+
+    private func triggerFocusFlash() {
+        withAnimation(ConductorMotion.emphasized) {
+            flashVisible = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            withAnimation(ConductorMotion.standard) {
+                flashVisible = false
+            }
+        }
+    }
+}
+
+private enum TerminalDetachTarget: Equatable {
+    case center
+    case left
+    case right
+    case up
+    case down
+
+    var direction: SplitDirection {
+        switch self {
+        case .center:
+            return .right
+        case .left:
+            return .left
+        case .right:
+            return .right
+        case .up:
+            return .up
+        case .down:
+            return .down
+        }
+    }
+
+    var alignment: Alignment {
+        switch self {
+        case .center:
+            return .center
+        case .left:
+            return .leading
+        case .right:
+            return .trailing
+        case .up:
+            return .top
+        case .down:
+            return .bottom
+        }
+    }
+
+    var isHorizontalSplit: Bool {
+        switch self {
+        case .center:
+            return false
+        case .left, .right:
+            return true
+        case .up, .down:
+            return false
+        }
+    }
+}
+
+private struct TerminalDetachDropOverlay: View {
+    let target: TerminalDetachTarget
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        GeometryReader { proxy in
+            if target == .center {
+                Rectangle()
+                    .fill(theme.accent.opacity(0.10))
+                    .overlay {
+                        Rectangle()
+                            .stroke(theme.accent.opacity(0.62), lineWidth: 1)
+                    }
+            } else {
+                ZStack(alignment: target.alignment) {
+                    Color.clear
+                    Rectangle()
+                        .fill(theme.accent.opacity(0.12))
+                        .overlay {
+                            Rectangle()
+                                .stroke(theme.accent.opacity(0.72), lineWidth: 1)
+                        }
+                        .frame(
+                            width: target.isHorizontalSplit ? max(0, proxy.size.width / 2) : nil,
+                            height: target.isHorizontalSplit ? nil : max(0, proxy.size.height / 2)
+                        )
                 }
             }
         }
@@ -333,37 +743,30 @@ private struct TerminalPaneView: View {
 private struct TerminalPaneBorderOverlay: View {
     let color: Color
     let lineWidth: CGFloat
-    let focused: Bool
-    let accent: Color
 
     var body: some View {
-        ZStack {
-            edgeStrokes(color: color, lineWidth: lineWidth, inset: 0)
-            if focused {
-                edgeStrokes(color: accent.opacity(0.18), lineWidth: 1, inset: 2)
-            }
-        }
-    }
-
-    private func edgeStrokes(color: Color, lineWidth: CGFloat, inset: CGFloat) -> some View {
         GeometryReader { proxy in
             let width = max(lineWidth, 0)
             let size = proxy.size
-            ZStack {
+            if width > 0 {
                 Rectangle()
-                    .fill(color)
-                    .frame(width: width, height: max(0, size.height - inset))
-                    .position(x: inset + width / 2, y: size.height / 2)
-                Rectangle()
-                    .fill(color)
-                    .frame(width: width, height: max(0, size.height - inset))
-                    .position(x: size.width - inset - width / 2, y: size.height / 2)
-                Rectangle()
-                    .fill(color)
-                    .frame(width: max(0, size.width - inset * 2), height: width)
-                    .position(x: size.width / 2, y: size.height - inset - width / 2)
+                    .stroke(color, lineWidth: width)
+                    .frame(width: max(0, size.width - width), height: max(0, size.height - width))
+                    .position(x: size.width / 2, y: size.height / 2)
             }
         }
+    }
+}
+
+private struct TerminalPaneFlashOverlay: View {
+    let color: Color
+    let visible: Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .stroke(color.opacity(visible ? 0.86 : 0), lineWidth: 2)
+            .shadow(color: color.opacity(visible ? 0.46 : 0), radius: visible ? 8 : 0)
+            .padding(1)
     }
 }
 
@@ -372,6 +775,7 @@ private struct StableTerminalTabStrip: View {
     @ObservedObject var model: ConductorWindowModel
     let paneFocused: Bool
     @Binding var highlightedDropTabID: TerminalID?
+    @Namespace private var selectionNamespace
 
     private let tabSpacing: CGFloat = 4
     private let tabEdgePadding: CGFloat = 0
@@ -435,6 +839,7 @@ private struct StableTerminalTabStrip: View {
             isDropTarget: highlightedDropTabID == tab.id,
             metadata: model.metadataByTerminalID[tab.id],
             unreadCount: model.notifications.snapshot.unreadCount(for: tab.id),
+            selectionNamespace: selectionNamespace,
             model: model,
             paneID: pane.id
         )
@@ -449,6 +854,98 @@ private struct StableTerminalTabStrip: View {
                 model: model
             )
         )
+    }
+}
+
+private let terminalTabDragPrefix = "terminal:"
+
+private func terminalTabDragPayload(for tabID: TerminalID) -> NSString {
+    "\(terminalTabDragPrefix)\(tabID.description)" as NSString
+}
+
+private func terminalID(fromDroppedText text: String) -> TerminalID? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let rawID = trimmed.hasPrefix(terminalTabDragPrefix)
+        ? String(trimmed.dropFirst(terminalTabDragPrefix.count))
+        : trimmed
+    guard let uuid = UUID(uuidString: rawID) else { return nil }
+    return TerminalID(uuid)
+}
+
+private func stringFromDropItem(_ item: NSSecureCoding?) -> String? {
+    if let data = item as? Data {
+        return String(data: data, encoding: .utf8)
+    }
+    if let string = item as? String {
+        return string
+    }
+    if let nsString = item as? NSString {
+        return nsString as String
+    }
+    return nil
+}
+
+private struct TerminalDetachDropDelegate: DropDelegate {
+    let paneID: PaneID
+    let size: CGSize
+    @Binding var target: TerminalDetachTarget?
+    let model: ConductorWindowModel
+
+    func dropEntered(info: DropInfo) {
+        target = target(for: info.location)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        target = target(for: info.location)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        target = nil
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let resolvedTarget = target(for: info.location)
+        target = nil
+        guard let item = info.itemProviders(for: [UTType.text]).first else { return false }
+        item.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { item, _ in
+            guard let text = stringFromDropItem(item),
+                  let draggedTabID = terminalID(fromDroppedText: text) else {
+                return
+            }
+
+            Task { @MainActor in
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    if resolvedTarget == .center {
+                        guard model.workspace.paneID(containing: draggedTabID) != paneID else { return }
+                        model.moveTabToEnd(draggedTabID, in: paneID)
+                    } else {
+                        model.moveTabToSplit(draggedTabID, targetPaneID: paneID, direction: resolvedTarget.direction)
+                    }
+                }
+            }
+        }
+        return true
+    }
+
+    private func target(for location: CGPoint) -> TerminalDetachTarget {
+        let width = max(1, size.width)
+        let height = max(1, size.height)
+        let horizontalEdge = max(80, width * 0.25)
+        let verticalEdge = max(80, height * 0.25)
+        if location.x < horizontalEdge {
+            return .left
+        }
+        if location.x > width - horizontalEdge {
+            return .right
+        }
+        if location.y < verticalEdge {
+            return .up
+        }
+        if location.y > height - verticalEdge {
+            return .down
+        }
+        return .center
     }
 }
 
@@ -472,24 +969,12 @@ private struct TerminalTabDropDelegate: DropDelegate {
         highlightedTabID = nil
         guard let item = info.itemProviders(for: [UTType.text]).first else { return false }
         item.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { item, _ in
-            let text: String?
-            if let data = item as? Data {
-                text = String(data: data, encoding: .utf8)
-            } else if let string = item as? String {
-                text = string
-            } else if let nsString = item as? NSString {
-                text = nsString as String
-            } else {
-                text = nil
-            }
-
-            guard let text,
-                  let uuid = UUID(uuidString: text.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            guard let text = stringFromDropItem(item),
+                  let draggedTabID = terminalID(fromDroppedText: text) else {
                 return
             }
 
             Task { @MainActor in
-                let draggedTabID = TerminalID(uuid)
                 ConductorMotion.perform(ConductorMotion.layout) {
                     if let targetTabID {
                         model.moveTab(draggedTabID, before: targetTabID, in: paneID)
@@ -512,10 +997,11 @@ private struct PaneBarButton: View {
     let action: () -> Void
     @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         Button {
-            ConductorMotion.perform(action)
+            action()
         } label: {
             ViewThatFits(in: .horizontal) {
                 if showsTitle {
@@ -530,15 +1016,15 @@ private struct PaneBarButton: View {
                 Image(systemName: systemImage)
                     .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
             }
-            .foregroundStyle(hovering ? Color.accentColor.opacity(0.96) : ConductorDesign.terminalTextMuted)
+            .foregroundStyle(hovering ? theme.shellChromeText.opacity(0.92) : theme.shellChromeTextMuted)
             .padding(.horizontal, showsTitle ? 5 : 4)
             .frame(height: 18)
             .frame(minWidth: showsTitle ? nil : 19)
-            .background(hovering ? Color.accentColor.opacity(0.115) : Color.white.opacity(showsTitle ? 0.050 : 0.025))
+            .background(hovering ? theme.shellHoverFill : (theme.usesDarkChrome ? Color.white.opacity(showsTitle ? 0.050 : 0.025) : theme.shellControlFill))
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
-                    .stroke(hovering ? Color.accentColor.opacity(0.34) : Color.white.opacity(0.075), lineWidth: 1)
+                    .stroke(hovering ? theme.shellStroke.opacity(0.72) : theme.shellStroke.opacity(0.42), lineWidth: 1)
             }
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
         }
@@ -546,9 +1032,9 @@ private struct PaneBarButton: View {
         .disabled(disabled)
         .opacity(disabled ? 0.35 : 1)
         .animation(ConductorMotion.micro, value: disabled)
-        .animation(ConductorMotion.micro, value: hovering)
+        .animation(ConductorMotion.hover, value: hovering)
         .onHover { value in
-            withAnimation(ConductorMotion.micro) {
+            ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }
         }
@@ -563,6 +1049,7 @@ private struct TerminalTabButton: View {
     let isDropTarget: Bool
     let metadata: TerminalDisplayMetadata?
     let unreadCount: Int
+    let selectionNamespace: Namespace.ID
     @ObservedObject var model: ConductorWindowModel
     let paneID: PaneID
     @State private var editingTitle = false
@@ -571,6 +1058,7 @@ private struct TerminalTabButton: View {
     @State private var renameCancelled = false
     @FocusState private var titleFieldFocused: Bool
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     private var tabIndex: Int? {
         model.workspace.panes[paneID]?.tabs.firstIndex { $0.id == tab.id }
@@ -593,23 +1081,21 @@ private struct TerminalTabButton: View {
     }
 
     private var tabFill: Color {
-        if isSelected {
-            return paneFocused ? model.theme.accent.opacity(0.30) : Color.white.opacity(0.105)
-        }
-        if hovering {
-            return model.theme.accent.opacity(0.075)
-        }
-        return Color.white.opacity(0.026)
+        hovering ? theme.shellHoverFill : (theme.usesDarkChrome ? theme.shellControlFill.opacity(0.18) : theme.shellControlFill)
+    }
+
+    private var selectedFill: Color {
+        theme.shellSelectedFill.opacity(paneFocused ? (theme.usesDarkChrome ? 1.0 : 0.92) : 0.72)
     }
 
     private var tabStroke: Color {
         if isDropTarget {
-            return model.theme.accent.opacity(0.88)
+            return theme.floatingSelectedStroke.opacity(0.95)
         }
         if isSelected {
-            return paneFocused ? model.theme.accent.opacity(0.86) : Color.white.opacity(0.26)
+            return theme.shellStroke.opacity(paneFocused ? 0.92 : 0.58)
         }
-        return Color.white.opacity(hovering ? 0.13 : 0.075)
+        return theme.shellStroke.opacity(hovering ? 0.54 : 0.32)
     }
 
     private var terminalDetailLabel: String? {
@@ -633,10 +1119,10 @@ private struct TerminalTabButton: View {
             parts.append(terminalDetailLabel)
         }
         if unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0 {
-            parts.append("未读")
+            parts.append(L("未读", "Unread"))
         }
         if metadata?.readonly == true {
-            parts.append("只读")
+            parts.append(L("只读", "Read Only"))
         }
         return parts.joined(separator: " · ")
     }
@@ -646,12 +1132,12 @@ private struct TerminalTabButton: View {
             if editingTitle {
                 Image(systemName: "terminal")
                     .font(.conductorSystem(size: 10, scale: fontScale))
-                    .foregroundStyle(isSelected ? ConductorDesign.primaryText : ConductorDesign.terminalText)
+                    .foregroundStyle(isSelected ? theme.shellChromeText : theme.shellChromeTextMuted)
                 RenameTextField(
                     text: $titleDraft,
-                    placeholder: "标签名称",
+                    placeholder: L("标签名称", "Tab Name"),
                     font: .conductorMonospacedSystemFont(ofSize: 10.5, weight: isSelected ? .semibold : .medium, scale: fontScale),
-                    textColor: NSColor.labelColor,
+                    textColor: NSColor(theme.shellChromeText),
                     onCommit: commitRename,
                     onCancel: cancelRename
                 )
@@ -663,26 +1149,26 @@ private struct TerminalTabButton: View {
                 HStack(spacing: 5) {
                     Image(systemName: "terminal")
                         .font(.conductorSystem(size: 10, scale: fontScale))
-                        .foregroundStyle(isSelected ? (paneFocused ? model.theme.accent : ConductorDesign.terminalText) : ConductorDesign.terminalTextMuted)
+                        .foregroundStyle(isSelected ? theme.shellChromeText : theme.shellChromeTextMuted)
                     Text(tab.title)
                         .font(.conductorSystem(size: 10.5, weight: isSelected ? .semibold : .medium, scale: fontScale))
-                        .foregroundStyle(isSelected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted)
+                        .foregroundStyle(isSelected ? theme.shellChromeText : theme.shellChromeTextMuted)
                         .lineLimit(1)
                         .layoutPriority(1)
-                    if let terminalDetailLabel, isSelected || hovering {
+                    if let terminalDetailLabel, isSelected {
                         Text("· \(terminalDetailLabel)")
                             .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
-                            .foregroundStyle(isSelected && paneFocused ? model.theme.accent.opacity(0.82) : ConductorDesign.terminalTextMuted.opacity(0.78))
+                            .foregroundStyle(theme.shellChromeTextMuted.opacity(isSelected ? 0.92 : 0.78))
                             .lineLimit(1)
                     }
                     Spacer(minLength: 2)
                     if unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0 {
                         Circle()
-                            .fill(model.theme.accent)
+                            .fill(theme.floatingEmphasis.opacity(0.72))
                             .frame(width: 6, height: 6)
                     } else if metadata?.progressKind != nil {
                         Circle()
-                            .stroke(model.theme.accent, lineWidth: 1.5)
+                            .stroke(theme.floatingEmphasis.opacity(0.72), lineWidth: 1.25)
                             .frame(width: 7, height: 7)
                     } else if metadata?.readonly == true {
                         Image(systemName: "lock")
@@ -691,6 +1177,7 @@ private struct TerminalTabButton: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
                 .help(terminalHelpText)
             }
 
@@ -702,13 +1189,12 @@ private struct TerminalTabButton: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(hovering || isSelected ? ConductorDesign.terminalText.opacity(0.88) : ConductorDesign.terminalTextMuted.opacity(0.78))
+                        .foregroundStyle(hovering || isSelected ? theme.shellChromeText.opacity(0.80) : theme.shellChromeTextMuted.opacity(0.72))
                         .frame(width: 13, height: 13)
-                        .background(hovering ? Color.white.opacity(0.075) : Color.clear)
                         .clipShape(Circle())
                 }
                 .buttonStyle(ConductorPressButtonStyle())
-                .help("关闭标签")
+                .help(L("关闭标签", "Close Tab"))
             }
         }
         .padding(.leading, 8)
@@ -719,72 +1205,76 @@ private struct TerminalTabButton: View {
             idealWidth: model.appearance.density.paneTabWidth,
             maxWidth: model.appearance.density.paneTabWidth
         )
-        .background(tabFill)
+        .background {
+            let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
+            if isSelected {
+                shape
+                    .fill(selectedFill)
+            } else {
+                shape
+                    .fill(tabFill)
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
                 .stroke(tabStroke, lineWidth: isDropTarget || (isSelected && paneFocused) ? 1.35 : 1)
         }
-        .animation(nil, value: isSelected)
-        .animation(ConductorMotion.micro, value: hovering)
+        .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.micro, value: isDropTarget)
-        .animation(ConductorMotion.standard, value: editingTitle)
+        .animation(ConductorMotion.selection, value: editingTitle)
         .animation(ConductorMotion.emphasized, value: unreadCount)
-        .animation(ConductorMotion.standard, value: metadata?.progressKind)
         .onHover { value in
-            withAnimation(ConductorMotion.micro) {
+            ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab))
+        .onTapGesture {
+            model.selectTab(tab.id, in: paneID)
+        }
         .simultaneousGesture(
-            TapGesture(count: 1).onEnded {
-                model.selectTab(tab.id, in: paneID)
+            TapGesture(count: 2).onEnded {
+                guard !editingTitle else { return }
+                beginRename()
             }
         )
         .onDrag {
             model.selectTab(tab.id, in: paneID)
-            return NSItemProvider(object: tab.id.description as NSString)
+            return NSItemProvider(object: terminalTabDragPayload(for: tab.id))
         }
-        .simultaneousGesture(
-            TapGesture(count: 2).onEnded {
-                ConductorMotion.perform {
-                    beginRename()
-                }
-            }
-        )
         .contextMenu {
-            Button("重命名标签...") {
-                ConductorMotion.perform {
+            Button(L("重命名标签...", "Rename Tab...")) {
+                ConductorMotion.perform(ConductorMotion.selection) {
                     beginRename()
                 }
             }
             if tab.userTitle != nil {
-                Button("恢复终端标题") {
-                    ConductorMotion.perform {
+                Button(L("恢复终端标题", "Restore Terminal Title")) {
+                    ConductorMotion.perform(ConductorMotion.selection) {
                         model.clearUserTerminalTitle(tab.id)
                     }
                 }
             }
-            Button("复制标签") {
+            Button(L("复制标签", "Duplicate Tab")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.duplicateTab(tab.id, in: paneID)
                 }
             }
             Divider()
-            Button("关闭标签") {
+            Button(L("关闭标签", "Close Tab")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.closeTab(tab.id, in: paneID)
                 }
             }
-            Button("关闭其他标签") {
+            Button(L("关闭其他标签", "Close Other Tabs")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
                     model.closeOtherTabs(in: paneID)
                 }
             }
             .disabled(!model.workspace.canCloseOtherTabs(in: paneID))
-            Button("关闭右侧标签") {
+            Button(L("关闭右侧标签", "Close Tabs to the Right")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
                     model.closeTabsToRight(in: paneID)
@@ -792,14 +1282,14 @@ private struct TerminalTabButton: View {
             }
             .disabled(!model.workspace.canCloseTabsToRight(of: tab.id, in: paneID))
             Divider()
-            Button("标签左移") {
+            Button(L("标签左移", "Move Tab Left")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
                     model.moveSelectedTabLeft()
                 }
             }
             .disabled(tabIndex == nil || tabIndex == 0)
-            Button("标签右移") {
+            Button(L("标签右移", "Move Tab Right")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
                     model.moveSelectedTabRight()
@@ -807,21 +1297,21 @@ private struct TerminalTabButton: View {
             }
             .disabled(tabIndex == nil || tabIndex == tabCount - 1)
             Divider()
-            Button("移动到下一个分屏") {
+            Button(L("移动到下一个分屏", "Move to Next Pane")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
                     model.moveSelectedTabToNextPane()
                 }
             }
             .disabled(!canMoveTargetTabToNextPane)
-            Button("移动到右侧新分屏") {
+            Button(L("移动到右侧新分屏", "Move to New Right Split")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
                     model.moveSelectedTabToNewSplit(.right)
                 }
             }
             .disabled(!canMoveTargetTabToNewSplit)
-            Button("移动到下方新分屏") {
+            Button(L("移动到下方新分屏", "Move to New Down Split")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
                     model.moveSelectedTabToNewSplit(.down)
@@ -839,14 +1329,14 @@ private struct TerminalTabButton: View {
     }
 
     private func commitRename() {
-        ConductorMotion.perform {
+        ConductorMotion.perform(ConductorMotion.selection) {
             model.renameTerminal(tab.id, title: titleDraft)
             editingTitle = false
         }
     }
 
     private func cancelRename() {
-        ConductorMotion.perform {
+        ConductorMotion.perform(ConductorMotion.selection) {
             editingTitle = false
         }
     }

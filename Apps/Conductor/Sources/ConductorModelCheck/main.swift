@@ -640,6 +640,98 @@ func checkMoveSelectedTabToNewSplit() {
     require(workspace.panes[destinationPaneID]?.tabs.map(\.id) == [movedTerminalID], "new pane should own moved tab")
 }
 
+func checkMoveInactiveTabToNewSplitPreservesSourceSelection() {
+    var workspace = WorkspaceState()
+    let sourcePaneID = workspace.focusedPaneID
+    let firstTerminalID = workspace.focusedPane!.selectedTabID
+    let movedTerminalID = workspace.newTerminal(title: "server")
+    let thirdTerminalID = workspace.newTerminal(title: "logs")
+    workspace.selectTab(firstTerminalID, in: sourcePaneID)
+
+    let result = workspace.moveTabToNewSplit(movedTerminalID, .down)
+
+    require(result.movedTerminalID == movedTerminalID, "inactive tab move to split should report moved terminal")
+    require(workspace.root.leaves.count == 2, "inactive tab move should create pane")
+    require(workspace.panes[sourcePaneID]?.tabs.map(\.id) == [firstTerminalID, thirdTerminalID], "source pane should remove only dragged tab")
+    require(workspace.panes[sourcePaneID]?.selectedTabID == firstTerminalID, "source pane selection should not jump when moving inactive tab")
+    let destinationPaneID = workspace.focusedPaneID
+    require(destinationPaneID != sourcePaneID, "new pane should become focused after inactive tab move")
+    require(workspace.panes[destinationPaneID]?.tabs.map(\.id) == [movedTerminalID], "new pane should own inactive moved tab")
+    requireValidWorkspace(workspace, "move inactive tab to new split")
+}
+
+func checkMoveTabToNewSplitSupportsAllDropEdges() {
+    for direction in [SplitDirection.left, .right, .up, .down] {
+        var workspace = WorkspaceState()
+        let sourcePaneID = workspace.focusedPaneID
+        let firstTerminalID = workspace.focusedPane!.selectedTabID
+        let movedTerminalID = workspace.newTerminal(title: direction.rawValue)
+
+        let result = workspace.moveTabToNewSplit(movedTerminalID, direction)
+        let destinationPaneID = workspace.focusedPaneID
+
+        require(result.movedTerminalID == movedTerminalID, "drop edge \(direction.rawValue) should report moved terminal")
+        require(destinationPaneID != sourcePaneID, "drop edge \(direction.rawValue) should focus new pane")
+        require(workspace.panes[sourcePaneID]?.tabs.map(\.id) == [firstTerminalID], "drop edge \(direction.rawValue) should keep source tab")
+        require(workspace.panes[destinationPaneID]?.tabs.map(\.id) == [movedTerminalID], "drop edge \(direction.rawValue) should own moved tab")
+
+        guard case let .split(axis, first, second, _) = workspace.root else {
+            return require(false, "drop edge \(direction.rawValue) should create split root")
+        }
+        require(axis == direction.axis, "drop edge \(direction.rawValue) should use expected split axis")
+        let expectedFirst: SplitNode = direction.insertsBeforeFocusedPane ? .leaf(destinationPaneID) : .leaf(sourcePaneID)
+        let expectedSecond: SplitNode = direction.insertsBeforeFocusedPane ? .leaf(sourcePaneID) : .leaf(destinationPaneID)
+        require(first == expectedFirst, "drop edge \(direction.rawValue) should place first node correctly")
+        require(second == expectedSecond, "drop edge \(direction.rawValue) should place second node correctly")
+        requireValidWorkspace(workspace, "move tab to new split edge \(direction.rawValue)")
+    }
+}
+
+func checkMoveTabToSplitAroundTargetPane() {
+    var workspace = WorkspaceState()
+    let sourcePaneID = workspace.focusedPaneID
+    let firstTerminalID = workspace.focusedPane!.selectedTabID
+    let movedTerminalID = workspace.newTerminal(title: "server")
+    guard let targetPaneID = workspace.splitFocusedPane(.right, title: "target") else {
+        return require(false, "target split should be created")
+    }
+    let targetTerminalID = workspace.panes[targetPaneID]!.selectedTabID
+
+    let result = workspace.moveTabToSplit(movedTerminalID, targetPaneID: targetPaneID, .up)
+    let destinationPaneID = workspace.focusedPaneID
+
+    require(result.movedTerminalID == movedTerminalID, "target split drop should report moved terminal")
+    require(workspace.panes[sourcePaneID]?.tabs.map(\.id) == [firstTerminalID], "source pane should keep remaining tab")
+    require(workspace.panes[targetPaneID]?.tabs.map(\.id) == [targetTerminalID], "target pane should remain intact")
+    require(workspace.panes[destinationPaneID]?.tabs.map(\.id) == [movedTerminalID], "new target-adjacent pane should own moved tab")
+    guard case let .split(axis, first, second, _) = workspace.root else {
+        return require(false, "target split drop should keep split root")
+    }
+    require(axis == .horizontal, "original root should remain horizontal")
+    require(first == .leaf(sourcePaneID), "source pane should stay outside target replacement")
+    require(second.leaves == [destinationPaneID, targetPaneID], "target pane should be replaced by vertical split with moved tab above")
+    requireValidWorkspace(workspace, "move tab to split around target pane")
+}
+
+func checkMoveOnlyTabToSplitAroundTargetPaneClosesSource() {
+    var workspace = WorkspaceState()
+    let sourcePaneID = workspace.focusedPaneID
+    let movedTerminalID = workspace.focusedPane!.selectedTabID
+    guard let targetPaneID = workspace.splitFocusedPane(.right, title: "target") else {
+        return require(false, "target split should be created")
+    }
+
+    let result = workspace.moveTabToSplit(movedTerminalID, targetPaneID: targetPaneID, .left)
+    let destinationPaneID = workspace.focusedPaneID
+
+    require(result.movedTerminalID == movedTerminalID, "only-tab target split drop should report moved terminal")
+    require(result.closedPaneIDs == [sourcePaneID], "only-tab target split drop should report closed source pane")
+    require(workspace.panes[sourcePaneID] == nil, "only-tab source pane should close")
+    require(workspace.panes[destinationPaneID]?.tabs.map(\.id) == [movedTerminalID], "new pane should own moved tab")
+    require(workspace.root.leaves == [destinationPaneID, targetPaneID], "target replacement should remain after source closes")
+    requireValidWorkspace(workspace, "move only tab to split around target pane")
+}
+
 func checkContextTabMoveAvailabilityUsesTargetTabPane() {
     var workspace = WorkspaceState()
     let sourcePaneID = workspace.focusedPaneID
@@ -849,6 +941,10 @@ checkCloseOtherTabs()
 checkCloseTabsToRight()
 checkMoveSelectedTabToNextPane()
 checkMoveSelectedTabToNewSplit()
+checkMoveInactiveTabToNewSplitPreservesSourceSelection()
+checkMoveTabToNewSplitSupportsAllDropEdges()
+checkMoveTabToSplitAroundTargetPane()
+checkMoveOnlyTabToSplitAroundTargetPaneClosesSource()
 checkContextTabMoveAvailabilityUsesTargetTabPane()
 checkMoveTabToEndInSamePane()
 checkRapidTabSwitchingKeepsStableStructure()

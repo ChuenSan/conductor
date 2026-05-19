@@ -3,36 +3,25 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+private func withoutShellAnimation(_ action: () -> Void) {
+    ConductorMotion.withoutAnimation(action)
+}
+
+private func L(_ zh: String, _ en: String) -> String {
+    ConductorLocalization.text(zh: zh, en: en)
+}
+
 struct ConductorRootView: View {
     @ObservedObject var model: ConductorWindowModel
 
     var body: some View {
-        HStack(alignment: .top, spacing: ConductorDesign.shellGap) {
-            ConductorSidebar(model: model)
-
-            VStack(spacing: 0) {
-                ConductorToolbar(model: model)
-                SplitNodeView(node: model.workspace.visibleRoot, model: model)
-                    .background(model.theme.terminalBackground)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(model.theme.terminalRaisedBackground)
-            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane))
-            .overlay {
-                RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane)
-                    .stroke(model.theme.terminalOuterStroke, lineWidth: 1)
-                    .allowsHitTesting(false)
-            }
-
-            if model.filePreview.isVisible {
-                FilePreviewPanel(model: model)
-                    .frame(width: ConductorTokens.Space.filePreviewPanelWidth)
-                    .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .trailing)))
+        GeometryReader { _ in
+            ZStack(alignment: .trailing) {
+                shellContent
             }
         }
-        .animation(model.shellAnimation(ConductorMotion.layout), value: model.sidebarVisible)
-        .animation(model.shellAnimation(ConductorMotion.layout), value: model.filePreview.isVisible)
-        .padding(.horizontal, ConductorDesign.shellHorizontalPadding)
+        .padding(.leading, ConductorDesign.shellLeadingPadding)
+        .padding(.trailing, ConductorDesign.shellTrailingPadding)
         .padding(.top, ConductorDesign.shellTopPadding)
         .padding(.bottom, ConductorDesign.shellBottomPadding)
         .frame(
@@ -44,28 +33,280 @@ struct ConductorRootView: View {
         )
         .background(ConductorWindowBackdrop(theme: model.theme))
         .ignoresSafeArea(.container, edges: .top)
+        .environment(\.colorScheme, model.theme.chromeColorScheme)
+        .preferredColorScheme(model.theme.chromeColorScheme)
         .tint(model.theme.floatingEmphasis)
         .environment(\.conductorFontScale, model.appearance.fontScale)
+        .environment(\.conductorFontFamily, model.appearance.fontFamily)
         .environment(\.conductorTheme, model.theme)
+        .environment(\.locale, model.appearance.language.locale)
         .overlay {
             ZStack {
                 if model.commandPaletteVisible {
                     CommandPaletteView(model: model)
-                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                        .environment(\.conductorTheme, model.theme)
+                        .environment(\.conductorFontScale, model.appearance.fontScale)
+                        .environment(\.conductorFontFamily, model.appearance.fontFamily)
+                        .environment(\.locale, model.appearance.language.locale)
+                        .transition(ConductorMotion.panelTransition)
                 }
                 if model.settingsPanelVisible {
                     AppearanceSettingsPanel(model: model)
-                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                        .environment(\.conductorTheme, model.theme)
+                        .environment(\.conductorFontScale, model.appearance.fontScale)
+                        .environment(\.conductorFontFamily, model.appearance.fontFamily)
+                        .environment(\.locale, model.appearance.language.locale)
+                        .transition(ConductorMotion.panelTransition)
                 }
                 if model.workspaceOverviewVisible {
                     WorkspaceOverviewPanel(model: model)
-                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                        .environment(\.conductorTheme, model.theme)
+                        .environment(\.conductorFontScale, model.appearance.fontScale)
+                        .environment(\.conductorFontFamily, model.appearance.fontFamily)
+                        .environment(\.locale, model.appearance.language.locale)
+                        .transition(ConductorMotion.panelTransition)
                 }
             }
         }
-        .animation(model.shellAnimation(ConductorMotion.standard), value: model.commandPaletteVisible)
-        .animation(model.shellAnimation(ConductorMotion.standard), value: model.settingsPanelVisible)
-        .animation(model.shellAnimation(ConductorMotion.standard), value: model.workspaceOverviewVisible)
+        .animation(model.shellAnimation(ConductorMotion.panel), value: model.commandPaletteVisible)
+        .animation(model.shellAnimation(ConductorMotion.panel), value: model.settingsPanelVisible)
+        .animation(model.shellAnimation(ConductorMotion.panel), value: model.workspaceOverviewVisible)
+    }
+
+    private var shellContent: some View {
+        HStack(alignment: .top, spacing: ConductorDesign.shellGap) {
+            ConductorSidebar(model: model)
+            ConductorShellJoiner(theme: model.theme)
+
+            VStack(spacing: 0) {
+                ConductorToolbar(model: model)
+                ZStack(alignment: .topTrailing) {
+                    SplitNodeView(node: model.workspace.visibleRoot, model: model)
+                        .background(model.theme.terminalBackground)
+                    if model.terminalSearchVisible {
+                        TerminalContextSearchBar(model: model)
+                            .padding(.top, 8)
+                            .padding(.trailing, 12)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(model.theme.terminalBackground)
+            .overlay(alignment: .leading) {
+                TerminalSidebarContactWash(theme: model.theme)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+}
+
+private struct TerminalContextSearchBar: View {
+    @ObservedObject var model: ConductorWindowModel
+    @FocusState private var searchFocused: Bool
+    @State private var query = ""
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorFontFamily) private var fontFamily
+
+    private var metadata: TerminalSearchMetadata {
+        model.focusedTerminalSearchMetadata
+    }
+
+    private var selectedTarget: TerminalSearchTargetDisplay? {
+        model.terminalSearchTargets.first { $0.id == model.terminalSearchTargetID } ??
+            model.terminalSearchTargets.first { $0.id == model.focusedTerminalID }
+    }
+
+    private var matchText: String {
+        guard !query.isEmpty else { return L("输入搜索", "Type to search") }
+        guard let total = metadata.total else { return L("搜索中", "Searching") }
+        guard total > 0 else { return L("无结果", "No results") }
+        if let selected = metadata.selected {
+            return "\(selected + 1)/\(total)"
+        }
+        return "0/\(total)"
+    }
+
+    private var hasQuery: Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.58))
+
+            Menu {
+                ForEach(model.terminalSearchTargets) { target in
+                    Button {
+                        model.selectTerminalSearchTarget(target.id)
+                    } label: {
+                        Label(
+                            "\(target.title) · \(target.subtitle)",
+                            systemImage: target.id == selectedTarget?.id ? "checkmark" : "terminal"
+                        )
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: selectedTarget?.isActive == true ? "scope" : "terminal")
+                        .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                    Text(selectedTarget?.title ?? L("当前终端", "Current terminal"))
+                        .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.conductorSystem(size: 8.5, weight: .bold, family: fontFamily, scale: fontScale))
+                        .opacity(0.62)
+                }
+                .foregroundStyle(theme.shellChromeText.opacity(0.72))
+                .padding(.horizontal, 8)
+                .frame(width: 118, height: 22, alignment: .leading)
+                .background(Color.white.opacity(theme.usesDarkChrome ? 0.045 : 0.075))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .help(L("选择搜索的终端", "Choose terminal to search"))
+
+            TextField(L("搜索选中终端", "Search selected terminal"), text: $query)
+                .textFieldStyle(.plain)
+                .font(.conductorSystem(size: 11.5, weight: .medium, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText)
+                .frame(width: 168)
+                .focused($searchFocused)
+                .onSubmit {
+                    model.navigateTerminalSearch(previous: false)
+                }
+
+            Text(matchText)
+                .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.52))
+                .monospacedDigit()
+                .frame(minWidth: 48, alignment: .trailing)
+
+            TerminalSearchIconButton(
+                systemImage: "chevron.up",
+                help: L("上一个结果 Shift-Cmd-G", "Previous result Shift-Cmd-G"),
+                disabled: !hasQuery
+            ) {
+                model.navigateTerminalSearch(previous: true)
+            }
+
+            TerminalSearchIconButton(
+                systemImage: "chevron.down",
+                help: L("下一个结果 Cmd-G", "Next result Cmd-G"),
+                disabled: !hasQuery
+            ) {
+                model.navigateTerminalSearch(previous: false)
+            }
+
+            TerminalSearchIconButton(
+                systemImage: "xmark",
+                help: L("关闭搜索 Esc", "Close search Esc")
+            ) {
+                model.closeTerminalSearch()
+            }
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
+        .frame(height: 32)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.96 : 0.92))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.10 : 0.18), lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.26 : 0.14), radius: 14, x: 0, y: 8)
+        }
+        .onAppear {
+            query = model.terminalSearchQuery
+            searchFocused = true
+        }
+        .onChange(of: model.terminalSearchFocusGeneration) { _, _ in
+            searchFocused = true
+        }
+        .onChange(of: query) { _, next in
+            model.setTerminalSearchQuery(next)
+        }
+        .onChange(of: model.terminalSearchQuery) { _, next in
+            guard next != query else { return }
+            query = next
+        }
+    }
+}
+
+private struct TerminalSearchIconButton: View {
+    let systemImage: String
+    let help: String
+    var disabled = false
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Button {
+            guard !disabled else { return }
+            action()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundStyle(theme.shellChromeText.opacity(disabled ? 0.26 : (hovering ? 0.82 : 0.56)))
+                .frame(width: 22, height: 22)
+                .background(Color.white.opacity(hovering && !disabled ? 0.070 : 0.018))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.95))
+        .disabled(disabled)
+        .onHover { hovering = $0 }
+        .animation(ConductorMotion.hover, value: hovering)
+        .help(help)
+    }
+}
+
+private struct ConductorShellJoiner: View {
+    let theme: TerminalTheme
+
+    var body: some View {
+        Color.clear
+            .frame(width: ConductorDesign.shellJoinerWidth)
+            .frame(maxHeight: .infinity)
+            .allowsHitTesting(false)
+    }
+}
+
+private struct TerminalSidebarContactWash: View {
+    let theme: TerminalTheme
+
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color.black.opacity(theme.usesDarkChrome ? 0.10 : 0.030),
+                theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.04 : 0.018),
+                Color.clear
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .frame(width: theme.usesDarkChrome ? 12 : 8)
+    }
+}
+
+struct NotificationPanelRootView: View {
+    @ObservedObject var model: ConductorWindowModel
+
+    var body: some View {
+        NotificationPanelView(model: model)
+            .environment(\.colorScheme, model.theme.chromeColorScheme)
+            .preferredColorScheme(model.theme.chromeColorScheme)
+            .environment(\.conductorTheme, model.theme)
+            .environment(\.conductorFontScale, model.appearance.fontScale)
+            .environment(\.conductorFontFamily, model.appearance.fontFamily)
+            .environment(\.locale, model.appearance.language.locale)
     }
 }
 
@@ -77,6 +318,7 @@ private struct FloatingPanelHeader<Trailing: View>: View {
     let onClose: () -> Void
     let trailing: Trailing
     @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
 
     init(
         systemImage: String,
@@ -97,7 +339,7 @@ private struct FloatingPanelHeader<Trailing: View>: View {
     var body: some View {
         HStack(spacing: 9) {
             Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
                 .frame(width: 24, height: 24)
                 .background(theme.floatingControlFill)
@@ -105,11 +347,11 @@ private struct FloatingPanelHeader<Trailing: View>: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.conductorSystem(size: 14, weight: .bold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
                     .foregroundStyle(ConductorDesign.tertiaryText)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -120,10 +362,10 @@ private struct FloatingPanelHeader<Trailing: View>: View {
             trailing
 
             Button {
-                ConductorMotion.perform(onClose)
+                onClose()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.secondaryText)
                     .frame(width: 24, height: 24)
                     .background(theme.floatingControlFill)
@@ -171,6 +413,7 @@ private struct CommandPaletteView: View {
     @State private var selectedCommandID: String?
     @FocusState private var searchFocused: Bool
     @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
 
     private var commands: [CommandPaletteItem] {
         ConductorCommandCatalog.items(model: model, run: run)
@@ -188,10 +431,6 @@ private struct CommandPaletteView: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.18)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-
             ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 10) {
                     commandHeader
@@ -209,8 +448,7 @@ private struct CommandPaletteView: View {
             .onChange(of: query) {
                 ensureSelection()
             }
-            .animation(ConductorMotion.standard, value: selectedCommandID)
-            .animation(ConductorMotion.micro, value: query)
+            .animation(ConductorMotion.selection, value: selectedCommandID)
             .onMoveCommand { direction in
                 switch direction {
                 case .up:
@@ -235,7 +473,7 @@ private struct CommandPaletteView: View {
             systemImage: "command",
             title: "Command Center",
             subtitle: model.workspace.title,
-            closeHelp: "关闭命令中心"
+            closeHelp: L("关闭命令中心", "Close Command Center")
         ) {
             model.hideCommandPalette()
         }
@@ -244,14 +482,14 @@ private struct CommandPaletteView: View {
     private var commandSearchField: some View {
         HStack(spacing: 7) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
-            TextField("搜索命令", text: $query)
+            TextField(L("搜索命令", "Search commands"), text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13, weight: .medium))
+                .font(.conductorSystem(size: 13, weight: .medium, scale: fontScale))
                 .focused($searchFocused)
             Text("↵")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
         }
         .padding(.horizontal, 10)
@@ -269,10 +507,10 @@ private struct CommandPaletteView: View {
             if filteredCommands.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "command")
-                        .font(.system(size: 22, weight: .medium))
+                        .font(.conductorSystem(size: 22, weight: .medium, scale: fontScale))
                         .foregroundStyle(ConductorDesign.tertiaryText)
-                    Text("没有匹配的命令")
-                        .font(.system(size: 12.5, weight: .semibold))
+                    Text(L("没有匹配的命令", "No matching commands"))
+                        .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
                         .foregroundStyle(ConductorDesign.secondaryText)
                 }
                 .frame(maxWidth: .infinity)
@@ -305,10 +543,8 @@ private struct CommandPaletteView: View {
     }
 
     private func run(_ action: () -> Void) {
-        ConductorMotion.perform {
-            action()
-            model.hideCommandPalette()
-        }
+        action()
+        model.hideCommandPalette()
     }
 
     private func ensureSelection() {
@@ -358,24 +594,34 @@ private struct CommandPaletteItem: Identifiable {
 
     var systemImage: String {
         switch id {
+        case "new-workspace":
+            WorkspaceChromeGlyph.systemName(selected: false)
         case "new-terminal":
             "plus.rectangle.on.rectangle"
-        case "open-current-path":
-            "folder"
         case "duplicate-tab", "duplicate-workspace":
             "plus.square.on.square"
         case "split-right":
             "rectangle.split.2x1"
         case "split-down":
             "rectangle.split.1x2"
-        case "next-tab", "next-pane":
+        case "next-tab", "next-pane", "focus-right":
             "arrow.right"
-        case "previous-tab", "previous-pane":
+        case "previous-tab", "previous-pane", "focus-left":
             "arrow.left"
+        case "focus-up":
+            "arrow.up"
+        case "focus-down":
+            "arrow.down"
+        case "resize-left", "resize-right":
+            "arrow.left.and.right"
+        case "resize-up", "resize-down":
+            "arrow.up.and.down"
         case "notifications":
             "bell"
         case "jump-unread":
             "bell.badge"
+        case "context-search", "find-next", "find-previous":
+            "magnifyingglass"
         case "close-tab", "close-pane", "clear-notifications":
             "xmark"
         case "move-tab-left":
@@ -388,16 +634,18 @@ private struct CommandPaletteItem: Identifiable {
             "rectangle.split.2x1"
         case "toggle-zoom":
             "arrow.up.left.and.arrow.down.right"
+        case "toggle-fullscreen":
+            "arrow.up.left.and.arrow.down.right.circle"
+        case "flash-focused-pane":
+            "scope"
         case "equalize-splits":
             "equal.square"
         case "workspace-overview":
-            "rectangle.3.group"
+            WorkspaceChromeGlyph.systemName(selected: false)
         case "appearance-settings":
             "slider.horizontal.3"
         case "reset-workspace":
             "arrow.counterclockwise"
-        case "install-codex-hooks":
-            "bolt.horizontal.circle"
         case "debug-notification":
             "bell.badge"
         default:
@@ -411,7 +659,7 @@ private struct CommandPaletteItem: Identifiable {
         }
         switch id {
         case "notifications":
-            return "工具栏"
+            return L("工具栏", "Toolbar")
         default:
             return "Command Center"
         }
@@ -425,148 +673,224 @@ private enum ConductorCommandCatalog {
         run: @escaping (@escaping () -> Void) -> Void
     ) -> [CommandPaletteItem] {
         [
-            CommandPaletteItem(id: "new-terminal", section: "创建", title: "新开终端", shortcut: "Cmd-T", keywords: "terminal pane shell") {
+            CommandPaletteItem(id: "new-workspace", section: L("创建", "Create"), title: L("新建工作区", "New Workspace"), shortcut: "Cmd-N", keywords: "workspace new") {
+                run {
+                    model.newWorkspace()
+                }
+            },
+            CommandPaletteItem(id: "new-terminal", section: L("创建", "Create"), title: L("新开终端", "New Terminal"), shortcut: "Cmd-T", keywords: "terminal pane shell") {
                 run {
                     model.newTerminal()
                 }
             },
-            CommandPaletteItem(id: "open-current-path", section: "创建", title: "打开当前路径", shortcut: "Path", keywords: "folder cwd file markdown image preview") {
-                run {
-                    model.openCurrentPathForFocusedTerminal()
-                }
-            },
-            CommandPaletteItem(id: "duplicate-tab", section: "创建", title: "复制当前标签", shortcut: "Duplicate", keywords: "copy tab duplicate") {
+            CommandPaletteItem(id: "duplicate-tab", section: L("创建", "Create"), title: L("复制当前标签", "Duplicate Current Tab"), shortcut: "Duplicate", keywords: "copy tab duplicate") {
                 run {
                     model.duplicateSelectedTab()
                 }
             },
-            CommandPaletteItem(id: "split-right", section: "创建", title: "向右分屏", shortcut: "Cmd-D", disabled: !model.canSplit, disabledReason: "当前布局已到可用分屏上限", keywords: "split right vertical") {
+            CommandPaletteItem(id: "split-right", section: L("创建", "Create"), title: L("向右分屏", "Split Right"), shortcut: "Cmd-D", disabled: !model.canSplit, disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split right vertical") {
                 run {
                     model.splitRight()
                 }
             },
-            CommandPaletteItem(id: "split-down", section: "创建", title: "向下分屏", shortcut: "Cmd-Shift-D", disabled: !model.canSplit, disabledReason: "当前布局已到可用分屏上限", keywords: "split down horizontal") {
+            CommandPaletteItem(id: "split-down", section: L("创建", "Create"), title: L("向下分屏", "Split Down"), shortcut: "Cmd-Shift-D", disabled: !model.canSplit, disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split down horizontal") {
                 run {
                     model.splitDown()
                 }
             },
-            CommandPaletteItem(id: "next-tab", section: "导航", title: "下一个标签", shortcut: "Cmd-]", keywords: "next tab") {
+            CommandPaletteItem(id: "next-tab", section: L("导航", "Navigate"), title: L("下一个标签", "Next Tab"), shortcut: "Cmd-]", keywords: "next tab") {
                 run {
                     model.selectNextTab()
                 }
             },
-            CommandPaletteItem(id: "previous-tab", section: "导航", title: "上一个标签", shortcut: "Cmd-[", keywords: "previous tab") {
+            CommandPaletteItem(id: "previous-tab", section: L("导航", "Navigate"), title: L("上一个标签", "Previous Tab"), shortcut: "Cmd-[", keywords: "previous tab") {
                 run {
                     model.selectPreviousTab()
                 }
             },
-            CommandPaletteItem(id: "next-pane", section: "导航", title: "下一个分屏", shortcut: "Cmd-Shift-]", keywords: "next pane focus") {
+            CommandPaletteItem(id: "next-pane", section: L("导航", "Navigate"), title: L("下一个分屏", "Next Pane"), shortcut: "Cmd-Shift-]", keywords: "next pane focus") {
                 run {
                     model.focusNextPane()
                 }
             },
-            CommandPaletteItem(id: "previous-pane", section: "导航", title: "上一个分屏", shortcut: "Cmd-Shift-[", keywords: "previous pane focus") {
+            CommandPaletteItem(id: "previous-pane", section: L("导航", "Navigate"), title: L("上一个分屏", "Previous Pane"), shortcut: "Cmd-Shift-[", keywords: "previous pane focus") {
                 run {
                     model.focusPreviousPane()
                 }
             },
-            CommandPaletteItem(id: "notifications", section: "导航", title: "通知中心", shortcut: "\(model.notifications.snapshot.unreadCount)", keywords: "notification unread agent") {
+            CommandPaletteItem(id: "notifications", section: L("导航", "Navigate"), title: L("通知中心", "Notification Center"), shortcut: "Cmd-Opt-N", keywords: "notification unread agent") {
                 run {
                     model.toggleNotificationPanel()
                 }
             },
             CommandPaletteItem(
                 id: "jump-unread",
-                section: "导航",
-                title: "跳到最新未读",
-                shortcut: "Unread",
+                section: L("导航", "Navigate"),
+                title: L("跳到最新未读", "Jump to Latest Unread"),
+                shortcut: "Cmd-Opt-J",
                 disabled: model.notifications.snapshot.latestUnread == nil,
-                disabledReason: "没有未读通知",
+                disabledReason: L("没有未读通知", "No unread notifications"),
                 keywords: "notification unread jump"
             ) {
                 run {
                     _ = model.jumpToLatestUnread()
                 }
             },
-            CommandPaletteItem(id: "close-tab", section: "整理", title: "关闭标签", shortcut: "Cmd-W", keywords: "close tab") {
+            CommandPaletteItem(id: "context-search", section: L("导航", "Navigate"), title: L("上下文搜索", "Context Search"), shortcut: "Cmd-F", keywords: "find search terminal context") {
+                run {
+                    model.showTerminalSearch()
+                }
+            },
+            CommandPaletteItem(
+                id: "find-next",
+                section: L("导航", "Navigate"),
+                title: L("下一个搜索结果", "Find Next"),
+                shortcut: "Cmd-G",
+                disabled: !model.terminalSearchVisible,
+                disabledReason: L("先打开上下文搜索", "Open Context Search first"),
+                keywords: "find next search result"
+            ) {
+                run {
+                    model.navigateTerminalSearch(previous: false)
+                }
+            },
+            CommandPaletteItem(
+                id: "find-previous",
+                section: L("导航", "Navigate"),
+                title: L("上一个搜索结果", "Find Previous"),
+                shortcut: "Cmd-Shift-G",
+                disabled: !model.terminalSearchVisible,
+                disabledReason: L("先打开上下文搜索", "Open Context Search first"),
+                keywords: "find previous search result"
+            ) {
+                run {
+                    model.navigateTerminalSearch(previous: true)
+                }
+            },
+            CommandPaletteItem(id: "focus-left", section: L("导航", "Navigate"), title: L("聚焦左侧分屏", "Focus Pane Left"), shortcut: "Cmd-Opt-←", keywords: "focus pane left") {
+                run {
+                    model.focusPane(direction: .left)
+                }
+            },
+            CommandPaletteItem(id: "focus-right", section: L("导航", "Navigate"), title: L("聚焦右侧分屏", "Focus Pane Right"), shortcut: "Cmd-Opt-→", keywords: "focus pane right") {
+                run {
+                    model.focusPane(direction: .right)
+                }
+            },
+            CommandPaletteItem(id: "focus-up", section: L("导航", "Navigate"), title: L("聚焦上方分屏", "Focus Pane Up"), shortcut: "Cmd-Opt-↑", keywords: "focus pane up") {
+                run {
+                    model.focusPane(direction: .up)
+                }
+            },
+            CommandPaletteItem(id: "focus-down", section: L("导航", "Navigate"), title: L("聚焦下方分屏", "Focus Pane Down"), shortcut: "Cmd-Opt-↓", keywords: "focus pane down") {
+                run {
+                    model.focusPane(direction: .down)
+                }
+            },
+            CommandPaletteItem(id: "close-tab", section: L("整理", "Organize"), title: L("关闭标签", "Close Tab"), shortcut: "Cmd-W", keywords: "close tab") {
                 run {
                     model.closeSelectedTab()
                 }
             },
-            CommandPaletteItem(id: "close-pane", section: "整理", title: "关闭分屏", shortcut: "Cmd-Shift-W", disabled: !model.canCloseFocusedPane, disabledReason: "至少保留一个分屏", keywords: "close pane split") {
+            CommandPaletteItem(id: "close-pane", section: L("整理", "Organize"), title: L("关闭分屏", "Close Pane"), shortcut: "Cmd-Shift-W", disabled: !model.canCloseFocusedPane, disabledReason: L("至少保留一个分屏", "Keep at least one pane"), keywords: "close pane split") {
                 run {
                     model.closePane(model.workspace.focusedPaneID)
                 }
             },
-            CommandPaletteItem(id: "move-tab-left", section: "整理", title: "标签左移", shortcut: "Cmd-Shift-,", disabled: !model.canMoveSelectedTabLeft, disabledReason: "已经在最左侧", keywords: "move tab left") {
+            CommandPaletteItem(id: "move-tab-left", section: L("整理", "Organize"), title: L("标签左移", "Move Tab Left"), shortcut: "Cmd-Shift-,", disabled: !model.canMoveSelectedTabLeft, disabledReason: L("已经在最左侧", "Already on the left"), keywords: "move tab left") {
                 run {
                     model.moveSelectedTabLeft()
                 }
             },
-            CommandPaletteItem(id: "move-tab-right", section: "整理", title: "标签右移", shortcut: "Cmd-Shift-.", disabled: !model.canMoveSelectedTabRight, disabledReason: "已经在最右侧", keywords: "move tab right") {
+            CommandPaletteItem(id: "move-tab-right", section: L("整理", "Organize"), title: L("标签右移", "Move Tab Right"), shortcut: "Cmd-Shift-.", disabled: !model.canMoveSelectedTabRight, disabledReason: L("已经在最右侧", "Already on the right"), keywords: "move tab right") {
                 run {
                     model.moveSelectedTabRight()
                 }
             },
-            CommandPaletteItem(id: "move-tab-next-pane", section: "整理", title: "移到下一个分屏", shortcut: "Cmd-Opt-M", disabled: !model.canMoveSelectedTabToNextPane, disabledReason: "需要另一个分屏", keywords: "move tab pane") {
+            CommandPaletteItem(id: "move-tab-next-pane", section: L("整理", "Organize"), title: L("移到下一个分屏", "Move to Next Pane"), shortcut: "Cmd-Opt-M", disabled: !model.canMoveSelectedTabToNextPane, disabledReason: L("需要另一个分屏", "Requires another pane"), keywords: "move tab pane") {
                 run {
                     model.moveSelectedTabToNextPane()
                 }
             },
-            CommandPaletteItem(id: "move-tab-new-split", section: "整理", title: "移到右侧新分屏", shortcut: "Cmd-Opt-Shift-M", disabled: !model.canMoveSelectedTabToNewSplit, disabledReason: "需要可移动标签和可用分屏空间", keywords: "move tab new split") {
+            CommandPaletteItem(id: "move-tab-new-split", section: L("整理", "Organize"), title: L("移到右侧新分屏", "Move to New Right Split"), shortcut: "Cmd-Opt-Shift-M", disabled: !model.canMoveSelectedTabToNewSplit, disabledReason: L("需要可移动标签和可用分屏空间", "Requires a movable tab and split space"), keywords: "move tab new split") {
                 run {
                     model.moveSelectedTabToNewSplit(.right)
                 }
             },
+            CommandPaletteItem(id: "resize-left", section: L("整理", "Organize"), title: L("向左调整分屏", "Resize Pane Left"), shortcut: "Cmd-Shift-←", disabled: model.workspace.root.leaves.count <= 1, disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split left") {
+                run {
+                    model.resizeFocusedSplit(direction: .left)
+                }
+            },
+            CommandPaletteItem(id: "resize-right", section: L("整理", "Organize"), title: L("向右调整分屏", "Resize Pane Right"), shortcut: "Cmd-Shift-→", disabled: model.workspace.root.leaves.count <= 1, disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split right") {
+                run {
+                    model.resizeFocusedSplit(direction: .right)
+                }
+            },
+            CommandPaletteItem(id: "resize-up", section: L("整理", "Organize"), title: L("向上调整分屏", "Resize Pane Up"), shortcut: "Cmd-Shift-↑", disabled: model.workspace.root.leaves.count <= 1, disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split up") {
+                run {
+                    model.resizeFocusedSplit(direction: .up)
+                }
+            },
+            CommandPaletteItem(id: "resize-down", section: L("整理", "Organize"), title: L("向下调整分屏", "Resize Pane Down"), shortcut: "Cmd-Shift-↓", disabled: model.workspace.root.leaves.count <= 1, disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split down") {
+                run {
+                    model.resizeFocusedSplit(direction: .down)
+                }
+            },
             CommandPaletteItem(
                 id: "toggle-zoom",
-                section: "视图",
-                title: model.workspace.isZoomed ? "还原当前分屏" : "放大当前分屏",
-                shortcut: "Cmd-Z",
+                section: L("视图", "View"),
+                title: model.workspace.isZoomed ? L("还原当前分屏", "Restore Current Pane") : L("放大当前分屏", "Zoom Current Pane"),
+                shortcut: "Cmd-Opt-Z",
                 disabled: model.workspace.root.leaves.count <= 1,
-                disabledReason: "需要多个分屏",
+                disabledReason: L("需要多个分屏", "Requires multiple panes"),
                 keywords: "zoom pane"
             ) {
                 run {
                     model.toggleZoom()
                 }
             },
-            CommandPaletteItem(id: "equalize-splits", section: "视图", title: "均分分屏", shortcut: "Cmd-Shift-=", disabled: model.workspace.root.leaves.count <= 1, disabledReason: "需要多个分屏", keywords: "equalize split layout") {
+            CommandPaletteItem(id: "equalize-splits", section: L("视图", "View"), title: L("均分分屏", "Equalize Splits"), shortcut: "Cmd-Shift-=", disabled: model.workspace.root.leaves.count <= 1, disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "equalize split layout") {
                 run {
                     model.equalizeSplits()
                 }
             },
-            CommandPaletteItem(id: "workspace-overview", section: "视图", title: "工作区总览", shortcut: "Cmd-O", keywords: "workspace overview mission control") {
+            CommandPaletteItem(id: "flash-focused-pane", section: L("视图", "View"), title: L("闪烁当前分屏", "Flash Focused Pane"), shortcut: "Cmd-Shift-H", keywords: "flash highlight focused pane") {
+                run {
+                    model.flashFocusedPane()
+                }
+            },
+            CommandPaletteItem(id: "workspace-overview", section: L("视图", "View"), title: L("工作区总览", "Workspace Overview"), shortcut: "Cmd-O", keywords: "workspace overview mission control") {
                 run {
                     model.toggleWorkspaceOverview()
                 }
             },
-            CommandPaletteItem(id: "appearance-settings", section: "视图", title: "外观设置", shortcut: "Theme", keywords: "appearance theme settings") {
+            CommandPaletteItem(id: "toggle-fullscreen", section: L("视图", "View"), title: L("切换全屏", "Toggle Full Screen"), shortcut: "Ctrl-Cmd-F", keywords: "fullscreen window mac") {
+                run {
+                    NSApp.keyWindow?.toggleFullScreen(nil)
+                }
+            },
+            CommandPaletteItem(id: "appearance-settings", section: L("视图", "View"), title: L("外观设置", "Appearance Settings"), shortcut: "Cmd-,", keywords: "appearance theme settings") {
                 run {
                     model.toggleSettingsPanel()
                 }
             },
-            CommandPaletteItem(id: "duplicate-workspace", section: "视图", title: "复制工作区", shortcut: "Duplicate", keywords: "workspace duplicate") {
+            CommandPaletteItem(id: "duplicate-workspace", section: L("视图", "View"), title: L("复制工作区", "Duplicate Workspace"), shortcut: "Duplicate", keywords: "workspace duplicate") {
                 run {
                     model.duplicateWorkspace(model.workspace.id)
                 }
             },
-            CommandPaletteItem(id: "reset-workspace", section: "视图", title: "重置工作区", shortcut: "Reset", keywords: "workspace reset") {
+            CommandPaletteItem(id: "reset-workspace", section: L("视图", "View"), title: L("重置工作区", "Reset Workspace"), shortcut: "Reset", keywords: "workspace reset") {
                 run {
                     model.resetWorkspace()
                 }
             },
-            CommandPaletteItem(id: "clear-notifications", section: "整理", title: "清空通知", shortcut: "Clear", disabled: model.notifications.records.isEmpty, disabledReason: "通知中心为空", keywords: "notification clear") {
+            CommandPaletteItem(id: "clear-notifications", section: L("整理", "Organize"), title: L("清空通知", "Clear Notifications"), shortcut: "Clear", disabled: model.notifications.records.isEmpty, disabledReason: L("通知中心为空", "Notification Center is empty"), keywords: "notification clear") {
                 run {
                     model.clearAllNotifications()
                 }
             },
-            CommandPaletteItem(id: "install-codex-hooks", section: "集成", title: "连接 Codex 完成通知", shortcut: "Codex", keywords: "codex hooks notification agent") {
-                run {
-                    model.installCodexNotificationHooks()
-                }
-            },
-            CommandPaletteItem(id: "debug-notification", section: "调试", title: "模拟当前终端通知", shortcut: "Test", keywords: "notification test") {
+            CommandPaletteItem(id: "debug-notification", section: L("通知", "Notifications"), title: L("发送测试通知", "Send Test Notification"), shortcut: "Test", keywords: "notification test") {
                 run {
                     model.notifyFocusedTerminalForTesting()
                 }
@@ -577,7 +901,7 @@ private enum ConductorCommandCatalog {
     @MainActor
     static func shortcutGuideItems(model: ConductorWindowModel) -> [CommandShortcutGuideItem] {
         items(model: model) { _ in }
-            .filter { $0.section != "调试" }
+            .filter { $0.section != L("调试", "Debug") }
             .map { command in
                 CommandShortcutGuideItem(
                     id: command.id,
@@ -601,6 +925,7 @@ private struct CommandShortcutGuideItem: Identifiable {
 private struct CommandSectionTitle: View {
     let title: String
     @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
 
     init(_ title: String) {
         self.title = title
@@ -609,7 +934,7 @@ private struct CommandSectionTitle: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(title)
-                .font(.system(size: 10.5, weight: .semibold))
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
             Rectangle()
                 .fill(theme.floatingSeparator)
@@ -627,12 +952,13 @@ private struct CommandButton: View {
     var onHover: () -> Void = {}
     @State private var hovering = false
     @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 9) {
                 Image(systemName: command.systemImage)
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(iconColor)
                     .frame(width: 24, height: 24)
                     .background(iconFill)
@@ -640,12 +966,12 @@ private struct CommandButton: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(command.title)
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
                         .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.primaryText)
                         .lineLimit(1)
                     if let disabledReason = command.disabledReason, command.disabled {
                         Text(disabledReason)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
                             .foregroundStyle(ConductorDesign.tertiaryText)
                             .lineLimit(1)
                     }
@@ -654,7 +980,7 @@ private struct CommandButton: View {
                 Spacer(minLength: 8)
 
                 Text(command.shortcut)
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
                     .padding(.horizontal, 7)
                     .frame(height: 19)
@@ -674,10 +1000,10 @@ private struct CommandButton: View {
         .buttonStyle(.plain)
         .disabled(command.disabled)
         .opacity(command.disabled ? 0.62 : 1)
-        .animation(ConductorMotion.micro, value: selected)
-        .animation(ConductorMotion.micro, value: hovering)
+        .animation(ConductorMotion.selection, value: selected)
+        .animation(ConductorMotion.hover, value: hovering)
         .onHover { value in
-            withAnimation(ConductorMotion.micro) {
+            ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }
             if value {
@@ -713,7 +1039,7 @@ private struct CommandButton: View {
 
 private struct AppearanceSettingsPanel: View {
     @ObservedObject var model: ConductorWindowModel
-    @State private var selectedSection: SettingsPanelSection = .interface
+    @State private var selectedSection: SettingsPanelSection = .themes
     @Environment(\.conductorTheme) private var theme
 
     private let columns = [
@@ -722,17 +1048,13 @@ private struct AppearanceSettingsPanel: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.18)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-
             ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(spacing: 0) {
                     FloatingPanelHeader(
                         systemImage: "gearshape",
-                        title: "设置",
+                        title: L("设置", "Settings"),
                         subtitle: model.theme.title,
-                        closeHelp: "关闭设置"
+                        closeHelp: L("关闭设置", "Close Settings")
                     ) {
                         model.hideSettingsPanel()
                     }
@@ -769,7 +1091,7 @@ private struct AppearanceSettingsPanel: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SidebarSectionTitle("分类")
+            SidebarSectionTitle(L("分类", "Categories"))
 
             VStack(spacing: 3) {
                 ForEach(SettingsPanelSection.allCases) { section in
@@ -777,7 +1099,7 @@ private struct AppearanceSettingsPanel: View {
                         section: section,
                         selected: selectedSection == section
                     ) {
-                        model.performShellMotion {
+                        model.performShellMotion(ConductorMotion.selection) {
                             selectedSection = section
                         }
                     }
@@ -814,78 +1136,81 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var interfaceSettings: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionLabel("界面")
-            AppearanceSegmentedControl(
-                title: "密度",
-                options: AppearanceDensity.allCases,
-                selection: Binding(
-                    get: { model.appearance.density },
-                    set: { density in
-                        model.performShellMotion {
-                            model.setAppearanceDensity(density)
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 9) {
+                SettingsSectionLabel(L("语言", "Language"))
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 9) {
+                    ForEach(AppearanceLanguage.allCases) { language in
+                        SettingsOptionCard(
+                            title: language.title,
+                            subtitle: language.subtitle,
+                            systemImage: "character.bubble",
+                            selected: model.appearance.language == language
+                        ) {
+                            model.performShellMotion(ConductorMotion.selection) {
+                                model.setLanguage(language)
+                            }
                         }
                     }
-                ),
-                titleForOption: \.title,
-                subtitleForOption: \.subtitle
-            )
-            AppearanceSegmentedControl(
-                title: "清晰度",
-                options: ChromeClarity.allCases,
-                selection: Binding(
-                    get: { model.appearance.chromeClarity },
-                    set: { clarity in
-                        model.performShellMotion {
-                            model.setChromeClarity(clarity)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 9) {
+                SettingsSectionLabel(L("字体", "Font"))
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 9) {
+                    ForEach(AppearanceFontFamily.allCases) { family in
+                        SettingsOptionCard(
+                            title: family.title,
+                            subtitle: family.subtitle,
+                            systemImage: family.systemImage,
+                            selected: model.appearance.fontFamily == family,
+                            fontFamily: family
+                        ) {
+                            model.performShellMotion(ConductorMotion.selection) {
+                                model.setFontFamily(family)
+                            }
                         }
                     }
-                ),
-                titleForOption: \.title,
-                subtitleForOption: \.subtitle
-            )
-            AppearanceSegmentedControl(
-                title: "字体",
-                options: AppearanceFontScale.allCases,
-                selection: Binding(
-                    get: { model.appearance.fontScale },
-                    set: { fontScale in
-                        model.performShellMotion {
-                            model.setFontScale(fontScale)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 9) {
+                SettingsSectionLabel(L("字号", "Font Size"))
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 9) {
+                    ForEach(AppearanceFontScale.allCases) { scale in
+                        SettingsOptionCard(
+                            title: scale.title,
+                            subtitle: scale.subtitle,
+                            systemImage: "textformat.size",
+                            selected: model.appearance.fontScale == scale
+                        ) {
+                            model.performShellMotion(ConductorMotion.selection) {
+                                model.setFontScale(scale)
+                            }
                         }
                     }
-                ),
-                titleForOption: \.title,
-                subtitleForOption: \.subtitle
-            )
-            AppearanceToggleRow(
-                title: "降低动态效果",
-                subtitle: "减少面板、tab 和选中反馈的过渡",
-                isOn: Binding(
-                    get: { model.appearance.reducedMotion },
-                    set: { model.setReducedMotion($0) }
-                )
-            )
+                }
+            }
         }
     }
 
     private var commandSettings: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SettingsSectionLabel("命令与快捷键")
+            SettingsSectionLabel(L("命令与快捷键", "Commands and Shortcuts"))
             CommandShortcutGuide(model: model, height: 372)
         }
     }
 
     private var themeSettings: some View {
         VStack(alignment: .leading, spacing: 9) {
-            SettingsSectionLabel("全壳主题")
+            SettingsSectionLabel(L("全壳主题", "Shell Themes"))
             LazyVGrid(columns: columns, alignment: .leading, spacing: 9) {
                 ForEach(TerminalTheme.allCases) { theme in
                     ThemePreviewCard(
                         theme: theme,
                         selected: model.theme == theme
                     ) {
-                        model.performShellMotion {
+                        model.performShellMotion(ConductorMotion.selection) {
                             model.theme = theme
                         }
                     }
@@ -905,33 +1230,121 @@ private enum SettingsPanelSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .interface:
-            "界面"
+            L("界面", "Interface")
         case .commands:
-            "命令"
+            L("命令", "Commands")
         case .themes:
-            "主题"
+            L("主题", "Themes")
         }
     }
 
     var subtitle: String {
         switch self {
         case .interface:
-            "密度、清晰度、字体和动态效果"
+            L("语言、字体和字号", "Language, font, and size")
         case .commands:
-            "Command Center 与快捷入口"
+            L("Command Center 与快捷入口", "Command Center and shortcuts")
         case .themes:
-            "整套窗口、终端和强调色"
+            L("整套窗口、终端和强调色", "Window, terminal, and accent colors")
         }
     }
 
     var systemImage: String {
         switch self {
         case .interface:
-            "rectangle.3.group"
+            "textformat"
         case .commands:
             "command"
         case .themes:
             "swatchpalette"
+        }
+    }
+}
+
+private struct SettingsOptionCard: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let selected: Bool
+    var fontFamily: AppearanceFontFamily? = nil
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorFontFamily) private var activeFontFamily
+    @Environment(\.conductorTheme) private var theme
+
+    private var resolvedFontFamily: AppearanceFontFamily {
+        fontFamily ?? activeFontFamily
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: systemImage)
+                    .font(.conductorSystem(size: 13, weight: .semibold, family: resolvedFontFamily, scale: fontScale))
+                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
+                    .frame(width: 20, height: 20)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.conductorSystem(size: 12, weight: .semibold, family: resolvedFontFamily, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.primaryText)
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.conductorSystem(size: 10, weight: .medium, family: resolvedFontFamily, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.tertiaryText.opacity(0.70))
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 58)
+            .background(cardFill)
+            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row + 2, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.row + 2, style: .continuous)
+                    .stroke(selected ? theme.floatingSelectedStroke : theme.floatingStroke.opacity(hovering ? 0.86 : 0.54), lineWidth: selected ? 1.2 : 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row + 2, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { value in
+            ConductorMotion.perform(ConductorMotion.hover) {
+                hovering = value
+            }
+        }
+        .animation(ConductorMotion.hover, value: hovering)
+        .animation(ConductorMotion.selection, value: selected)
+        .help(title)
+    }
+
+    private var cardFill: Color {
+        if selected {
+            return theme.floatingSelectedFill
+        }
+        if hovering {
+            return theme.floatingHoverFill
+        }
+        return theme.floatingControlFill.opacity(0.56)
+    }
+}
+
+private extension AppearanceFontFamily {
+    var systemImage: String {
+        switch self {
+        case .system:
+            "textformat"
+        case .rounded:
+            "textformat.alt"
+        case .serif:
+            "textformat.abc"
+        case .monospaced:
+            "number"
         }
     }
 }
@@ -967,97 +1380,23 @@ private struct SettingsSidebarItem: View {
         }
         .buttonStyle(ConductorPressButtonStyle())
         .onHover { value in
-            withAnimation(ConductorMotion.micro) {
+            ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }
         }
-        .animation(ConductorMotion.standard, value: selected)
-        .animation(ConductorMotion.micro, value: hovering)
+        .animation(ConductorMotion.selection, value: selected)
+        .animation(ConductorMotion.hover, value: hovering)
         .help(section.title)
     }
 
     private var rowFill: Color {
         if selected {
-            return theme.shellSelectedFill
+            return theme.floatingSelectedFill
         }
         if hovering {
-            return theme.shellHoverFill
+            return theme.floatingHoverFill
         }
         return Color.clear
-    }
-}
-
-private struct AppearanceSegmentedControl<Option: Identifiable & Hashable>: View {
-    let title: String
-    let options: [Option]
-    @Binding var selection: Option
-    let titleForOption: (Option) -> String
-    let subtitleForOption: (Option) -> String
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.secondaryText)
-
-            HStack(spacing: 5) {
-                ForEach(options) { option in
-                    Button {
-                        selection = option
-                    } label: {
-                        Text(titleForOption(option))
-                            .font(.conductorSystem(size: 11, weight: selection == option ? .bold : .semibold, scale: fontScale))
-                            .foregroundStyle(selection == option ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
-                            .lineLimit(1)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 28)
-                        .background(selection == option ? theme.floatingSelectedFill : Color.clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(selection == option ? theme.floatingSelectedStroke : Color.clear, lineWidth: 1)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .help("\(titleForOption(option)) · \(subtitleForOption(option))")
-                }
-            }
-            .padding(3)
-            .background(theme.floatingControlFill)
-            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(theme.floatingStroke, lineWidth: 1)
-            }
-        }
-    }
-}
-
-private struct AppearanceToggleRow: View {
-    let title: String
-    let subtitle: String
-    @Binding var isOn: Bool
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        Toggle(isOn: $isOn) {
-            Text(title)
-                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.primaryText)
-        }
-        .toggleStyle(.switch)
-        .padding(.vertical, 7)
-        .padding(.horizontal, 9)
-        .background(theme.floatingControlFill)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(theme.floatingStroke, lineWidth: 1)
-        }
-        .help(subtitle)
     }
 }
 
@@ -1122,7 +1461,7 @@ private struct CommandShortcutGuideRow: View {
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .padding(.horizontal, 6)
                 .frame(height: 17)
-                .background(theme.shellSelectedFill)
+                .background(theme.floatingSelectedFill)
                 .clipShape(Capsule())
         }
         .padding(.horizontal, 8)
@@ -1170,11 +1509,11 @@ private struct ThemePreviewCard: View {
         }
         .buttonStyle(.plain)
         .onHover { value in
-            withAnimation(ConductorMotion.micro) {
+            ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }
         }
-        .animation(ConductorMotion.micro, value: selected)
+        .animation(ConductorMotion.selection, value: selected)
         .help(theme.title)
     }
 
@@ -1313,6 +1652,7 @@ private struct WorkspaceOverviewPanel: View {
     @State private var highlightedWorkspaceID: WorkspaceID?
     @FocusState private var searchFocused: Bool
     @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
 
     private let columns = [
         GridItem(.adaptive(minimum: 214, maximum: 236), spacing: 10)
@@ -1334,10 +1674,6 @@ private struct WorkspaceOverviewPanel: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.18)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-
             ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 11) {
                     header
@@ -1407,17 +1743,16 @@ private struct WorkspaceOverviewPanel: View {
             .onExitCommand {
                 model.hideWorkspaceOverview()
             }
-            .animation(ConductorMotion.standard, value: highlightedWorkspaceID)
-            .animation(ConductorMotion.micro, value: query)
+            .animation(ConductorMotion.selection, value: highlightedWorkspaceID)
         }
     }
 
     private var header: some View {
         FloatingPanelHeader(
-            systemImage: "rectangle.3.group",
-            title: "工作区总览",
-            subtitle: "\(model.workspaces.count) 个工作区",
-            closeHelp: "关闭总览"
+            systemImage: WorkspaceChromeGlyph.systemName(selected: false),
+            title: L("工作区总览", "Workspace Overview"),
+            subtitle: L("\(model.workspaces.count) 个工作区", "\(model.workspaces.count) workspaces"),
+            closeHelp: L("关闭总览", "Close Overview")
         ) {
             model.hideWorkspaceOverview()
         }
@@ -1426,14 +1761,14 @@ private struct WorkspaceOverviewPanel: View {
     private var searchField: some View {
         HStack(spacing: 7) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
-            TextField("搜索工作区", text: $query)
+            TextField(L("搜索工作区", "Search workspaces"), text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13, weight: .medium))
+                .font(.conductorSystem(size: 13, weight: .medium, scale: fontScale))
                 .focused($searchFocused)
             Text("↵")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
         }
         .padding(.horizontal, 10)
@@ -1448,11 +1783,11 @@ private struct WorkspaceOverviewPanel: View {
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Image(systemName: "rectangle.3.group")
-                .font(.system(size: 24, weight: .medium))
+            Image(systemName: WorkspaceChromeGlyph.systemName(selected: false))
+                .font(.conductorSystem(size: 24, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
-            Text("没有匹配的工作区")
-                .font(.system(size: 12.5, weight: .semibold))
+            Text(L("没有匹配的工作区", "No matching workspaces"))
+                .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
         }
         .frame(maxWidth: .infinity)
@@ -1498,9 +1833,7 @@ private struct WorkspaceOverviewPanel: View {
     }
 
     private func openWorkspace(_ workspaceID: WorkspaceID) {
-        ConductorMotion.perform {
-            model.selectWorkspace(workspaceID)
-        }
+        model.selectWorkspace(workspaceID)
     }
 }
 
@@ -1514,13 +1847,14 @@ private struct WorkspaceOverviewCard: View {
     let action: () -> Void
     let onHover: () -> Void
     @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
 
     private var terminalCount: Int {
         workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
     }
 
     private var focusedTerminalTitle: String {
-        workspace.focusedPane?.selectedTab?.title ?? "终端"
+        workspace.focusedPane?.selectedTab?.title ?? L("终端", "Terminal")
     }
 
     var body: some View {
@@ -1535,19 +1869,19 @@ private struct WorkspaceOverviewCard: View {
 
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 7) {
-                        Image(systemName: selected ? "rectangle.3.group.fill" : "rectangle.3.group")
-                            .font(.system(size: 11.5, weight: .semibold))
+                        Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
+                            .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
                             .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
                             .frame(width: 16)
                         Text(workspace.title)
-                            .font(.system(size: 12.5, weight: .semibold))
+                            .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
                             .foregroundStyle(ConductorDesign.primaryText)
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer(minLength: 0)
                         if unreadCount > 0 {
                             Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 5)
                                 .frame(minWidth: 16, minHeight: 15)
@@ -1560,12 +1894,12 @@ private struct WorkspaceOverviewCard: View {
                         WorkspaceOverviewMetric(systemImage: "square.split.2x2", value: "\(workspace.panes.count)")
                         WorkspaceOverviewMetric(systemImage: "terminal", value: "\(terminalCount)")
                         if workspace.isZoomed {
-                            WorkspaceOverviewMetric(systemImage: "arrow.up.left.and.arrow.down.right", value: "Zoom")
+                            WorkspaceOverviewMetric(systemImage: "arrow.up.left.and.arrow.down.right", value: L("放大", "Zoom"))
                         }
                     }
 
                     Text(focusedTerminalTitle)
-                        .font(.system(size: 10.5, weight: .medium))
+                        .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
                         .foregroundStyle(ConductorDesign.tertiaryText)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -1582,17 +1916,17 @@ private struct WorkspaceOverviewCard: View {
         }
         .buttonStyle(.plain)
         .onHover { value in
-            withAnimation(ConductorMotion.micro) {
+            ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }
             if value {
                 onHover()
             }
         }
-        .animation(ConductorMotion.standard, value: selected)
-        .animation(ConductorMotion.standard, value: highlighted)
+        .animation(ConductorMotion.selection, value: selected)
+        .animation(ConductorMotion.selection, value: highlighted)
         .animation(ConductorMotion.emphasized, value: unreadCount)
-        .help("\(workspace.title) · \(workspace.panes.count) 分屏 · \(terminalCount) 终端")
+        .help("\(workspace.title) · \(workspace.panes.count) \(L("分屏", "panes")) · \(terminalCount) \(L("终端", "terminals"))")
     }
 
     private var cardFill: Color {
@@ -1620,13 +1954,14 @@ private struct WorkspaceOverviewMetric: View {
     let systemImage: String
     let value: String
     @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: systemImage)
-                .font(.system(size: 9.5, weight: .semibold))
+                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
             Text(value)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                 .lineLimit(1)
         }
         .foregroundStyle(ConductorDesign.secondaryText)
@@ -1786,6 +2121,7 @@ private struct WorkspaceMiniPane: View {
 struct NotificationPanelView: View {
     @ObservedObject var model: ConductorWindowModel
     @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
@@ -1831,35 +2167,35 @@ struct NotificationPanelView: View {
             minWidth: ConductorTokens.Space.notificationPanelMinWidth,
             minHeight: ConductorTokens.Space.notificationPanelMinHeight
         )
-        .animation(ConductorMotion.layout, value: model.notifications.records.map(\.id))
+        .animation(ConductorMotion.list, value: model.notifications.records.map(\.id))
         .animation(ConductorMotion.emphasized, value: model.notifications.snapshot.unreadCount)
     }
 
     private var notificationHeader: some View {
         FloatingPanelHeader(
             systemImage: model.notifications.snapshot.unreadCount > 0 ? "bell.badge.fill" : "bell",
-            title: "通知",
-            subtitle: model.notifications.records.isEmpty ? "暂无通知" : "\(model.notifications.records.count) 条记录",
-            closeHelp: "关闭通知"
+            title: L("通知", "Notifications"),
+            subtitle: model.notifications.records.isEmpty ? L("暂无通知", "No notifications") : L("\(model.notifications.records.count) 条记录", "\(model.notifications.records.count) records"),
+            closeHelp: L("关闭通知", "Close Notifications")
         ) {
             model.hideNotificationPanel()
         } trailing: {
-            Button("跳转") {
-                ConductorMotion.perform {
+            Button(L("跳转", "Jump")) {
+                ConductorMotion.perform(ConductorMotion.selection) {
                     _ = model.jumpToLatestUnread()
                 }
             }
             .buttonStyle(ConductorPressButtonStyle())
-            .font(.system(size: 10.5, weight: .semibold))
+            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
             .foregroundStyle(model.notifications.snapshot.latestUnread == nil ? ConductorDesign.tertiaryText : theme.floatingEmphasis)
             .disabled(model.notifications.snapshot.latestUnread == nil)
-            Button("清空") {
-                ConductorMotion.perform(ConductorMotion.layout) {
+            Button(L("清空", "Clear")) {
+                ConductorMotion.perform(ConductorMotion.list) {
                     model.clearAllNotifications()
                 }
             }
             .buttonStyle(ConductorPressButtonStyle())
-            .font(.system(size: 10.5, weight: .semibold))
+            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
             .foregroundStyle(model.notifications.records.isEmpty ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
             .disabled(model.notifications.records.isEmpty)
         }
@@ -1871,22 +2207,22 @@ struct NotificationPanelView: View {
     private var emptyNotifications: some View {
         VStack(spacing: 6) {
             Image(systemName: "bell.slash")
-                .font(.system(size: 21, weight: .medium))
+                .font(.conductorSystem(size: 21, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
-            Text("暂无通知")
-                .font(.system(size: 12, weight: .semibold))
+            Text(L("暂无通知", "No notifications"))
+                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
-            Text("Codex 完成、终端通知和响铃都会出现在这里")
-                .font(.system(size: 10.5, weight: .medium))
+            Text(L("终端通知、响铃和任务完成都会出现在这里", "Terminal notifications, bells, and task completions appear here"))
+                .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .multilineTextAlignment(.center)
             Button {
-                ConductorMotion.perform {
-                    model.installCodexNotificationHooks()
+                ConductorMotion.perform(ConductorMotion.emphasized) {
+                    model.notifyFocusedTerminalForTesting()
                 }
             } label: {
-                Label("连接 Codex", systemImage: "bolt.horizontal.circle")
-                    .font(.system(size: 10.5, weight: .semibold))
+                Label(L("发送测试通知", "Send Test Notification"), systemImage: "bell.badge")
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     .padding(.horizontal, 9)
                     .frame(height: 23)
                     .background(theme.floatingControlStrongFill)
@@ -1908,7 +2244,7 @@ struct NotificationPanelView: View {
                 }
             }
         }
-        return "终端"
+        return L("终端", "Terminal")
     }
 }
 
@@ -1920,15 +2256,16 @@ private struct NotificationRowView: View {
     let onClear: () -> Void
     @State private var hovering = false
     @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
             Button {
-                ConductorMotion.perform(onOpen)
+                onOpen()
             } label: {
                 HStack(alignment: .top, spacing: 7) {
                     Image(systemName: iconName)
-                        .font(.system(size: 10.5, weight: .semibold))
+                        .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                         .foregroundStyle(iconColor)
                         .frame(width: 22, height: 22)
                         .background(
@@ -1960,17 +2297,17 @@ private struct NotificationRowView: View {
             .buttonStyle(ConductorPressButtonStyle())
 
             Button {
-                ConductorMotion.perform(ConductorMotion.layout, onClear)
+                ConductorMotion.perform(ConductorMotion.list, onClear)
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
                     .foregroundStyle(hovering ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText)
                     .frame(width: 18, height: 18)
                     .background(hovering ? theme.floatingControlFill : theme.floatingControlFill.opacity(0.40))
                     .clipShape(Circle())
             }
             .buttonStyle(ConductorPressButtonStyle())
-            .help("清除通知")
+            .help(L("清除通知", "Clear Notification"))
         }
         .padding(.leading, 9)
         .padding(.trailing, 6)
@@ -1984,11 +2321,10 @@ private struct NotificationRowView: View {
                     lineWidth: 1
                 )
         }
-        .scaleEffect(hovering ? 1.002 : 1)
-        .animation(ConductorMotion.micro, value: hovering)
+        .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.emphasized, value: unread)
         .onHover { value in
-            withAnimation(ConductorMotion.micro) {
+            ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }
         }
@@ -1997,12 +2333,12 @@ private struct NotificationRowView: View {
     private var rowTitle: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(notification.title)
-                .font(.system(size: 11.5, weight: unread ? .semibold : .medium))
+                .font(.conductorSystem(size: 11.5, weight: unread ? .semibold : .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.primaryText)
                 .lineLimit(1)
             Spacer(minLength: 6)
             Text(notification.createdAt.formatted(date: .omitted, time: .shortened))
-                .font(.system(size: 9.5, weight: .medium))
+                .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .monospacedDigit()
         }
@@ -2012,7 +2348,7 @@ private struct NotificationRowView: View {
     private var rowBody: some View {
         if !notification.body.isEmpty {
             Text(notification.body)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .lineSpacing(1)
                 .lineLimit(2)
@@ -2023,7 +2359,7 @@ private struct NotificationRowView: View {
     private var rowMetadata: some View {
         HStack(spacing: 5) {
             Label(kindLabel, systemImage: kindChipIcon)
-                .font(.system(size: 9, weight: .medium))
+                .font(.conductorSystem(size: 9, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .labelStyle(.titleAndIcon)
                 .padding(.horizontal, 5)
@@ -2032,7 +2368,7 @@ private struct NotificationRowView: View {
                 .clipShape(Capsule())
 
             Label(terminalTitle, systemImage: "terminal")
-                .font(.system(size: 9, weight: .medium))
+                .font(.conductorSystem(size: 9, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .labelStyle(.titleAndIcon)
                 .lineLimit(1)
@@ -2084,9 +2420,9 @@ private struct NotificationRowView: View {
         case .agent:
             "Agent"
         case .bell:
-            "响铃"
+            L("响铃", "Bell")
         case .notification:
-            "终端"
+            L("终端", "Terminal")
         }
     }
 
@@ -2104,14 +2440,14 @@ private struct NotificationRowView: View {
 
 private struct WindowControlButtons: View {
     private let controls: [WindowControl] = [
-        WindowControl(color: Color(red: 1.0, green: 0.33, blue: 0.32), accessibilityLabel: "关闭窗口") {
+        WindowControl(id: "close", color: Color(red: 1.0, green: 0.33, blue: 0.32), accessibilityLabel: "关闭窗口") {
             NSApp.keyWindow?.performClose(nil)
         },
-        WindowControl(color: Color(red: 1.0, green: 0.75, blue: 0.10), accessibilityLabel: "最小化窗口") {
+        WindowControl(id: "minimize", color: Color(red: 1.0, green: 0.75, blue: 0.10), accessibilityLabel: "最小化窗口") {
             NSApp.keyWindow?.performMiniaturize(nil)
         },
-        WindowControl(color: Color(red: 0.14, green: 0.78, blue: 0.27), accessibilityLabel: "缩放窗口") {
-            NSApp.keyWindow?.performZoom(nil)
+        WindowControl(id: "fullscreen", color: Color(red: 0.14, green: 0.78, blue: 0.27), accessibilityLabel: "切换全屏") {
+            NSApp.keyWindow?.toggleFullScreen(nil)
         }
     ]
 
@@ -2137,7 +2473,7 @@ private struct WindowControlButtons: View {
 }
 
 private struct WindowControl: Identifiable {
-    let id = UUID()
+    let id: String
     let color: Color
     let accessibilityLabel: String
     let action: () -> Void
@@ -2147,6 +2483,8 @@ private struct ConductorSidebar: View {
     @ObservedObject var model: ConductorWindowModel
     @State private var renamingWorkspaceID: WorkspaceID?
     @State private var workspaceTitleDraft = ""
+    @State private var sidebarToggleHovering = false
+    @Namespace private var workspaceSelectionNamespace
     @Environment(\.conductorFontScale) private var fontScale
 
     private var terminalCount: Int {
@@ -2154,7 +2492,22 @@ private struct ConductorSidebar: View {
     }
 
     private var focusedTerminalTitle: String {
-        model.workspace.focusedPane?.selectedTab?.title ?? "无"
+        model.workspace.focusedPane?.selectedTab?.title ?? L("无", "None")
+    }
+
+    private var workspaceRows: [WorkspaceChromeDisplayModel] {
+        let selectedWorkspaceID = model.workspace.id
+        let notificationSnapshot = model.notifications.snapshot
+        return model.workspaces.map { workspace in
+            WorkspaceChromeDisplayModel(
+                id: workspace.id,
+                title: workspace.title,
+                splitCount: workspace.panes.count,
+                terminalCount: workspaceTerminalCount(workspace),
+                unreadCount: notificationSnapshot.unreadCount(for: workspace.id),
+                selected: workspace.id == selectedWorkspaceID
+            )
+        }
     }
 
     private var sidebarHeaderHeight: CGFloat {
@@ -2167,10 +2520,8 @@ private struct ConductorSidebar: View {
 
             if model.sidebarVisible {
                 expandedSidebar
-                    .transition(.opacity.combined(with: .move(edge: .leading)))
             } else {
                 collapsedSidebar
-                    .transition(.opacity.combined(with: .move(edge: .leading)))
             }
         }
         .padding(.horizontal, model.sidebarVisible ? ConductorTokens.Space.sidebarX : 6)
@@ -2179,25 +2530,17 @@ private struct ConductorSidebar: View {
         .frame(width: model.sidebarVisible ? ConductorDesign.sidebarWidth(for: model.appearance) : ConductorDesign.sidebarCollapsedWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background {
-            ConductorGlassSurface(style: .sidebar, clarity: model.appearance.chromeClarity, interactive: true) {
-                model.theme.shellPanelBackground
-            }
+            SidebarRailSurface(theme: model.theme, clarity: model.appearance.chromeClarity)
         }
-        .clipShape(RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: ConductorDesign.sidebarCornerRadius, style: .continuous)
-                .stroke(model.theme.shellStroke.opacity(0.82), lineWidth: 0.8)
-                .allowsHitTesting(false)
+            SidebarBookSpineChrome(
+                collapsed: !model.sidebarVisible,
+                theme: model.theme,
+                clarity: model.appearance.chromeClarity
+            )
+            .allowsHitTesting(false)
         }
-        .overlay(alignment: .top) {
-            if !model.sidebarVisible {
-                collapsedTrafficLightShelf
-            }
-        }
-        .animation(model.shellAnimation(ConductorMotion.layout), value: model.sidebarVisible)
-        .animation(model.shellAnimation(ConductorMotion.standard), value: model.workspace.id)
-        .animation(model.shellAnimation(ConductorMotion.layout), value: model.workspaces.map(\.id))
-        .animation(model.shellAnimation(ConductorMotion.layout), value: model.appearance.density)
+        .clipShape(SidebarRailShape())
     }
 
     @ViewBuilder
@@ -2226,7 +2569,7 @@ private struct ConductorSidebar: View {
 
     private var sidebarToggleButton: some View {
         Button {
-            ConductorMotion.perform(ConductorMotion.layout) {
+            withoutShellAnimation {
                 finishWorkspaceRenameIfNeeded()
                 model.sidebarVisible.toggle()
             }
@@ -2235,34 +2578,21 @@ private struct ConductorSidebar: View {
                 .font(.conductorSystem(size: 11.5, weight: .bold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .frame(width: 26, height: 24)
-                .background(model.theme.shellControlFill)
+                .background(sidebarToggleFill)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(ConductorPressButtonStyle())
-        .help(model.sidebarVisible ? "收起侧边栏" : "展开侧边栏")
+        .onHover { value in
+            sidebarToggleHovering = value
+        }
+        .help(model.sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
     }
 
-    private var collapsedTrafficLightShelf: some View {
-        VStack(spacing: 0) {
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.26),
-                    Color.white.opacity(0.12),
-                    Color.white.opacity(0.0)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 58)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(model.theme.shellStroke.opacity(0.30))
-                    .frame(height: 1)
-                    .padding(.horizontal, 12)
-            }
-            Spacer(minLength: 0)
+    private var sidebarToggleFill: Color {
+        if sidebarToggleHovering {
+            return model.theme.shellHoverFill.opacity(model.theme.usesDarkChrome ? 0.95 : 0.70)
         }
-        .allowsHitTesting(false)
+        return model.theme.shellControlFill.opacity(model.theme.usesDarkChrome ? 0.36 : 0.18)
     }
 
     private var expandedSidebar: some View {
@@ -2272,7 +2602,7 @@ private struct ConductorSidebar: View {
 
             SidebarSeparator()
 
-            SidebarSectionTitle("状态")
+            SidebarSectionTitle(L("状态", "Status"))
             SidebarStatusSummary(
                 splitCount: model.workspace.panes.count,
                 terminalCount: terminalCount,
@@ -2282,37 +2612,44 @@ private struct ConductorSidebar: View {
 
             SidebarSeparator()
 
-            SidebarSectionTitle("快捷操作")
+            SidebarSectionTitle(L("快捷操作", "Quick Actions"))
             primaryQuickActions(showsLabels: true)
 
             Spacer(minLength: 8)
 
-            SidebarActionRow(icon: "paintpalette", title: model.theme.title, help: "切换主题") {
+            expandedSidebarFooter
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private var expandedSidebarFooter: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            SidebarActionRow(icon: "paintpalette", title: model.theme.title, help: L("切换主题", "Switch Theme")) {
                 finishWorkspaceRenameIfNeeded()
-                ConductorMotion.perform {
+                ConductorMotion.perform(ConductorMotion.selection) {
                     model.cycleTheme()
                 }
             }
             .contextMenu {
                 themeMenuItems
             }
-            SidebarActionRow(icon: "gearshape", title: "设置", help: "设置") {
+            SidebarActionRow(icon: "gearshape", title: L("设置", "Settings"), help: L("设置", "Settings")) {
                 finishWorkspaceRenameIfNeeded()
-                ConductorMotion.perform {
+                ConductorMotion.perform(ConductorMotion.panel) {
                     model.toggleSettingsPanel()
                 }
             }
         }
-        .frame(maxHeight: .infinity)
+        .padding(.bottom, 10)
     }
 
     private var workspaceSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                SidebarSectionTitle("工作区")
+                SidebarSectionTitle(L("工作区", "Workspaces"))
                 Spacer()
                 Button {
-                    ConductorMotion.perform(ConductorMotion.layout) {
+                    ConductorMotion.perform(ConductorMotion.list) {
                         finishWorkspaceRenameIfNeeded()
                         model.newWorkspace()
                     }
@@ -2324,72 +2661,46 @@ private struct ConductorSidebar: View {
                         .contentShape(RoundedRectangle(cornerRadius: 5))
                 }
                 .buttonStyle(ConductorPressButtonStyle())
-                .help("新建工作区")
+                .help(L("新建工作区 Cmd-N", "New Workspace Cmd-N"))
             }
             .padding(.trailing, 5)
 
-            ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(spacing: 3) {
-                        ForEach(model.workspaces) { workspace in
-                            workspaceRow(for: workspace)
-                                .id(workspace.id)
-                                .transition(.asymmetric(
-                                    insertion: .opacity.combined(with: .move(edge: .leading)),
-                                    removal: .opacity.combined(with: .move(edge: .trailing))
-                                ))
-                        }
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 3) {
+                    ForEach(workspaceRows) { row in
+                        workspaceRow(for: row)
+                            .id(row.id)
                     }
-                    .padding(.vertical, 2)
                 }
-                .mask(ConductorVerticalFadeMask())
-                .onAppear {
-                    scrollSidebarSelection(proxy)
-                }
-                .onChange(of: model.workspace.id) {
-                    scrollSidebarSelection(proxy)
-                }
-                .onChange(of: model.workspaces.map(\.id)) {
-                    scrollSidebarSelection(proxy)
-                }
+                .padding(.vertical, 2)
             }
+            .mask(ConductorVerticalFadeMask())
             .frame(minHeight: 72, maxHeight: .infinity)
+            .animation(nil, value: model.workspace.id)
         }
     }
 
     private var collapsedSidebar: some View {
         VStack(spacing: 6) {
-            ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 6) {
-                        ForEach(model.workspaces) { workspace in
-                            SidebarRailButton(
-                                icon: workspace.id == model.workspace.id ? "rectangle.3.group.fill" : "rectangle.3.group",
-                                selected: workspace.id == model.workspace.id,
-                                help: workspace.title
-                            ) {
-                                ConductorMotion.perform {
-                                    model.selectWorkspace(workspace.id)
-                                }
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 6) {
+                    ForEach(workspaceRows) { row in
+                        SidebarRailButton(
+                            icon: WorkspaceChromeGlyph.systemName(selected: row.selected),
+                            selected: row.selected,
+                            help: row.title
+                        ) {
+                            withoutShellAnimation {
+                                model.selectWorkspace(row.id)
                             }
-                            .id(workspace.id)
-                            .transition(.scale(scale: 0.86).combined(with: .opacity))
                         }
+                        .id(row.id)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
                 }
-                .mask(ConductorVerticalFadeMask())
-                .onAppear {
-                    scrollSidebarSelection(proxy)
-                }
-                .onChange(of: model.workspace.id) {
-                    scrollSidebarSelection(proxy)
-                }
-                .onChange(of: model.workspaces.map(\.id)) {
-                    scrollSidebarSelection(proxy)
-                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
             }
+            .mask(ConductorVerticalFadeMask())
             .frame(maxHeight: .infinity)
 
             SidebarSeparator()
@@ -2399,22 +2710,29 @@ private struct ConductorSidebar: View {
 
             Spacer(minLength: 8)
 
+            collapsedSidebarFooter
+        }
+    }
+
+    private var collapsedSidebarFooter: some View {
+        VStack(spacing: 6) {
             SidebarRailButton(icon: "paintpalette", help: model.theme.title) {
                 finishWorkspaceRenameIfNeeded()
-                ConductorMotion.perform {
+                ConductorMotion.perform(ConductorMotion.selection) {
                     model.cycleTheme()
                 }
             }
             .contextMenu {
                 themeMenuItems
             }
-            SidebarRailButton(icon: "gearshape", help: "设置") {
+            SidebarRailButton(icon: "gearshape", help: L("设置", "Settings")) {
                 finishWorkspaceRenameIfNeeded()
-                ConductorMotion.perform {
+                ConductorMotion.perform(ConductorMotion.panel) {
                     model.toggleSettingsPanel()
                 }
             }
         }
+        .padding(.bottom, 10)
     }
 
     @ViewBuilder
@@ -2422,7 +2740,7 @@ private struct ConductorSidebar: View {
         ForEach(TerminalTheme.allCases) { theme in
             Button(theme.title) {
                 finishWorkspaceRenameIfNeeded()
-                ConductorMotion.perform {
+                ConductorMotion.perform(ConductorMotion.selection) {
                     model.theme = theme
                 }
             }
@@ -2432,79 +2750,82 @@ private struct ConductorSidebar: View {
     @ViewBuilder
     private func primaryQuickActions(showsLabels: Bool) -> some View {
         Group {
-            SidebarActionRow(icon: "plus.rectangle.on.rectangle", title: "新开终端", showsTitle: showsLabels, help: "新开终端 Cmd-T") {
+            SidebarActionRow(icon: "plus.rectangle.on.rectangle", title: L("新开终端", "New Terminal"), showsTitle: showsLabels, help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
                 finishWorkspaceRenameIfNeeded()
                 model.newTerminal()
             }
-            SidebarActionRow(icon: "folder", title: "当前路径", showsTitle: showsLabels, help: "打开当前路径") {
+            SidebarActionRow(icon: "rectangle.split.2x1", title: L("向右分屏", "Split Right"), showsTitle: showsLabels, disabled: !model.canSplit, help: L("向右分屏 Cmd-D", "Split Right Cmd-D")) {
                 finishWorkspaceRenameIfNeeded()
-                model.openCurrentPathForFocusedTerminal()
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.splitRight()
+                }
             }
-            SidebarActionRow(icon: "rectangle.split.2x1", title: "向右分屏", showsTitle: showsLabels, disabled: !model.canSplit, help: "向右分屏 Cmd-D") {
+            SidebarActionRow(icon: "rectangle.split.1x2", title: L("向下分屏", "Split Down"), showsTitle: showsLabels, disabled: !model.canSplit, help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D")) {
                 finishWorkspaceRenameIfNeeded()
-                model.splitRight()
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.splitDown()
+                }
             }
-            SidebarActionRow(icon: "rectangle.split.1x2", title: "向下分屏", showsTitle: showsLabels, disabled: !model.canSplit, help: "向下分屏 Cmd-Shift-D") {
-                finishWorkspaceRenameIfNeeded()
-                model.splitDown()
-            }
-            SidebarActionRow(icon: "command", title: "命令面板", showsTitle: showsLabels, help: "打开命令面板 Cmd-K") {
+            SidebarActionRow(icon: "command", title: L("命令面板", "Command Center"), showsTitle: showsLabels, help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
                 finishWorkspaceRenameIfNeeded()
                 model.toggleCommandPalette()
             }
         }
     }
 
-    private func workspaceRow(for workspace: WorkspaceState) -> some View {
+    private func workspaceRow(for row: WorkspaceChromeDisplayModel) -> some View {
         WorkspaceSidebarRow(
-            title: workspace.title,
-            terminalCount: workspaceTerminalCount(workspace),
-            unreadCount: model.notifications.snapshot.unreadCount(for: workspace.id),
-            selected: workspace.id == model.workspace.id,
-            editing: renamingWorkspaceID == workspace.id,
+            title: row.title,
+            terminalCount: row.terminalCount,
+            unreadCount: row.unreadCount,
+            selected: row.selected,
+            editing: renamingWorkspaceID == row.id,
+            selectionNamespace: workspaceSelectionNamespace,
             titleDraft: $workspaceTitleDraft,
             onCommitRename: commitWorkspaceRename,
             onCancelRename: cancelWorkspaceRename
         ) {
-            finishWorkspaceRenameIfNeeded(except: workspace.id)
-            model.selectWorkspace(workspace.id)
+            finishWorkspaceRenameIfNeeded(except: row.id)
+            withoutShellAnimation {
+                model.selectWorkspace(row.id)
+            }
         } onRename: {
-            finishWorkspaceRenameIfNeeded(except: workspace.id)
-            beginRenameWorkspace(workspace)
+            finishWorkspaceRenameIfNeeded(except: row.id)
+            beginRenameWorkspace(row)
         }
         .contextMenu {
-            Button("重命名工作区...") {
-                ConductorMotion.perform {
-                    finishWorkspaceRenameIfNeeded(except: workspace.id)
-                    beginRenameWorkspace(workspace)
+            Button(L("重命名工作区...", "Rename Workspace...")) {
+                ConductorMotion.perform(ConductorMotion.selection) {
+                    finishWorkspaceRenameIfNeeded(except: row.id)
+                    beginRenameWorkspace(row)
                 }
             }
-            Button("复制工作区") {
+            Button(L("复制工作区", "Duplicate Workspace")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     finishWorkspaceRenameIfNeeded()
-                    model.duplicateWorkspace(workspace.id)
+                    model.duplicateWorkspace(row.id)
                 }
             }
             Divider()
-            Button("关闭其他工作区") {
-                ConductorMotion.perform(ConductorMotion.layout) {
-                    finishWorkspaceRenameIfNeeded(except: workspace.id)
-                    model.closeOtherWorkspaces(keeping: workspace.id)
+            Button(L("关闭其他工作区", "Close Other Workspaces")) {
+                withoutShellAnimation {
+                    finishWorkspaceRenameIfNeeded(except: row.id)
+                    model.closeOtherWorkspaces(keeping: row.id)
                 }
             }
             .disabled(model.workspaces.count <= 1)
-            Button("关闭右侧工作区") {
-                ConductorMotion.perform(ConductorMotion.layout) {
+            Button(L("关闭右侧工作区", "Close Workspaces to the Right")) {
+                withoutShellAnimation {
                     finishWorkspaceRenameIfNeeded()
-                    model.closeWorkspacesToRight(of: workspace.id)
+                    model.closeWorkspacesToRight(of: row.id)
                 }
             }
             .disabled(model.workspaces.count <= 1)
             Divider()
-            Button("关闭工作区") {
-                ConductorMotion.perform(ConductorMotion.layout) {
+            Button(L("关闭工作区", "Close Workspace")) {
+                withoutShellAnimation {
                     finishWorkspaceRenameIfNeeded()
-                    model.closeWorkspace(workspace.id)
+                    model.closeWorkspace(row.id)
                 }
             }
             .disabled(model.workspaces.count <= 1)
@@ -2515,14 +2836,14 @@ private struct ConductorSidebar: View {
         workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
     }
 
-    private func beginRenameWorkspace(_ workspace: WorkspaceState) {
-        workspaceTitleDraft = workspace.title
-        renamingWorkspaceID = workspace.id
+    private func beginRenameWorkspace(_ row: WorkspaceChromeDisplayModel) {
+        workspaceTitleDraft = row.title
+        renamingWorkspaceID = row.id
     }
 
     private func commitWorkspaceRename() {
         if let renamingWorkspaceID {
-            ConductorMotion.perform {
+            ConductorMotion.perform(ConductorMotion.selection) {
                 model.renameWorkspace(renamingWorkspaceID, title: workspaceTitleDraft)
             }
         }
@@ -2541,10 +2862,157 @@ private struct ConductorSidebar: View {
         renamingWorkspaceID = nil
     }
 
-    private func scrollSidebarSelection(_ proxy: ScrollViewProxy) {
-        withAnimation(ConductorMotion.standard) {
-            proxy.scrollTo(model.workspace.id, anchor: .center)
+}
+
+private struct SidebarRailShape: InsettableShape {
+    var leadingRadius: CGFloat = ConductorDesign.sidebarCornerRadius
+    var trailingRadius: CGFloat = 8
+    var insetAmount: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        let rect = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        let leading = min(leadingRadius, rect.width / 2, rect.height / 2)
+        let trailing = min(trailingRadius, rect.width / 2, rect.height / 2)
+
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + leading, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - trailing, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + trailing),
+            control: CGPoint(x: rect.maxX, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - trailing))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - trailing, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX + leading, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - leading),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + leading))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + leading, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY)
+        )
+        path.closeSubpath()
+        return path
+    }
+
+    func inset(by amount: CGFloat) -> SidebarRailShape {
+        var shape = self
+        shape.insetAmount += amount
+        return shape
+    }
+}
+
+private struct SidebarRailSurface: View {
+    let theme: TerminalTheme
+    let clarity: ChromeClarity
+
+    var body: some View {
+        let shape = SidebarRailShape()
+        shape
+            .fill(theme.shellPanelBackground)
+            .overlay {
+                shape
+                    .fill(theme.shellPanelBackground.opacity(clarity.glassTintMultiplier))
+            }
+            .overlay {
+                shape
+                    .fill(theme.usesDarkChrome ? theme.terminalBackground.opacity(0.18) : Color.white.opacity(0.16))
+            }
+            .overlay {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(theme.usesDarkChrome ? 0.018 : 0.18),
+                        Color.clear,
+                        theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.16 : 0.030)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .clipShape(shape)
+            }
+            .overlay(alignment: .trailing) {
+                LinearGradient(
+                    colors: [
+                        Color.clear,
+                        Color.black.opacity(theme.usesDarkChrome ? 0.08 : 0.020)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: 10)
+            }
+            .overlay {
+                shape
+                    .strokeBorder(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.10), lineWidth: 0.6)
+            }
+    }
+}
+
+private struct SidebarBookSpineChrome: View {
+    let collapsed: Bool
+    let theme: TerminalTheme
+    let clarity: ChromeClarity
+
+    var body: some View {
+        ZStack {
+            if collapsed {
+                collapsedSpine
+            } else {
+                expandedSpine
+            }
         }
+    }
+
+    private var collapsedSpine: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(theme.usesDarkChrome ? 0.012 : 0.026),
+                    Color.clear,
+                    Color.black.opacity(theme.usesDarkChrome ? 0.034 : 0.012)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .opacity(0.46)
+        }
+    }
+
+    private var expandedSpine: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            LinearGradient(
+                colors: [
+                    Color.clear,
+                    theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.12 : 0.050),
+                    theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.10 : 0.028)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: 13)
+        }
+        .opacity(0.62)
+    }
+}
+
+private struct WorkspaceChromeDisplayModel: Identifiable, Equatable {
+    let id: WorkspaceID
+    let title: String
+    let splitCount: Int
+    let terminalCount: Int
+    let unreadCount: Int
+    let selected: Bool
+}
+
+private enum WorkspaceChromeGlyph {
+    static func systemName(selected: Bool) -> String {
+        selected ? "square.grid.2x2.fill" : "square.grid.2x2"
     }
 }
 
@@ -2559,10 +3027,10 @@ private struct SidebarStatusSummary: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
-                SidebarStatusPill(title: "分屏", value: "\(splitCount)")
-                SidebarStatusPill(title: "终端", value: "\(terminalCount)")
+                SidebarStatusPill(title: L("分屏", "Panes"), value: "\(splitCount)")
+                SidebarStatusPill(title: L("终端", "Terms"), value: "\(terminalCount)")
                 if unreadCount > 0 {
-                    SidebarStatusPill(title: "未读", value: unreadCount > 99 ? "99+" : "\(unreadCount)", highlighted: true)
+                    SidebarStatusPill(title: L("未读", "Unread"), value: unreadCount > 99 ? "99+" : "\(unreadCount)", highlighted: true)
                 }
             }
             HStack(spacing: 6) {
@@ -2570,7 +3038,7 @@ private struct SidebarStatusSummary: View {
                     .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(theme.floatingEmphasis.opacity(0.88))
                     .frame(width: 14)
-                Text("焦点")
+                Text(L("焦点", "Focus"))
                     .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
                     .foregroundStyle(ConductorDesign.tertiaryText)
                 Text(focusedTerminalTitle)
@@ -2634,11 +3102,11 @@ private struct SidebarRailButton: View {
 
     var body: some View {
         Button {
-            ConductorMotion.perform(action)
+            action()
         } label: {
             Image(systemName: icon)
                 .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
-                .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
+                .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
                 .frame(width: 34, height: 34)
                 .background(selected ? theme.shellSelectedFill : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 11))
@@ -2647,7 +3115,6 @@ private struct SidebarRailButton: View {
         .buttonStyle(ConductorPressButtonStyle())
         .disabled(disabled)
         .opacity(disabled ? 0.35 : 1)
-        .animation(ConductorMotion.standard, value: selected)
         .animation(ConductorMotion.micro, value: disabled)
         .help(help)
     }
@@ -2681,7 +3148,7 @@ private struct SidebarRow: View {
         HStack(spacing: 7) {
             Image(systemName: icon)
                 .frame(width: 14)
-                .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
+                .foregroundStyle(selected ? theme.floatingEmphasis.opacity(0.90) : ConductorDesign.secondaryText)
             Text(title)
                 .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.primaryText)
@@ -2700,6 +3167,7 @@ private struct WorkspaceSidebarRow: View {
     let unreadCount: Int
     let selected: Bool
     let editing: Bool
+    let selectionNamespace: Namespace.ID
     @Binding var titleDraft: String
     let onCommitRename: () -> Void
     let onCancelRename: () -> Void
@@ -2715,18 +3183,16 @@ private struct WorkspaceSidebarRow: View {
         Group {
             if editing {
                 editingRow
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .transition(.identity)
             } else {
                 displayRow
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .transition(.identity)
             }
         }
-        .animation(ConductorMotion.standard, value: selected)
-        .animation(ConductorMotion.standard, value: editing)
-        .animation(ConductorMotion.standard, value: terminalCount)
+        .animation(nil, value: editing)
         .animation(ConductorMotion.emphasized, value: unreadCount)
         .onHover { value in
-            withAnimation(ConductorMotion.micro) {
+            ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }
         }
@@ -2735,15 +3201,15 @@ private struct WorkspaceSidebarRow: View {
 
     private var editingRow: some View {
         HStack(spacing: 7) {
-            Image(systemName: "rectangle.3.group.fill")
+            Image(systemName: WorkspaceChromeGlyph.systemName(selected: true))
                 .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .frame(width: 14)
-                .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
+                .foregroundStyle(selected ? theme.floatingEmphasis.opacity(0.90) : ConductorDesign.secondaryText)
             RenameTextField(
                 text: $titleDraft,
-                placeholder: "工作区名称",
+                placeholder: L("工作区名称", "Workspace Name"),
                 font: .conductorSystemFont(ofSize: 12, weight: .semibold, scale: fontScale),
-                textColor: NSColor.labelColor,
+                textColor: NSColor(theme.shellChromeText),
                 onCommit: onCommitRename,
                 onCancel: onCancelRename
             )
@@ -2759,43 +3225,89 @@ private struct WorkspaceSidebarRow: View {
     }
 
     private var displayRow: some View {
-        Button {
-            ConductorMotion.perform(action)
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: selected ? "rectangle.3.group.fill" : "rectangle.3.group")
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .frame(width: 14)
-                    .foregroundStyle(selected ? Color.accentColor : ConductorDesign.secondaryText)
-                Text(title)
-                    .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 4)
-                Text("\(terminalCount)")
-                    .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                if unreadCount > 0 {
-                    Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                        .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                        .frame(minWidth: 15, minHeight: 14)
-                        .background(theme.floatingEmphasis)
-                        .clipShape(Capsule())
-                }
-            }
-            .padding(.horizontal, 7)
-            .frame(height: 32)
-            .background(selected ? theme.shellSelectedFill : (hovering ? theme.shellHoverFill : Color.clear))
-            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
-            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
+        Button(action: action) {
+            WorkspaceSidebarRowContent(
+                title: title,
+                terminalCount: terminalCount,
+                unreadCount: unreadCount,
+                selected: selected,
+                hovering: hovering,
+                selectionNamespace: selectionNamespace
+            )
+            .equatable()
         }
         .buttonStyle(ConductorPressButtonStyle())
         .simultaneousGesture(
-            TapGesture(count: 2).onEnded(onRename)
+            TapGesture(count: 2).onEnded {
+                action()
+                onRename()
+            }
         )
+    }
+}
+
+private struct WorkspaceSidebarRowContent: View, Equatable {
+    let title: String
+    let terminalCount: Int
+    let unreadCount: Int
+    let selected: Bool
+    let hovering: Bool
+    let selectionNamespace: Namespace.ID
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    nonisolated static func == (lhs: WorkspaceSidebarRowContent, rhs: WorkspaceSidebarRowContent) -> Bool {
+        lhs.title == rhs.title &&
+        lhs.terminalCount == rhs.terminalCount &&
+        lhs.unreadCount == rhs.unreadCount &&
+        lhs.selected == rhs.selected &&
+        lhs.hovering == rhs.hovering
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
+                .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : ConductorDesign.secondaryText)
+                .frame(width: 19, height: 19)
+                .background(selected ? theme.shellControlRaisedFill.opacity(0.84) : (hovering ? theme.shellHoverFill.opacity(0.62) : Color.clear))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            Text(title)
+                .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 4)
+            Text("\(terminalCount)")
+                .font(.conductorSystem(size: 10, weight: selected ? .bold : .medium, scale: fontScale))
+                .foregroundStyle(selected ? ConductorDesign.primaryText.opacity(0.86) : ConductorDesign.tertiaryText)
+                .padding(.horizontal, selected ? 5 : 0)
+                .frame(minHeight: 17)
+                .background(selected ? theme.shellHoverFill.opacity(0.82) : Color.clear)
+                .clipShape(Capsule())
+            if unreadCount > 0 {
+                Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                    .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .frame(minWidth: 15, minHeight: 14)
+                    .background(theme.floatingEmphasis)
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(.leading, 7)
+        .padding(.trailing, 7)
+        .frame(height: 32)
+        .background {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+                .fill(hovering ? theme.shellHoverFill : Color.clear)
+            if selected {
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+                    .fill(theme.shellSelectedFill)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
+        .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
     }
 }
 
@@ -2812,7 +3324,7 @@ private struct SidebarActionRow: View {
 
     var body: some View {
         Button {
-            ConductorMotion.perform(action)
+            action()
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: icon)
@@ -2834,9 +3346,9 @@ private struct SidebarActionRow: View {
         .disabled(disabled)
         .opacity(disabled ? 0.38 : 1)
         .animation(ConductorMotion.micro, value: disabled)
-        .animation(ConductorMotion.micro, value: hovering)
+        .animation(ConductorMotion.hover, value: hovering)
         .onHover { value in
-            withAnimation(ConductorMotion.micro) {
+            ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }
         }
@@ -2864,57 +3376,63 @@ private struct ConductorToolbar: View {
                 .layoutPriority(0)
 
                 ConductorPillGroup {
-                    ConductorIconButton(systemImage: "plus", help: "新建工作区", title: "工作区") {
+                    ConductorIconButton(systemImage: "plus", help: L("新建工作区 Cmd-N", "New Workspace Cmd-N"), title: L("工作区", "Workspace")) {
                         finishWorkspaceRenameIfNeeded()
                         model.newWorkspace()
                     }
                 }
 
                 ConductorPillGroup {
-                    ConductorIconButton(systemImage: "plus.rectangle.on.rectangle", help: "新开终端 Cmd-T", title: "新终端") {
+                    ConductorIconButton(systemImage: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T"), title: L("终端", "Terminal")) {
                         finishWorkspaceRenameIfNeeded()
                         model.newTerminal()
-                    }
-                    ConductorSegmentDivider()
-                    ConductorIconButton(
-                        systemImage: "folder",
-                        help: "打开当前路径",
-                        title: "路径",
-                        active: model.filePreview.isVisible
-                    ) {
-                        finishWorkspaceRenameIfNeeded()
-                        model.openCurrentPathForFocusedTerminal()
                     }
                 }
 
                 ConductorPillGroup {
-                    ConductorIconButton(systemImage: "rectangle.split.2x1", help: "向右分屏 Cmd-D", title: "右分屏", disabled: !model.canSplit) {
+                    ConductorIconButton(systemImage: "rectangle.split.2x1", help: L("向右分屏 Cmd-D", "Split Right Cmd-D"), title: L("右分屏", "Right"), disabled: !model.canSplit) {
                         finishWorkspaceRenameIfNeeded()
-                        model.splitRight()
+                        ConductorMotion.perform(ConductorMotion.layout) {
+                            model.splitRight()
+                        }
                     }
                     ConductorSegmentDivider()
-                    ConductorIconButton(systemImage: "rectangle.split.1x2", help: "向下分屏 Cmd-Shift-D", title: "下分屏", disabled: !model.canSplit) {
+                    ConductorIconButton(systemImage: "rectangle.split.1x2", help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D"), title: L("下分屏", "Down"), disabled: !model.canSplit) {
                         finishWorkspaceRenameIfNeeded()
-                        model.splitDown()
+                        ConductorMotion.perform(ConductorMotion.layout) {
+                            model.splitDown()
+                        }
                     }
                     ConductorSegmentDivider()
                     ConductorIconButton(
                         systemImage: "arrow.up.left.and.arrow.down.right",
-                        help: model.workspace.isZoomed ? "还原当前分屏" : "放大当前分屏",
-                        title: nil,
+                        help: model.workspace.isZoomed ? L("还原当前分屏 Cmd-Opt-Z", "Restore Current Pane Cmd-Opt-Z") : L("放大当前分屏 Cmd-Opt-Z", "Zoom Current Pane Cmd-Opt-Z"),
+                        title: model.workspace.isZoomed ? L("还原", "Restore") : L("放大", "Zoom"),
                         disabled: model.workspace.root.leaves.count <= 1,
                         active: model.workspace.isZoomed
                     ) {
                         finishWorkspaceRenameIfNeeded()
-                        model.toggleZoom()
+                        ConductorMotion.perform(ConductorMotion.layout) {
+                            model.toggleZoom()
+                        }
                     }
                 }
 
                 ConductorPillGroup {
                     ConductorIconButton(
-                        systemImage: "rectangle.3.group",
-                        help: "工作区总览 Cmd-O",
-                        title: nil,
+                        systemImage: "magnifyingglass",
+                        help: L("上下文搜索 Cmd-F", "Context Search Cmd-F"),
+                        title: L("搜索", "Search"),
+                        active: model.terminalSearchVisible
+                    ) {
+                        finishWorkspaceRenameIfNeeded()
+                        model.showTerminalSearch()
+                    }
+                    ConductorSegmentDivider()
+                    ConductorIconButton(
+                        systemImage: WorkspaceChromeGlyph.systemName(selected: false),
+                        help: L("工作区总览 Cmd-O", "Workspace Overview Cmd-O"),
+                        title: L("总览", "Overview"),
                         active: model.workspaceOverviewVisible
                     ) {
                         finishWorkspaceRenameIfNeeded()
@@ -2923,15 +3441,15 @@ private struct ConductorToolbar: View {
                     ConductorSegmentDivider()
                     ConductorIconButton(
                         systemImage: model.notifications.snapshot.unreadCount > 0 ? "bell.badge" : "bell",
-                        help: "通知中心",
-                        title: model.notifications.snapshot.unreadCount > 0 ? "\(model.notifications.snapshot.unreadCount)" : nil,
+                        help: L("通知中心 Cmd-Opt-N", "Notification Center Cmd-Opt-N"),
+                        title: model.notifications.snapshot.unreadCount > 0 ? L("通知 \(model.notifications.snapshot.unreadCount)", "Alerts \(model.notifications.snapshot.unreadCount)") : L("通知", "Alerts"),
                         active: model.notificationPanelVisible
                     ) {
                         finishWorkspaceRenameIfNeeded()
                         model.toggleNotificationPanel()
                     }
                     ConductorSegmentDivider()
-                    ConductorIconButton(systemImage: "ellipsis", help: "命令面板 Cmd-K", title: "命令") {
+                    ConductorIconButton(systemImage: "ellipsis", help: L("命令面板 Cmd-K", "Command Center Cmd-K"), title: L("命令", "Command")) {
                         finishWorkspaceRenameIfNeeded()
                         model.toggleCommandPalette()
                     }
@@ -2945,14 +3463,14 @@ private struct ConductorToolbar: View {
         .frame(height: ConductorDesign.toolbarHeight(for: model.appearance))
     }
 
-    private func beginRenameWorkspace(_ workspace: WorkspaceState) {
-        workspaceTitleDraft = workspace.title
-        editingWorkspaceID = workspace.id
+    private func beginRenameWorkspace(_ row: WorkspaceChromeDisplayModel) {
+        workspaceTitleDraft = row.title
+        editingWorkspaceID = row.id
     }
 
     private func commitWorkspaceRename() {
         if let editingWorkspaceID {
-            ConductorMotion.perform {
+            ConductorMotion.perform(ConductorMotion.selection) {
                 model.renameWorkspace(editingWorkspaceID, title: workspaceTitleDraft)
             }
         }
@@ -2974,24 +3492,37 @@ private struct WorkspaceTabStrip: View {
     @ObservedObject var model: ConductorWindowModel
     @Binding var editingWorkspaceID: WorkspaceID?
     @Binding var workspaceTitleDraft: String
-    let onBeginRename: (WorkspaceState) -> Void
+    let onBeginRename: (WorkspaceChromeDisplayModel) -> Void
     let onCommitRename: () -> Void
     let onCancelRename: () -> Void
     @State private var scrollTargetID: WorkspaceID?
+    @Namespace private var selectionNamespace
+
+    private var workspaceRows: [WorkspaceChromeDisplayModel] {
+        let selectedWorkspaceID = model.workspace.id
+        let notificationSnapshot = model.notifications.snapshot
+        return model.workspaces.map { workspace in
+            WorkspaceChromeDisplayModel(
+                id: workspace.id,
+                title: workspace.title,
+                splitCount: workspace.panes.count,
+                terminalCount: workspaceTerminalCount(workspace),
+                unreadCount: notificationSnapshot.unreadCount(for: workspace.id),
+                selected: workspace.id == selectedWorkspaceID
+            )
+        }
+    }
 
     private var workspaceIDs: [WorkspaceID] {
-        model.workspaces.map(\.id)
+        workspaceRows.map(\.id)
     }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: WorkspaceTabMetrics.spacing) {
-                ForEach(model.workspaces) { workspace in
-                    workspaceTabView(for: workspace)
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.96)),
-                            removal: .opacity.combined(with: .scale(scale: 0.92))
-                        ))
+                ForEach(workspaceRows) { row in
+                    workspaceTabView(for: row)
+                        .transition(ConductorMotion.tabTransition)
                 }
             }
             .padding(.horizontal, WorkspaceTabMetrics.edgePadding)
@@ -2999,13 +3530,6 @@ private struct WorkspaceTabStrip: View {
         }
         .scrollTargetBehavior(.viewAligned)
         .scrollPosition(id: $scrollTargetID, anchor: .center)
-        .onDrop(
-            of: [UTType.text],
-            delegate: WorkspaceTabDropDelegate(
-                targetWorkspaceID: nil,
-                model: model
-            )
-        )
         .onAppear {
             syncScrollTarget(animated: false)
         }
@@ -3024,7 +3548,7 @@ private struct WorkspaceTabStrip: View {
         )
         .clipped()
         .mask(ConductorHorizontalFadeMask())
-        .animation(ConductorMotion.layout, value: workspaceIDs)
+        .animation(ConductorMotion.list, value: workspaceIDs)
     }
 
     private func syncScrollTarget(animated: Bool) {
@@ -3033,30 +3557,28 @@ private struct WorkspaceTabStrip: View {
             scrollTargetID = model.workspace.id
         }
         if animated {
-            model.performShellMotion(ConductorMotion.standard, update)
+            model.performShellMotion(ConductorMotion.selection, update)
         } else {
             update()
         }
     }
 
-    private func workspaceTabView(for workspace: WorkspaceState) -> some View {
+    private func workspaceTabView(for row: WorkspaceChromeDisplayModel) -> some View {
         WorkspaceTopTab(
-            workspace: workspace,
-            unreadCount: model.notifications.snapshot.unreadCount(for: workspace.id),
-            selected: workspace.id == model.workspace.id,
-            accent: model.theme.accent,
+            row: row,
             appearance: model.appearance,
             canClose: model.workspaces.count > 1,
-            editing: editingWorkspaceID == workspace.id,
+            editing: editingWorkspaceID == row.id,
+            selectionNamespace: selectionNamespace,
             titleDraft: $workspaceTitleDraft,
             onSelect: {
-                finishWorkspaceRenameIfNeeded(except: workspace.id)
-                model.selectWorkspace(workspace.id)
+                finishWorkspaceRenameIfNeeded(except: row.id)
+                model.selectWorkspace(row.id)
             },
             onRename: {
-                ConductorMotion.perform {
-                    finishWorkspaceRenameIfNeeded(except: workspace.id)
-                    onBeginRename(workspace)
+                ConductorMotion.perform(ConductorMotion.selection) {
+                    finishWorkspaceRenameIfNeeded(except: row.id)
+                    onBeginRename(row)
                 }
             },
             onCommitRename: onCommitRename,
@@ -3064,36 +3586,33 @@ private struct WorkspaceTabStrip: View {
             onDuplicate: {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     finishWorkspaceRenameIfNeeded()
-                    model.duplicateWorkspace(workspace.id)
+                    model.duplicateWorkspace(row.id)
                 }
             },
             onClose: {
-                ConductorMotion.perform(ConductorMotion.layout) {
+                withoutShellAnimation {
                     finishWorkspaceRenameIfNeeded()
-                    model.closeWorkspace(workspace.id)
+                    model.closeWorkspace(row.id)
                 }
             },
             onCloseOthers: {
-                ConductorMotion.perform(ConductorMotion.layout) {
-                    finishWorkspaceRenameIfNeeded(except: workspace.id)
-                    model.closeOtherWorkspaces(keeping: workspace.id)
+                withoutShellAnimation {
+                    finishWorkspaceRenameIfNeeded(except: row.id)
+                    model.closeOtherWorkspaces(keeping: row.id)
                 }
             },
             onCloseRight: {
-                ConductorMotion.perform(ConductorMotion.layout) {
+                withoutShellAnimation {
                     finishWorkspaceRenameIfNeeded()
-                    model.closeWorkspacesToRight(of: workspace.id)
+                    model.closeWorkspacesToRight(of: row.id)
                 }
             }
         )
-        .id(workspace.id)
-        .onDrop(
-            of: [UTType.text],
-            delegate: WorkspaceTabDropDelegate(
-                targetWorkspaceID: workspace.id,
-                model: model
-            )
-        )
+        .id(row.id)
+    }
+
+    private func workspaceTerminalCount(_ workspace: WorkspaceState) -> Int {
+        workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
     }
 
     private func finishWorkspaceRenameIfNeeded(except workspaceID: WorkspaceID? = nil) {
@@ -3114,18 +3633,16 @@ private enum WorkspaceTabMetrics {
         appearance.density.workspaceTabHeight
     }
 
-    static let spacing: CGFloat = 8
+    static let spacing: CGFloat = 5
     static let edgePadding: CGFloat = 2
 }
 
 private struct WorkspaceTopTab: View {
-    let workspace: WorkspaceState
-    let unreadCount: Int
-    let selected: Bool
-    let accent: Color
+    let row: WorkspaceChromeDisplayModel
     let appearance: AppearancePreferences
     let canClose: Bool
     let editing: Bool
+    let selectionNamespace: Namespace.ID
     @Binding var titleDraft: String
     let onSelect: () -> Void
     let onRename: () -> Void
@@ -3139,42 +3656,48 @@ private struct WorkspaceTopTab: View {
     @State private var renameCancelled = false
     @FocusState private var titleFieldFocused: Bool
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
-    private var terminalCount: Int {
-        workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+    private var selected: Bool {
+        row.selected
     }
 
-    private var tabFill: some ShapeStyle {
-        LinearGradient(
-            colors: [
-                selected ? accent.opacity(0.150 * appearance.chromeClarity.accentFillMultiplier) : (hovering ? Color.white.opacity(0.070) : Color.white.opacity(0.030)),
-                selected ? Color.white.opacity(0.068) : (hovering ? Color.white.opacity(0.040) : Color.white.opacity(0.018))
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+    private var unreadCount: Int {
+        row.unreadCount
+    }
+
+    private var tabShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous)
+    }
+
+    private var baseFill: Color {
+        hovering ? theme.shellHoverFill : (theme.usesDarkChrome ? theme.shellControlFill.opacity(0.18) : theme.shellControlFill)
+    }
+
+    private var selectedFill: Color {
+        theme.usesDarkChrome ? theme.shellSelectedFill : theme.shellSelectedFill.opacity(0.92)
     }
 
     private var tabStroke: Color {
         if selected {
-            return accent.opacity(0.40 * appearance.chromeClarity.accentFillMultiplier)
+            return theme.shellStroke.opacity(0.82 * appearance.chromeClarity.strokeMultiplier)
         }
-        return Color.white.opacity(hovering ? 0.120 : 0.070)
+        return theme.shellStroke.opacity(hovering ? 0.54 : 0.32)
     }
 
     private var titleColor: Color {
-        selected ? ConductorDesign.terminalText : ConductorDesign.terminalTextMuted
+        selected ? theme.shellChromeText : theme.shellChromeTextMuted
     }
 
     var body: some View {
         HStack(spacing: 7) {
             if editing {
-                WorkspaceTabGlyph(selected: true, accent: accent)
+                WorkspaceTabGlyph(selected: true)
                 RenameTextField(
                     text: $titleDraft,
-                    placeholder: "工作区名称",
+                    placeholder: L("工作区名称", "Workspace Name"),
                     font: .conductorSystemFont(ofSize: 11.5, weight: .bold, scale: fontScale),
-                    textColor: NSColor.labelColor,
+                    textColor: NSColor(theme.shellChromeText),
                     onCommit: onCommitRename,
                     onCancel: onCancelRename
                 )
@@ -3183,41 +3706,43 @@ private struct WorkspaceTopTab: View {
                     renameCancelled = false
                 }
             } else {
-                WorkspaceTabGlyph(selected: selected, accent: accent)
-                Text(workspace.title)
-                    .font(.conductorSystem(size: 11.5, weight: selected ? .bold : .semibold, scale: fontScale))
-                    .foregroundStyle(titleColor)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text("\(terminalCount)")
-                    .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
-                    .foregroundStyle(selected ? accent.opacity(0.94) : ConductorDesign.terminalTextMuted.opacity(0.86))
-                    .padding(.horizontal, 5)
-                    .frame(minWidth: 21, minHeight: 20)
-                    .background(selected ? accent.opacity(0.135 * appearance.chromeClarity.accentFillMultiplier) : Color.white.opacity(0.045))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                if unreadCount > 0 {
-                    Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                        .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                        .frame(minWidth: 15, minHeight: 14)
-                        .background(Color.accentColor)
-                        .clipShape(Capsule())
+                HStack(spacing: 7) {
+                    WorkspaceTabGlyph(selected: selected)
+                    Text(row.title)
+                        .font(.conductorSystem(size: 11.5, weight: selected ? .semibold : .medium, scale: fontScale))
+                        .foregroundStyle(titleColor)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("\(row.terminalCount)")
+                        .font(.conductorSystem(size: 10.5, weight: selected ? .semibold : .medium, scale: fontScale))
+                        .foregroundStyle(selected ? theme.shellChromeText.opacity(0.78) : theme.shellChromeTextMuted.opacity(0.78))
+                        .frame(minWidth: 18, minHeight: 18)
+                    if unreadCount > 0 {
+                        Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                            .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 15, minHeight: 14)
+                            .background(theme.floatingEmphasis.opacity(0.72))
+                            .clipShape(Capsule())
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
                 Button {
-                    ConductorMotion.perform(ConductorMotion.layout, onClose)
+                    onClose()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
                         .foregroundStyle(canClose ? titleColor.opacity(selected || hovering ? 0.74 : 0.52) : Color.clear)
                         .frame(width: 13, height: 13)
+                        .clipShape(Circle())
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(ConductorPressButtonStyle())
                 .disabled(!canClose)
-                .help("关闭工作区")
+                .help(L("关闭工作区", "Close Workspace"))
             }
         }
         .padding(.leading, 8)
@@ -3226,122 +3751,76 @@ private struct WorkspaceTopTab: View {
             width: WorkspaceTabMetrics.width(for: appearance),
             height: WorkspaceTabMetrics.height(for: appearance)
         )
-        .background(tabFill)
-        .clipShape(Capsule())
+        .background {
+            if selected {
+                tabShape
+                    .fill(selectedFill)
+            } else {
+                tabShape
+                    .fill(baseFill)
+            }
+        }
+        .clipShape(tabShape)
         .overlay {
-            Capsule()
+            tabShape
                 .stroke(tabStroke, lineWidth: 1)
         }
-        .animation(nil, value: selected)
-        .animation(ConductorMotion.micro, value: hovering)
-        .animation(ConductorMotion.standard, value: editing)
+        .animation(ConductorMotion.hover, value: hovering)
+        .animation(ConductorMotion.selection, value: editing)
         .animation(ConductorMotion.emphasized, value: unreadCount)
         .onHover { value in
-            withAnimation(ConductorMotion.micro) {
+            ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }
         }
-        .contentShape(Capsule())
-        .simultaneousGesture(
-            TapGesture(count: 1).onEnded {
-                onSelect()
-            }
-        )
+        .contentShape(tabShape)
+        .onTapGesture {
+            onSelect()
+        }
         .simultaneousGesture(
             TapGesture(count: 2).onEnded {
-                ConductorMotion.perform(onRename)
-            }
-        )
-        .onDrag {
-            NSItemProvider(object: workspace.id.description as NSString)
-        }
-        .contextMenu {
-            Button("重命名工作区...") {
+                guard !editing else { return }
+                onSelect()
                 onRename()
             }
-            Button("复制工作区") {
+        )
+        .contextMenu {
+            Button(L("重命名工作区...", "Rename Workspace...")) {
+                onRename()
+            }
+            Button(L("复制工作区", "Duplicate Workspace")) {
                 onDuplicate()
             }
             Divider()
-            Button("关闭其他工作区") {
+            Button(L("关闭其他工作区", "Close Other Workspaces")) {
                 onCloseOthers()
             }
             .disabled(!canClose)
-            Button("关闭右侧工作区") {
+            Button(L("关闭右侧工作区", "Close Workspaces to the Right")) {
                 onCloseRight()
             }
             .disabled(!canClose)
             Divider()
-            Button("关闭工作区") {
+            Button(L("关闭工作区", "Close Workspace")) {
                 onClose()
             }
             .disabled(!canClose)
         }
-        .help("\(workspace.title) · \(workspace.panes.count) 分屏 · \(terminalCount) 终端")
+        .help("\(row.title) · \(row.splitCount) \(L("分屏", "panes")) · \(row.terminalCount) \(L("终端", "terminals"))")
     }
 }
 
 private struct WorkspaceTabGlyph: View {
     let selected: Bool
-    let accent: Color
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        Grid(horizontalSpacing: 2.4, verticalSpacing: 2.4) {
-            GridRow {
-                cell(opacity: selected ? 0.98 : 0.62)
-                cell(opacity: selected ? 0.74 : 0.38)
-            }
-            GridRow {
-                cell(opacity: selected ? 0.56 : 0.34)
-                cell(opacity: selected ? 0.88 : 0.48)
-            }
-        }
-        .frame(width: 16, height: 16)
-        .padding(2)
-        .background(selected ? accent.opacity(0.105) : Color.white.opacity(0.035))
-        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .stroke(selected ? accent.opacity(0.24) : Color.white.opacity(0.06), lineWidth: 1)
-        }
-    }
-
-    private func cell(opacity: Double) -> some View {
-        RoundedRectangle(cornerRadius: 1.6, style: .continuous)
-            .fill((selected ? accent : ConductorDesign.terminalTextMuted).opacity(opacity))
-            .frame(width: 4.6, height: 4.6)
-    }
-}
-
-private struct WorkspaceTabDropDelegate: DropDelegate {
-    let targetWorkspaceID: WorkspaceID?
-    let model: ConductorWindowModel
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard let item = info.itemProviders(for: [UTType.text]).first else { return false }
-        item.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { item, _ in
-            let text: String?
-            if let data = item as? Data {
-                text = String(data: data, encoding: .utf8)
-            } else if let string = item as? String {
-                text = string
-            } else if let nsString = item as? NSString {
-                text = nsString as String
-            } else {
-                text = nil
-            }
-
-            guard let text,
-                  let uuid = UUID(uuidString: text.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-                return
-            }
-
-            Task { @MainActor in
-                ConductorMotion.perform(ConductorMotion.layout) {
-                    model.moveWorkspace(WorkspaceID(uuid), before: targetWorkspaceID)
-                }
-            }
-        }
-        return true
+        Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
+            .font(.system(size: 11, weight: selected ? .bold : .semibold))
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(selected ? theme.shellChromeText.opacity(0.92) : theme.shellChromeTextMuted.opacity(0.74))
+            .frame(width: 19, height: 19)
+            .background(selected ? theme.shellHoverFill : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }

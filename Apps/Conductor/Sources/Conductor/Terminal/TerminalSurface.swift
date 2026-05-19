@@ -8,6 +8,7 @@ final class TerminalSurface {
     let id: TerminalID
     let hostView: TerminalHostView
     var onFocusRequest: (@MainActor (TerminalID) -> Void)?
+    var onContextMenuRequest: (@MainActor (TerminalID, NSEvent, NSView) -> Bool)?
 
     private var surface: ghostty_surface_t?
     private var lastPixelSize = CGSize(width: -1, height: -1)
@@ -136,7 +137,10 @@ final class TerminalSurface {
     }
 
     func syncGeometry(force: Bool = false) {
-        guard let surface else { return }
+        guard let surface,
+              let window = hostView.window else {
+            return
+        }
 
         let signpost = force ? ConductorSignpost.begin("surface-geometry-force") : nil
         defer {
@@ -145,7 +149,7 @@ final class TerminalSurface {
             }
         }
 
-        let backingScale = hostView.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        let backingScale = window.backingScaleFactor
         var didUpdateGeometry = false
         let scale = CGSize(width: backingScale, height: backingScale)
         if force || scale != lastScale {
@@ -154,7 +158,7 @@ final class TerminalSurface {
             didUpdateGeometry = true
         }
 
-        if let displayID = hostView.window?.screen?.conductorDisplayID,
+        if let displayID = window.screen?.conductorDisplayID,
            displayID != 0,
            force || displayID != lastDisplayID {
             ghostty_surface_set_display_id(surface, displayID)
@@ -189,9 +193,42 @@ final class TerminalSurface {
         onFocusRequest?(id)
     }
 
+    @discardableResult
+    func requestContextMenu(event: NSEvent, in view: NSView) -> Bool {
+        onContextMenuRequest?(id, event, view) ?? false
+    }
+
     func refresh() {
         guard let surface else { return }
         ghostty_surface_refresh(surface)
+    }
+
+    @discardableResult
+    func performBindingAction(_ action: String) -> Bool {
+        guard let surface else { return false }
+        return action.withCString { pointer in
+            ghostty_surface_binding_action(surface, pointer, UInt(action.utf8.count))
+        }
+    }
+
+    @discardableResult
+    func startSearchPrompt() -> Bool {
+        performBindingAction("start_search")
+    }
+
+    @discardableResult
+    func search(_ query: String) -> Bool {
+        performBindingAction("search:\(Self.searchNeedle(from: query))")
+    }
+
+    @discardableResult
+    func navigateSearch(previous: Bool) -> Bool {
+        performBindingAction(previous ? "navigate_search:previous" : "navigate_search:next")
+    }
+
+    @discardableResult
+    func endSearch() -> Bool {
+        performBindingAction("end_search")
     }
 
     func sendText(_ text: String) {
@@ -390,6 +427,13 @@ final class TerminalSurface {
         default:
             nil
         }
+    }
+
+    private static func searchNeedle(from query: String) -> String {
+        query
+            .replacingOccurrences(of: "\u{0}", with: "")
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
     }
 }
 

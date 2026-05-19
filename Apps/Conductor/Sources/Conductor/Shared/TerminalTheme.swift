@@ -1,6 +1,7 @@
 import SwiftUI
 
 enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
+    case macOSDark
     case codexDark
     case flexoki
     case aurora
@@ -11,6 +12,8 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var title: String {
         switch self {
+        case .macOSDark:
+            "macOS Dark"
         case .codexDark:
             "Codex Dark"
         case .flexoki:
@@ -30,58 +33,83 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         return themes[(index + 1) % themes.count]
     }
 
+    var usesDarkChrome: Bool {
+        switch self {
+        case .macOSDark, .codexDark:
+            true
+        case .flexoki, .aurora, .graphite, .ember:
+            false
+        }
+    }
+
+    var chromeColorScheme: ColorScheme {
+        usesDarkChrome ? .dark : .light
+    }
+
     var terminalRaisedBackground: Color {
         switch self {
+        case .macOSDark:
+            Color(red: 0.045, green: 0.047, blue: 0.052)
         case .codexDark:
             Color(red: 0.024, green: 0.035, blue: 0.052)
         case .flexoki:
-            Color(red: 0.055, green: 0.047, blue: 0.040)
+            Color(red: 0.946, green: 0.928, blue: 0.880)
         case .aurora:
-            Color(red: 0.014, green: 0.050, blue: 0.076)
+            Color(red: 0.902, green: 0.954, blue: 0.962)
         case .graphite:
-            Color(red: 0.044, green: 0.046, blue: 0.052)
+            Color(red: 0.922, green: 0.930, blue: 0.942)
         case .ember:
-            Color(red: 0.069, green: 0.031, blue: 0.018)
+            Color(red: 0.974, green: 0.918, blue: 0.858)
         }
     }
 
     var terminalChrome: Color {
         switch self {
+        case .macOSDark:
+            Color(red: 0.074, green: 0.076, blue: 0.084)
         case .codexDark:
             Color(red: 0.047, green: 0.071, blue: 0.106)
         case .flexoki:
-            Color(red: 0.090, green: 0.071, blue: 0.055)
+            Color(red: 0.972, green: 0.952, blue: 0.904)
         case .aurora:
-            Color(red: 0.026, green: 0.083, blue: 0.120)
+            Color(red: 0.932, green: 0.978, blue: 0.982)
         case .graphite:
-            Color(red: 0.075, green: 0.078, blue: 0.086)
+            Color(red: 0.952, green: 0.958, blue: 0.966)
         case .ember:
-            Color(red: 0.114, green: 0.052, blue: 0.030)
+            Color(red: 0.990, green: 0.942, blue: 0.888)
         }
     }
 
     var terminalBackground: Color {
         switch self {
+        case .macOSDark:
+            Color(red: 0.055, green: 0.057, blue: 0.063)
         case .codexDark:
             Color(red: 0.055, green: 0.058, blue: 0.070)
         case .flexoki:
-            Color(red: 0.063, green: 0.059, blue: 0.059)
+            Color(red: 0.988, green: 0.968, blue: 0.920)
         case .aurora:
-            Color(red: 0.024, green: 0.070, blue: 0.105)
+            Color(red: 0.956, green: 0.988, blue: 0.992)
         case .graphite:
-            Color(red: 0.061, green: 0.064, blue: 0.071)
+            Color(red: 0.976, green: 0.980, blue: 0.986)
         case .ember:
-            Color(red: 0.082, green: 0.042, blue: 0.029)
+            Color(red: 0.998, green: 0.956, blue: 0.910)
         }
     }
 
     var windowBackdropStops: [Color] {
         switch self {
+        case .macOSDark:
+            [
+                Color(red: 0.102, green: 0.106, blue: 0.116),
+                Color(red: 0.070, green: 0.073, blue: 0.082),
+                Color(red: 0.042, green: 0.044, blue: 0.050)
+            ]
         case .codexDark:
             [
-                Color(red: 0.925, green: 0.944, blue: 0.968),
-                Color(red: 0.875, green: 0.910, blue: 0.948),
-                Color(red: 0.824, green: 0.862, blue: 0.910)
+                Color(red: 0.086, green: 0.096, blue: 0.116),
+                Color(red: 0.060, green: 0.070, blue: 0.090),
+                Color(red: 0.034, green: 0.040, blue: 0.054)
             ]
         case .flexoki:
             [
@@ -112,8 +140,10 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var windowBackdropWash: Color {
         switch self {
+        case .macOSDark:
+            Color(red: 0.10, green: 0.32, blue: 0.58).opacity(0.08)
         case .codexDark:
-            Color(red: 0.80, green: 0.87, blue: 0.98).opacity(0.16)
+            Color(red: 0.22, green: 0.40, blue: 0.72).opacity(0.080)
         case .flexoki:
             Color(red: 0.98, green: 0.74, blue: 0.34).opacity(0.15)
         case .aurora:
@@ -127,31 +157,35 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellPanelBackground: Color {
         switch self {
+        case .macOSDark:
+            Color(red: 0.082, green: 0.084, blue: 0.092).opacity(0.98)
         case .codexDark:
-            Color(red: 0.945, green: 0.960, blue: 0.982).opacity(0.74)
+            Color(red: 0.062, green: 0.071, blue: 0.090).opacity(0.98)
         case .flexoki:
-            Color(red: 0.968, green: 0.940, blue: 0.875).opacity(0.76)
+            Color(red: 0.930, green: 0.900, blue: 0.835).opacity(0.90)
         case .aurora:
-            Color(red: 0.900, green: 0.966, blue: 0.972).opacity(0.74)
+            Color(red: 0.862, green: 0.938, blue: 0.946).opacity(0.90)
         case .graphite:
-            Color(red: 0.920, green: 0.928, blue: 0.940).opacity(0.76)
+            Color(red: 0.892, green: 0.902, blue: 0.916).opacity(0.90)
         case .ember:
-            Color(red: 0.984, green: 0.912, blue: 0.838).opacity(0.74)
+            Color(red: 0.950, green: 0.872, blue: 0.800).opacity(0.90)
         }
     }
 
     var shellPanelStrong: Color {
         switch self {
+        case .macOSDark:
+            Color(red: 0.112, green: 0.116, blue: 0.126).opacity(0.96)
         case .codexDark:
-            Color(red: 0.982, green: 0.988, blue: 0.996).opacity(0.84)
+            Color(red: 0.086, green: 0.100, blue: 0.124).opacity(0.96)
         case .flexoki:
-            Color(red: 0.988, green: 0.960, blue: 0.900).opacity(0.84)
+            Color(red: 0.956, green: 0.924, blue: 0.862).opacity(0.94)
         case .aurora:
-            Color(red: 0.942, green: 0.990, blue: 0.994).opacity(0.82)
+            Color(red: 0.894, green: 0.956, blue: 0.962).opacity(0.94)
         case .graphite:
-            Color(red: 0.972, green: 0.976, blue: 0.982).opacity(0.82)
+            Color(red: 0.920, green: 0.928, blue: 0.940).opacity(0.94)
         case .ember:
-            Color(red: 0.996, green: 0.936, blue: 0.872).opacity(0.82)
+            Color(red: 0.970, green: 0.898, blue: 0.830).opacity(0.94)
         }
     }
 
@@ -173,8 +207,10 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingPanelBase: Color {
         switch self {
+        case .macOSDark:
+            Color(red: 0.118, green: 0.121, blue: 0.130).opacity(0.985)
         case .codexDark:
-            Color(red: 0.944, green: 0.955, blue: 0.970).opacity(0.965)
+            Color(red: 0.106, green: 0.114, blue: 0.134).opacity(0.985)
         case .flexoki:
             Color(red: 0.966, green: 0.940, blue: 0.884).opacity(0.965)
         case .aurora:
@@ -188,8 +224,10 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingPanelWash: Color {
         switch self {
+        case .macOSDark:
+            Color(red: 0.22, green: 0.25, blue: 0.30).opacity(0.035)
         case .codexDark:
-            Color(red: 0.62, green: 0.68, blue: 0.76).opacity(0.045)
+            Color(red: 0.28, green: 0.36, blue: 0.52).opacity(0.040)
         case .flexoki:
             Color(red: 0.62, green: 0.52, blue: 0.38).opacity(0.050)
         case .aurora:
@@ -202,17 +240,29 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     }
 
     var floatingControlFill: Color {
-        Color.white.opacity(0.50)
+        switch self {
+        case .macOSDark, .codexDark:
+            Color.white.opacity(0.075)
+        default:
+            Color.white.opacity(0.50)
+        }
     }
 
     var floatingControlStrongFill: Color {
-        Color.white.opacity(0.68)
+        switch self {
+        case .macOSDark, .codexDark:
+            Color.white.opacity(0.115)
+        default:
+            Color.white.opacity(0.68)
+        }
     }
 
     var floatingStroke: Color {
         switch self {
+        case .macOSDark:
+            Color.white.opacity(0.105)
         case .codexDark:
-            Color(red: 0.20, green: 0.23, blue: 0.30).opacity(0.13)
+            Color.white.opacity(0.105)
         case .flexoki:
             Color(red: 0.42, green: 0.31, blue: 0.18).opacity(0.14)
         case .aurora:
@@ -230,6 +280,8 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingEmphasis: Color {
         switch self {
+        case .macOSDark:
+            Color(red: 0.48, green: 0.62, blue: 0.84)
         case .codexDark:
             Color(red: 0.42, green: 0.47, blue: 0.55)
         case .flexoki:
@@ -244,21 +296,38 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     }
 
     var floatingSelectedFill: Color {
-        Color.black.opacity(0.060)
+        switch self {
+        case .macOSDark, .codexDark:
+            Color.white.opacity(0.090)
+        default:
+            Color.black.opacity(0.060)
+        }
     }
 
     var floatingHoverFill: Color {
-        Color.black.opacity(0.038)
+        switch self {
+        case .macOSDark, .codexDark:
+            Color.white.opacity(0.055)
+        default:
+            Color.black.opacity(0.038)
+        }
     }
 
     var floatingSelectedStroke: Color {
-        Color.black.opacity(0.135)
+        switch self {
+        case .macOSDark, .codexDark:
+            Color.white.opacity(0.145)
+        default:
+            Color.black.opacity(0.135)
+        }
     }
 
     var shellStroke: Color {
         switch self {
+        case .macOSDark:
+            Color.white.opacity(0.082)
         case .codexDark:
-            Color(red: 0.18, green: 0.22, blue: 0.32).opacity(0.15)
+            Color.white.opacity(0.078)
         case .flexoki:
             Color(red: 0.42, green: 0.31, blue: 0.18).opacity(0.16)
         case .aurora:
@@ -271,25 +340,66 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     }
 
     var shellSelectedFill: Color {
-        floatingEmphasis.opacity(0.10)
+        switch self {
+        case .macOSDark, .codexDark:
+            floatingEmphasis.opacity(0.10)
+        default:
+            Color.black.opacity(0.090)
+        }
     }
 
     var shellHoverFill: Color {
-        floatingEmphasis.opacity(0.055)
+        switch self {
+        case .macOSDark, .codexDark:
+            floatingEmphasis.opacity(0.055)
+        default:
+            Color.black.opacity(0.060)
+        }
     }
 
     var shellControlFill: Color {
-        Color.black.opacity(0.045)
+        switch self {
+        case .macOSDark, .codexDark:
+            Color.white.opacity(0.070)
+        default:
+            Color.black.opacity(0.045)
+        }
     }
 
     var shellControlRaisedFill: Color {
         shellPanelStrong.opacity(0.62)
     }
 
+    var shellChromeText: Color {
+        switch self {
+        case .macOSDark, .codexDark:
+            Color(red: 0.894, green: 0.918, blue: 0.953)
+        case .flexoki:
+            Color(red: 0.165, green: 0.135, blue: 0.095)
+        case .aurora:
+            Color(red: 0.075, green: 0.150, blue: 0.185)
+        case .graphite:
+            Color(red: 0.135, green: 0.150, blue: 0.175)
+        case .ember:
+            Color(red: 0.190, green: 0.105, blue: 0.075)
+        }
+    }
+
+    var shellChromeTextMuted: Color {
+        switch self {
+        case .macOSDark, .codexDark:
+            Color(red: 0.494, green: 0.537, blue: 0.612)
+        default:
+            shellChromeText.opacity(0.58)
+        }
+    }
+
     var terminalOuterStroke: Color {
         switch self {
+        case .macOSDark:
+            Color.white.opacity(0.120)
         case .codexDark:
-            Color.black.opacity(0.68)
+            Color.white.opacity(0.110)
         case .flexoki:
             Color(red: 0.18, green: 0.12, blue: 0.08).opacity(0.70)
         case .aurora:
@@ -303,6 +413,8 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var accent: Color {
         switch self {
+        case .macOSDark:
+            Color(red: 0.240, green: 0.520, blue: 0.940)
         case .codexDark:
             Color(red: 0.43, green: 0.35, blue: 0.86)
         case .flexoki:
@@ -318,6 +430,31 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var ghosttyConfig: String {
         switch self {
+        case .macOSDark:
+            """
+            palette = 0=#1d1d1f
+            palette = 1=#ff6961
+            palette = 2=#63d297
+            palette = 3=#ffd166
+            palette = 4=#64a9ff
+            palette = 5=#bf8cff
+            palette = 6=#5ac8fa
+            palette = 7=#d1d1d6
+            palette = 8=#6e6e73
+            palette = 9=#ff8a80
+            palette = 10=#8ee6b2
+            palette = 11=#ffe08a
+            palette = 12=#8fc5ff
+            palette = 13=#d3adff
+            palette = 14=#8edcff
+            palette = 15=#f5f5f7
+            background = #111113
+            foreground = #e8e8ed
+            cursor-color = #0a84ff
+            cursor-text = #111113
+            selection-background = #2f3f58
+            selection-foreground = #f5f5f7
+            """
         case .codexDark:
             """
             palette = 0=#111318
@@ -361,12 +498,12 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             palette = 13=#a02f6f
             palette = 14=#24837b
             palette = 15=#cecdc3
-            background = #100f0f
-            foreground = #cecdc3
-            cursor-color = #cecdc3
-            cursor-text = #100f0f
-            selection-background = #403e3c
-            selection-foreground = #cecdc3
+            background = #fffcf0
+            foreground = #100f0f
+            cursor-color = #205ea6
+            cursor-text = #fffcf0
+            selection-background = #d8e6f4
+            selection-foreground = #100f0f
             """
         case .aurora:
             """
@@ -386,12 +523,12 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             palette = 13=#cabdff
             palette = 14=#7cf4f1
             palette = 15=#f4fbff
-            background = #06121c
-            foreground = #d9edf5
-            cursor-color = #9ff2df
-            cursor-text = #06121c
-            selection-background = #17394a
-            selection-foreground = #f4fbff
+            background = #f4fdff
+            foreground = #102331
+            cursor-color = #128797
+            cursor-text = #f4fdff
+            selection-background = #c7ecf4
+            selection-foreground = #102331
             """
         case .graphite:
             """
@@ -411,12 +548,12 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             palette = 13=#d990ee
             palette = 14=#74d4df
             palette = 15=#f2f3f5
-            background = #111318
-            foreground = #e3e5e8
-            cursor-color = #d7dae0
-            cursor-text = #111318
-            selection-background = #30343b
-            selection-foreground = #f2f3f5
+            background = #f8f9fb
+            foreground = #1f2328
+            cursor-color = #4f5662
+            cursor-text = #f8f9fb
+            selection-background = #dce3ed
+            selection-foreground = #1f2328
             """
         case .ember:
             """
@@ -436,12 +573,12 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             palette = 13=#ffa7dc
             palette = 14=#7dece3
             palette = 15=#fff4eb
-            background = #160d0a
-            foreground = #f4dfd0
-            cursor-color = #ffb38a
-            cursor-text = #160d0a
-            selection-background = #4c2419
-            selection-foreground = #fff4eb
+            background = #fff6ed
+            foreground = #24110b
+            cursor-color = #d94a23
+            cursor-text = #fff6ed
+            selection-background = #f4d4c4
+            selection-foreground = #24110b
             """
         }
     }

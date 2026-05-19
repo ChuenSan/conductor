@@ -4,8 +4,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+if [[ -x /usr/local/opt/swift/bin/swift ]]; then
+  export PATH="/usr/local/opt/swift/bin:$PATH"
+fi
+
 ./Scripts/prepare-ghosttykit.sh
 swift build
+BIN_PATH="$(swift build --show-bin-path)"
 
 APP="$ROOT/.build/Conductor.app"
 CONTENTS="$APP/Contents"
@@ -14,7 +19,8 @@ RESOURCES="$CONTENTS/Resources"
 
 rm -rf "$APP"
 mkdir -p "$MACOS" "$RESOURCES"
-cp "$ROOT/.build/debug/Conductor" "$MACOS/Conductor"
+cp "$BIN_PATH/Conductor" "$MACOS/Conductor"
+swift "$ROOT/Scripts/generate-app-icon.swift" "$RESOURCES/AppIcon.icns"
 
 cat > "$CONTENTS/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -27,6 +33,8 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
   <string>Conductor</string>
   <key>CFBundleIdentifier</key>
   <string>app.conductor.dev</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>

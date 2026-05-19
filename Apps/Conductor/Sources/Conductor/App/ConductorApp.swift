@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import ConductorCore
 import SwiftUI
 
@@ -26,21 +27,45 @@ struct ConductorApp {
 final class ConductorWindow: NSWindow {
     var routeAppShortcut: ((NSEvent) -> Bool)?
 
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown,
+           event.clickCount == 2,
+           isChromeBorderDoubleClick(event) {
+            toggleFullScreen(nil)
+            return
+        }
+        super.sendEvent(event)
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if let terminalHost = Self.owningTerminalHost(for: firstResponder) {
-            if terminalHost.performKeyEquivalent(with: event) {
+            if routeAppShortcut?(event) == true {
                 return true
             }
             if let mainMenu = NSApp.mainMenu, mainMenu.performKeyEquivalent(with: event) {
                 return true
             }
-            return routeAppShortcut?(event) == true
+            if terminalHost.performKeyEquivalent(with: event) {
+                return true
+            }
+            return false
         }
 
         if super.performKeyEquivalent(with: event) {
             return true
         }
         return routeAppShortcut?(event) == true
+    }
+
+    private func isChromeBorderDoubleClick(_ event: NSEvent) -> Bool {
+        guard event.window === self else { return false }
+        let location = event.locationInWindow
+        let size = frame.size
+        let borderHitWidth: CGFloat = 18
+        return location.x <= borderHitWidth ||
+            location.x >= size.width - borderHitWidth ||
+            location.y <= borderHitWidth ||
+            location.y >= size.height - borderHitWidth
     }
 
     private static func owningTerminalHost(for responder: NSResponder?) -> TerminalHostView? {
@@ -99,6 +124,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     private var notificationWindowDelegate: NotificationWindowDelegate?
     private var agentHookObserver: NSObjectProtocol?
     private var shellKeyMonitor: Any?
+    private var cancellables = Set<AnyCancellable>()
     private let model = ConductorWindowModel()
     private var didStart = false
 
@@ -120,6 +146,8 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.titleVisibility = .hidden
         window.isOpaque = false
         window.backgroundColor = .clear
+        window.collectionBehavior = [.fullScreenPrimary, .managed]
+        applyAppearance(for: model.theme, to: window)
         window.hideSystemTrafficLights()
         window.routeAppShortcut = { [weak self] event in
             self?.routeAppShortcut(event) ?? false
@@ -146,6 +174,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
+        installAppearanceBinding()
         installMainMenu()
         runShortcutAutomationIfRequested()
         runSmokeAutomationIfRequested()
@@ -168,6 +197,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        Self.appendStressTrace("applicationWillTerminate", to: ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"])
         model.flushPersistence()
         notificationWindow?.close()
         if let agentHookObserver {
@@ -181,7 +211,8 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        Self.appendStressTrace("applicationShouldTerminateAfterLastWindowClosed", to: ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"])
+        return true
     }
 
     private func installMainMenu() {
@@ -189,14 +220,16 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu(title: "Conductor")
+        appMenu.addItem(menuItem("Settings...", ",", [], #selector(settingsPanelCommand)))
+        appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Quit Conductor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(menuItem("New Workspace", "n", [], #selector(newWorkspaceCommand)))
         fileMenu.addItem(menuItem("New Terminal", "t", [], #selector(newTerminalCommand)))
-        fileMenu.addItem(menuItem("Open Current Path", "", [], #selector(openCurrentPathCommand)))
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(menuItem("Close Tab", "w", [], #selector(closeTabCommand)))
         fileMenu.addItem(menuItem("Close Pane", "w", [.shift], #selector(closePaneCommand)))
@@ -214,7 +247,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         layoutMenu.addItem(menuItem("Previous Pane", "[", [.shift], #selector(focusPreviousPaneCommand)))
         layoutMenu.addItem(NSMenuItem.separator())
         layoutMenu.addItem(menuItem("Equalize Splits", "=", [.shift], #selector(equalizeSplitsCommand)))
-        layoutMenu.addItem(menuItem("Toggle Pane Zoom", "z", [], #selector(toggleZoomCommand)))
+        layoutMenu.addItem(menuItem("Toggle Pane Zoom", "z", [.option], #selector(toggleZoomCommand)))
         layoutMenu.addItem(NSMenuItem.separator())
         layoutMenu.addItem(menuItem("Move Tab Left", ",", [.shift], #selector(moveTabLeftCommand)))
         layoutMenu.addItem(menuItem("Move Tab Right", ".", [.shift], #selector(moveTabRightCommand)))
@@ -227,10 +260,21 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let viewMenu = NSMenu(title: "View")
         viewMenu.addItem(menuItem("Workspace Overview", "o", [], #selector(workspaceOverviewCommand)))
         viewMenu.addItem(menuItem("Command Palette", "k", [], #selector(commandPaletteCommand)))
-        viewMenu.addItem(menuItem("Notifications", "", [], #selector(notificationCenterCommand)))
+        viewMenu.addItem(menuItem("Notifications", "n", [.option], #selector(notificationCenterCommand)))
+        viewMenu.addItem(menuItem("Jump to Latest Unread", "j", [.option], #selector(jumpToLatestUnreadCommand)))
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(menuItem("Toggle Full Screen", "f", [.control], #selector(toggleFullScreenCommand)))
         viewMenu.addItem(menuItem("Reset Workspace", "", [], #selector(resetWorkspaceCommand)))
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
+
+        let findMenuItem = NSMenuItem()
+        let findMenu = NSMenu(title: "Find")
+        findMenu.addItem(menuItem("Find in Terminal", "f", [], #selector(findInTerminalCommand)))
+        findMenu.addItem(menuItem("Find Next", "g", [], #selector(findNextCommand)))
+        findMenu.addItem(menuItem("Find Previous", "g", [.shift], #selector(findPreviousCommand)))
+        findMenuItem.submenu = findMenu
+        mainMenu.addItem(findMenuItem)
 
         NSApp.mainMenu = mainMenu
     }
@@ -263,6 +307,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             model.canMoveSelectedTabToNextPane
         case #selector(moveTabToNewRightSplitCommand):
             model.canMoveSelectedTabToNewSplit
+        case #selector(jumpToLatestUnreadCommand):
+            model.notifications.snapshot.latestUnread != nil
+        case #selector(findNextCommand), #selector(findPreviousCommand):
+            model.terminalSearchVisible
         default:
             true
         }
@@ -281,6 +329,18 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         }
 
         switch (characters, flags.contains(.shift)) {
+        case ("f", _) where flags.contains(.control):
+            scheduleCommand { [weak self] in self?.window?.toggleFullScreen(nil) }
+            return true
+        case ("n", _) where flags.contains(.option):
+            scheduleCommand { [model] in model.toggleNotificationPanel() }
+            return true
+        case ("n", _):
+            scheduleCommand { [model] in model.newWorkspace() }
+            return true
+        case ("j", _) where flags.contains(.option):
+            scheduleCommand { [model] in _ = model.jumpToLatestUnread() }
+            return true
         case ("t", _):
             scheduleCommand { [model] in model.newTerminal() }
             return true
@@ -289,6 +349,17 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             return true
         case ("o", _):
             scheduleCommand { [model] in model.toggleWorkspaceOverview() }
+            return true
+        case ("f", _):
+            scheduleCommand { [model] in model.showTerminalSearch() }
+            return true
+        case ("g", true):
+            guard model.terminalSearchVisible else { return false }
+            scheduleCommand { [model] in model.navigateTerminalSearch(previous: true) }
+            return true
+        case ("g", false):
+            guard model.terminalSearchVisible else { return false }
+            scheduleCommand { [model] in model.navigateTerminalSearch(previous: false) }
             return true
         case ("w", true):
             guard model.canCloseFocusedPane else { return true }
@@ -304,6 +375,9 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         case ("d", true):
             guard model.canSplit else { return true }
             scheduleCommand { [model] in model.splitDown() }
+            return true
+        case ("h", true):
+            scheduleCommand { [model] in model.flashFocusedPane() }
             return true
         case ("]", true):
             scheduleCommand { [model] in model.focusNextPane() }
@@ -337,7 +411,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             guard model.workspace.root.leaves.count > 1 else { return true }
             scheduleCommand { [model] in model.equalizeSplits() }
             return true
-        case ("z", _):
+        case ("z", _) where flags.contains(.option):
             guard model.workspace.root.leaves.count > 1 else { return true }
             scheduleCommand { [model] in model.toggleZoom() }
             return true
@@ -409,12 +483,12 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         return model.dismissVisibleShellPanel()
     }
 
-    @objc private func newTerminalCommand() {
-        scheduleCommand { [model] in model.newTerminal() }
+    @objc private func newWorkspaceCommand() {
+        scheduleCommand { [model] in model.newWorkspace() }
     }
 
-    @objc private func openCurrentPathCommand() {
-        scheduleCommand { [model] in model.openCurrentPathForFocusedTerminal() }
+    @objc private func newTerminalCommand() {
+        scheduleCommand { [model] in model.newTerminal() }
     }
 
     @objc private func closeTabCommand() {
@@ -474,12 +548,36 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         scheduleCommand { [model] in model.toggleWorkspaceOverview() }
     }
 
+    @objc private func settingsPanelCommand() {
+        scheduleCommand { [model] in model.toggleSettingsPanel() }
+    }
+
     @objc private func notificationCenterCommand() {
         scheduleCommand { [model] in model.toggleNotificationPanel() }
     }
 
+    @objc private func jumpToLatestUnreadCommand() {
+        scheduleCommand { [model] in _ = model.jumpToLatestUnread() }
+    }
+
+    @objc private func toggleFullScreenCommand() {
+        scheduleCommand { [weak self] in self?.window?.toggleFullScreen(nil) }
+    }
+
     @objc private func resetWorkspaceCommand() {
         scheduleCommand { [model] in model.resetWorkspace() }
+    }
+
+    @objc private func findInTerminalCommand() {
+        scheduleCommand { [model] in model.showTerminalSearch() }
+    }
+
+    @objc private func findNextCommand() {
+        scheduleCommand { [model] in model.navigateTerminalSearch(previous: false) }
+    }
+
+    @objc private func findPreviousCommand() {
+        scheduleCommand { [model] in model.navigateTerminalSearch(previous: true) }
     }
 
     private func setNotificationWindowVisible(_ visible: Bool) {
@@ -488,6 +586,28 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         } else {
             hideNotificationWindow()
         }
+    }
+
+    private func installAppearanceBinding() {
+        model.$theme
+            .removeDuplicates()
+            .sink { [weak self] theme in
+                guard let self else { return }
+                if let window {
+                    applyAppearance(for: theme, to: window)
+                }
+                if let notificationWindow {
+                    applyAppearance(for: theme, to: notificationWindow)
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func applyAppearance(for theme: TerminalTheme, to window: NSWindow) {
+        let appearanceName: NSAppearance.Name = theme.chromeColorScheme == .dark ? .darkAqua : .aqua
+        let appearance = NSAppearance(named: appearanceName)
+        window.appearance = appearance
+        window.contentView?.appearance = appearance
     }
 
     private func hideNotificationWindow() {
@@ -521,6 +641,14 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         panel.titlebarAppearsTransparent = true
         panel.isOpaque = false
         panel.backgroundColor = .clear
+        applyAppearance(for: model.theme, to: panel)
+        [
+            NSWindow.ButtonType.closeButton,
+            .miniaturizeButton,
+            .zoomButton
+        ].forEach { buttonType in
+            panel.standardWindowButton(buttonType)?.isHidden = true
+        }
         panel.isReleasedWhenClosed = false
         panel.isFloatingPanel = false
         panel.becomesKeyOnlyIfNeeded = true
@@ -541,9 +669,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         contentContainer.wantsLayer = true
         contentContainer.layer?.backgroundColor = NSColor.clear.cgColor
         let hostingView = ConductorHostingView(
-            rootView: NotificationPanelView(model: model)
-                .environment(\.conductorTheme, model.theme)
-                .environment(\.conductorFontScale, model.appearance.fontScale)
+            rootView: NotificationPanelRootView(model: model)
                 .frame(
                     minWidth: ConductorTokens.Space.notificationPanelMinWidth,
                     minHeight: ConductorTokens.Space.notificationPanelMinHeight
@@ -591,7 +717,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let frame = window.frame
         return NSRect(
             x: frame.maxX - size.width - 24,
-            y: max(frame.minY + 40, frame.maxY - size.height - 54),
+            y: max(frame.minY + 40, frame.maxY - size.height - 72),
             width: size.width,
             height: size.height
         )
@@ -629,10 +755,14 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             }
 
             let shortcuts: [(String, String, NSEvent.ModifierFlags, UInt16)] = [
+                ("n", "n", [.command], 45),
                 ("t", "t", [.command], 17),
                 ("T", "t", [.command, .shift], 17),
                 ("d", "d", [.command], 2),
                 ("D", "d", [.command, .shift], 2),
+                ("n", "n", [.command, .option], 45),
+                ("j", "j", [.command, .option], 38),
+                ("z", "z", [.command, .option], 6),
                 ("]", "]", [.command], 30),
                 ("[", "[", [.command], 33),
                 ("}", "]", [.command, .shift], 30),
@@ -1060,33 +1190,76 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_OUTPUT"] ?? "/tmp/conductor-stress-ok.txt"
         let requestedCharacters = Self.positiveEnvironmentInt("CONDUCTOR_STRESS_CHARACTERS")
         let completionDelay = TimeInterval(Self.positiveEnvironmentInt("CONDUCTOR_STRESS_WAIT_SECONDS") ?? 3)
+        let multiTerminalStress = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_MULTI_TERMINAL"] == "1"
+        let markerRoot = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_MARKER_DIR"] ??
+            "/tmp/conductor-stress-\(UUID().uuidString)"
+        let tracePath = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"]
         let originalWorkspace = model.workspace
         let originalTheme = model.theme
+        Self.appendStressTrace("scheduled characters=\(requestedCharacters ?? 0) multi=\(multiTerminalStress)", to: tracePath)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [model] in
+            Self.appendStressTrace("begin", to: tracePath)
             model.closeAllSurfaces()
-            model.workspace = WorkspaceState(title: "Stress Automation")
             model.commandPaletteVisible = false
 
+            var stressWorkspace = WorkspaceState(title: "Stress Automation")
             if requestedCharacters == nil {
-                model.newTerminal()
-                model.splitRight()
-                model.splitDown()
-                model.equalizeSplits()
+                stressWorkspace.newTerminal(title: "zsh 2")
+                stressWorkspace.splitWorkspaceEdge(.right, title: "zsh 3")
+                stressWorkspace.splitWorkspaceEdge(.down, title: "zsh 4")
+                stressWorkspace.equalizeSplits()
+            } else if multiTerminalStress {
+                stressWorkspace.splitWorkspaceEdge(.right, title: "zsh 2")
+                stressWorkspace.splitWorkspaceEdge(.down, title: "zsh 3")
+                stressWorkspace.splitWorkspaceEdge(.right, title: "zsh 4")
+                stressWorkspace.equalizeSplits()
             }
+            model.workspace = stressWorkspace
+            Self.appendStressTrace(
+                "workspace panes=\(model.workspace.panes.count) terminals=\(model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count })",
+                to: tracePath
+            )
 
-            let command = Self.stressCommand(characterCount: requestedCharacters)
-            for pane in model.workspace.panes.values {
-                guard let tab = pane.selectedTab else { continue }
+            let markerURL = URL(fileURLWithPath: markerRoot, isDirectory: true)
+            try? FileManager.default.removeItem(at: markerURL)
+            try? FileManager.default.createDirectory(at: markerURL, withIntermediateDirectories: true)
+            var markerPaths: [String] = []
+            let targetTabs: [TerminalTabState]
+            if requestedCharacters == nil {
+                targetTabs = model.workspace.panes.values.flatMap(\.tabs)
+            } else {
+                targetTabs = model.workspace.root.leaves.compactMap { paneID in
+                    model.workspace.panes[paneID]?.selectedTab
+                }
+            }
+            Self.appendStressTrace("targets=\(targetTabs.count)", to: tracePath)
+            for tab in targetTabs {
+                let command: String
+                if let requestedCharacters {
+                    let markerPath = markerURL.appendingPathComponent("\(tab.id.description).done").path
+                    markerPaths.append(markerPath)
+                    command = Self.stressCommand(characterCount: requestedCharacters, completionMarkerPath: markerPath)
+                } else {
+                    command = Self.defaultStressCommand()
+                }
                 model.surface(for: tab).sendText(command)
             }
+            Self.appendStressTrace("sent markers=\(markerPaths.count)", to: tracePath)
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + completionDelay) {
+            @MainActor
+            func finish(status: String) {
+                let terminalCount = model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+                let completedCount = markerPaths.filter { FileManager.default.fileExists(atPath: $0) }.count
+                Self.appendStressTrace("finish status=\(status) completed=\(completedCount)", to: tracePath)
                 let summary = [
-                    "status=ok",
+                    "status=\(status)",
                     "stress=long-output",
                     "characters=\(requestedCharacters ?? 0)",
+                    "characters_per_terminal=\(requestedCharacters ?? 0)",
+                    "total_characters=\((requestedCharacters ?? 0) * terminalCount)",
+                    "completed_terminals=\(completedCount)",
                     "panes=\(model.workspace.panes.count)",
-                    "terminals=\(model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count })",
+                    "terminals=\(terminalCount)",
                     "zoomed=\(model.workspace.isZoomed)"
                 ].joined(separator: "\n")
 
@@ -1101,6 +1274,46 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
                 model.flushPersistence()
                 NSApp.terminate(nil)
             }
+
+            let deadline = Date().addingTimeInterval(completionDelay)
+            @MainActor
+            func pollCompletion() {
+                let completedCount = markerPaths.filter { FileManager.default.fileExists(atPath: $0) }.count
+                let completed = completedCount == markerPaths.count
+                if completed {
+                    finish(status: "ok")
+                    return
+                }
+                if Date() >= deadline {
+                    finish(status: "timeout")
+                    return
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    pollCompletion()
+                }
+            }
+            if requestedCharacters == nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + completionDelay) {
+                    finish(status: "ok")
+                }
+            } else {
+                pollCompletion()
+            }
+        }
+    }
+
+    private static func appendStressTrace(_ line: String, to tracePath: String?) {
+        guard let tracePath else { return }
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let text = "\(timestamp) \(line)\n"
+        guard let data = text.data(using: .utf8) else { return }
+        if FileManager.default.fileExists(atPath: tracePath),
+           let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: tracePath)) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: URL(fileURLWithPath: tracePath), options: [.atomic])
         }
     }
 
@@ -1113,12 +1326,15 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         return value
     }
 
-    private static func stressCommand(characterCount: Int?) -> String {
-        guard let characterCount else {
-            return "for i in {1..2000}; do echo conductor-stress-$i; done\n"
-        }
+    private static func defaultStressCommand() -> String {
+        "for i in {1..2000}; do echo conductor-stress-$i; done\n"
+    }
+
+    private static func stressCommand(characterCount: Int, completionMarkerPath: String) -> String {
+        let escapedMarkerPath = completionMarkerPath.replacingOccurrences(of: "'", with: "'\"'\"'")
         return """
         python3 - <<'PY'
+        import pathlib
         import sys
 
         remaining = \(characterCount)
@@ -1128,6 +1344,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             sys.stdout.write(chunk[:size])
             remaining -= size
         sys.stdout.flush()
+        pathlib.Path('\(escapedMarkerPath)').write_text('ok', encoding='utf-8')
         PY
 
         """
@@ -1142,19 +1359,21 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             guard let self else { return }
             self.model.closeAllSurfaces()
-            self.model.workspace = WorkspaceState(title: "Resize Stress Automation")
             self.model.commandPaletteVisible = false
 
-            self.model.newTerminal()
-            self.model.splitRight()
-            self.model.splitDown()
-            self.model.equalizeSplits()
+            var stressWorkspace = WorkspaceState(title: "Resize Stress Automation")
+            stressWorkspace.newTerminal(title: "zsh 2")
+            stressWorkspace.splitWorkspaceEdge(.right, title: "zsh 3")
+            stressWorkspace.splitWorkspaceEdge(.down, title: "zsh 4")
+            stressWorkspace.equalizeSplits()
+            self.model.workspace = stressWorkspace
             self.model.closeAllSurfaces()
 
             let command = "for i in {1..4000}; do echo conductor-resize-stress-$i; done\n"
             for pane in self.model.workspace.panes.values {
-                guard let tab = pane.selectedTab else { continue }
-                self.model.surface(for: tab).sendText(command)
+                for tab in pane.tabs {
+                    self.model.surface(for: tab).sendText(command)
+                }
             }
 
             self.performResizeStressStep(

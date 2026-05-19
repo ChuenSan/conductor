@@ -514,6 +514,34 @@ public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
         return canSplit(maximumPaneCount: maximumPaneCount) && sourcePane.tabs.count > 1
     }
 
+    public func canMoveTabToNewSplit(_ tabID: TerminalID, maximumPaneCount: Int = Self.defaultMaximumPaneCount) -> Bool {
+        guard canSplit(maximumPaneCount: maximumPaneCount),
+              let sourcePaneID = paneID(containing: tabID),
+              let sourcePane = panes[sourcePaneID] else {
+            return false
+        }
+        return sourcePane.tabs.count > 1
+    }
+
+    public func canMoveTabToSplit(
+        _ tabID: TerminalID,
+        targetPaneID: PaneID,
+        maximumPaneCount: Int = Self.defaultMaximumPaneCount
+    ) -> Bool {
+        guard let sourcePaneID = paneID(containing: tabID),
+              let sourcePane = panes[sourcePaneID],
+              panes[targetPaneID] != nil else {
+            return false
+        }
+        if sourcePaneID == targetPaneID {
+            return canSplit(maximumPaneCount: maximumPaneCount) && sourcePane.tabs.count > 1
+        }
+        if sourcePane.tabs.count == 1 {
+            return panes.count > 1
+        }
+        return canSplit(maximumPaneCount: maximumPaneCount)
+    }
+
     public mutating func setSplitFraction(path: [SplitPathElement], fraction: Double) {
         root = root.settingFraction(at: path[...], to: fraction)
     }
@@ -782,28 +810,70 @@ public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
         _ direction: SplitDirection,
         maximumPaneCount: Int = Self.defaultMaximumPaneCount
     ) -> WorkspaceMoveResult {
-        let sourcePaneID = focusedPaneID
-        guard canMoveSelectedTabToNewSplit(maximumPaneCount: maximumPaneCount),
-              var sourcePane = panes[sourcePaneID],
-              let selectedIndex = sourcePane.tabs.firstIndex(where: { $0.id == sourcePane.selectedTabID }) else {
+        guard let tabID = focusedPane?.selectedTabID else {
             return WorkspaceMoveResult()
         }
+        return moveTabToNewSplit(tabID, direction, maximumPaneCount: maximumPaneCount)
+    }
 
+    @discardableResult
+    public mutating func moveTabToNewSplit(
+        _ tabID: TerminalID,
+        _ direction: SplitDirection,
+        maximumPaneCount: Int = Self.defaultMaximumPaneCount
+    ) -> WorkspaceMoveResult {
+        guard let sourcePaneID = paneID(containing: tabID) else {
+            return WorkspaceMoveResult()
+        }
+        return moveTabToSplit(
+            tabID,
+            targetPaneID: sourcePaneID,
+            direction,
+            maximumPaneCount: maximumPaneCount
+        )
+    }
+
+    @discardableResult
+    public mutating func moveTabToSplit(
+        _ tabID: TerminalID,
+        targetPaneID: PaneID,
+        _ direction: SplitDirection,
+        maximumPaneCount: Int = Self.defaultMaximumPaneCount
+    ) -> WorkspaceMoveResult {
+        guard canMoveTabToSplit(tabID, targetPaneID: targetPaneID, maximumPaneCount: maximumPaneCount),
+              let sourcePaneID = paneID(containing: tabID),
+              var sourcePane = panes[sourcePaneID],
+              let selectedIndex = sourcePane.tabs.firstIndex(where: { $0.id == tabID }) else {
+            return WorkspaceMoveResult()
+        }
         let tab = sourcePane.tabs.remove(at: selectedIndex)
-        let replacementIndex = min(selectedIndex, sourcePane.tabs.count - 1)
-        sourcePane.selectedTabID = sourcePane.tabs[replacementIndex].id
-        panes[sourcePaneID] = sourcePane
+        var closedPaneIDs: [PaneID] = []
+        if sourcePane.selectedTabID == tabID, !sourcePane.tabs.isEmpty {
+            let replacementIndex = min(selectedIndex, sourcePane.tabs.count - 1)
+            sourcePane.selectedTabID = sourcePane.tabs[replacementIndex].id
+        }
+        if sourcePane.tabs.isEmpty {
+            panes.removeValue(forKey: sourcePaneID)
+            root = root.removingLeaf(sourcePaneID) ?? replacementRootAfterRemovingLastPane()
+            closedPaneIDs.append(sourcePaneID)
+            if zoomedPaneID == sourcePaneID {
+                zoomedPaneID = nil
+            }
+        } else {
+            panes[sourcePaneID] = sourcePane
+        }
 
         let newPane = PaneState(tabs: [tab])
-        let firstNode: SplitNode = direction.insertsBeforeFocusedPane ? .leaf(newPane.id) : .leaf(sourcePaneID)
-        let secondNode: SplitNode = direction.insertsBeforeFocusedPane ? .leaf(sourcePaneID) : .leaf(newPane.id)
+        let firstNode: SplitNode = direction.insertsBeforeFocusedPane ? .leaf(newPane.id) : .leaf(targetPaneID)
+        let secondNode: SplitNode = direction.insertsBeforeFocusedPane ? .leaf(targetPaneID) : .leaf(newPane.id)
         root = root.replacingLeaf(
-            sourcePaneID,
+            targetPaneID,
             with: .split(axis: direction.axis, first: firstNode, second: secondNode, fraction: 0.5)
         )
         panes[newPane.id] = newPane
         focusedPaneID = newPane.id
-        return WorkspaceMoveResult(movedTerminalID: tab.id)
+        zoomedPaneID = nil
+        return WorkspaceMoveResult(movedTerminalID: tab.id, closedPaneIDs: closedPaneIDs)
     }
 
     @discardableResult

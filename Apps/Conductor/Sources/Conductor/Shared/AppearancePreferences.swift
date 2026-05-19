@@ -11,22 +11,22 @@ enum AppearanceDensity: String, CaseIterable, Codable, Identifiable {
     var title: String {
         switch self {
         case .compact:
-            "紧凑"
+            ConductorLocalization.text(zh: "紧凑", en: "Compact")
         case .standard:
-            "标准"
+            ConductorLocalization.text(zh: "标准", en: "Standard")
         case .spacious:
-            "宽松"
+            ConductorLocalization.text(zh: "宽松", en: "Spacious")
         }
     }
 
     var subtitle: String {
         switch self {
         case .compact:
-            "更多终端面积"
+            ConductorLocalization.text(zh: "更多终端面积", en: "More terminal space")
         case .standard:
-            "平衡密度"
+            ConductorLocalization.text(zh: "平衡密度", en: "Balanced density")
         case .spacious:
-            "更松弛的控件"
+            ConductorLocalization.text(zh: "更松弛的控件", en: "Roomier controls")
         }
     }
 
@@ -118,22 +118,22 @@ enum ChromeClarity: String, CaseIterable, Codable, Identifiable {
     var title: String {
         switch self {
         case .soft:
-            "柔和"
+            ConductorLocalization.text(zh: "柔和", en: "Soft")
         case .balanced:
-            "标准"
+            ConductorLocalization.text(zh: "标准", en: "Balanced")
         case .crisp:
-            "清晰"
+            ConductorLocalization.text(zh: "清晰", en: "Crisp")
         }
     }
 
     var subtitle: String {
         switch self {
         case .soft:
-            "弱边界"
+            ConductorLocalization.text(zh: "弱边界", en: "Softer edges")
         case .balanced:
-            "默认层级"
+            ConductorLocalization.text(zh: "默认层级", en: "Default hierarchy")
         case .crisp:
-            "更明确"
+            ConductorLocalization.text(zh: "更明确", en: "Clearer layers")
         }
     }
 
@@ -192,22 +192,22 @@ enum AppearanceFontScale: String, CaseIterable, Codable, Identifiable {
     var title: String {
         switch self {
         case .small:
-            "小"
+            ConductorLocalization.text(zh: "小", en: "Small")
         case .standard:
-            "标准"
+            ConductorLocalization.text(zh: "标准", en: "Standard")
         case .large:
-            "大"
+            ConductorLocalization.text(zh: "大", en: "Large")
         }
     }
 
     var subtitle: String {
         switch self {
         case .small:
-            "更密集"
+            ConductorLocalization.text(zh: "更密集", en: "Denser")
         case .standard:
-            "默认字号"
+            ConductorLocalization.text(zh: "默认字号", en: "Default size")
         case .large:
-            "更易读"
+            ConductorLocalization.text(zh: "更易读", en: "Easier to read")
         }
     }
 
@@ -227,21 +227,135 @@ enum AppearanceFontScale: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum AppearanceLanguage: String, CaseIterable, Codable, Identifiable {
+    case system
+    case simplifiedChinese
+    case english
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system:
+            ConductorLocalization.text(zh: "跟随系统", en: "System")
+        case .simplifiedChinese:
+            "简体中文"
+        case .english:
+            "English"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .system:
+            ConductorLocalization.text(zh: "使用 macOS 首选语言", en: "Use macOS preferred language")
+        case .simplifiedChinese:
+            ConductorLocalization.text(zh: "中文界面", en: "Chinese UI")
+        case .english:
+            "English UI"
+        }
+    }
+
+    var localeIdentifier: String? {
+        switch self {
+        case .system:
+            nil
+        case .simplifiedChinese:
+            "zh-Hans"
+        case .english:
+            "en"
+        }
+    }
+}
+
+enum AppearanceFontFamily: String, CaseIterable, Codable, Identifiable {
+    case system
+    case rounded
+    case serif
+    case monospaced
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system:
+            ConductorLocalization.text(zh: "系统", en: "System")
+        case .rounded:
+            ConductorLocalization.text(zh: "圆体", en: "Rounded")
+        case .serif:
+            ConductorLocalization.text(zh: "衬线", en: "Serif")
+        case .monospaced:
+            ConductorLocalization.text(zh: "等宽", en: "Mono")
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .system:
+            ConductorLocalization.text(zh: "macOS 默认", en: "macOS default")
+        case .rounded:
+            ConductorLocalization.text(zh: "更柔和", en: "Softer UI")
+        case .serif:
+            ConductorLocalization.text(zh: "更有编辑感", en: "Editorial feel")
+        case .monospaced:
+            ConductorLocalization.text(zh: "代码感更强", en: "Code-like")
+        }
+    }
+}
+
+extension AppearanceLanguage {
+    var locale: Locale {
+        localeIdentifier.map(Locale.init(identifier:)) ?? .autoupdatingCurrent
+    }
+
+    var resolvedForDisplay: AppearanceLanguage {
+        switch self {
+        case .system:
+            let identifier = Locale.preferredLanguages.first ?? Locale.autoupdatingCurrent.identifier
+            return identifier.lowercased().hasPrefix("zh") ? .simplifiedChinese : .english
+        case .simplifiedChinese, .english:
+            return self
+        }
+    }
+}
+
+enum ConductorAppearanceRuntime {
+    nonisolated(unsafe) static var fontFamily: AppearanceFontFamily = .system
+    nonisolated(unsafe) static var language: AppearanceLanguage = .system
+
+    static func apply(_ appearance: AppearancePreferences) {
+        fontFamily = appearance.fontFamily
+        language = appearance.language
+    }
+}
+
+enum ConductorLocalization {
+    static func text(zh: String, en: String) -> String {
+        ConductorAppearanceRuntime.language.resolvedForDisplay == .english ? en : zh
+    }
+}
+
 struct AppearancePreferences: Codable, Equatable {
     var density: AppearanceDensity
     var chromeClarity: ChromeClarity
     var fontScale: AppearanceFontScale
+    var language: AppearanceLanguage
+    var fontFamily: AppearanceFontFamily
     var reducedMotion: Bool
 
     init(
         density: AppearanceDensity = .standard,
         chromeClarity: ChromeClarity = .balanced,
         fontScale: AppearanceFontScale = .standard,
+        language: AppearanceLanguage = .system,
+        fontFamily: AppearanceFontFamily = .system,
         reducedMotion: Bool = false
     ) {
         self.density = density
         self.chromeClarity = chromeClarity
         self.fontScale = fontScale
+        self.language = language
+        self.fontFamily = fontFamily
         self.reducedMotion = reducedMotion
     }
 
@@ -250,6 +364,8 @@ struct AppearancePreferences: Codable, Equatable {
         self.density = try container.decodeIfPresent(AppearanceDensity.self, forKey: .density) ?? .standard
         self.chromeClarity = try container.decodeIfPresent(ChromeClarity.self, forKey: .chromeClarity) ?? .balanced
         self.fontScale = try container.decodeIfPresent(AppearanceFontScale.self, forKey: .fontScale) ?? .standard
+        self.language = try container.decodeIfPresent(AppearanceLanguage.self, forKey: .language) ?? .system
+        self.fontFamily = try container.decodeIfPresent(AppearanceFontFamily.self, forKey: .fontFamily) ?? .system
         self.reducedMotion = try container.decodeIfPresent(Bool.self, forKey: .reducedMotion) ?? false
     }
 
@@ -257,6 +373,8 @@ struct AppearancePreferences: Codable, Equatable {
         case density
         case chromeClarity
         case fontScale
+        case language
+        case fontFamily
         case reducedMotion
     }
 }
