@@ -10,6 +10,7 @@ final class TerminalSurface {
     var onFocusRequest: (@MainActor (TerminalID) -> Void)?
     var onContextMenuRequest: (@MainActor (TerminalID, NSEvent, NSView) -> Bool)?
     var onTerminalTabDropRequest: (@MainActor (TerminalID, TerminalID, TerminalTabDropTarget) -> Bool)?
+    var hasActiveTerminalTabDrag: (@MainActor () -> Bool)?
 
     private var surface: ghostty_surface_t?
     private var lastPixelSize = CGSize(width: -1, height: -1)
@@ -220,6 +221,10 @@ final class TerminalSurface {
     @discardableResult
     func performTerminalTabDrop(draggedTerminalID: TerminalID, target: TerminalTabDropTarget) -> Bool {
         onTerminalTabDropRequest?(id, draggedTerminalID, target) ?? false
+    }
+
+    func canAcceptTerminalTabDrop() -> Bool {
+        hasActiveTerminalTabDrag?() ?? false
     }
 
     func refresh() {

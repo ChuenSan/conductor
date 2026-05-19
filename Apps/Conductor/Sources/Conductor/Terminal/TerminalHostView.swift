@@ -9,6 +9,12 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     private static let internalTerminalTabDragType = NSPasteboard.PasteboardType("app.conductor.terminal-tab")
     private static let dropTypes: Set<NSPasteboard.PasteboardType> = [
         internalTerminalTabDragType,
+        .string,
+        .fileURL,
+        .URL,
+        legacyFilenamesPboardType
+    ]
+    private static let externalFileDropTypes: Set<NSPasteboard.PasteboardType> = [
         .fileURL,
         .URL,
         legacyFilenamesPboardType
@@ -401,13 +407,14 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     }
 
     private func dropOperation(for pasteboard: NSPasteboard) -> NSDragOperation {
-        if terminalTabID(from: pasteboard) != nil {
+        if surface?.canAcceptTerminalTabDrop() == true,
+           terminalTabID(from: pasteboard) != nil {
             return .move
         }
 
         guard let types = pasteboard.types,
               !types.contains(Self.internalTerminalTabDragType),
-              !Set(types).isDisjoint(with: Self.dropTypes),
+              !Set(types).isDisjoint(with: Self.externalFileDropTypes),
               droppedTerminalText(from: pasteboard) != nil else {
             return []
         }
@@ -424,6 +431,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         if terminalTabDropOverlay.superview !== self {
             addSubview(terminalTabDropOverlay, positioned: .above, relativeTo: nil)
         }
+        terminalTabDropOverlay.layer?.zPosition = 10_000
         terminalTabDropOverlay.isHidden = false
         terminalTabDropOverlay.needsDisplay = true
     }
@@ -446,6 +454,12 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         }
 
         if let text = pasteboard.string(forType: Self.internalTerminalTabDragType),
+           let terminalID = terminalID(fromDroppedText: text) {
+            return terminalID
+        }
+
+        if surface?.canAcceptTerminalTabDrop() == true,
+           let text = pasteboard.string(forType: .string),
            let terminalID = terminalID(fromDroppedText: text) {
             return terminalID
         }
@@ -600,6 +614,8 @@ private final class TerminalHostTabDropOverlayView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
+        layer?.isOpaque = false
+        layer?.zPosition = 10_000
         autoresizingMask = [.width, .height]
     }
 

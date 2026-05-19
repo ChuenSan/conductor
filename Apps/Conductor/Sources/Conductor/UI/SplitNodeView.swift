@@ -610,7 +610,7 @@ private struct TerminalPaneView: View {
                 .contentShape(Rectangle())
                 .clipped()
                 .onDrop(
-                    of: [terminalTabDragType],
+                    of: terminalTabDropTypes,
                     delegate: TerminalDetachDropDelegate(
                         paneID: pane.id,
                         size: proxy.size,
@@ -753,7 +753,7 @@ private struct StableTerminalTabStrip: View {
                 .padding(.horizontal, tabEdgePadding)
             }
             .onDrop(
-                of: [terminalTabDragType],
+                of: terminalTabDropTypes,
                 delegate: TerminalTabDropDelegate(
                     targetTabID: nil,
                     paneID: pane.id,
@@ -802,7 +802,7 @@ private struct StableTerminalTabStrip: View {
         .frame(width: model.appearance.density.paneTabWidth)
         .id(tab.id)
         .onDrop(
-            of: [terminalTabDragType],
+            of: terminalTabDropTypes,
             delegate: TerminalTabDropDelegate(
                 targetTabID: tab.id,
                 paneID: pane.id,
@@ -814,19 +814,33 @@ private struct StableTerminalTabStrip: View {
 }
 
 private let terminalTabDragType = UTType(exportedAs: "app.conductor.terminal-tab")
+private let terminalTabDropTypes: [UTType] = [terminalTabDragType, .text]
 private let terminalTabDragPrefix = "terminal:"
 
 private func terminalTabDragPayload(for tabID: TerminalID) -> NSItemProvider {
-    let provider = NSItemProvider()
-    let data = Data("\(terminalTabDragPrefix)\(tabID.description)".utf8)
+    let payload = "\(terminalTabDragPrefix)\(tabID.description)"
+    let provider = NSItemProvider(object: payload as NSString)
+    let data = Data(payload.utf8)
     provider.registerDataRepresentation(
         forTypeIdentifier: terminalTabDragType.identifier,
-        visibility: .ownProcess
+        visibility: .all
     ) { completion in
         completion(data, nil)
         return nil
     }
     return provider
+}
+
+private struct TerminalTabDropPayloadProvider {
+    let provider: NSItemProvider
+    let typeIdentifier: String
+
+    func loadTerminalID(_ completion: @escaping @Sendable (TerminalID?) -> Void) {
+        provider.loadItem(forTypeIdentifier: typeIdentifier, options: nil) { item, _ in
+            let terminalID = stringFromDropItem(item).flatMap(terminalID(fromDroppedText:))
+            completion(terminalID)
+        }
+    }
 }
 
 private func terminalID(fromDroppedText text: String) -> TerminalID? {
@@ -851,8 +865,14 @@ private func stringFromDropItem(_ item: NSSecureCoding?) -> String? {
     return nil
 }
 
-private func terminalTabDropProvider(in info: DropInfo) -> NSItemProvider? {
-    info.itemProviders(for: [terminalTabDragType]).first
+private func terminalTabDropProvider(in info: DropInfo) -> TerminalTabDropPayloadProvider? {
+    if let provider = info.itemProviders(for: [terminalTabDragType]).first {
+        return TerminalTabDropPayloadProvider(provider: provider, typeIdentifier: terminalTabDragType.identifier)
+    }
+    if let provider = info.itemProviders(for: [.text]).first {
+        return TerminalTabDropPayloadProvider(provider: provider, typeIdentifier: UTType.text.identifier)
+    }
+    return nil
 }
 
 private struct TerminalDetachDropDelegate: DropDelegate {
@@ -887,13 +907,9 @@ private struct TerminalDetachDropDelegate: DropDelegate {
         let resolvedTarget = target(for: info.location)
         target = nil
         guard validateDrop(info: info),
-              let item = terminalTabDropProvider(in: info) else { return false }
-        item.loadItem(forTypeIdentifier: terminalTabDragType.identifier, options: nil) { item, _ in
-            guard let text = stringFromDropItem(item),
-                  let draggedTabID = terminalID(fromDroppedText: text) else {
-                return
-            }
-
+              let payloadProvider = terminalTabDropProvider(in: info) else { return false }
+        payloadProvider.loadTerminalID { draggedTabID in
+            guard let draggedTabID else { return }
             Task { @MainActor in
                 ConductorMotion.perform(ConductorMotion.layout) {
                     if resolvedTarget == .center {
@@ -954,13 +970,9 @@ private struct TerminalTabDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         highlightedTabID = nil
         guard validateDrop(info: info),
-              let item = terminalTabDropProvider(in: info) else { return false }
-        item.loadItem(forTypeIdentifier: terminalTabDragType.identifier, options: nil) { item, _ in
-            guard let text = stringFromDropItem(item),
-                  let draggedTabID = terminalID(fromDroppedText: text) else {
-                return
-            }
-
+              let payloadProvider = terminalTabDropProvider(in: info) else { return false }
+        payloadProvider.loadTerminalID { draggedTabID in
+            guard let draggedTabID else { return }
             Task { @MainActor in
                 ConductorMotion.perform(ConductorMotion.layout) {
                     if let targetTabID {

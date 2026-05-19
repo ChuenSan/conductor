@@ -415,6 +415,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         surface.onContextMenuRequest = { [weak self] terminalID, event, view in
             self?.showTerminalContextMenu(terminalID: terminalID, event: event, in: view) ?? false
         }
+        surface.hasActiveTerminalTabDrag = { [weak self] in
+            self?.hasActiveTerminalTabDrag() ?? false
+        }
         surface.onTerminalTabDropRequest = { [weak self] targetTerminalID, draggedTerminalID, target in
             guard let self,
                   let targetPaneID = self.workspace.paneID(containing: targetTerminalID) else {
