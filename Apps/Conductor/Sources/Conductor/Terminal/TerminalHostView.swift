@@ -9,7 +9,6 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     private static let dropTypes: Set<NSPasteboard.PasteboardType> = [
         .fileURL,
         .URL,
-        .string,
         legacyFilenamesPboardType
     ]
 

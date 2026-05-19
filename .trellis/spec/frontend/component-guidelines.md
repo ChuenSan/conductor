@@ -291,10 +291,15 @@ terminal.
   providers can match surprisingly broad data representations.
 - Split placeholders and tab insertion highlights may only appear for that private internal
   tab-drag type.
-- External `.fileURL`/`.URL`/`.string` drops on a live terminal surface should be handled by
-  the stable AppKit `TerminalHostView`, focus the target terminal, and insert shell-escaped
-  file paths as terminal input without pressing Return. Decode file URLs first, then fall back
-  to URL/string payloads, matching Ghostty/cmux drag-destination behavior.
+- External `.fileURL`/`.URL`/legacy filename drops on a live terminal surface should be
+  handled by the stable AppKit `TerminalHostView`, focus the target terminal, and insert
+  shell-escaped file paths as terminal input without pressing Return. Decode file URLs first,
+  then fall back to URL payloads, matching Ghostty/cmux drag-destination behavior where it
+  does not conflict with app tab dragging.
+- Do not register broad `.string` drag types on `TerminalHostView`; SwiftUI/AppKit can expose
+  internal tab drags through text-compatible payloads, and a registered AppKit host can
+  prevent the parent split-drop target from showing its placeholder even when the host later
+  rejects the drop.
 - Terminal host file/text drop handling must reject the private internal terminal-tab drag
   pasteboard type so dragging tabs cannot be inserted into the shell as text.
 - Do not route dropped file contents or path lists through observable SwiftUI transcript state.
