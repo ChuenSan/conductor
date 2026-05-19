@@ -97,10 +97,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         didSet {
             let previousWorkspace = oldValue
             selectedWorkspaceID = workspace.id
-            if previousWorkspace.id == workspace.id {
-                syncSelectedWorkspace()
-            } else {
-                syncWorkspace(previousWorkspace)
+            let shouldSyncPreviousWorkspace = !skipPreviousWorkspaceSyncForNextAssignment
+            skipPreviousWorkspaceSyncForNextAssignment = false
+            if shouldSyncPreviousWorkspace {
+                if previousWorkspace.id == workspace.id {
+                    syncSelectedWorkspace()
+                } else {
+                    syncWorkspace(previousWorkspace)
+                }
             }
             persist()
         }
@@ -148,6 +152,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var pendingMetadataPublish: DispatchWorkItem?
     private var activeTerminalContextMenuController: TerminalContextMenuController?
     private var selectedWorkspaceID: WorkspaceID
+    private var skipPreviousWorkspaceSyncForNextAssignment = false
 
     init() {
         let persisted = persistence.load()
@@ -817,8 +822,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspaces.remove(at: index)
         if workspace.id == workspaceID {
             let nextIndex = min(index, workspaces.count - 1)
-            selectedWorkspaceID = workspaces[nextIndex].id
-            workspace = workspaces[nextIndex]
+            selectWorkspaceAfterListMutation(workspaces[nextIndex])
         } else {
             persist()
         }
@@ -833,8 +837,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             closeSurfaces(for: terminalIDs(in: closingWorkspace))
         }
         workspaces = [keptWorkspace]
-        selectedWorkspaceID = keptWorkspace.id
-        workspace = keptWorkspace
+        selectWorkspaceAfterListMutation(keptWorkspace)
         commandPaletteVisible = false
     }
 
@@ -852,8 +855,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             syncSelectedWorkspace()
             persist()
         } else {
-            selectedWorkspaceID = workspaceID
-            workspace = workspaces[index]
+            selectWorkspaceAfterListMutation(workspaces[index])
         }
         commandPaletteVisible = false
     }
@@ -1580,8 +1582,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         } else {
             workspaces.append(replacement)
         }
-        selectedWorkspaceID = replacement.id
-        workspace = replacement
+        selectWorkspaceAfterListMutation(replacement)
+    }
+
+    private func selectWorkspaceAfterListMutation(_ nextWorkspace: WorkspaceState) {
+        selectedWorkspaceID = nextWorkspace.id
+        skipPreviousWorkspaceSyncForNextAssignment = true
+        workspace = nextWorkspace
     }
 
     private func updateWorkspace(containing terminalID: TerminalID, _ update: (inout WorkspaceState) -> Bool) -> Bool {

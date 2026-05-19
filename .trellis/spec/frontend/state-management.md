@@ -139,6 +139,10 @@ Forbidden patterns:
   appearance changes.
 - Bad: Hard-coding fixed white/black opacity fills for selected sidebar/settings rows when a
   `TerminalTheme` shell color exists.
+- Bad: Deleting or replacing the selected workspace, assigning `workspace` to a successor,
+  and letting `workspace.didSet` sync the old selected workspace back into `workspaces`.
+  Controlled list mutations must use a guarded assignment path so close/reset operations do
+  not resurrect the item the user just removed.
 
 ### 6. Tests Required
 
