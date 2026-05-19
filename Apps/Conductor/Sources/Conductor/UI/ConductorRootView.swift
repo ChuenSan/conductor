@@ -3097,6 +3097,7 @@ private struct SidebarRailButton: View {
     var disabled = false
     let help: String
     let action: () -> Void
+    @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -3108,14 +3109,22 @@ private struct SidebarRailButton: View {
                 .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
                 .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
                 .frame(width: 34, height: 34)
-                .background(selected ? theme.shellSelectedFill : Color.clear)
+                .background(selected ? theme.shellSelectedFill : (hovering ? theme.shellHoverFill : Color.clear))
                 .clipShape(RoundedRectangle(cornerRadius: 11))
+                .overlay {
+                    ConductorMagneticGlow(cornerRadius: 11, active: selected, lineWidth: 0.8)
+                        .opacity(selected ? 0.75 : 0)
+                }
                 .contentShape(RoundedRectangle(cornerRadius: 11))
         }
         .buttonStyle(ConductorPressButtonStyle())
         .disabled(disabled)
         .opacity(disabled ? 0.35 : 1)
+        .scaleEffect(hovering && !disabled ? 1.035 : 1)
         .animation(ConductorMotion.micro, value: disabled)
+        .animation(ConductorMotion.hover, value: hovering)
+        .animation(ConductorMotion.selection, value: selected)
+        .onHover { hovering = $0 }
         .help(help)
     }
 }
@@ -3304,7 +3313,12 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
             if selected {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
                     .fill(theme.shellSelectedFill)
+                    .matchedGeometryEffect(id: "workspace-sidebar-selection", in: selectionNamespace)
             }
+        }
+        .overlay {
+            ConductorMagneticGlow(cornerRadius: ConductorTokens.Radius.row, active: selected, lineWidth: 0.75)
+                .opacity(selected ? 0.55 : 0)
         }
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
@@ -3345,6 +3359,7 @@ private struct SidebarActionRow: View {
         .buttonStyle(ConductorPressButtonStyle())
         .disabled(disabled)
         .opacity(disabled ? 0.38 : 1)
+        .scaleEffect(hovering && !disabled ? (showsTitle ? 1.006 : 1.032) : 1)
         .animation(ConductorMotion.micro, value: disabled)
         .animation(ConductorMotion.hover, value: hovering)
         .onHover { value in
@@ -3755,18 +3770,25 @@ private struct WorkspaceTopTab: View {
             if selected {
                 tabShape
                     .fill(selectedFill)
+                    .matchedGeometryEffect(id: "workspace-tab-selection", in: selectionNamespace)
             } else {
                 tabShape
                     .fill(baseFill)
             }
+        }
+        .overlay {
+            ConductorMagneticGlow(cornerRadius: ConductorTokens.Radius.workspaceTab, active: selected, lineWidth: 0.9)
+                .opacity(selected ? 0.72 : 0)
         }
         .clipShape(tabShape)
         .overlay {
             tabShape
                 .stroke(tabStroke, lineWidth: 1)
         }
+        .scaleEffect(hovering && !selected ? 1.012 : 1)
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.selection, value: editing)
+        .animation(ConductorMotion.selection, value: selected)
         .animation(ConductorMotion.emphasized, value: unreadCount)
         .onHover { value in
             ConductorMotion.perform(ConductorMotion.hover) {

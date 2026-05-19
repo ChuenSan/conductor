@@ -526,11 +526,11 @@ enum ConductorMotion {
     }
 
     static var feedback: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.05)
+        reducedMotion ? nil : .easeOut(duration: 0.055)
     }
 
     static var press: Animation? {
-        nil
+        reducedMotion ? nil : .easeOut(duration: 0.045)
     }
 
     static var selection: Animation? {
@@ -538,7 +538,7 @@ enum ConductorMotion {
     }
 
     static var navigation: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.12)
+        magnetic(duration: 0.18)
     }
 
     static var standard: Animation? {
@@ -546,11 +546,11 @@ enum ConductorMotion {
     }
 
     static var panel: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.15)
+        magnetic(duration: 0.20)
     }
 
     static var list: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.12)
+        magnetic(duration: 0.16)
     }
 
     static var layout: Animation? {
@@ -558,19 +558,19 @@ enum ConductorMotion {
     }
 
     static var spatial: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.16)
+        magnetic(duration: 0.22)
     }
 
     static var emphasized: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.18)
+        magnetic(duration: 0.24)
     }
 
     static var panelTransition: AnyTransition {
-        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.995, anchor: .top))
+        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.982, anchor: .topTrailing))
     }
 
     static var tabTransition: AnyTransition {
-        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.995))
+        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.988))
     }
 
     static var rowTransition: AnyTransition {
@@ -579,6 +579,10 @@ enum ConductorMotion {
 
     static func setReducedMotion(_ value: Bool) {
         reducedMotion = value
+    }
+
+    static func magnetic(duration: Double = 0.18) -> Animation? {
+        reducedMotion ? nil : .smooth(duration: duration, extraBounce: 0.045)
     }
 
     static func perform(_ action: () -> Void) {
@@ -622,6 +626,31 @@ struct ConductorPressButtonStyle: ButtonStyle {
                 transaction.animation = ConductorMotion.press
                 transaction.disablesAnimations = ConductorMotion.press == nil
             }
+    }
+}
+
+struct ConductorMagneticGlow: View {
+    var cornerRadius: CGFloat
+    var active = true
+    var lineWidth: CGFloat = 1
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(theme.usesDarkChrome ? 0.20 : 0.42),
+                        theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.22 : 0.16),
+                        theme.shellStroke.opacity(theme.usesDarkChrome ? 0.24 : 0.36)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: lineWidth
+            )
+            .opacity(active ? 1 : 0)
+            .allowsHitTesting(false)
     }
 }
 
@@ -684,6 +713,7 @@ struct ConductorIconButton: View {
         .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.97))
         .disabled(disabled)
         .opacity(disabled ? 0.34 : 1)
+        .scaleEffect(hovering && !disabled ? 1.018 : 1)
         .animation(ConductorMotion.selection, value: active)
         .animation(ConductorMotion.micro, value: disabled)
         .animation(ConductorMotion.hover, value: hovering)
