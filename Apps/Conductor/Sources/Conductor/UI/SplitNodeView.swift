@@ -503,7 +503,7 @@ private struct TerminalPaneView: View {
     let pane: PaneState
     @ObservedObject var model: ConductorWindowModel
     @State private var highlightedDropTabID: TerminalID?
-    @State private var detachDropTarget: TerminalDetachTarget?
+    @State private var detachDropTarget: TerminalTabDropTarget?
     @State private var flashVisible = false
     @Environment(\.conductorSplitResizeActive) private var splitResizeActive
 
@@ -519,6 +519,10 @@ private struct TerminalPaneView: View {
             !model.terminalSearchVisible
     }
 
+    private var paneDropTarget: TerminalTabDropTarget? {
+        detachDropTarget ?? model.terminalTabDropTargetByPaneID[pane.id]
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             tabBar
@@ -526,11 +530,19 @@ private struct TerminalPaneView: View {
         }
         .background(model.theme.terminalBackground)
         .overlay {
-            TerminalPaneFlashOverlay(
-                color: model.theme.accent,
-                visible: flashVisible
-            )
-            .allowsHitTesting(false)
+            ZStack {
+                if let paneDropTarget {
+                    TerminalDetachDropOverlay(target: paneDropTarget)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+
+                TerminalPaneFlashOverlay(
+                    color: model.theme.accent,
+                    visible: flashVisible
+                )
+                .allowsHitTesting(false)
+            }
         }
         .clipped()
         .onChange(of: model.paneFlashTokens[pane.id] ?? 0) { _, token in
@@ -617,11 +629,6 @@ private struct TerminalPaneView: View {
                         }
                     }
 
-                    if let detachDropTarget {
-                        TerminalDetachDropOverlay(target: detachDropTarget)
-                            .allowsHitTesting(false)
-                            .transition(.opacity)
-                    }
                 }
                 .contentShape(Rectangle())
                 .clipped()
@@ -650,28 +657,7 @@ private struct TerminalPaneView: View {
     }
 }
 
-private enum TerminalDetachTarget: Equatable {
-    case center
-    case left
-    case right
-    case up
-    case down
-
-    var direction: SplitDirection {
-        switch self {
-        case .center:
-            return .right
-        case .left:
-            return .left
-        case .right:
-            return .right
-        case .up:
-            return .up
-        case .down:
-            return .down
-        }
-    }
-
+private extension TerminalTabDropTarget {
     var alignment: Alignment {
         switch self {
         case .center:
@@ -687,20 +673,10 @@ private enum TerminalDetachTarget: Equatable {
         }
     }
 
-    var isHorizontalSplit: Bool {
-        switch self {
-        case .center:
-            return false
-        case .left, .right:
-            return true
-        case .up, .down:
-            return false
-        }
-    }
 }
 
 private struct TerminalDetachDropOverlay: View {
-    let target: TerminalDetachTarget
+    let target: TerminalTabDropTarget
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
@@ -894,7 +870,7 @@ private func terminalTabDropProvider(in info: DropInfo) -> TerminalTabDropPayloa
 private struct TerminalDetachDropDelegate: DropDelegate {
     let paneID: PaneID
     let size: CGSize
-    @Binding var target: TerminalDetachTarget?
+    @Binding var target: TerminalTabDropTarget?
     let model: ConductorWindowModel
 
     func validateDrop(info: DropInfo) -> Bool {
@@ -941,7 +917,7 @@ private struct TerminalDetachDropDelegate: DropDelegate {
         return true
     }
 
-    private func target(for location: CGPoint) -> TerminalDetachTarget {
+    private func target(for location: CGPoint) -> TerminalTabDropTarget {
         let width = max(1, size.width)
         let height = max(1, size.height)
         let horizontalEdge = max(80, width * 0.25)

@@ -26,7 +26,6 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     private var markedText = NSMutableAttributedString()
     private var markedSelectedRange = NSRange(location: NSNotFound, length: 0)
     private var consumedRightMouseForMenu = false
-    private lazy var terminalTabDropOverlay = TerminalHostTabDropOverlayView()
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 900, height: 620))
@@ -424,26 +423,11 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     private func updateTerminalTabDropOverlay(for sender: NSDraggingInfo) {
         let location = convert(sender.draggingLocation, from: nil)
         let target = terminalTabDropTarget(for: location, size: bounds.size)
-        terminalTabDropOverlay.accentColor = dropAccentColor
-        terminalTabDropOverlay.target = target
-        terminalTabDropOverlay.frame = bounds
-        terminalTabDropOverlay.autoresizingMask = [.width, .height]
-        if terminalTabDropOverlay.superview !== self {
-            addSubview(terminalTabDropOverlay, positioned: .above, relativeTo: nil)
-        }
-        terminalTabDropOverlay.layer?.zPosition = 10_000
-        terminalTabDropOverlay.isHidden = false
-        terminalTabDropOverlay.needsDisplay = true
+        surface?.updateTerminalTabDropTarget(target)
     }
 
     private func hideTerminalTabDropOverlay() {
-        terminalTabDropOverlay.isHidden = true
-        terminalTabDropOverlay.target = nil
-        terminalTabDropOverlay.removeFromSuperview()
-    }
-
-    private var dropAccentColor: NSColor {
-        surface?.terminalTabDropAccentColor ?? .controlAccentColor
+        surface?.updateTerminalTabDropTarget(nil)
     }
 
     private func terminalTabID(from pasteboard: NSPasteboard) -> TerminalID? {
@@ -600,60 +584,6 @@ enum TerminalTabDropTarget: Equatable {
             return true
         case .center, .up, .down:
             return false
-        }
-    }
-}
-
-private final class TerminalHostTabDropOverlayView: NSView {
-    var target: TerminalTabDropTarget?
-    var accentColor = NSColor.controlAccentColor
-
-    override var isOpaque: Bool { false }
-    override var isFlipped: Bool { true }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.isOpaque = false
-        layer?.zPosition = 10_000
-        autoresizingMask = [.width, .height]
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        nil
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let target,
-              let context = NSGraphicsContext.current?.cgContext else {
-            return
-        }
-
-        let rect = dropRect(for: target)
-        context.setFillColor(accentColor.withAlphaComponent(0.12).cgColor)
-        context.fill(rect)
-        context.setStrokeColor(accentColor.withAlphaComponent(0.72).cgColor)
-        context.setLineWidth(1)
-        context.stroke(rect.insetBy(dx: 0.5, dy: 0.5))
-    }
-
-    private func dropRect(for target: TerminalTabDropTarget) -> CGRect {
-        switch target {
-        case .center:
-            return bounds
-        case .left:
-            return CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width / 2, height: bounds.height)
-        case .right:
-            return CGRect(x: bounds.midX, y: bounds.minY, width: bounds.width / 2, height: bounds.height)
-        case .up:
-            return CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: bounds.height / 2)
-        case .down:
-            return CGRect(x: bounds.minX, y: bounds.midY, width: bounds.width, height: bounds.height / 2)
         }
     }
 }

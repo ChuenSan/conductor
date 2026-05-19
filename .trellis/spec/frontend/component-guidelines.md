@@ -297,9 +297,10 @@ terminal.
   drags: the private type or a text fallback must be paired with the active in-process
   drag-session marker and a valid terminal-tab ID payload.
 - When a live `NSViewRepresentable` terminal surface covers the pane, terminal-tab split drops
-  should be handled by the stable AppKit host as well: register the private tab type, draw the
-  split placeholder in an AppKit overlay above the Ghostty surface, and route the final drop
-  back through `ConductorWindowModel`.
+  should be handled by the stable AppKit host as well: register the private tab type, publish
+  hover target changes back through `ConductorWindowModel`, draw the split placeholder at the
+  full pane level so it covers the tab rail and terminal surface together, and route the final
+  drop back through `ConductorWindowModel`.
 - If a SwiftUI `NSItemProvider` payload is consumed by the AppKit host's `NSDraggingPasteboard`,
   the private tab type must be visible to the pasteboard reader. Keep the type private and gate
   acceptance through the active in-process drag-session marker rather than relying on provider

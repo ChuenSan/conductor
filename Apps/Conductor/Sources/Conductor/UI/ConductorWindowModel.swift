@@ -147,6 +147,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var terminalSearchFocusGeneration = 0
     @Published private(set) var terminalSearchTargetID: TerminalID?
     @Published private(set) var paneFlashTokens: [PaneID: UInt64] = [:]
+    @Published private(set) var terminalTabDropTargetByPaneID: [PaneID: TerminalTabDropTarget] = [:]
     private var activeTerminalTabDragID: TerminalID?
     private var terminalTabDragGeneration: UInt64 = 0
 
@@ -330,10 +331,20 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func endTerminalTabDrag() {
         terminalTabDragGeneration &+= 1
         activeTerminalTabDragID = nil
+        terminalTabDropTargetByPaneID.removeAll()
     }
 
     func hasActiveTerminalTabDrag() -> Bool {
         activeTerminalTabDragID != nil
+    }
+
+    func setTerminalTabDropTarget(for terminalID: TerminalID, target: TerminalTabDropTarget?) {
+        guard let paneID = workspace.paneID(containing: terminalID) else { return }
+        if let target {
+            terminalTabDropTargetByPaneID[paneID] = target
+        } else {
+            terminalTabDropTargetByPaneID.removeValue(forKey: paneID)
+        }
     }
 
     func canPerformCommand(_ command: ConductorShellCommand) -> Bool {
@@ -418,11 +429,15 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         surface.hasActiveTerminalTabDrag = { [weak self] in
             self?.hasActiveTerminalTabDrag() ?? false
         }
+        surface.onTerminalTabDropTargetChange = { [weak self] targetTerminalID, target in
+            self?.setTerminalTabDropTarget(for: targetTerminalID, target: target)
+        }
         surface.onTerminalTabDropRequest = { [weak self] targetTerminalID, draggedTerminalID, target in
             guard let self,
                   let targetPaneID = self.workspace.paneID(containing: targetTerminalID) else {
                 return false
             }
+            self.terminalTabDropTargetByPaneID.removeValue(forKey: targetPaneID)
             ConductorMotion.perform(ConductorMotion.layout) {
                 if target == .center {
                     guard self.workspace.paneID(containing: draggedTerminalID) != targetPaneID else { return }
