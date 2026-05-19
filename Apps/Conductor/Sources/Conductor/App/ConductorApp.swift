@@ -293,6 +293,9 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         viewMenu.addItem(menuItem("Notifications", "n", [.option], #selector(notificationCenterCommand)))
         viewMenu.addItem(menuItem("Jump to Latest Unread", "j", [.option], #selector(jumpToLatestUnreadCommand)))
         viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(menuItem("Open Current Directory", "", [], #selector(openCurrentDirectoryCommand)))
+        viewMenu.addItem(menuItem("Copy Current Directory Path", "", [], #selector(copyCurrentDirectoryCommand)))
+        viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(menuItem("Toggle Full Screen", "f", [.control], #selector(toggleFullScreenCommand)))
         viewMenu.addItem(menuItem("Reset Workspace", "", [], #selector(resetWorkspaceCommand)))
         viewMenuItem.submenu = viewMenu
@@ -339,6 +342,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             model.canPerformCommand(.moveTabToNewRightSplit)
         case #selector(jumpToLatestUnreadCommand):
             model.canPerformCommand(.jumpToLatestUnread)
+        case #selector(openCurrentDirectoryCommand):
+            model.canPerformCommand(.openFocusedDirectory)
+        case #selector(copyCurrentDirectoryCommand):
+            model.canPerformCommand(.copyFocusedDirectory)
         case #selector(findNextCommand), #selector(findPreviousCommand):
             model.canPerformCommand(menuItem.action == #selector(findNextCommand) ? .findNext : .findPrevious)
         default:
@@ -577,6 +584,14 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     @objc private func jumpToLatestUnreadCommand() {
         scheduleCommand(.jumpToLatestUnread)
+    }
+
+    @objc private func openCurrentDirectoryCommand() {
+        scheduleCommand(.openFocusedDirectory)
+    }
+
+    @objc private func copyCurrentDirectoryCommand() {
+        scheduleCommand(.copyFocusedDirectory)
     }
 
     @objc private func toggleFullScreenCommand() {

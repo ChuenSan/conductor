@@ -43,6 +43,9 @@ enum ConductorShellCommand: String, CaseIterable {
     case findPrevious
     case flashFocusedPane
     case duplicateSelectedTab
+    case newTerminalAtFocusedDirectory
+    case openFocusedDirectory
+    case copyFocusedDirectory
     case duplicateWorkspace
     case closeCurrentWorkspace
     case clearNotifications
@@ -81,6 +84,8 @@ enum ConductorShellCommand: String, CaseIterable {
             !model.notifications.records.isEmpty
         case .closeCurrentWorkspace:
             model.workspaces.count > 1
+        case .newTerminalAtFocusedDirectory, .openFocusedDirectory, .copyFocusedDirectory:
+            model.focusedWorkingDirectoryURL != nil
         default:
             true
         }
@@ -168,6 +173,12 @@ enum ConductorShellCommand: String, CaseIterable {
             model.flashFocusedPane()
         case .duplicateSelectedTab:
             model.duplicateSelectedTab()
+        case .newTerminalAtFocusedDirectory:
+            model.newTerminalAtFocusedDirectory()
+        case .openFocusedDirectory:
+            model.openFocusedDirectory()
+        case .copyFocusedDirectory:
+            model.copyFocusedDirectory()
         case .duplicateWorkspace:
             model.duplicateWorkspace(model.workspace.id)
         case .closeCurrentWorkspace:

@@ -46,6 +46,48 @@ struct TerminalDisplayMetadata: Equatable {
     var bellCount = 0
 }
 
+enum ToolPreviewKind: String, Equatable {
+    case markdown
+    case image
+    case text
+    case unsupported
+}
+
+struct ToolPreviewItem: Identifiable, Equatable {
+    let url: URL
+    let kind: ToolPreviewKind
+
+    var id: String {
+        "\(kind.rawValue):\(url.standardizedFileURL.path)"
+    }
+
+    var title: String {
+        url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent
+    }
+
+    var subtitle: String {
+        url.deletingLastPathComponent().path
+    }
+
+    init(url: URL) {
+        self.url = url.standardizedFileURL
+        self.kind = ToolPreviewItem.kind(for: self.url)
+    }
+
+    private static func kind(for url: URL) -> ToolPreviewKind {
+        switch url.pathExtension.lowercased() {
+        case "md", "markdown", "mdown", "mkd":
+            return .markdown
+        case "png", "jpg", "jpeg", "gif", "heic", "tiff", "webp":
+            return .image
+        case "txt", "log", "json", "jsonl", "yaml", "yml", "toml", "swift", "sh", "zsh", "bash", "py", "js", "ts", "tsx", "jsx", "html", "css", "xml":
+            return .text
+        default:
+            return .unsupported
+        }
+    }
+}
+
 private final class TerminalContextMenuController: NSObject, NSMenuDelegate {
     private var nextActionTag = 1
     private var actions: [Int: () -> Void] = [:]
@@ -142,6 +184,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published var settingsPanelVisible = false
     @Published var workspaceOverviewVisible = false
     @Published var terminalSearchVisible = false
+    @Published var toolPreviewItem: ToolPreviewItem?
     @Published var terminalSearchQuery = ""
     @Published private(set) var agentHookSettingsMessage: String?
     @Published private(set) var terminalSearchFocusGeneration = 0
@@ -371,6 +414,21 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspace.focusedPane?.selectedTabID
     }
 
+    var focusedWorkingDirectoryURL: URL? {
+        guard let focusedTerminalID,
+              let path = focusedWorkingDirectoryPath(for: focusedTerminalID) else {
+            return nil
+        }
+        let expanded = (path as NSString).expandingTildeInPath
+        let url = URL(fileURLWithPath: expanded, isDirectory: true).standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return nil
+        }
+        return url
+    }
+
     var focusedTerminalSearchMetadata: TerminalSearchMetadata {
         guard let terminalID = terminalSearchTargetID ?? focusedTerminalID else {
             return TerminalSearchMetadata()
@@ -459,8 +517,38 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspace.newTerminal(title: nextTerminalTitle(prefix: "zsh"))
     }
 
+    func newTerminalAtFocusedDirectory() {
+        let signpost = ConductorSignpost.begin("new-terminal-current-directory")
+        defer { ConductorSignpost.end("new-terminal-current-directory", signpost) }
+        workspace.newTerminal(
+            title: nextTerminalTitle(prefix: "zsh"),
+            workingDirectory: focusedWorkingDirectoryURL?.path
+        )
+    }
+
+    func openFocusedDirectory() {
+        guard let url = focusedWorkingDirectoryURL else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    func closeToolPreview() {
+        toolPreviewItem = nil
+    }
+
+    func revealToolPreviewInFinder() {
+        guard let item = toolPreviewItem else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([item.url])
+    }
+
+    func copyFocusedDirectory() {
+        guard let path = focusedWorkingDirectoryURL?.path else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(path, forType: .string)
+    }
+
     func ghosttyRuntimeDidRequestOpenURL(terminalID: TerminalID?, url: URL) -> Bool {
-        false
+        guard url.isFileURL else { return false }
+        return openLocalFileURLFromTerminal(terminalID: terminalID, url: url)
     }
 
     func splitRight() {
@@ -800,12 +888,24 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             self?.focusTerminal(terminalID)
             self?.performCommand(.showTerminalSearch, window: view.window)
         }
+        addItem(L("打开当前目录", "Open Current Directory"), enabled: focusedWorkingDirectoryURL != nil) { [weak self] in
+            self?.focusTerminal(terminalID)
+            self?.performCommand(.openFocusedDirectory, window: view.window)
+        }
+        addItem(L("复制当前目录路径", "Copy Current Directory Path"), enabled: focusedWorkingDirectoryURL != nil) { [weak self] in
+            self?.focusTerminal(terminalID)
+            self?.performCommand(.copyFocusedDirectory, window: view.window)
+        }
 
         addSeparator()
 
         addItem(L("新开终端", "New Terminal")) { [weak self] in
             self?.focusTerminal(terminalID)
             self?.performCommand(.newTerminal, window: view.window)
+        }
+        addItem(L("从当前目录新开终端", "New Terminal at Current Directory"), enabled: focusedWorkingDirectoryURL != nil) { [weak self] in
+            self?.focusTerminal(terminalID)
+            self?.performCommand(.newTerminalAtFocusedDirectory, window: view.window)
         }
         addItem(L("向右分屏", "Split Right"), enabled: target.workspace.canSplit()) { [weak self] in
             self?.focusTerminal(terminalID)
@@ -1560,6 +1660,44 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     private func metadata(for terminalID: TerminalID) -> TerminalDisplayMetadata {
         pendingMetadataByTerminalID[terminalID] ?? metadataByTerminalID[terminalID] ?? TerminalDisplayMetadata()
+    }
+
+    private func focusedWorkingDirectoryPath(for terminalID: TerminalID) -> String? {
+        let metadataPath = metadata(for: terminalID).workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let metadataPath, !metadataPath.isEmpty {
+            return metadataPath
+        }
+        guard let paneID = workspace.paneID(containing: terminalID),
+              let tab = workspace.panes[paneID]?.tabs.first(where: { $0.id == terminalID }) else {
+            return nil
+        }
+        let tabPath = tab.workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return tabPath?.isEmpty == false ? tabPath : nil
+    }
+
+    private func openLocalFileURLFromTerminal(terminalID: TerminalID?, url: URL) -> Bool {
+        let fileURL = url.standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory) else {
+            if let terminalID, containsTerminal(terminalID) {
+                _ = recordTerminalNotification(
+                    terminalID: terminalID,
+                    title: L("文件不存在", "File Not Found"),
+                    body: fileURL.path,
+                    kind: .notification
+                )
+            } else {
+                ConductorLog.terminal.warning("Ignoring missing local file URL: \(fileURL.path)")
+            }
+            return true
+        }
+
+        if isDirectory.boolValue {
+            NSWorkspace.shared.open(fileURL)
+        } else {
+            toolPreviewItem = ToolPreviewItem(url: fileURL)
+        }
+        return true
     }
 
     private func updateMetadata(for terminalID: TerminalID, _ update: (inout TerminalDisplayMetadata) -> Void) {

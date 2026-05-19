@@ -80,17 +80,13 @@ struct ConductorRootView: View {
 
             VStack(spacing: 0) {
                 ConductorToolbar(model: model)
-                ZStack(alignment: .topTrailing) {
-                    SplitNodeView(node: model.workspace.visibleRoot, model: model)
-                        .background(model.theme.terminalBackground)
-                    if model.terminalSearchVisible {
-                        TerminalContextSearchBar(model: model)
-                            .padding(.top, 8)
-                            .padding(.trailing, 12)
-                            .transition(ConductorMotion.searchTransition)
+                HStack(spacing: ConductorTokens.Space.splitGutter) {
+                    terminalStage
+                    if let item = model.toolPreviewItem {
+                        ToolPreviewPanel(model: model, item: item)
+                            .frame(width: 390)
                     }
                 }
-                .animation(model.shellAnimation(ConductorMotion.search), value: model.terminalSearchVisible)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(model.theme.terminalBackground)
@@ -99,6 +95,21 @@ struct ConductorRootView: View {
                     .allowsHitTesting(false)
             }
         }
+    }
+
+    private var terminalStage: some View {
+        ZStack(alignment: .topTrailing) {
+            SplitNodeView(node: model.workspace.visibleRoot, model: model)
+                .background(model.theme.terminalBackground)
+            if model.terminalSearchVisible {
+                TerminalContextSearchBar(model: model)
+                    .padding(.top, 8)
+                    .padding(.trailing, 12)
+                    .transition(ConductorMotion.searchTransition)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(model.shellAnimation(ConductorMotion.search), value: model.terminalSearchVisible)
     }
 
 }
@@ -273,6 +284,178 @@ private struct TerminalSearchIconButton: View {
         .animation(ConductorMotion.hover, value: hovering)
         .help(help)
     }
+}
+
+private struct ToolPreviewPanel: View {
+    @ObservedObject var model: ConductorWindowModel
+    let item: ToolPreviewItem
+    @State private var textState = PreviewTextState.loading
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorFontFamily) private var fontFamily
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 9) {
+                Image(systemName: iconName)
+                    .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(0.72))
+                    .frame(width: 24, height: 24)
+                    .background(theme.floatingControlFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.title)
+                        .font(.conductorSystem(size: 12.5, weight: .bold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.88))
+                        .lineLimit(1)
+                    Text(item.subtitle)
+                        .font(.conductorSystem(size: 10, weight: .medium, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.45))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer(minLength: 8)
+
+                TerminalSearchIconButton(systemImage: "folder", help: L("在 Finder 中显示", "Reveal in Finder")) {
+                    model.revealToolPreviewInFinder()
+                }
+                TerminalSearchIconButton(systemImage: "xmark", help: L("关闭预览", "Close Preview")) {
+                    model.closeToolPreview()
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 46)
+
+            Rectangle()
+                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.60 : 0.45))
+                .frame(height: 1)
+
+            previewContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.98 : 0.94))
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane, style: .continuous)
+                .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.80 : 0.55), lineWidth: 1)
+        }
+        .task(id: item.id) {
+            await loadTextIfNeeded()
+        }
+    }
+
+    @ViewBuilder
+    private var previewContent: some View {
+        switch item.kind {
+        case .image:
+            if let image = NSImage(contentsOf: item.url) {
+                GeometryReader { proxy in
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .background(theme.terminalBackground)
+                }
+            } else {
+                previewMessage(L("图片无法读取", "Image could not be loaded"))
+            }
+        case .markdown:
+            loadedText(markdown: true)
+        case .text:
+            loadedText(markdown: false)
+        case .unsupported:
+            previewMessage(L("这个文件类型暂时只支持在 Finder 中显示", "This file type can be revealed in Finder for now"))
+        }
+    }
+
+    private var iconName: String {
+        switch item.kind {
+        case .markdown:
+            "doc.richtext"
+        case .image:
+            "photo"
+        case .text:
+            "doc.text"
+        case .unsupported:
+            "doc"
+        }
+    }
+
+    @ViewBuilder
+    private func loadedText(markdown: Bool) -> some View {
+        switch textState {
+        case .loading:
+            previewMessage(L("读取中", "Loading"))
+        case .failed(let message):
+            previewMessage(message)
+        case .loaded(let text, let truncated):
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    if truncated {
+                        Text(L("文件较大，只预览前 1 MB。", "Large file: previewing the first 1 MB."))
+                            .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                            .foregroundStyle(theme.shellChromeText.opacity(0.46))
+                    }
+                    if markdown, let attributed = try? AttributedString(markdown: text) {
+                        Text(attributed)
+                            .font(.conductorSystem(size: 12.5, weight: .regular, family: fontFamily, scale: fontScale))
+                            .lineSpacing(5)
+                    } else {
+                        Text(text)
+                            .font(.system(size: 12, weight: .regular, design: .monospaced))
+                            .lineSpacing(3)
+                            .textSelection(.enabled)
+                    }
+                }
+                .foregroundStyle(theme.shellChromeText.opacity(0.82))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+            }
+        }
+    }
+
+    private func previewMessage(_ text: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: iconName)
+                .font(.conductorSystem(size: 22, weight: .medium, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.30))
+            Text(text)
+                .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.52))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func loadTextIfNeeded() async {
+        guard item.kind == .markdown || item.kind == .text else { return }
+        textState = .loading
+        let url = item.url
+        let result = await Task.detached(priority: .userInitiated) { () -> PreviewTextState in
+            do {
+                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+                let limit = 1_000_000
+                let handle = try FileHandle(forReadingFrom: url)
+                defer { try? handle.close() }
+                let data = try handle.read(upToCount: min(max(size, 0), limit)) ?? Data()
+                let text = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
+                return .loaded(text, truncated: size > limit)
+            } catch {
+                return .failed(error.localizedDescription)
+            }
+        }.value
+        textState = result
+    }
+}
+
+private enum PreviewTextState: Equatable {
+    case loading
+    case loaded(String, truncated: Bool)
+    case failed(String)
 }
 
 private struct ConductorShellJoiner: View {
@@ -617,6 +800,12 @@ private struct CommandPaletteItem: Identifiable {
             WorkspaceChromeGlyph.systemName(selected: false)
         case "new-terminal":
             "plus.rectangle.on.rectangle"
+        case "new-terminal-current-directory":
+            "arrow.turn.down.right"
+        case "open-current-directory":
+            "folder"
+        case "copy-current-directory":
+            "doc.on.doc"
         case "duplicate-tab", "duplicate-workspace":
             "plus.square.on.square"
         case "split-right":
@@ -708,8 +897,41 @@ private enum ConductorCommandCatalog {
             CommandPaletteItem(id: "new-terminal", section: L("创建", "Create"), title: L("新开终端", "New Terminal"), shortcut: "Cmd-T", keywords: "terminal pane shell") {
                 perform(.newTerminal)
             },
+            CommandPaletteItem(
+                id: "new-terminal-current-directory",
+                section: L("创建", "Create"),
+                title: L("从当前目录新开终端", "New Terminal at Current Directory"),
+                shortcut: "Current CWD",
+                disabled: !canPerform(.newTerminalAtFocusedDirectory),
+                disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
+                keywords: "terminal cwd current directory folder"
+            ) {
+                perform(.newTerminalAtFocusedDirectory)
+            },
             CommandPaletteItem(id: "duplicate-tab", section: L("创建", "Create"), title: L("复制当前标签", "Duplicate Current Tab"), shortcut: "Duplicate", keywords: "copy tab duplicate") {
                 perform(.duplicateSelectedTab)
+            },
+            CommandPaletteItem(
+                id: "open-current-directory",
+                section: L("上下文", "Context"),
+                title: L("打开当前目录", "Open Current Directory"),
+                shortcut: "Finder",
+                disabled: !canPerform(.openFocusedDirectory),
+                disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
+                keywords: "open reveal finder cwd folder directory"
+            ) {
+                perform(.openFocusedDirectory)
+            },
+            CommandPaletteItem(
+                id: "copy-current-directory",
+                section: L("上下文", "Context"),
+                title: L("复制当前目录路径", "Copy Current Directory Path"),
+                shortcut: "Copy",
+                disabled: !canPerform(.copyFocusedDirectory),
+                disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
+                keywords: "copy path cwd folder directory"
+            ) {
+                perform(.copyFocusedDirectory)
             },
             CommandPaletteItem(id: "split-right", section: L("创建", "Create"), title: L("向右分屏", "Split Right"), shortcut: "Cmd-D", disabled: !canPerform(.splitRight), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split right vertical") {
                 perform(.splitRight)

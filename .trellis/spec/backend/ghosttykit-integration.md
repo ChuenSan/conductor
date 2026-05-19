@@ -123,6 +123,18 @@ reveal, or error UI. Do not pass arbitrary local file URLs directly to LaunchSer
 terminal action callback; it can produce system alerts such as `-50` and breaks the intended
 right-side preview workflow.
 
+Current implementation contract:
+
+- `GhosttyAppRuntime.openURL(_:terminalID:)` asks `GhosttyAppRuntimeActionDelegate` first.
+- `ConductorWindowModel.ghosttyRuntimeDidRequestOpenURL(terminalID:url:)` must return `true`
+  for every local file URL, including missing files, so the runtime fallback never shows a
+  system alert for terminal-originated file paths.
+- Existing directories open in Finder; existing files become `ToolPreviewItem`s in the
+  app-owned right-side preview panel; missing files surface as compact Conductor
+  notifications when a terminal can be resolved.
+- Right-side file previews are product metadata/tool UI. They must not inspect terminal
+  scrollback or make terminal transcript text observable by SwiftUI.
+
 ## SwiftUI Bridge
 
 SwiftUI should see a stable terminal host component, not the terminal transcript or per-cell model.
