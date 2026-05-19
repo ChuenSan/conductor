@@ -424,13 +424,14 @@ private final class SplitDividerTrackingNSView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        cursor.set()
+        applyResizeCursor()
         onHoverChanged(true)
     }
 
     override func mouseExited(with event: NSEvent) {
         guard !isDragging else { return }
         onHoverChanged(false)
+        restoreDefaultCursor()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -439,7 +440,7 @@ private final class SplitDividerTrackingNSView: NSView {
             return
         }
         window?.makeFirstResponder(self)
-        cursor.set()
+        applyResizeCursor()
         isDragging = true
         dragStartWindowLocation = event.locationInWindow
         onHoverChanged(true)
@@ -448,7 +449,7 @@ private final class SplitDividerTrackingNSView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         guard isDragging, let dragStartWindowLocation else { return }
-        cursor.set()
+        applyResizeCursor()
         let location = event.locationInWindow
         let delta: CGFloat
         switch axis {
@@ -466,7 +467,13 @@ private final class SplitDividerTrackingNSView: NSView {
         dragStartWindowLocation = nil
         onDragEnded()
         let localLocation = convert(event.locationInWindow, from: nil)
-        onHoverChanged(bounds.contains(localLocation))
+        let hoveringAfterDrag = bounds.contains(localLocation)
+        onHoverChanged(hoveringAfterDrag)
+        if hoveringAfterDrag {
+            applyResizeCursor()
+        } else {
+            restoreDefaultCursor()
+        }
     }
 
     override func viewDidMoveToWindow() {
@@ -475,7 +482,16 @@ private final class SplitDividerTrackingNSView: NSView {
             isDragging = false
             dragStartWindowLocation = nil
             onHoverChanged(false)
+            restoreDefaultCursor()
         }
+    }
+
+    private func applyResizeCursor() {
+        cursor.set()
+    }
+
+    private func restoreDefaultCursor() {
+        NSCursor.arrow.set()
     }
 
     private var cursor: NSCursor {

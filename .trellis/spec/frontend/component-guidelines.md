@@ -257,6 +257,8 @@ styling to terminal output.
   seams against the workspace toolbar and pane rail.
 - Split gutters should have a stable hit target. Hover/drag may brighten the center handle,
   but dragging must keep split fraction updates animation-free.
+- Split gutter cursor overrides must be released explicitly on mouse exit, drag end outside
+  the divider, and view teardown; a resize cursor must not remain stuck after divider drag.
 - While a divider is being dragged, quiet adjacent pane border overlays so the gutter remains
   the only strong shared edge. Do not let both pane borders plus the divider draw competing
   hairlines during resize.
