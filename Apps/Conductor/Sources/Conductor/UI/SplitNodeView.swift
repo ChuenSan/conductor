@@ -887,7 +887,7 @@ private struct TerminalDetachDropDelegate: DropDelegate {
     let model: ConductorWindowModel
 
     func validateDrop(info: DropInfo) -> Bool {
-        terminalTabDropProvider(in: info) != nil
+        model.hasActiveTerminalTabDrag() && terminalTabDropProvider(in: info) != nil
     }
 
     func dropEntered(info: DropInfo) {
@@ -911,7 +911,8 @@ private struct TerminalDetachDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         let resolvedTarget = target(for: info.location)
         target = nil
-        guard let item = terminalTabDropProvider(in: info) else { return false }
+        guard validateDrop(info: info),
+              let item = terminalTabDropProvider(in: info) else { return false }
         item.loadItem(forTypeIdentifier: terminalTabDragType.identifier, options: nil) { item, _ in
             guard let text = stringFromDropItem(item),
                   let draggedTabID = terminalID(fromDroppedText: text) else {
@@ -927,6 +928,7 @@ private struct TerminalDetachDropDelegate: DropDelegate {
                         model.moveTabToSplit(draggedTabID, targetPaneID: paneID, direction: resolvedTarget.direction)
                     }
                 }
+                model.endTerminalTabDrag()
             }
         }
         return true
@@ -960,7 +962,7 @@ private struct TerminalTabDropDelegate: DropDelegate {
     let model: ConductorWindowModel
 
     func validateDrop(info: DropInfo) -> Bool {
-        terminalTabDropProvider(in: info) != nil
+        model.hasActiveTerminalTabDrag() && terminalTabDropProvider(in: info) != nil
     }
 
     func dropEntered(info: DropInfo) {
@@ -976,7 +978,8 @@ private struct TerminalTabDropDelegate: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         highlightedTabID = nil
-        guard let item = terminalTabDropProvider(in: info) else { return false }
+        guard validateDrop(info: info),
+              let item = terminalTabDropProvider(in: info) else { return false }
         item.loadItem(forTypeIdentifier: terminalTabDragType.identifier, options: nil) { item, _ in
             guard let text = stringFromDropItem(item),
                   let draggedTabID = terminalID(fromDroppedText: text) else {
@@ -991,6 +994,7 @@ private struct TerminalTabDropDelegate: DropDelegate {
                         model.moveTabToEnd(draggedTabID, in: paneID)
                     }
                 }
+                model.endTerminalTabDrag()
             }
         }
         return true
@@ -1304,6 +1308,7 @@ private struct TerminalTabButton: View {
         )
         .onDrag {
             model.selectTab(tab.id, in: paneID)
+            model.beginTerminalTabDrag(tab.id)
             return terminalTabDragPayload(for: tab.id)
         }
         .contextMenu {

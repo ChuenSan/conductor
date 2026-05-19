@@ -147,6 +147,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var terminalSearchFocusGeneration = 0
     @Published private(set) var terminalSearchTargetID: TerminalID?
     @Published private(set) var paneFlashTokens: [PaneID: UInt64] = [:]
+    private var activeTerminalTabDragID: TerminalID?
+    private var terminalTabDragGeneration: UInt64 = 0
 
     var onNotificationPanelVisibilityChange: ((Bool) -> Void)?
 
@@ -310,6 +312,28 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return
         }
         ConductorMotion.perform(animation, action)
+    }
+
+    func beginTerminalTabDrag(_ terminalID: TerminalID) {
+        terminalTabDragGeneration &+= 1
+        let generation = terminalTabDragGeneration
+        activeTerminalTabDragID = terminalID
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+            guard let self,
+                  self.terminalTabDragGeneration == generation else {
+                return
+            }
+            self.activeTerminalTabDragID = nil
+        }
+    }
+
+    func endTerminalTabDrag() {
+        terminalTabDragGeneration &+= 1
+        activeTerminalTabDragID = nil
+    }
+
+    func hasActiveTerminalTabDrag() -> Bool {
+        activeTerminalTabDragID != nil
     }
 
     func canPerformCommand(_ command: ConductorShellCommand) -> Bool {

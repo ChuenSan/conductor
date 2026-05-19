@@ -286,6 +286,9 @@ terminal.
 **Contract**:
 
 - Internal tab drag/reorder/split operations must use a private app UTType, not `UTType.text`.
+- Internal tab drag/reorder/split operations must also require an in-process drag-session
+  marker set by the terminal-tab `onDrag` source. Do not trust UTType matching alone; external
+  providers can match surprisingly broad data representations.
 - Split placeholders and tab insertion highlights may only appear for that private internal
   tab-drag type.
 - External `.fileURL` drops on a live terminal surface should focus the target terminal and
