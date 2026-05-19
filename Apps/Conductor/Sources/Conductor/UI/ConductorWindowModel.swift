@@ -602,13 +602,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         _ = surface(for: tab).navigateSearch(previous: previous)
     }
 
-    func closeTerminalSearch() {
+    func closeTerminalSearch(restoresTerminalFocus: Bool = true) {
         if terminalSearchVisible, let tab = terminalSearchTargetTab() {
             _ = surface(for: tab).endSearch()
         }
         terminalSearchVisible = false
         terminalSearchQuery = ""
         terminalSearchTargetID = nil
+        if restoresTerminalFocus {
+            restoreFocusedTerminalFocusSoon()
+        }
     }
 
     @discardableResult
@@ -709,7 +712,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func newWorkspace() {
         let signpost = ConductorSignpost.begin("new-workspace")
         defer { ConductorSignpost.end("new-workspace", signpost) }
-        closeTerminalSearch()
+        closeTerminalSearch(restoresTerminalFocus: false)
         let next = WorkspaceState(title: nextWorkspaceTitle())
         workspaces.append(next)
         selectedWorkspaceID = next.id
@@ -721,7 +724,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func duplicateWorkspace(_ workspaceID: WorkspaceID) {
         let signpost = ConductorSignpost.begin("duplicate-workspace")
         defer { ConductorSignpost.end("duplicate-workspace", signpost) }
-        closeTerminalSearch()
+        closeTerminalSearch(restoresTerminalFocus: false)
         guard let index = workspaces.firstIndex(where: { $0.id == workspaceID }) else { return }
         let source = workspace.id == workspaceID ? workspace : workspaces[index]
         let duplicate = source.duplicated(title: nextCopyTitle(for: source.title))
@@ -740,7 +743,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         guard let target = workspaces.first(where: { $0.id == workspaceID }) else {
             return
         }
-        closeTerminalSearch()
+        closeTerminalSearch(restoresTerminalFocus: false)
         selectedWorkspaceID = workspaceID
         workspace = target
         closeWorkspaceTransientPanels()
@@ -949,42 +952,63 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func toggleCommandPalette() {
-        commandPaletteVisible.toggle()
-        if commandPaletteVisible {
+        let willOpen = !commandPaletteVisible
+        commandPaletteVisible = willOpen
+        if willOpen {
             settingsPanelVisible = false
             workspaceOverviewVisible = false
-            closeTerminalSearch()
+            closeTerminalSearch(restoresTerminalFocus: false)
+        } else {
+            restoreFocusedTerminalFocusSoon()
         }
     }
 
     func hideCommandPalette() {
+        let wasVisible = commandPaletteVisible
         commandPaletteVisible = false
+        if wasVisible {
+            restoreFocusedTerminalFocusSoon()
+        }
     }
 
     func toggleSettingsPanel() {
-        settingsPanelVisible.toggle()
-        if settingsPanelVisible {
+        let willOpen = !settingsPanelVisible
+        settingsPanelVisible = willOpen
+        if willOpen {
             commandPaletteVisible = false
             workspaceOverviewVisible = false
-            closeTerminalSearch()
+            closeTerminalSearch(restoresTerminalFocus: false)
+        } else {
+            restoreFocusedTerminalFocusSoon()
         }
     }
 
     func hideSettingsPanel() {
+        let wasVisible = settingsPanelVisible
         settingsPanelVisible = false
+        if wasVisible {
+            restoreFocusedTerminalFocusSoon()
+        }
     }
 
     func toggleWorkspaceOverview() {
-        workspaceOverviewVisible.toggle()
-        if workspaceOverviewVisible {
+        let willOpen = !workspaceOverviewVisible
+        workspaceOverviewVisible = willOpen
+        if willOpen {
             commandPaletteVisible = false
             settingsPanelVisible = false
-            closeTerminalSearch()
+            closeTerminalSearch(restoresTerminalFocus: false)
+        } else {
+            restoreFocusedTerminalFocusSoon()
         }
     }
 
     func hideWorkspaceOverview() {
+        let wasVisible = workspaceOverviewVisible
         workspaceOverviewVisible = false
+        if wasVisible {
+            restoreFocusedTerminalFocusSoon()
+        }
     }
 
     @discardableResult
@@ -994,15 +1018,15 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return true
         }
         if commandPaletteVisible {
-            commandPaletteVisible = false
+            hideCommandPalette()
             return true
         }
         if settingsPanelVisible {
-            settingsPanelVisible = false
+            hideSettingsPanel()
             return true
         }
         if workspaceOverviewVisible {
-            workspaceOverviewVisible = false
+            hideWorkspaceOverview()
             return true
         }
         return false
@@ -1196,6 +1220,31 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let focusedTerminalID = workspace.focusedPane?.selectedTabID
         for (terminalID, surface) in surfaces {
             surface.setFocused(terminalID == focusedTerminalID)
+        }
+    }
+
+    private var shellPanelBlocksTerminalFocus: Bool {
+        commandPaletteVisible || settingsPanelVisible || workspaceOverviewVisible || terminalSearchVisible
+    }
+
+    func restoreFocusedTerminalFocusSoon() {
+        guard !shellPanelBlocksTerminalFocus else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.restoreFocusedTerminalFocusIfEligible()
+        }
+    }
+
+    private func restoreFocusedTerminalFocusIfEligible() {
+        guard !shellPanelBlocksTerminalFocus,
+              let terminalID = workspace.focusedPane?.selectedTabID,
+              let surface = surfaces[terminalID] else {
+            return
+        }
+        reconcileSurfaceFocus()
+        surface.attachIfPossible()
+        surface.setFocused(true, force: true)
+        if surface.hostView.window?.firstResponder !== surface.hostView {
+            surface.hostView.window?.makeFirstResponder(surface.hostView)
         }
     }
 
@@ -1512,7 +1561,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     private func closeWorkspaceTransientPanels() {
         if terminalSearchVisible {
-            closeTerminalSearch()
+            closeTerminalSearch(restoresTerminalFocus: false)
         }
         if commandPaletteVisible {
             commandPaletteVisible = false

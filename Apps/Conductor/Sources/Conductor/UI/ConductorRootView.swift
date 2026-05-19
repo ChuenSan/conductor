@@ -224,10 +224,10 @@ private struct TerminalContextSearchBar: View {
         }
         .onAppear {
             query = model.terminalSearchQuery
-            searchFocused = true
+            focusSearchField()
         }
         .onChange(of: model.terminalSearchFocusGeneration) { _, _ in
-            searchFocused = true
+            focusSearchField()
         }
         .onChange(of: query) { _, next in
             model.setTerminalSearchQuery(next)
@@ -236,6 +236,10 @@ private struct TerminalContextSearchBar: View {
             guard next != query else { return }
             query = next
         }
+    }
+
+    private func focusSearchField() {
+        PanelFocusPolicy.claim { searchFocused = $0 }
     }
 }
 
@@ -407,6 +411,16 @@ private struct FloatingPanelDivider: View {
     }
 }
 
+@MainActor
+private enum PanelFocusPolicy {
+    static func claim(_ assign: @escaping (Bool) -> Void) {
+        assign(true)
+        DispatchQueue.main.async {
+            assign(true)
+        }
+    }
+}
+
 private struct CommandPaletteView: View {
     @ObservedObject var model: ConductorWindowModel
     @State private var query = ""
@@ -442,7 +456,7 @@ private struct CommandPaletteView: View {
             }
             .frame(width: 690, height: 486)
             .onAppear {
-                searchFocused = true
+                focusSearchField()
                 ensureSelection()
             }
             .onChange(of: query) {
@@ -477,6 +491,10 @@ private struct CommandPaletteView: View {
         ) {
             model.hideCommandPalette()
         }
+    }
+
+    private func focusSearchField() {
+        PanelFocusPolicy.claim { searchFocused = $0 }
     }
 
     private var commandSearchField: some View {
@@ -1714,7 +1732,7 @@ private struct WorkspaceOverviewPanel: View {
             .frame(width: 690, height: 486)
             .onAppear {
                 highlightedWorkspaceID = model.workspace.id
-                searchFocused = true
+                focusSearchField()
                 ensureHighlight()
             }
             .onChange(of: query) {
@@ -1756,6 +1774,10 @@ private struct WorkspaceOverviewPanel: View {
         ) {
             model.hideWorkspaceOverview()
         }
+    }
+
+    private func focusSearchField() {
+        PanelFocusPolicy.claim { searchFocused = $0 }
     }
 
     private var searchField: some View {
@@ -2848,6 +2870,7 @@ private struct ConductorSidebar: View {
             }
         }
         renamingWorkspaceID = nil
+        model.restoreFocusedTerminalFocusSoon()
     }
 
     private func finishWorkspaceRenameIfNeeded(except workspaceID: WorkspaceID? = nil) {
@@ -2860,6 +2883,7 @@ private struct ConductorSidebar: View {
 
     private func cancelWorkspaceRename() {
         renamingWorkspaceID = nil
+        model.restoreFocusedTerminalFocusSoon()
     }
 
 }
@@ -3111,19 +3135,13 @@ private struct SidebarRailButton: View {
                 .frame(width: 34, height: 34)
                 .background(selected ? theme.shellSelectedFill : (hovering ? theme.shellHoverFill : Color.clear))
                 .clipShape(RoundedRectangle(cornerRadius: 11))
-                .overlay {
-                    ConductorMagneticGlow(cornerRadius: 11, active: selected, lineWidth: 0.8)
-                        .opacity(selected ? 0.75 : 0)
-                }
                 .contentShape(RoundedRectangle(cornerRadius: 11))
         }
         .buttonStyle(ConductorPressButtonStyle())
         .disabled(disabled)
         .opacity(disabled ? 0.35 : 1)
-        .scaleEffect(hovering && !disabled ? 1.035 : 1)
         .animation(ConductorMotion.micro, value: disabled)
         .animation(ConductorMotion.hover, value: hovering)
-        .animation(ConductorMotion.selection, value: selected)
         .onHover { hovering = $0 }
         .help(help)
     }
@@ -3313,12 +3331,7 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
             if selected {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
                     .fill(theme.shellSelectedFill)
-                    .matchedGeometryEffect(id: "workspace-sidebar-selection", in: selectionNamespace)
             }
-        }
-        .overlay {
-            ConductorMagneticGlow(cornerRadius: ConductorTokens.Radius.row, active: selected, lineWidth: 0.75)
-                .opacity(selected ? 0.55 : 0)
         }
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
@@ -3490,6 +3503,7 @@ private struct ConductorToolbar: View {
             }
         }
         editingWorkspaceID = nil
+        model.restoreFocusedTerminalFocusSoon()
     }
 
     private func finishWorkspaceRenameIfNeeded() {
@@ -3499,6 +3513,7 @@ private struct ConductorToolbar: View {
 
     private func cancelWorkspaceRename() {
         editingWorkspaceID = nil
+        model.restoreFocusedTerminalFocusSoon()
     }
 
 }
@@ -3510,7 +3525,6 @@ private struct WorkspaceTabStrip: View {
     let onBeginRename: (WorkspaceChromeDisplayModel) -> Void
     let onCommitRename: () -> Void
     let onCancelRename: () -> Void
-    @State private var scrollTargetID: WorkspaceID?
     @Namespace private var selectionNamespace
 
     private var workspaceRows: [WorkspaceChromeDisplayModel] {
@@ -3533,26 +3547,25 @@ private struct WorkspaceTabStrip: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: WorkspaceTabMetrics.spacing) {
-                ForEach(workspaceRows) { row in
-                    workspaceTabView(for: row)
-                        .transition(ConductorMotion.tabTransition)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: WorkspaceTabMetrics.spacing) {
+                    ForEach(workspaceRows) { row in
+                        workspaceTabView(for: row)
+                            .transition(ConductorMotion.tabTransition)
+                    }
                 }
+                .padding(.horizontal, WorkspaceTabMetrics.edgePadding)
             }
-            .padding(.horizontal, WorkspaceTabMetrics.edgePadding)
-            .scrollTargetLayout()
-        }
-        .scrollTargetBehavior(.viewAligned)
-        .scrollPosition(id: $scrollTargetID, anchor: .center)
-        .onAppear {
-            syncScrollTarget(animated: false)
-        }
-        .onChange(of: model.workspace.id) {
-            syncScrollTarget(animated: true)
-        }
-        .onChange(of: workspaceIDs) {
-            syncScrollTarget(animated: true)
+            .onAppear {
+                scrollSelectedTab(with: proxy, animated: false)
+            }
+            .onChange(of: model.workspace.id) {
+                scrollSelectedTab(with: proxy, animated: true)
+            }
+            .onChange(of: workspaceIDs) {
+                scrollSelectedTab(with: proxy, animated: true)
+            }
         }
         .frame(
             minWidth: WorkspaceTabMetrics.width(for: model.appearance),
@@ -3566,15 +3579,15 @@ private struct WorkspaceTabStrip: View {
         .animation(ConductorMotion.list, value: workspaceIDs)
     }
 
-    private func syncScrollTarget(animated: Bool) {
+    private func scrollSelectedTab(with proxy: ScrollViewProxy, animated: Bool) {
         guard workspaceIDs.contains(model.workspace.id) else { return }
         let update = {
-            scrollTargetID = model.workspace.id
+            proxy.scrollTo(model.workspace.id, anchor: .center)
         }
         if animated {
-            model.performShellMotion(ConductorMotion.selection, update)
+            model.performShellMotion(ConductorMotion.tabScroll, update)
         } else {
-            update()
+            withoutShellAnimation(update)
         }
     }
 
@@ -3724,13 +3737,13 @@ private struct WorkspaceTopTab: View {
                 HStack(spacing: 7) {
                     WorkspaceTabGlyph(selected: selected)
                     Text(row.title)
-                        .font(.conductorSystem(size: 11.5, weight: selected ? .semibold : .medium, scale: fontScale))
+                        .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
                         .foregroundStyle(titleColor)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("\(row.terminalCount)")
-                        .font(.conductorSystem(size: 10.5, weight: selected ? .semibold : .medium, scale: fontScale))
+                        .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                         .foregroundStyle(selected ? theme.shellChromeText.opacity(0.78) : theme.shellChromeTextMuted.opacity(0.78))
                         .frame(minWidth: 18, minHeight: 18)
                     if unreadCount > 0 {
@@ -3745,6 +3758,9 @@ private struct WorkspaceTopTab: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
+                .transaction { transaction in
+                    transaction.animation = nil
+                }
                 Button {
                     onClose()
                 } label: {
@@ -3788,7 +3804,6 @@ private struct WorkspaceTopTab: View {
         .scaleEffect(hovering && !selected ? 1.012 : 1)
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.selection, value: editing)
-        .animation(ConductorMotion.selection, value: selected)
         .animation(ConductorMotion.emphasized, value: unreadCount)
         .onHover { value in
             ConductorMotion.perform(ConductorMotion.hover) {
@@ -3837,12 +3852,15 @@ private struct WorkspaceTabGlyph: View {
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
-            .font(.system(size: 11, weight: selected ? .bold : .semibold))
+        Image(systemName: WorkspaceChromeGlyph.systemName(selected: false))
+            .font(.system(size: 11, weight: .semibold))
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(selected ? theme.shellChromeText.opacity(0.92) : theme.shellChromeTextMuted.opacity(0.74))
             .frame(width: 19, height: 19)
             .background(selected ? theme.shellHoverFill : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .transaction { transaction in
+                transaction.animation = nil
+            }
     }
 }
