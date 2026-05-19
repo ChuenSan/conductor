@@ -300,6 +300,18 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         ConductorMotion.perform(animation, action)
     }
 
+    func canPerformCommand(_ command: ConductorShellCommand) -> Bool {
+        command.canPerform(model: self)
+    }
+
+    @discardableResult
+    func performCommand(_ command: ConductorShellCommand, window: NSWindow? = nil) -> Bool {
+        ConductorLog.performance.debug("shell command \(command.rawValue, privacy: .public)")
+        let signpost = ConductorSignpost.begin("shell-command")
+        defer { ConductorSignpost.end("shell-command", signpost) }
+        return command.perform(model: self, window: window)
+    }
+
     var runtimeSurfaceCount: Int {
         surfaces.count
     }

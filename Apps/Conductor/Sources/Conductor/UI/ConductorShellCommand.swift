@@ -1,0 +1,160 @@
+import AppKit
+import ConductorCore
+import Foundation
+
+@MainActor
+enum ConductorShellCommand: String, CaseIterable {
+    case newWorkspace
+    case newTerminal
+    case closeSelectedTab
+    case closeFocusedPane
+    case splitRight
+    case splitDown
+    case selectNextTab
+    case selectPreviousTab
+    case focusNextPane
+    case focusPreviousPane
+    case focusPaneLeft
+    case focusPaneRight
+    case focusPaneUp
+    case focusPaneDown
+    case resizePaneLeft
+    case resizePaneRight
+    case resizePaneUp
+    case resizePaneDown
+    case equalizeSplits
+    case toggleZoom
+    case moveTabLeft
+    case moveTabRight
+    case moveTabToNextPane
+    case moveTabToNewRightSplit
+    case toggleCommandPalette
+    case toggleWorkspaceOverview
+    case toggleSettings
+    case toggleNotifications
+    case jumpToLatestUnread
+    case toggleFullScreen
+    case resetWorkspace
+    case showTerminalSearch
+    case findNext
+    case findPrevious
+    case flashFocusedPane
+    case duplicateSelectedTab
+    case duplicateWorkspace
+    case clearNotifications
+    case testNotification
+
+    func canPerform(model: ConductorWindowModel) -> Bool {
+        switch self {
+        case .closeFocusedPane:
+            model.canCloseFocusedPane
+        case .splitRight, .splitDown:
+            model.canSplit
+        case .equalizeSplits, .toggleZoom,
+             .resizePaneLeft, .resizePaneRight, .resizePaneUp, .resizePaneDown:
+            model.workspace.root.leaves.count > 1
+        case .moveTabLeft:
+            model.canMoveSelectedTabLeft
+        case .moveTabRight:
+            model.canMoveSelectedTabRight
+        case .moveTabToNextPane:
+            model.canMoveSelectedTabToNextPane
+        case .moveTabToNewRightSplit:
+            model.canMoveSelectedTabToNewSplit
+        case .jumpToLatestUnread:
+            model.notifications.snapshot.latestUnread != nil
+        case .findNext, .findPrevious:
+            model.terminalSearchVisible
+        case .clearNotifications:
+            !model.notifications.records.isEmpty
+        default:
+            true
+        }
+    }
+
+    @discardableResult
+    func perform(model: ConductorWindowModel, window: NSWindow? = nil) -> Bool {
+        guard canPerform(model: model) else { return false }
+        switch self {
+        case .newWorkspace:
+            model.newWorkspace()
+        case .newTerminal:
+            model.newTerminal()
+        case .closeSelectedTab:
+            model.closeSelectedTab()
+        case .closeFocusedPane:
+            model.closePane(model.workspace.focusedPaneID)
+        case .splitRight:
+            model.splitRight()
+        case .splitDown:
+            model.splitDown()
+        case .selectNextTab:
+            model.selectNextTab()
+        case .selectPreviousTab:
+            model.selectPreviousTab()
+        case .focusNextPane:
+            model.focusNextPane()
+        case .focusPreviousPane:
+            model.focusPreviousPane()
+        case .focusPaneLeft:
+            model.focusPane(direction: .left)
+        case .focusPaneRight:
+            model.focusPane(direction: .right)
+        case .focusPaneUp:
+            model.focusPane(direction: .up)
+        case .focusPaneDown:
+            model.focusPane(direction: .down)
+        case .resizePaneLeft:
+            model.resizeFocusedSplit(direction: .left)
+        case .resizePaneRight:
+            model.resizeFocusedSplit(direction: .right)
+        case .resizePaneUp:
+            model.resizeFocusedSplit(direction: .up)
+        case .resizePaneDown:
+            model.resizeFocusedSplit(direction: .down)
+        case .equalizeSplits:
+            model.equalizeSplits()
+        case .toggleZoom:
+            model.toggleZoom()
+        case .moveTabLeft:
+            model.moveSelectedTabLeft()
+        case .moveTabRight:
+            model.moveSelectedTabRight()
+        case .moveTabToNextPane:
+            model.moveSelectedTabToNextPane()
+        case .moveTabToNewRightSplit:
+            model.moveSelectedTabToNewSplit(.right)
+        case .toggleCommandPalette:
+            model.toggleCommandPalette()
+        case .toggleWorkspaceOverview:
+            model.toggleWorkspaceOverview()
+        case .toggleSettings:
+            model.toggleSettingsPanel()
+        case .toggleNotifications:
+            model.toggleNotificationPanel()
+        case .jumpToLatestUnread:
+            _ = model.jumpToLatestUnread()
+        case .toggleFullScreen:
+            (window ?? NSApp.keyWindow)?.toggleFullScreen(nil)
+        case .resetWorkspace:
+            model.resetWorkspace()
+        case .showTerminalSearch:
+            model.showTerminalSearch()
+        case .findNext:
+            model.navigateTerminalSearch(previous: false)
+        case .findPrevious:
+            model.navigateTerminalSearch(previous: true)
+        case .flashFocusedPane:
+            model.flashFocusedPane()
+        case .duplicateSelectedTab:
+            model.duplicateSelectedTab()
+        case .duplicateWorkspace:
+            model.duplicateWorkspace(model.workspace.id)
+        case .clearNotifications:
+            model.clearAllNotifications()
+        case .testNotification:
+            model.notifyFocusedTerminalForTesting()
+        }
+        return true
+    }
+}

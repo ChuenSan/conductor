@@ -402,6 +402,46 @@ private var shortcutRows: [CommandShortcutGuideItem] {
 }
 ```
 
+### Convention: Shell Command Routing
+
+**What**: Menu items, keyboard shortcuts, toolbar buttons, terminal context menus, and future
+touch/gesture affordances should route user actions through `ConductorShellCommand` and
+`ConductorWindowModel.performCommand`.
+
+**Why**: The same user intent should have one enablement check, one action implementation, and
+one performance signpost. Splitting direct `ConductorWindowModel` method calls across menus,
+toolbar buttons, and context menus creates drift: a command can appear enabled in one surface,
+be disabled in another, or miss lifecycle cleanup and performance tracing.
+
+**Contract**:
+
+- Add shell-level actions to `ConductorShellCommand` first, with `canPerform(model:)` and
+  `perform(model:window:)`.
+- UI surfaces should ask `model.canPerformCommand(...)` for disabled state and call
+  `model.performCommand(..., window:)` for execution.
+- Commands may read compact product state such as selected workspace, focused pane, tab
+  metadata, visible panels, notifications, and search visibility.
+- Commands must not route terminal output, scrollback, cursor movement, or raw renderer state
+  through SwiftUI-observed state.
+- Keep command dispatch on the main actor. Heavy work triggered by a command must hop to the
+  appropriate runtime/background layer after the shell state transition is recorded.
+- Keep `ConductorSignpost` coverage at the command boundary so sluggish menu, shortcut,
+  toolbar, and context-menu actions can be compared in Instruments.
+
+**Correct**:
+
+```swift
+guard model.canPerformCommand(.closeFocusedPane) else { return }
+model.performCommand(.closeFocusedPane, window: window)
+```
+
+**Wrong**:
+
+```swift
+guard model.canCloseFocusedPane else { return }
+model.closePane(model.workspace.focusedPaneID)
+```
+
 ### Convention: Settings Panel Navigation
 
 **What**: Settings surfaces with three or more product areas should use a compact sidebar

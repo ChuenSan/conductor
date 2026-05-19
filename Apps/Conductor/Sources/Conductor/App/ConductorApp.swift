@@ -324,23 +324,23 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
         case #selector(closePaneCommand):
-            model.canCloseFocusedPane
+            model.canPerformCommand(.closeFocusedPane)
         case #selector(splitRightCommand), #selector(splitDownCommand):
-            model.canSplit
+            model.canPerformCommand(menuItem.action == #selector(splitRightCommand) ? .splitRight : .splitDown)
         case #selector(equalizeSplitsCommand), #selector(toggleZoomCommand):
-            model.workspace.root.leaves.count > 1
+            model.canPerformCommand(menuItem.action == #selector(equalizeSplitsCommand) ? .equalizeSplits : .toggleZoom)
         case #selector(moveTabLeftCommand):
-            model.canMoveSelectedTabLeft
+            model.canPerformCommand(.moveTabLeft)
         case #selector(moveTabRightCommand):
-            model.canMoveSelectedTabRight
+            model.canPerformCommand(.moveTabRight)
         case #selector(moveTabToNextPaneCommand):
-            model.canMoveSelectedTabToNextPane
+            model.canPerformCommand(.moveTabToNextPane)
         case #selector(moveTabToNewRightSplitCommand):
-            model.canMoveSelectedTabToNewSplit
+            model.canPerformCommand(.moveTabToNewRightSplit)
         case #selector(jumpToLatestUnreadCommand):
-            model.notifications.snapshot.latestUnread != nil
+            model.canPerformCommand(.jumpToLatestUnread)
         case #selector(findNextCommand), #selector(findPreviousCommand):
-            model.terminalSearchVisible
+            model.canPerformCommand(menuItem.action == #selector(findNextCommand) ? .findNext : .findPrevious)
         default:
             true
         }
@@ -360,96 +360,87 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
         switch (characters, flags.contains(.shift)) {
         case ("f", _) where flags.contains(.control):
-            scheduleCommand { [weak self] in self?.window?.toggleFullScreen(nil) }
+            scheduleCommand(.toggleFullScreen)
             return true
         case ("n", _) where flags.contains(.option):
-            scheduleCommand { [model] in model.toggleNotificationPanel() }
+            scheduleCommand(.toggleNotifications)
             return true
         case ("n", _):
-            scheduleCommand { [model] in model.newWorkspace() }
+            scheduleCommand(.newWorkspace)
             return true
         case ("j", _) where flags.contains(.option):
-            scheduleCommand { [model] in _ = model.jumpToLatestUnread() }
+            scheduleCommand(.jumpToLatestUnread)
             return true
         case ("t", _):
-            scheduleCommand { [model] in model.newTerminal() }
+            scheduleCommand(.newTerminal)
             return true
         case ("k", _):
-            scheduleCommand { [model] in model.toggleCommandPalette() }
+            scheduleCommand(.toggleCommandPalette)
             return true
         case ("o", _):
-            scheduleCommand { [model] in model.toggleWorkspaceOverview() }
+            scheduleCommand(.toggleWorkspaceOverview)
             return true
         case ("f", _):
-            scheduleCommand { [model] in model.showTerminalSearch() }
+            scheduleCommand(.showTerminalSearch)
             return true
         case ("g", true):
-            guard model.terminalSearchVisible else { return false }
-            scheduleCommand { [model] in model.navigateTerminalSearch(previous: true) }
+            guard model.canPerformCommand(.findPrevious) else { return false }
+            scheduleCommand(.findPrevious)
             return true
         case ("g", false):
-            guard model.terminalSearchVisible else { return false }
-            scheduleCommand { [model] in model.navigateTerminalSearch(previous: false) }
+            guard model.canPerformCommand(.findNext) else { return false }
+            scheduleCommand(.findNext)
             return true
         case ("w", true):
-            guard model.canCloseFocusedPane else { return true }
-            scheduleCommand { [model] in model.closePane(model.workspace.focusedPaneID) }
+            scheduleCommand(.closeFocusedPane)
             return true
         case ("w", _):
-            scheduleCommand { [model] in model.closeSelectedTab() }
+            scheduleCommand(.closeSelectedTab)
             return true
         case ("d", false):
-            guard model.canSplit else { return true }
-            scheduleCommand { [model] in model.splitRight() }
+            scheduleCommand(.splitRight)
             return true
         case ("d", true):
-            guard model.canSplit else { return true }
-            scheduleCommand { [model] in model.splitDown() }
+            scheduleCommand(.splitDown)
             return true
         case ("h", true):
-            scheduleCommand { [model] in model.flashFocusedPane() }
+            scheduleCommand(.flashFocusedPane)
             return true
         case ("]", true):
-            scheduleCommand { [model] in model.focusNextPane() }
+            scheduleCommand(.focusNextPane)
             return true
         case ("[", true):
-            scheduleCommand { [model] in model.focusPreviousPane() }
+            scheduleCommand(.focusPreviousPane)
             return true
         case ("]", false):
-            scheduleCommand { [model] in model.selectNextTab() }
+            scheduleCommand(.selectNextTab)
             return true
         case ("[", false):
-            scheduleCommand { [model] in model.selectPreviousTab() }
+            scheduleCommand(.selectPreviousTab)
             return true
         case (",", true):
-            guard model.canMoveSelectedTabLeft else { return true }
-            scheduleCommand { [model] in model.moveSelectedTabLeft() }
+            scheduleCommand(.moveTabLeft)
             return true
         case (".", true):
-            guard model.canMoveSelectedTabRight else { return true }
-            scheduleCommand { [model] in model.moveSelectedTabRight() }
+            scheduleCommand(.moveTabRight)
             return true
         case ("m", false) where flags.contains(.option):
-            guard model.canMoveSelectedTabToNextPane else { return true }
-            scheduleCommand { [model] in model.moveSelectedTabToNextPane() }
+            scheduleCommand(.moveTabToNextPane)
             return true
         case ("m", true) where flags.contains(.option):
-            guard model.canMoveSelectedTabToNewSplit else { return true }
-            scheduleCommand { [model] in model.moveSelectedTabToNewSplit(.right) }
+            scheduleCommand(.moveTabToNewRightSplit)
             return true
         case ("=", true):
-            guard model.workspace.root.leaves.count > 1 else { return true }
-            scheduleCommand { [model] in model.equalizeSplits() }
+            scheduleCommand(.equalizeSplits)
             return true
         case ("z", _) where flags.contains(.option):
-            guard model.workspace.root.leaves.count > 1 else { return true }
-            scheduleCommand { [model] in model.toggleZoom() }
+            scheduleCommand(.toggleZoom)
             return true
         case ("}", _):
-            scheduleCommand { [model] in model.focusNextPane() }
+            scheduleCommand(.focusNextPane)
             return true
         case ("{", _):
-            scheduleCommand { [model] in model.focusPreviousPane() }
+            scheduleCommand(.focusPreviousPane)
             return true
         default:
             return false
@@ -462,13 +453,13 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         if flags.contains(.option) {
             switch direction {
             case .left:
-                scheduleCommand { [model] in model.focusPane(direction: .left) }
+                scheduleCommand(.focusPaneLeft)
             case .right:
-                scheduleCommand { [model] in model.focusPane(direction: .right) }
+                scheduleCommand(.focusPaneRight)
             case .up:
-                scheduleCommand { [model] in model.focusPane(direction: .up) }
+                scheduleCommand(.focusPaneUp)
             case .down:
-                scheduleCommand { [model] in model.focusPane(direction: .down) }
+                scheduleCommand(.focusPaneDown)
             }
             return true
         }
@@ -476,13 +467,13 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         if flags.contains(.shift) {
             switch direction {
             case .left:
-                scheduleCommand { [model] in model.resizeFocusedSplit(direction: .left) }
+                scheduleCommand(.resizePaneLeft)
             case .right:
-                scheduleCommand { [model] in model.resizeFocusedSplit(direction: .right) }
+                scheduleCommand(.resizePaneRight)
             case .up:
-                scheduleCommand { [model] in model.resizeFocusedSplit(direction: .up) }
+                scheduleCommand(.resizePaneUp)
             case .down:
-                scheduleCommand { [model] in model.resizeFocusedSplit(direction: .down) }
+                scheduleCommand(.resizePaneDown)
             }
             return true
         }
@@ -493,6 +484,13 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     private func scheduleCommand(_ command: @escaping @MainActor () -> Void) {
         Task { @MainActor in
             command()
+        }
+    }
+
+    private func scheduleCommand(_ command: ConductorShellCommand) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.model.performCommand(command, window: self.window)
         }
     }
 
@@ -514,100 +512,91 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     }
 
     @objc private func newWorkspaceCommand() {
-        scheduleCommand { [model] in model.newWorkspace() }
+        scheduleCommand(.newWorkspace)
     }
 
     @objc private func newTerminalCommand() {
-        scheduleCommand { [model] in model.newTerminal() }
+        scheduleCommand(.newTerminal)
     }
 
     @objc private func closeTabCommand() {
-        scheduleCommand { [model] in model.closeSelectedTab() }
+        scheduleCommand(.closeSelectedTab)
     }
 
     @objc private func closePaneCommand() {
-        guard model.canCloseFocusedPane else { return }
-        scheduleCommand { [model] in model.closePane(model.workspace.focusedPaneID) }
+        scheduleCommand(.closeFocusedPane)
     }
 
     @objc private func splitRightCommand() {
-        guard model.canSplit else { return }
-        scheduleCommand { [model] in model.splitRight() }
+        scheduleCommand(.splitRight)
     }
 
     @objc private func splitDownCommand() {
-        guard model.canSplit else { return }
-        scheduleCommand { [model] in model.splitDown() }
+        scheduleCommand(.splitDown)
     }
 
     @objc private func equalizeSplitsCommand() {
-        guard model.workspace.root.leaves.count > 1 else { return }
-        scheduleCommand { [model] in model.equalizeSplits() }
+        scheduleCommand(.equalizeSplits)
     }
 
     @objc private func toggleZoomCommand() {
-        guard model.workspace.root.leaves.count > 1 else { return }
-        scheduleCommand { [model] in model.toggleZoom() }
+        scheduleCommand(.toggleZoom)
     }
 
     @objc private func moveTabLeftCommand() {
-        guard model.canMoveSelectedTabLeft else { return }
-        scheduleCommand { [model] in model.moveSelectedTabLeft() }
+        scheduleCommand(.moveTabLeft)
     }
 
     @objc private func moveTabRightCommand() {
-        guard model.canMoveSelectedTabRight else { return }
-        scheduleCommand { [model] in model.moveSelectedTabRight() }
+        scheduleCommand(.moveTabRight)
     }
 
     @objc private func moveTabToNextPaneCommand() {
-        guard model.canMoveSelectedTabToNextPane else { return }
-        scheduleCommand { [model] in model.moveSelectedTabToNextPane() }
+        scheduleCommand(.moveTabToNextPane)
     }
 
     @objc private func moveTabToNewRightSplitCommand() {
-        guard model.canMoveSelectedTabToNewSplit else { return }
-        scheduleCommand { [model] in model.moveSelectedTabToNewSplit(.right) }
+        scheduleCommand(.moveTabToNewRightSplit)
     }
 
     @objc private func commandPaletteCommand() {
-        scheduleCommand { [model] in model.toggleCommandPalette() }
+        scheduleCommand(.toggleCommandPalette)
     }
 
     @objc private func workspaceOverviewCommand() {
-        scheduleCommand { [model] in model.toggleWorkspaceOverview() }
+        scheduleCommand(.toggleWorkspaceOverview)
     }
 
     @objc private func settingsPanelCommand() {
-        scheduleCommand { [model] in model.toggleSettingsPanel() }
+        scheduleCommand(.toggleSettings)
     }
 
     @objc private func notificationCenterCommand() {
-        scheduleCommand { [model] in model.toggleNotificationPanel() }
+        scheduleCommand(.toggleNotifications)
     }
 
     @objc private func jumpToLatestUnreadCommand() {
-        scheduleCommand { [model] in _ = model.jumpToLatestUnread() }
+        scheduleCommand(.jumpToLatestUnread)
     }
 
     @objc private func toggleFullScreenCommand() {
-        scheduleCommand { [weak self] in self?.window?.toggleFullScreen(nil) }
+        scheduleCommand(.toggleFullScreen)
     }
 
     @objc private func resetWorkspaceCommand() {
-        scheduleCommand { [model] in model.resetWorkspace() }
+        scheduleCommand(.resetWorkspace)
     }
 
     @objc private func findInTerminalCommand() {
-        scheduleCommand { [model] in model.showTerminalSearch() }
+        scheduleCommand(.showTerminalSearch)
     }
 
     @objc private func findNextCommand() {
-        scheduleCommand { [model] in model.navigateTerminalSearch(previous: false) }
+        scheduleCommand(.findNext)
     }
 
     @objc private func findPreviousCommand() {
-        scheduleCommand { [model] in model.navigateTerminalSearch(previous: true) }
+        scheduleCommand(.findPrevious)
     }
 
     private func setNotificationWindowVisible(_ visible: Bool) {
@@ -754,19 +743,19 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     }
 
     @objc private func selectNextTabCommand() {
-        scheduleCommand { [model] in model.selectNextTab() }
+        scheduleCommand(.selectNextTab)
     }
 
     @objc private func selectPreviousTabCommand() {
-        scheduleCommand { [model] in model.selectPreviousTab() }
+        scheduleCommand(.selectPreviousTab)
     }
 
     @objc private func focusNextPaneCommand() {
-        scheduleCommand { [model] in model.focusNextPane() }
+        scheduleCommand(.focusNextPane)
     }
 
     @objc private func focusPreviousPaneCommand() {
-        scheduleCommand { [model] in model.focusPreviousPane() }
+        scheduleCommand(.focusPreviousPane)
     }
 
     private func runShortcutAutomationIfRequested() {
