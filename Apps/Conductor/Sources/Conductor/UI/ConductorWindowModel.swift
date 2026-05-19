@@ -112,7 +112,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var workspaces: [WorkspaceState]
     @Published var theme: TerminalTheme {
         didSet {
-            surfaces.values.forEach { $0.applyTheme(theme) }
+            surfaces.values.forEach {
+                $0.applyAppearance(theme: theme, terminalFontSize: appearance.terminalFontSize)
+            }
             persist()
         }
     }
@@ -121,6 +123,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             guard oldValue != appearance else { return }
             ConductorAppearanceRuntime.apply(appearance)
             ConductorMotion.setReducedMotion(appearance.reducedMotion)
+            if oldValue.terminalFontSize != appearance.terminalFontSize {
+                surfaces.values.forEach { $0.applyTerminalFontSize(appearance.terminalFontSize) }
+            }
             persist()
         }
     }
@@ -262,6 +267,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         appearance.fontFamily = fontFamily
     }
 
+    func setTerminalFontSize(_ terminalFontSize: CGFloat) {
+        let clamped = AppearancePreferences.clampedTerminalFontSize(terminalFontSize)
+        let rounded = (clamped * 2).rounded() / 2
+        guard appearance.terminalFontSize != rounded else { return }
+        appearance.terminalFontSize = rounded
+    }
+
     func setReducedMotion(_ reducedMotion: Bool) {
         guard appearance.reducedMotion != reducedMotion else { return }
         appearance.reducedMotion = reducedMotion
@@ -367,7 +379,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         if let surface = surfaces[tab.id] {
             return surface
         }
-        let surface = TerminalSurface(id: tab.id, theme: theme, workingDirectory: tab.workingDirectory)
+        let surface = TerminalSurface(
+            id: tab.id,
+            theme: theme,
+            terminalFontSize: appearance.terminalFontSize,
+            workingDirectory: tab.workingDirectory
+        )
         surface.onFocusRequest = { [weak self] terminalID in
             self?.focusTerminal(terminalID)
         }

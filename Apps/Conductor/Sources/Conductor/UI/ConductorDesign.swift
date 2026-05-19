@@ -465,7 +465,80 @@ struct ConductorWindowBackdrop: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
+            ConductorBackdropMotif(theme: theme)
         }
+    }
+}
+
+private struct ConductorBackdropMotif: View {
+    let theme: TerminalTheme
+
+    var body: some View {
+        GeometryReader { proxy in
+            switch theme.designLanguage {
+            case .neon:
+                Path { path in
+                    let step: CGFloat = 42
+                    var x: CGFloat = 0
+                    while x <= proxy.size.width {
+                        path.move(to: CGPoint(x: x, y: 0))
+                        path.addLine(to: CGPoint(x: x, y: proxy.size.height))
+                        x += step
+                    }
+                    var y: CGFloat = 0
+                    while y <= proxy.size.height {
+                        path.move(to: CGPoint(x: 0, y: y))
+                        path.addLine(to: CGPoint(x: proxy.size.width, y: y))
+                        y += step
+                    }
+                }
+                .stroke(theme.accent.opacity(0.045), lineWidth: 0.8)
+            case .paper, .editorial:
+                VStack(spacing: 26) {
+                    ForEach(0..<28, id: \.self) { _ in
+                        Rectangle()
+                            .fill(theme.shellStroke.opacity(0.18))
+                            .frame(height: 1)
+                    }
+                }
+                .padding(.top, 20)
+            case .glass, .fluid, .frost:
+                ZStack {
+                    Circle()
+                        .fill(theme.accent.opacity(theme.usesDarkChrome ? 0.10 : 0.14))
+                        .frame(width: proxy.size.width * 0.36)
+                        .blur(radius: 52)
+                        .offset(x: proxy.size.width * 0.30, y: -proxy.size.height * 0.20)
+                    RoundedRectangle(cornerRadius: 36, style: .continuous)
+                        .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.040 : 0.13), lineWidth: 1)
+                        .frame(width: proxy.size.width * 0.34, height: proxy.size.height * 0.48)
+                        .offset(x: proxy.size.width * 0.25, y: proxy.size.height * 0.08)
+                }
+            case .botanical:
+                HStack(alignment: .bottom, spacing: 22) {
+                    ForEach(0..<14, id: \.self) { index in
+                        Capsule()
+                            .fill(theme.accent.opacity(index.isMultiple(of: 2) ? 0.050 : 0.026))
+                            .frame(width: 8, height: CGFloat(80 + index * 12))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(.trailing, 42)
+            case .sunlit, .warm:
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.18),
+                        theme.accent.opacity(0.050),
+                        Color.clear
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            case .studio, .minimal, .system:
+                EmptyView()
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 

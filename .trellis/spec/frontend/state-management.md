@@ -70,7 +70,7 @@ Forbidden patterns:
 ### 1. Scope / Trigger
 
 - Trigger: Shell appearance preferences such as theme, density, chrome clarity, font scale,
-  and reduced motion are added to the user-facing settings surface.
+  terminal font size, and reduced motion are added to the user-facing settings surface.
 - Scope: These preferences are low-frequency product state. They may affect SwiftUI chrome
   dimensions, material tint, strokes, and motion policy, but they must not alter terminal
   transcript, scrollback, cursor, or Ghostty runtime identity.
@@ -81,7 +81,11 @@ Forbidden patterns:
 - `enum AppearanceDensity: String, CaseIterable, Codable, Identifiable`
 - `enum ChromeClarity: String, CaseIterable, Codable, Identifiable`
 - `enum AppearanceFontScale: String, CaseIterable, Codable, Identifiable`
+- `AppearancePreferences.terminalFontSize: CGFloat`
 - `ConductorWindowModel.appearance: AppearancePreferences`
+- `ConductorWindowModel.setTerminalFontSize(_:)`
+- `TerminalSurface.applyTerminalFontSize(_:)`
+- `GhosttyAppRuntime.makeConfig(theme:terminalFontSize:)`
 - `WorkspacePersistence.save(workspaces:selectedWorkspaceID:theme:appearance:)`
 - `TerminalTheme.shellPanelBackground`, `shellPanelStrong`, `shellStroke`,
   `shellSelectedFill`, `shellHoverFill`, `shellControlFill`, `shellControlRaisedFill`,
@@ -106,6 +110,12 @@ Forbidden patterns:
 - Chrome clarity can change material tint and stroke emphasis.
 - Font scale can change SwiftUI shell text and icon labels in toolbar, sidebar, settings,
   workspace tabs, and pane tabs.
+- Terminal font size is a dedicated low-frequency product preference. It is persisted in
+  `AppearancePreferences`, clamped to the supported range, applied to existing
+  `TerminalSurface` instances through Ghostty config updates, and passed to new surface
+  creation through `ghostty_surface_config_s.font_size`.
+- Terminal font size must not store measured terminal font metrics, scroll offsets, or
+  transcript-derived values in SwiftUI state.
 - Reduced motion can disable or shorten shell chrome animations, but must not change model
   semantics.
 
@@ -121,6 +131,9 @@ Forbidden patterns:
 - Theme change while terminals are streaming output -> Ghostty config/terminal host color
   updates may occur, but SwiftUI observes only the compact `TerminalTheme` value and theme
   derived chrome colors.
+- Terminal font size change while terminals are streaming output -> Ghostty receives a
+  bounded config update per live surface; terminal transcript, scrollback, cursor, and
+  measured cell metrics remain owned by Ghostty/AppKit.
 
 ### 5. Good/Base/Bad Cases
 
@@ -133,8 +146,8 @@ Forbidden patterns:
   standard density, balanced clarity, and normal motion.
 - Bad: Storing measured scroll offsets, terminal font metrics, or transcript-derived values in
   `AppearancePreferences`.
-- Bad: Treating font scale as a Ghostty terminal font-size control before a dedicated terminal
-  font contract exists.
+- Bad: Treating `AppearanceFontScale` as a Ghostty terminal font-size control. Shell font
+  scale and terminal font size are separate preferences.
 - Bad: Applying opacity, scale, or identity transitions to `TerminalSurfaceRepresentable` when
   appearance changes.
 - Bad: Hard-coding fixed white/black opacity fills for selected sidebar/settings rows when a

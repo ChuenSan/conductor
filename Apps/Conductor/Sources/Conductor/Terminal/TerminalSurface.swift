@@ -16,16 +16,19 @@ final class TerminalSurface {
     private var lastDisplayID: UInt32 = 0
     private var isFocused = false
     private var currentTheme: TerminalTheme
+    private var currentTerminalFontSize: CGFloat
     private var appliedTheme: TerminalTheme?
+    private var appliedTerminalFontSize: CGFloat?
     private var surfaceConfig: ghostty_config_t?
     private var pendingText: [String] = []
     private let workingDirectory: String?
     private var lifecycle: TerminalSurfaceLifecycle = .initialized
     private var retainedUserdata: Unmanaged<TerminalSurface>?
 
-    init(id: TerminalID, theme: TerminalTheme, workingDirectory: String?) {
+    init(id: TerminalID, theme: TerminalTheme, terminalFontSize: CGFloat, workingDirectory: String?) {
         self.id = id
         self.currentTheme = theme
+        self.currentTerminalFontSize = AppearancePreferences.clampedTerminalFontSize(terminalFontSize)
         self.workingDirectory = workingDirectory
         self.hostView = TerminalHostView()
         self.hostView.surface = self
@@ -58,7 +61,7 @@ final class TerminalSurface {
         guard hostView.window != nil else { return }
         let signpost = ConductorSignpost.begin("surface-attach")
         defer { ConductorSignpost.end("surface-attach", signpost) }
-        GhosttyAppRuntime.shared.ensureStarted(theme: currentTheme)
+        GhosttyAppRuntime.shared.ensureStarted(theme: currentTheme, terminalFontSize: currentTerminalFontSize)
         guard let app = GhosttyAppRuntime.shared.app else { return }
 
         var config = ghostty_surface_config_new()
@@ -71,7 +74,7 @@ final class TerminalSurface {
         let userdata = Unmanaged.passRetained(self)
         config.userdata = userdata.toOpaque()
         config.context = GHOSTTY_SURFACE_CONTEXT_WINDOW
-        config.font_size = 13
+        config.font_size = Float(currentTerminalFontSize)
         config.wait_after_command = false
         config.scale_factor = Double(hostView.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2)
 
@@ -113,7 +116,7 @@ final class TerminalSurface {
         retainedUserdata = userdata
 
         syncGeometry(force: true)
-        applyTheme(currentTheme)
+        applyAppearance(theme: currentTheme, terminalFontSize: currentTerminalFontSize)
         setFocused(false, force: true)
         pendingText.forEach { sendText($0) }
         pendingText.removeAll(keepingCapacity: false)
@@ -123,10 +126,20 @@ final class TerminalSurface {
     }
 
     func applyTheme(_ theme: TerminalTheme) {
+        applyAppearance(theme: theme, terminalFontSize: currentTerminalFontSize)
+    }
+
+    func applyTerminalFontSize(_ terminalFontSize: CGFloat) {
+        applyAppearance(theme: currentTheme, terminalFontSize: terminalFontSize)
+    }
+
+    func applyAppearance(theme: TerminalTheme, terminalFontSize: CGFloat) {
         currentTheme = theme
+        currentTerminalFontSize = AppearancePreferences.clampedTerminalFontSize(terminalFontSize)
         hostView.layer?.backgroundColor = NSColor(theme.terminalBackground).cgColor
-        guard let surface, appliedTheme != theme else { return }
-        guard let config = GhosttyAppRuntime.shared.makeConfig(theme: theme) else { return }
+        guard let surface,
+              appliedTheme != theme || appliedTerminalFontSize != currentTerminalFontSize else { return }
+        guard let config = GhosttyAppRuntime.shared.makeConfig(theme: theme, terminalFontSize: currentTerminalFontSize) else { return }
         if let surfaceConfig {
             ghostty_config_free(surfaceConfig)
         }
@@ -134,6 +147,7 @@ final class TerminalSurface {
         ghostty_surface_update_config(surface, config)
         ghostty_surface_refresh(surface)
         appliedTheme = theme
+        appliedTerminalFontSize = currentTerminalFontSize
     }
 
     func syncGeometry(force: Bool = false) {

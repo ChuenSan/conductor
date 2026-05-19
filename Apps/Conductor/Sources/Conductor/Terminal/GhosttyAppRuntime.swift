@@ -39,7 +39,7 @@ final class GhosttyAppRuntime {
 
     private init() {}
 
-    func ensureStarted(theme: TerminalTheme) {
+    func ensureStarted(theme: TerminalTheme, terminalFontSize: CGFloat) {
         guard app == nil else { return }
 
         if getenv("NO_COLOR") != nil {
@@ -52,7 +52,7 @@ final class GhosttyAppRuntime {
             return
         }
 
-        guard let config = makeConfig(theme: theme) else {
+        guard let config = makeConfig(theme: theme, terminalFontSize: terminalFontSize) else {
             ConductorLog.terminal.error("Ghostty config allocation failed")
             return
         }
@@ -117,13 +117,15 @@ final class GhosttyAppRuntime {
         ConductorLog.terminal.info("Ghostty runtime started")
     }
 
-    func makeConfig(theme: TerminalTheme) -> ghostty_config_t? {
+    func makeConfig(theme: TerminalTheme, terminalFontSize: CGFloat) -> ghostty_config_t? {
         guard let config = ghostty_config_new() else { return nil }
+        let resolvedFontSize = AppearancePreferences.clampedTerminalFontSize(terminalFontSize)
+        let fontSizeText = String(format: "%.1f", Double(resolvedFontSize))
         let text = """
         macos-background-from-layer = true
         macos-titlebar-proxy-icon = hidden
         shell-integration = none
-        font-size = 13
+        font-size = \(fontSizeText)
         \(theme.ghosttyConfig)
         """
         text.withCString { pointer in

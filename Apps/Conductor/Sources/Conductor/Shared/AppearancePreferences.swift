@@ -336,11 +336,16 @@ enum ConductorLocalization {
 }
 
 struct AppearancePreferences: Codable, Equatable {
+    static let defaultTerminalFontSize: CGFloat = 13
+    static let minTerminalFontSize: CGFloat = 10
+    static let maxTerminalFontSize: CGFloat = 22
+
     var density: AppearanceDensity
     var chromeClarity: ChromeClarity
     var fontScale: AppearanceFontScale
     var language: AppearanceLanguage
     var fontFamily: AppearanceFontFamily
+    var terminalFontSize: CGFloat
     var reducedMotion: Bool
     var agentNotifications: AgentNotificationPreferences
 
@@ -350,6 +355,7 @@ struct AppearancePreferences: Codable, Equatable {
         fontScale: AppearanceFontScale = .standard,
         language: AppearanceLanguage = .system,
         fontFamily: AppearanceFontFamily = .system,
+        terminalFontSize: CGFloat = Self.defaultTerminalFontSize,
         reducedMotion: Bool = false,
         agentNotifications: AgentNotificationPreferences = AgentNotificationPreferences()
     ) {
@@ -358,6 +364,7 @@ struct AppearancePreferences: Codable, Equatable {
         self.fontScale = fontScale
         self.language = language
         self.fontFamily = fontFamily
+        self.terminalFontSize = Self.clampedTerminalFontSize(terminalFontSize)
         self.reducedMotion = reducedMotion
         self.agentNotifications = agentNotifications
     }
@@ -369,8 +376,14 @@ struct AppearancePreferences: Codable, Equatable {
         self.fontScale = try container.decodeIfPresent(AppearanceFontScale.self, forKey: .fontScale) ?? .standard
         self.language = try container.decodeIfPresent(AppearanceLanguage.self, forKey: .language) ?? .system
         self.fontFamily = try container.decodeIfPresent(AppearanceFontFamily.self, forKey: .fontFamily) ?? .system
+        let decodedTerminalFontSize = try container.decodeIfPresent(CGFloat.self, forKey: .terminalFontSize) ?? Self.defaultTerminalFontSize
+        self.terminalFontSize = Self.clampedTerminalFontSize(decodedTerminalFontSize)
         self.reducedMotion = try container.decodeIfPresent(Bool.self, forKey: .reducedMotion) ?? false
         self.agentNotifications = try container.decodeIfPresent(AgentNotificationPreferences.self, forKey: .agentNotifications) ?? AgentNotificationPreferences()
+    }
+
+    static func clampedTerminalFontSize(_ value: CGFloat) -> CGFloat {
+        min(max(value, minTerminalFontSize), maxTerminalFontSize)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -379,6 +392,7 @@ struct AppearancePreferences: Codable, Equatable {
         case fontScale
         case language
         case fontFamily
+        case terminalFontSize
         case reducedMotion
         case agentNotifications
     }
