@@ -290,6 +290,8 @@ private struct ToolPreviewPanel: View {
     @ObservedObject var model: ConductorWindowModel
     let item: ToolPreviewItem
     @State private var textState = PreviewTextState.loading
+    @State private var selectedOutlineID: String?
+    @State private var reloadToken = 0
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorFontFamily) private var fontFamily
@@ -318,6 +320,12 @@ private struct ToolPreviewPanel: View {
 
                 Spacer(minLength: 8)
 
+                TerminalSearchIconButton(systemImage: "arrow.clockwise", help: L("重新读取", "Reload Preview")) {
+                    reloadToken += 1
+                }
+                TerminalSearchIconButton(systemImage: "doc.on.doc", help: L("复制文件路径", "Copy File Path")) {
+                    copyPreviewPath()
+                }
                 TerminalSearchIconButton(systemImage: "folder", help: L("在 Finder 中显示", "Reveal in Finder")) {
                     model.revealToolPreviewInFinder()
                 }
@@ -327,6 +335,8 @@ private struct ToolPreviewPanel: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 46)
+
+            previewInfoBar
 
             Rectangle()
                 .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.60 : 0.45))
@@ -341,9 +351,31 @@ private struct ToolPreviewPanel: View {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane, style: .continuous)
                 .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.80 : 0.55), lineWidth: 1)
         }
-        .task(id: item.id) {
+        .task(id: "\(item.id)-\(reloadToken)") {
             await loadTextIfNeeded()
         }
+        .onChange(of: item.id) {
+            selectedOutlineID = nil
+            reloadToken = 0
+        }
+    }
+
+    private var previewInfoBar: some View {
+        HStack(spacing: 7) {
+            ToolPreviewInfoPill(title: kindTitle)
+            if let size = fileSizeLabel {
+                ToolPreviewInfoPill(title: size)
+            }
+            if case .loaded(let document, _) = textState {
+                ToolPreviewInfoPill(title: L("\(document.lineCount) 行", "\(document.lineCount) lines"))
+                if let headingCount = document.markdown?.outline.count, headingCount > 0 {
+                    ToolPreviewInfoPill(title: L("\(headingCount) 个标题", "\(headingCount) headings"))
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     @ViewBuilder
@@ -390,29 +422,233 @@ private struct ToolPreviewPanel: View {
             previewMessage(L("读取中", "Loading"))
         case .failed(let message):
             previewMessage(message)
-        case .loaded(let text, let truncated):
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    if truncated {
-                        Text(L("文件较大，只预览前 1 MB。", "Large file: previewing the first 1 MB."))
-                            .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                            .foregroundStyle(theme.shellChromeText.opacity(0.46))
-                    }
-                    if markdown, let attributed = try? AttributedString(markdown: text) {
-                        Text(attributed)
-                            .font(.conductorSystem(size: 12.5, weight: .regular, family: fontFamily, scale: fontScale))
-                            .lineSpacing(5)
-                    } else {
-                        Text(text)
-                            .font(.system(size: 12, weight: .regular, design: .monospaced))
-                            .lineSpacing(3)
-                            .textSelection(.enabled)
-                    }
-                }
-                .foregroundStyle(theme.shellChromeText.opacity(0.82))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
+        case .loaded(let document, let truncated):
+            if markdown, let markdown = document.markdown {
+                markdownReader(markdown, truncated: truncated)
+            } else {
+                plainTextReader(document.text, truncated: truncated)
             }
+        }
+    }
+
+    private func markdownReader(_ document: ParsedMarkdownDocument, truncated: Bool) -> some View {
+        ScrollViewReader { proxy in
+            VStack(spacing: 0) {
+                if !document.outline.isEmpty {
+                    markdownOutline(document.outline, proxy: proxy)
+                    Rectangle()
+                        .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.38 : 0.28))
+                        .frame(height: 1)
+                }
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if truncated {
+                            previewWarning(L("文件较大，只预览前 1 MB。", "Large file: previewing the first 1 MB."))
+                        }
+
+                        ForEach(document.blocks) { block in
+                            markdownBlock(block)
+                                .id(block.id)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .padding(.bottom, 10)
+                }
+                .scrollIndicators(.visible)
+            }
+        }
+    }
+
+    private func plainTextReader(_ text: String, truncated: Bool) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                if truncated {
+                    previewWarning(L("文件较大，只预览前 1 MB。", "Large file: previewing the first 1 MB."))
+                }
+                Text(text)
+                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                    .lineSpacing(3)
+                    .textSelection(.enabled)
+            }
+            .foregroundStyle(theme.shellChromeText.opacity(0.82))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+        }
+        .scrollIndicators(.visible)
+    }
+
+    private func markdownOutline(_ outline: [MarkdownOutlineItem], proxy: ScrollViewProxy) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 5) {
+                ForEach(outline) { item in
+                    Button {
+                        selectedOutlineID = item.id
+                        withAnimation(ConductorMotion.scroll) {
+                            proxy.scrollTo(item.id, anchor: .top)
+                        }
+                    } label: {
+                        Text(item.title)
+                            .font(.conductorSystem(size: 10.5, weight: item.id == selectedOutlineID ? .bold : .semibold, family: fontFamily, scale: fontScale))
+                            .lineLimit(1)
+                            .foregroundStyle(theme.shellChromeText.opacity(item.id == selectedOutlineID ? 0.86 : 0.58))
+                            .padding(.leading, CGFloat(max(0, item.level - 1)) * 5 + 8)
+                            .padding(.trailing, 8)
+                            .frame(height: 24)
+                            .background(item.id == selectedOutlineID ? theme.floatingSelectedFill : theme.floatingControlFill.opacity(0.62))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+        }
+    }
+
+    @ViewBuilder
+    private func markdownBlock(_ block: MarkdownBlock) -> some View {
+        switch block {
+        case .heading(_, let level, let title):
+            Text(title)
+                .font(.conductorSystem(size: headingFontSize(level), weight: level <= 2 ? .bold : .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(level <= 2 ? 0.92 : 0.82))
+                .textSelection(.enabled)
+                .padding(.top, level == 1 ? 2 : 8)
+        case .paragraph(_, let text):
+            Text(inlineMarkdown(text))
+                .font(.conductorSystem(size: 12.5, weight: .regular, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.80))
+                .lineSpacing(5)
+                .textSelection(.enabled)
+        case .listItem(_, let text):
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Circle()
+                    .fill(theme.shellChromeText.opacity(0.46))
+                    .frame(width: 4, height: 4)
+                    .offset(y: -1)
+                Text(inlineMarkdown(text))
+                    .font(.conductorSystem(size: 12.5, weight: .regular, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(0.80))
+                    .lineSpacing(4)
+                    .textSelection(.enabled)
+            }
+        case .taskItem(_, let checked, let text):
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Image(systemName: checked ? "checkmark.square.fill" : "square")
+                    .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(checked ? 0.68 : 0.40))
+                    .frame(width: 13)
+                Text(inlineMarkdown(text))
+                    .font(.conductorSystem(size: 12.5, weight: .regular, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(checked ? 0.55 : 0.80))
+                    .lineSpacing(4)
+                    .textSelection(.enabled)
+            }
+        case .quote(_, let text):
+            HStack(alignment: .top, spacing: 9) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(theme.shellChromeText.opacity(0.20))
+                    .frame(width: 3)
+                Text(inlineMarkdown(text))
+                    .font(.conductorSystem(size: 12.5, weight: .regular, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(0.66))
+                    .lineSpacing(4)
+                    .textSelection(.enabled)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        case .code(_, let language, let text):
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text(language?.isEmpty == false ? language! : "code")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.46))
+                    Spacer(minLength: 8)
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(theme.shellChromeText.opacity(0.44))
+                            .frame(width: 20, height: 20)
+                            .background(theme.floatingControlFill.opacity(0.55))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("复制代码", "Copy Code"))
+                }
+                ScrollView(.horizontal, showsIndicators: true) {
+                    Text(text)
+                        .font(.system(size: 11.5, weight: .regular, design: .monospaced))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.84))
+                        .textSelection(.enabled)
+                        .padding(.bottom, 1)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.floatingControlStrongFill.opacity(theme.usesDarkChrome ? 0.50 : 0.74))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(theme.terminalOuterStroke.opacity(0.34), lineWidth: 1)
+            }
+        case .rule:
+            Rectangle()
+                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.34))
+                .frame(height: 1)
+                .padding(.vertical, 4)
+        }
+    }
+
+    private func previewWarning(_ text: String) -> some View {
+        Text(text)
+            .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+            .foregroundStyle(theme.shellChromeText.opacity(0.50))
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background(theme.floatingControlFill.opacity(0.70))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func inlineMarkdown(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+    }
+
+    private var kindTitle: String {
+        switch item.kind {
+        case .markdown:
+            return "Markdown"
+        case .image:
+            return L("图片", "Image")
+        case .text:
+            return L("文本", "Text")
+        case .unsupported:
+            return L("文件", "File")
+        }
+    }
+
+    private var fileSizeLabel: String? {
+        guard let size = try? FileManager.default
+            .attributesOfItem(atPath: item.url.path)[.size] as? NSNumber else {
+            return nil
+        }
+        return ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file)
+    }
+
+    private func copyPreviewPath() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(item.url.path, forType: .string)
+    }
+
+    private func headingFontSize(_ level: Int) -> CGFloat {
+        switch level {
+        case 1: 18
+        case 2: 15.5
+        case 3: 14
+        default: 12.8
         }
     }
 
@@ -434,6 +670,7 @@ private struct ToolPreviewPanel: View {
         guard item.kind == .markdown || item.kind == .text else { return }
         textState = .loading
         let url = item.url
+        let kind = item.kind
         let result = await Task.detached(priority: .userInitiated) { () -> PreviewTextState in
             do {
                 let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
@@ -443,7 +680,7 @@ private struct ToolPreviewPanel: View {
                 defer { try? handle.close() }
                 let data = try handle.read(upToCount: min(max(size, 0), limit)) ?? Data()
                 let text = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
-                return .loaded(text, truncated: size > limit)
+                return .loaded(PreviewTextDocument(text: text, kind: kind), truncated: size > limit)
             } catch {
                 return .failed(error.localizedDescription)
             }
@@ -454,8 +691,235 @@ private struct ToolPreviewPanel: View {
 
 private enum PreviewTextState: Equatable {
     case loading
-    case loaded(String, truncated: Bool)
+    case loaded(PreviewTextDocument, truncated: Bool)
     case failed(String)
+}
+
+private struct ToolPreviewInfoPill: View {
+    let title: String
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorFontFamily) private var fontFamily
+
+    var body: some View {
+        Text(title)
+            .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
+            .foregroundStyle(theme.shellChromeText.opacity(0.52))
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .frame(height: 19)
+            .background(theme.floatingControlFill.opacity(0.56))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+}
+
+private struct PreviewTextDocument: Equatable {
+    let text: String
+    let markdown: ParsedMarkdownDocument?
+    let lineCount: Int
+
+    init(text: String, kind: ToolPreviewKind) {
+        self.text = text
+        self.markdown = kind == .markdown ? ParsedMarkdownDocument(text) : nil
+        self.lineCount = max(1, text.components(separatedBy: .newlines).count)
+    }
+}
+
+private struct ParsedMarkdownDocument: Equatable {
+    let blocks: [MarkdownBlock]
+    let outline: [MarkdownOutlineItem]
+
+    init(_ text: String) {
+        var parser = MarkdownBlockParser()
+        self.blocks = parser.parse(text)
+        self.outline = blocks.compactMap { block in
+            guard case .heading(let id, let level, let title) = block else { return nil }
+            return MarkdownOutlineItem(id: id, level: level, title: title)
+        }
+    }
+}
+
+private struct MarkdownOutlineItem: Identifiable, Equatable {
+    let id: String
+    let level: Int
+    let title: String
+}
+
+private enum MarkdownBlock: Identifiable, Equatable {
+    case heading(id: String, level: Int, title: String)
+    case paragraph(id: String, text: String)
+    case listItem(id: String, text: String)
+    case taskItem(id: String, checked: Bool, text: String)
+    case quote(id: String, text: String)
+    case code(id: String, language: String?, text: String)
+    case rule(id: String)
+
+    var id: String {
+        switch self {
+        case .heading(let id, _, _),
+             .paragraph(let id, _),
+             .listItem(let id, _),
+             .taskItem(let id, _, _),
+             .quote(let id, _),
+             .code(let id, _, _),
+             .rule(let id):
+            return id
+        }
+    }
+}
+
+private struct MarkdownBlockParser {
+    private var counter = 0
+
+    mutating func parse(_ text: String) -> [MarkdownBlock] {
+        var blocks: [MarkdownBlock] = []
+        var paragraph: [String] = []
+        var quote: [String] = []
+        var codeLanguage: String?
+        var codeFence: String?
+        var codeLines: [String] = []
+
+        func flushParagraph() {
+            guard !paragraph.isEmpty else { return }
+            blocks.append(.paragraph(id: nextID("p"), text: paragraph.joined(separator: " ")))
+            paragraph.removeAll(keepingCapacity: true)
+        }
+
+        func flushQuote() {
+            guard !quote.isEmpty else { return }
+            blocks.append(.quote(id: nextID("q"), text: quote.joined(separator: "\n")))
+            quote.removeAll(keepingCapacity: true)
+        }
+
+        func flushCode() {
+            blocks.append(.code(id: nextID("code"), language: codeLanguage, text: codeLines.joined(separator: "\n")))
+            codeLanguage = nil
+            codeFence = nil
+            codeLines.removeAll(keepingCapacity: true)
+        }
+
+        for line in text.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if let fence = codeFence {
+                if trimmed.hasPrefix(fence) {
+                    flushCode()
+                } else {
+                    codeLines.append(line)
+                }
+                continue
+            }
+
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                flushParagraph()
+                flushQuote()
+                codeFence = String(trimmed.prefix(3))
+                codeLanguage = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
+                continue
+            }
+
+            if trimmed.isEmpty {
+                flushParagraph()
+                flushQuote()
+                continue
+            }
+
+            if isRule(trimmed) {
+                flushParagraph()
+                flushQuote()
+                blocks.append(.rule(id: nextID("rule")))
+                continue
+            }
+
+            if let heading = heading(in: line) {
+                flushParagraph()
+                flushQuote()
+                blocks.append(.heading(id: nextID("h"), level: heading.level, title: heading.title))
+                continue
+            }
+
+            if let quoteLine = quoteText(in: line) {
+                flushParagraph()
+                quote.append(quoteLine)
+                continue
+            }
+
+            if let listText = listItemText(in: line) {
+                flushParagraph()
+                flushQuote()
+                if let task = taskItem(in: listText) {
+                    blocks.append(.taskItem(id: nextID("task"), checked: task.checked, text: task.text))
+                } else {
+                    blocks.append(.listItem(id: nextID("li"), text: listText))
+                }
+                continue
+            }
+
+            flushQuote()
+            paragraph.append(trimmed)
+        }
+
+        if codeFence != nil {
+            flushCode()
+        }
+        flushParagraph()
+        flushQuote()
+        return blocks
+    }
+
+    private mutating func nextID(_ prefix: String) -> String {
+        counter += 1
+        return "\(prefix)-\(counter)"
+    }
+
+    private func heading(in line: String) -> (level: Int, title: String)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let level = trimmed.prefix(while: { $0 == "#" }).count
+        guard (1...6).contains(level),
+              trimmed.count > level,
+              trimmed[trimmed.index(trimmed.startIndex, offsetBy: level)] == " " else {
+            return nil
+        }
+        let title = trimmed.dropFirst(level).trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? nil : (level, String(title))
+    }
+
+    private func quoteText(in line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix(">") else { return nil }
+        return String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces)
+    }
+
+    private func listItemText(in line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        for prefix in ["- ", "* ", "+ "] where trimmed.hasPrefix(prefix) {
+            return String(trimmed.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        }
+
+        let digitPrefix = trimmed.prefix(while: { $0.isNumber })
+        guard !digitPrefix.isEmpty else { return nil }
+        let rest = trimmed.dropFirst(digitPrefix.count)
+        guard rest.hasPrefix(". ") || rest.hasPrefix(") ") else { return nil }
+        return String(rest.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+    }
+
+    private func taskItem(in text: String) -> (checked: Bool, text: String)? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let lowercased = trimmed.lowercased()
+        guard lowercased.hasPrefix("[ ] ") || lowercased.hasPrefix("[x] ") else { return nil }
+        return (
+            checked: lowercased.hasPrefix("[x] "),
+            text: String(trimmed.dropFirst(4)).trimmingCharacters(in: .whitespaces)
+        )
+    }
+
+    private func isRule(_ line: String) -> Bool {
+        let compact = line.replacingOccurrences(of: " ", with: "")
+        guard compact.count >= 3 else { return false }
+        return compact.allSatisfy { $0 == "-" } ||
+            compact.allSatisfy { $0 == "*" } ||
+            compact.allSatisfy { $0 == "_" }
+    }
 }
 
 private struct ConductorShellJoiner: View {
