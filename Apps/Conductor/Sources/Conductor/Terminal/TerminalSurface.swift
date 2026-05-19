@@ -284,6 +284,10 @@ final class TerminalSurface {
     func close() {
         guard lifecycle != .closing && lifecycle != .closed else { return }
         lifecycle = .closing
+        pendingText.removeAll(keepingCapacity: false)
+        onFocusRequest = nil
+        onContextMenuRequest = nil
+        hostView.removeFromSuperview()
         guard let surface else {
             hostView.surface = nil
             lifecycle = .closed

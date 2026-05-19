@@ -167,6 +167,10 @@ Do not free terminal state or renderer resources during transient SwiftUI disman
   the representable during divider movement.
 - Split-divider drags must update split fractions inside a non-animated transaction.
 - Notification jumps or programmatic terminal navigation must focus the owning pane, select the tab, then force a current-run-loop and next-run-loop geometry refresh for the target surface if it already exists.
+- Terminal close must detach the AppKit host view from its superview, clear pending input
+  buffers and app callback closures, nil the host view's weak surface link, free the
+  `ghostty_surface_t`, release retained Ghostty userdata exactly once, and leave the method
+  idempotent for pane close, tab close, workspace close, app quit, and failed initialization.
 
 ### 4. Validation & Error Matrix
 
@@ -174,12 +178,17 @@ Do not free terminal state or renderer resources during transient SwiftUI disman
 - SwiftUI layout animation wraps the live terminal host -> split resize can lag behind the pointer or show ghost frames.
 - Repeated forced refreshes from `updateNSView` -> tab switching and resize feel sticky under many panes/tabs.
 - Navigation selects a tab without focusing its pane -> first responder and Ghostty focus can disagree after notification jump.
+- Close leaves host view installed in an AppKit container -> Instruments can show short-lived
+  view retention after terminal close, and a stale terminal frame can remain visible until the
+  next SwiftUI update.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: Dragging a divider changes AppKit bounds immediately; Ghostty receives deduped pixel sizes and refreshes only on actual geometry changes.
 - Base: Selecting a terminal tab swaps one stable host view and schedules a single post-layout sync.
 - Bad: `updateNSView` calls `layoutSubtreeIfNeeded`, `syncGeometry(force: true)`, and `refresh()` several times for every unrelated SwiftUI metadata update.
+- Bad: `TerminalSurface.close()` frees Ghostty but waits for SwiftUI teardown to detach the
+  host view and callbacks.
 
 ### 6. Tests Required
 
