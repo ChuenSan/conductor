@@ -51,6 +51,59 @@ enum ConductorShellCommand: String, CaseIterable {
     case clearNotifications
     case testNotification
 
+    var signpostName: StaticString {
+        switch self {
+        case .newWorkspace:
+            return "command-new-workspace"
+        case .newTerminal, .newTerminalAtFocusedDirectory:
+            return "command-new-terminal"
+        case .closeSelectedTab, .closeOtherTabs, .closeTabsToRight:
+            return "command-close-tab"
+        case .closeFocusedPane:
+            return "command-close-pane"
+        case .splitRight, .splitDown:
+            return "command-split"
+        case .selectNextTab, .selectPreviousTab:
+            return "command-select-tab"
+        case .focusNextPane, .focusPreviousPane, .focusPaneLeft, .focusPaneRight, .focusPaneUp, .focusPaneDown:
+            return "command-focus-pane"
+        case .resizePaneLeft, .resizePaneRight, .resizePaneUp, .resizePaneDown:
+            return "command-resize-pane"
+        case .equalizeSplits:
+            return "command-equalize-splits"
+        case .toggleZoom:
+            return "command-toggle-zoom"
+        case .moveTabLeft, .moveTabRight, .moveTabToNextPane, .moveTabToNewRightSplit, .moveTabToNewDownSplit:
+            return "command-move-tab"
+        case .toggleCommandPalette:
+            return "command-toggle-palette"
+        case .toggleWorkspaceOverview:
+            return "command-toggle-overview"
+        case .toggleSettings:
+            return "command-toggle-settings"
+        case .toggleNotifications:
+            return "command-toggle-notifications"
+        case .jumpToLatestUnread:
+            return "command-jump-unread"
+        case .toggleFullScreen:
+            return "command-toggle-fullscreen"
+        case .resetWorkspace:
+            return "command-reset-workspace"
+        case .showTerminalSearch, .findNext, .findPrevious:
+            return "command-terminal-search"
+        case .flashFocusedPane:
+            return "command-flash-pane"
+        case .duplicateSelectedTab:
+            return "command-duplicate-tab"
+        case .openFocusedDirectory, .copyFocusedDirectory:
+            return "command-directory"
+        case .duplicateWorkspace, .closeCurrentWorkspace:
+            return "command-workspace"
+        case .clearNotifications, .testNotification:
+            return "command-notification"
+        }
+    }
+
     func canPerform(model: ConductorWindowModel) -> Bool {
         switch self {
         case .closeOtherTabs:

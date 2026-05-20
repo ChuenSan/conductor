@@ -31,6 +31,13 @@ Always:
 - Use throttled display models for sidebar rows, notification badges, and agent status.
 - Keep focus changes explicit and predictable.
 - Prefer AppKit overlays for visuals that must track terminal geometry.
+- Add low-cost signposts around user-facing interaction boundaries before tuning perceived
+  latency. Shell commands, workspace/tab selection, panel toggles, terminal search entry, and
+  navigation refresh should be observable as separate intervals so a click path can be traced
+  without logging terminal transcript content.
+- Avoid doing persistence preparation work twice on the main actor. `workspace.didSet` is the
+  boundary that synchronizes the selected workspace snapshot; delayed persistence should
+  capture already-synchronized values and perform disk writes later.
 
 ---
 

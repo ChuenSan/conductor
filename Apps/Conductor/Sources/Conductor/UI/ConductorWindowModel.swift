@@ -198,6 +198,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var activeTerminalContextMenuController: TerminalContextMenuController?
     private var selectedWorkspaceID: WorkspaceID
     private var skipPreviousWorkspaceSyncForNextAssignment = false
+    private var pendingNavigationRefreshTerminalIDs = Set<TerminalID>()
 
     init() {
         let persisted = persistence.load()
@@ -403,6 +404,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         ConductorLog.performance.debug("shell command \(command.rawValue, privacy: .public)")
         let signpost = ConductorSignpost.begin("shell-command")
         defer { ConductorSignpost.end("shell-command", signpost) }
+        let commandSignpost = ConductorSignpost.begin(command.signpostName)
+        defer { ConductorSignpost.end(command.signpostName, commandSignpost) }
         return command.perform(model: self, window: window)
     }
 
@@ -793,11 +796,17 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func focusTerminal(_ terminalID: TerminalID) {
+        let signpost = ConductorSignpost.begin("focus-terminal")
+        defer { ConductorSignpost.end("focus-terminal", signpost) }
         if workspace.paneID(containing: terminalID) == nil,
            let workspaceID = workspaces.first(where: { $0.paneID(containing: terminalID) != nil })?.id {
             selectWorkspace(workspaceID)
         }
         guard let paneID = workspace.paneID(containing: terminalID) else { return }
+        if workspace.focusedPaneID == paneID,
+           workspace.panes[paneID]?.selectedTabID == terminalID {
+            return
+        }
         workspace.focusPane(paneID)
         workspace.selectTab(terminalID, in: paneID)
         reconcileSurfaceFocus()
@@ -815,6 +824,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func showTerminalSearch(for terminalID: TerminalID) {
+        let signpost = ConductorSignpost.begin("terminal-search-show")
+        defer { ConductorSignpost.end("terminal-search-show", signpost) }
         guard activateTerminalContextTarget(terminalID) != nil,
               let target = terminalSearchTarget(for: terminalID) else { return }
         commandPaletteVisible = false
@@ -1015,6 +1026,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func selectWorkspace(_ workspaceID: WorkspaceID) {
+        let signpost = ConductorSignpost.begin("select-workspace")
+        defer { ConductorSignpost.end("select-workspace", signpost) }
         guard workspaceID != workspace.id else {
             closeWorkspaceTransientPanels()
             return
@@ -1202,23 +1215,35 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func selectNextTab() {
-        workspace.selectAdjacentTab(offset: 1)
+        if let terminalID = workspace.selectAdjacentTab(offset: 1) {
+            reconcileSurfaceFocus()
+            refreshSurfaceAfterNavigation(terminalID)
+        }
     }
 
     func selectPreviousTab() {
-        workspace.selectAdjacentTab(offset: -1)
+        if let terminalID = workspace.selectAdjacentTab(offset: -1) {
+            reconcileSurfaceFocus()
+            refreshSurfaceAfterNavigation(terminalID)
+        }
     }
 
     func focusNextPane() {
-        workspace.focusAdjacentPane(.next)
+        if workspace.focusAdjacentPane(.next) != nil {
+            reconcileSurfaceFocus()
+        }
     }
 
     func focusPreviousPane() {
-        workspace.focusAdjacentPane(.previous)
+        if workspace.focusAdjacentPane(.previous) != nil {
+            reconcileSurfaceFocus()
+        }
     }
 
     func focusPane(direction: FocusDirection) {
-        workspace.focusAdjacentPane(direction)
+        if workspace.focusAdjacentPane(direction) != nil {
+            reconcileSurfaceFocus()
+        }
     }
 
     func resizeFocusedSplit(direction: ResizeSplitDirection, amount: Double = 5) {
@@ -1228,6 +1253,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func toggleCommandPalette() {
+        let signpost = ConductorSignpost.begin("palette-toggle")
+        defer { ConductorSignpost.end("palette-toggle", signpost) }
         commandPaletteVisible.toggle()
         if commandPaletteVisible {
             settingsPanelVisible = false
@@ -1241,6 +1268,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func toggleSettingsPanel() {
+        let signpost = ConductorSignpost.begin("settings-toggle")
+        defer { ConductorSignpost.end("settings-toggle", signpost) }
         settingsPanelVisible.toggle()
         if settingsPanelVisible {
             commandPaletteVisible = false
@@ -1254,6 +1283,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func toggleWorkspaceOverview() {
+        let signpost = ConductorSignpost.begin("overview-toggle")
+        defer { ConductorSignpost.end("overview-toggle", signpost) }
         workspaceOverviewVisible.toggle()
         if workspaceOverviewVisible {
             commandPaletteVisible = false
@@ -1288,6 +1319,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func toggleNotificationPanel() {
+        let signpost = ConductorSignpost.begin("notifications-toggle")
+        defer { ConductorSignpost.end("notifications-toggle", signpost) }
         if notificationPanelVisible {
             onNotificationPanelVisibilityChange?(true)
             return
@@ -1462,12 +1495,18 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     private func refreshSurfaceAfterNavigation(_ terminalID: TerminalID) {
         guard let surface = surfaces[terminalID] else { return }
+        guard pendingNavigationRefreshTerminalIDs.insert(terminalID).inserted else { return }
+        let signpost = ConductorSignpost.begin("navigation-refresh")
         reconcileSurfaceFocus()
         surface.attachIfPossible()
         surface.setFocused(true, force: true)
         surface.syncGeometry(force: true)
         surface.refresh()
         Task { @MainActor [weak self] in
+            defer {
+                self?.pendingNavigationRefreshTerminalIDs.remove(terminalID)
+                ConductorSignpost.end("navigation-refresh", signpost)
+            }
             guard let surface = self?.surfaces[terminalID] else { return }
             surface.attachIfPossible()
             surface.syncGeometry(force: true)
@@ -1781,12 +1820,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     private func persist() {
         pendingPersistence?.cancel()
-        syncSelectedWorkspace()
         let workspaces = workspaces
         let selectedWorkspaceID = selectedWorkspaceID
         let theme = theme
         let appearance = appearance
         let item = DispatchWorkItem { [persistence] in
+            let signpost = ConductorSignpost.begin("persistence-save")
+            defer { ConductorSignpost.end("persistence-save", signpost) }
             persistence.save(
                 workspaces: workspaces,
                 selectedWorkspaceID: selectedWorkspaceID,
