@@ -748,7 +748,6 @@ private struct TerminalPaneView: View {
     let pane: PaneState
     @ObservedObject var model: ConductorWindowModel
     @State private var highlightedDropTabID: TerminalID?
-    @State private var detachDropTarget: TerminalTabDropTarget?
     @State private var flashVisible = false
     @Environment(\.conductorSplitResizeActive) private var splitResizeActive
 
@@ -765,7 +764,7 @@ private struct TerminalPaneView: View {
     }
 
     private var paneDropTarget: TerminalTabDropTarget? {
-        detachDropTarget ?? model.terminalTabDropTargetByPaneID[pane.id]
+        model.terminalTabDropTargetByPaneID[pane.id]
     }
 
     var body: some View {
@@ -855,38 +854,27 @@ private struct TerminalPaneView: View {
     private var selectedTerminal: some View {
         if let selected = pane.selectedTab,
            model.workspace.panes[pane.id]?.selectedTabID == selected.id {
-            GeometryReader { proxy in
-                ZStack {
-                    TerminalSurfaceRepresentable(
-                        surface: model.surface(for: selected),
-                        theme: model.theme,
-                        isFocused: terminalAcceptsInputFocus,
-                        suspendsGeometrySync: false
-                    )
-                    .background(model.theme.terminalBackground)
-                    .transaction { transaction in
-                        transaction.disablesAnimations = true
-                        transaction.animation = nil
-                    }
-                    .onTapGesture {
-                        ConductorMotion.perform(ConductorMotion.selection) {
-                            model.focusPane(pane.id)
-                        }
-                    }
-
-                }
-                .contentShape(Rectangle())
-                .clipped()
-                .onDrop(
-                    of: terminalTabDropTypes,
-                    delegate: TerminalDetachDropDelegate(
-                        paneID: pane.id,
-                        size: proxy.size,
-                        target: $detachDropTarget,
-                        model: model
-                    )
+            ZStack {
+                TerminalSurfaceRepresentable(
+                    surface: model.surface(for: selected),
+                    theme: model.theme,
+                    isFocused: terminalAcceptsInputFocus,
+                    suspendsGeometrySync: false
                 )
+                .background(model.theme.terminalBackground)
+                .transaction { transaction in
+                    transaction.disablesAnimations = true
+                    transaction.animation = nil
+                }
+                .onTapGesture {
+                    ConductorMotion.perform(ConductorMotion.selection) {
+                        model.focusPane(pane.id)
+                    }
+                }
+
             }
+            .contentShape(Rectangle())
+            .clipped()
         }
     }
 
@@ -1110,77 +1098,6 @@ private func terminalTabDropProvider(in info: DropInfo) -> TerminalTabDropPayloa
         return TerminalTabDropPayloadProvider(provider: provider, typeIdentifier: UTType.text.identifier)
     }
     return nil
-}
-
-private struct TerminalDetachDropDelegate: DropDelegate {
-    let paneID: PaneID
-    let size: CGSize
-    @Binding var target: TerminalTabDropTarget?
-    let model: ConductorWindowModel
-
-    func validateDrop(info: DropInfo) -> Bool {
-        model.hasActiveTerminalTabDrag() && terminalTabDropProvider(in: info) != nil
-    }
-
-    func dropEntered(info: DropInfo) {
-        guard validateDrop(info: info) else { return }
-        target = target(for: info.location)
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        guard validateDrop(info: info) else {
-            target = nil
-            return nil
-        }
-        target = target(for: info.location)
-        return DropProposal(operation: .move)
-    }
-
-    func dropExited(info: DropInfo) {
-        target = nil
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        let resolvedTarget = target(for: info.location)
-        target = nil
-        guard validateDrop(info: info),
-              let payloadProvider = terminalTabDropProvider(in: info) else { return false }
-        payloadProvider.loadTerminalID { draggedTabID in
-            guard let draggedTabID else { return }
-            Task { @MainActor in
-                ConductorMotion.perform(ConductorMotion.layout) {
-                    if resolvedTarget == .center {
-                        guard model.workspace.paneID(containing: draggedTabID) != paneID else { return }
-                        model.moveTabToEnd(draggedTabID, in: paneID)
-                    } else {
-                        model.moveTabToSplit(draggedTabID, targetPaneID: paneID, direction: resolvedTarget.direction)
-                    }
-                }
-                model.endTerminalTabDrag()
-            }
-        }
-        return true
-    }
-
-    private func target(for location: CGPoint) -> TerminalTabDropTarget {
-        let width = max(1, size.width)
-        let height = max(1, size.height)
-        let horizontalEdge = max(80, width * 0.25)
-        let verticalEdge = max(80, height * 0.25)
-        if location.x < horizontalEdge {
-            return .left
-        }
-        if location.x > width - horizontalEdge {
-            return .right
-        }
-        if location.y < verticalEdge {
-            return .up
-        }
-        if location.y > height - verticalEdge {
-            return .down
-        }
-        return .center
-    }
 }
 
 private struct TerminalTabDropDelegate: DropDelegate {

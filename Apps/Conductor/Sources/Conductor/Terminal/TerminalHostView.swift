@@ -192,8 +192,13 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         hideTerminalTabDropOverlay()
     }
 
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        hideTerminalTabDropOverlay()
+    }
+
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        if let draggedTerminalID = terminalTabID(from: sender.draggingPasteboard) {
+        if surface?.canAcceptTerminalTabDrop() == true,
+           let draggedTerminalID = terminalTabID(from: sender.draggingPasteboard) {
             let target = terminalTabDropTarget(for: convert(sender.draggingLocation, from: nil), size: bounds.size)
             hideTerminalTabDropOverlay()
             return surface?.performTerminalTabDrop(draggedTerminalID: draggedTerminalID, target: target) ?? false
@@ -431,6 +436,8 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     }
 
     private func terminalTabID(from pasteboard: NSPasteboard) -> TerminalID? {
+        guard surface?.canAcceptTerminalTabDrop() == true else { return nil }
+
         if let data = pasteboard.data(forType: Self.internalTerminalTabDragType),
            let text = String(data: data, encoding: .utf8),
            let terminalID = terminalID(fromDroppedText: text) {
@@ -442,8 +449,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
             return terminalID
         }
 
-        if surface?.canAcceptTerminalTabDrop() == true,
-           let text = pasteboard.string(forType: .string),
+        if let text = pasteboard.string(forType: .string),
            let terminalID = terminalID(fromDroppedText: text) {
             return terminalID
         }

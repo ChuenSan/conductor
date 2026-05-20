@@ -359,19 +359,27 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         terminalTabDragGeneration &+= 1
         let generation = terminalTabDragGeneration
         activeTerminalTabDragID = terminalID
+        if !terminalTabDropTargetByPaneID.isEmpty {
+            terminalTabDropTargetByPaneID.removeAll()
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
             guard let self,
                   self.terminalTabDragGeneration == generation else {
                 return
             }
             self.activeTerminalTabDragID = nil
+            if !self.terminalTabDropTargetByPaneID.isEmpty {
+                self.terminalTabDropTargetByPaneID.removeAll()
+            }
         }
     }
 
     func endTerminalTabDrag() {
         terminalTabDragGeneration &+= 1
         activeTerminalTabDragID = nil
-        terminalTabDropTargetByPaneID.removeAll()
+        if !terminalTabDropTargetByPaneID.isEmpty {
+            terminalTabDropTargetByPaneID.removeAll()
+        }
     }
 
     func hasActiveTerminalTabDrag() -> Bool {
@@ -381,8 +389,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func setTerminalTabDropTarget(for terminalID: TerminalID, target: TerminalTabDropTarget?) {
         guard let paneID = workspace.paneID(containing: terminalID) else { return }
         if let target {
+            guard terminalTabDropTargetByPaneID[paneID] != target else { return }
             terminalTabDropTargetByPaneID[paneID] = target
         } else {
+            guard terminalTabDropTargetByPaneID[paneID] != nil else { return }
             terminalTabDropTargetByPaneID.removeValue(forKey: paneID)
         }
     }

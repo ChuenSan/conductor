@@ -329,7 +329,8 @@ terminal.
   drags: the private type or a text fallback must be paired with the active in-process
   drag-session marker and a valid terminal-tab ID payload.
 - When a live `NSViewRepresentable` terminal surface covers the pane, terminal-tab split drops
-  should be handled by the stable AppKit host as well: register the private tab type, publish
+  must be handled by the stable AppKit host, not by a competing SwiftUI `.onDrop` around the
+  live terminal surface: register the private tab type on `TerminalHostView`, publish deduped
   hover target changes back through `ConductorWindowModel`, draw the split placeholder at the
   full pane level so it covers the tab rail and terminal surface together, and route the final
   drop back through `ConductorWindowModel`.
@@ -357,11 +358,26 @@ terminal.
 **Correct**:
 
 ```swift
-.onDrop(of: [terminalTabDragType], delegate: TerminalDetachDropDelegate(...))
-
 final class TerminalHostView: NSView {
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard surface?.canAcceptTerminalTabDrop() == true else { return [] }
+        surface?.updateTerminalTabDropTarget(target)
+        return .move
+    }
+
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if let draggedTerminalID = terminalTabID(from: sender.draggingPasteboard) {
+            return surface?.performTerminalTabDrop(draggedTerminalID: draggedTerminalID, target: target) ?? false
+        }
         surface?.sendText(shellQuotedPaths + " ")
+        return true
+    }
+}
+
+final class ConductorWindowModel: ObservableObject {
+    func setTerminalTabDropTarget(for terminalID: TerminalID, target: TerminalTabDropTarget?) {
+        guard terminalTabDropTargetByPaneID[paneID] != target else { return }
+        terminalTabDropTargetByPaneID[paneID] = target
     }
 }
 ```
@@ -370,6 +386,7 @@ final class TerminalHostView: NSView {
 
 ```swift
 .onDrop(of: [UTType.text], delegate: TerminalDetachDropDelegate(...))
+.onDrop(of: [terminalTabDragType], delegate: TerminalDetachDropDelegate(...)) // around TerminalSurfaceRepresentable
 .onDrop(of: [.fileURL], delegate: TerminalFileDropDelegate(...)) // wrapped around NSViewRepresentable
 ```
 
