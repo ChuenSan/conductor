@@ -487,8 +487,8 @@ private final class ConductorSplitView: NSSplitView {
 }
 
 private extension SplitNode {
-    static let desiredLeafMinimumWidth: CGFloat = 92
-    static let desiredLeafMinimumHeight: CGFloat = 72
+    static let desiredLeafMinimumWidth: CGFloat = 24
+    static let desiredLeafMinimumHeight: CGFloat = 24
 
     func minimumLength(along axis: SplitAxis, divider: CGFloat) -> CGFloat {
         switch self {

@@ -260,6 +260,10 @@ styling to terminal output.
   `SplitNode.maximumFraction` and reuse `SplitNode.clampedFraction(_:)` from SwiftUI/AppKit
   split chrome. Do not add a second wider UI-only clamp such as `0.15...0.85`; divider drag
   should feel free until the real pixel minimum of the nested pane tree is reached.
+- AppKit split minimum lengths are only a safety rail, not a layout preference. Keep leaf
+  minimums tiny so nested split groups do not accumulate into a large invisible drag clamp.
+  Visual readability can be handled by empty-state/chrome behavior; divider movement must not
+  stop at 15-20% just because the pane is nested.
 - Do not add or remove tab controls on hover. Reserve stable close/new-tab slots and change
   opacity, fill, or stroke only.
 - Show the active pane with a full pane border or rail accent. Do not rely on a small dot,
@@ -339,6 +343,9 @@ terminal.
 - Split placeholders and tab insertion highlights may only appear for private internal tab
   drags: the private type or a text fallback must be paired with the active in-process
   drag-session marker and a valid terminal-tab ID payload.
+- Terminal-tab drop edge zones should scale with the target pane and stay below half the pane
+  size. Avoid fixed large minimum edge widths such as 80px because small panes then feel like
+  they only have a few legal drop positions.
 - When a live `NSViewRepresentable` terminal surface covers the pane, terminal-tab split drops
   must be handled by the stable AppKit host, not by a competing SwiftUI `.onDrop` around the
   live terminal surface: register the private tab type on `TerminalHostView`, publish deduped

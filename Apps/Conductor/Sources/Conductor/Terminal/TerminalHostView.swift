@@ -486,8 +486,8 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         let width = max(1, size.width)
         let height = max(1, size.height)
         let topOriginY = height - location.y
-        let horizontalEdge = max(80, width * 0.25)
-        let verticalEdge = max(80, height * 0.25)
+        let horizontalEdge = min(max(36, width * 0.24), width * 0.42)
+        let verticalEdge = min(max(36, height * 0.24), height * 0.42)
         if location.x < horizontalEdge {
             return .left
         }
