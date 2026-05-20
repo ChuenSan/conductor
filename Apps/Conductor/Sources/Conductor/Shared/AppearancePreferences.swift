@@ -66,33 +66,33 @@ enum AppearanceDensity: String, CaseIterable, Codable, Identifiable {
     var paneTabRailHeight: CGFloat {
         switch self {
         case .compact:
-            24
+            27
         case .standard:
-            26
-        case .spacious:
             29
+        case .spacious:
+            32
         }
     }
 
     var paneTabHeight: CGFloat {
         switch self {
         case .compact:
-            19
+            22
         case .standard:
-            21
+            24
         case .spacious:
-            23
+            27
         }
     }
 
     var paneTabWidth: CGFloat {
         switch self {
         case .compact:
-            108
+            120
         case .standard:
-            118
+            132
         case .spacious:
-            130
+            146
         }
     }
 

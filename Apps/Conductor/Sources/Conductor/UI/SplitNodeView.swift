@@ -1334,17 +1334,17 @@ private struct TerminalTabButton: View {
                     }
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
+                        .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
                         .foregroundStyle(hovering || isSelected ? theme.shellChromeText.opacity(0.80) : theme.shellChromeTextMuted.opacity(0.72))
-                        .frame(width: 13, height: 13)
+                        .frame(width: 15, height: 15)
                         .clipShape(Circle())
                 }
                 .buttonStyle(ConductorPressButtonStyle())
                 .help(L("关闭标签", "Close Tab"))
             }
         }
-        .padding(.leading, 8)
-        .padding(.trailing, 4)
+        .padding(.leading, 9)
+        .padding(.trailing, 5)
         .frame(height: model.appearance.density.paneTabHeight)
         .frame(
             minWidth: 72,
@@ -1506,10 +1506,10 @@ private struct TerminalTabButtonContent: View, Equatable {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: "terminal")
-                .font(.conductorSystem(size: 10, scale: fontScale))
+                .font(.conductorSystem(size: 10.5, scale: fontScale))
                 .foregroundStyle(selected ? theme.shellChromeText : theme.shellChromeTextMuted)
             Text(title)
-                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(selected ? theme.shellChromeText : theme.shellChromeTextMuted)
                 .lineLimit(1)
                 .layoutPriority(1)
