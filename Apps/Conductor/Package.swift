@@ -12,9 +12,7 @@ let package = Package(
         .executable(name: "ConductorModelCheck", targets: ["ConductorModelCheck"]),
         .library(name: "ConductorCore", targets: ["ConductorCore"])
     ],
-    dependencies: [
-        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1")
-    ],
+    dependencies: [],
     targets: [
         .binaryTarget(
             name: "GhosttyKit",
@@ -27,8 +25,7 @@ let package = Package(
             name: "Conductor",
             dependencies: [
                 "ConductorCore",
-                "GhosttyKit",
-                .product(name: "MarkdownUI", package: "swift-markdown-ui")
+                "GhosttyKit"
             ],
             linkerSettings: [
                 .linkedLibrary("c++"),

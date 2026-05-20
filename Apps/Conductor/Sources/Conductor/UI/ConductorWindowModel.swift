@@ -47,7 +47,6 @@ struct TerminalDisplayMetadata: Equatable {
 }
 
 enum ToolPreviewKind: String, Equatable {
-    case markdown
     case image
     case text
     case unsupported
@@ -76,8 +75,6 @@ struct ToolPreviewItem: Identifiable, Equatable {
 
     private static func kind(for url: URL) -> ToolPreviewKind {
         switch url.pathExtension.lowercased() {
-        case "md", "markdown", "mdown", "mkd":
-            return .markdown
         case "png", "jpg", "jpeg", "gif", "heic", "tiff", "webp":
             return .image
         case "txt", "log", "json", "jsonl", "yaml", "yml", "toml", "swift", "sh", "zsh", "bash", "py", "js", "ts", "tsx", "jsx", "html", "css", "xml":

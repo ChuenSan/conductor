@@ -157,10 +157,11 @@ workspace overview, and compact status modules.
   title bar inside the panel. In-window floating panels should share a common width/height
   unless the surface is a true small popover.
 - File/tool previews opened from terminal file URLs are low-frequency tool UI beside the
-  terminal, not terminal rendering. Markdown/text previews may read bounded file content into
-  SwiftUI state, but they must do file IO and Markdown block parsing off the main actor, cap
-  initial reads, and expose only the preview document, outline, and file metadata. They must
-  not inspect terminal scrollback or make terminal transcript text observable.
+  terminal, not terminal rendering. Text previews may read bounded file content into SwiftUI
+  state, but they must do file IO off the main actor, cap initial reads, and expose only the
+  preview document and file metadata. They must not inspect terminal scrollback or make
+  terminal transcript text observable. Formatted document parsing is intentionally not part of
+  the current product surface.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.
