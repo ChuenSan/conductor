@@ -873,6 +873,12 @@ func checkTerminalNotificationStateIndexesAndLifecycle() {
     require(state.snapshot.unreadCount == 1, "mark read should decrease unread count")
     require(state.snapshot.latestUnread?.id == replacement.id, "latest unread should skip read records")
 
+    require(state.markTerminalRead(firstTerminalID), "terminal read should mark all unread records for that terminal")
+    require(state.snapshot.unreadCount == 0, "terminal read should clear terminal unread count")
+    require(state.snapshot.unreadCount(for: firstTerminalID) == 0, "terminal read should clear terminal unread index")
+    require(state.snapshot.latestUnread == nil, "terminal read should clear latest unread when no unread records remain")
+    require(!state.markTerminalRead(firstTerminalID), "terminal read should be idempotent once records are read")
+
     require(state.clearTerminal(firstTerminalID), "clear terminal should remove records")
     require(state.snapshot.unreadCount == 0, "clearing unread terminal should clear unread count")
     require(state.records.count == 1 && state.records[0].id == second.id, "clear terminal should preserve other terminal records")

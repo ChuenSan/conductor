@@ -163,6 +163,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        surface?.recordUserActivity()
         surface?.scroll(deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY, modifiers: event.modifierFlags)
     }
 
@@ -235,6 +236,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     }
 
     override func keyDown(with event: NSEvent) {
+        surface?.recordUserActivity()
         let action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let flags = event.modifierFlags
             .intersection(.deviceIndependentFlagsMask)

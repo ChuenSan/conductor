@@ -512,6 +512,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         surface.onFocusRequest = { [weak self] terminalID in
             self?.focusTerminal(terminalID)
         }
+        surface.onUserActivity = { [weak self] terminalID in
+            self?.recordTerminalUserActivity(terminalID)
+        }
         surface.onContextMenuRequest = { [weak self] terminalID, event, view in
             self?.showTerminalContextMenu(terminalID: terminalID, event: event, in: view) ?? false
         }
@@ -639,14 +642,30 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
 
         if last, let lastTabID = pane.tabs.last?.id {
-            return workspace.selectTab(lastTabID, in: paneID)
+            let didSelect = workspace.selectTab(lastTabID, in: paneID)
+            if didSelect {
+                markTerminalNotificationsRead(lastTabID)
+                reconcileSurfaceFocus()
+            }
+            return didSelect
         }
 
         if let offset {
             if offset > 0, offset <= pane.tabs.count {
-                return workspace.selectTab(pane.tabs[offset - 1].id, in: paneID)
+                let targetID = pane.tabs[offset - 1].id
+                let didSelect = workspace.selectTab(targetID, in: paneID)
+                if didSelect {
+                    markTerminalNotificationsRead(targetID)
+                    reconcileSurfaceFocus()
+                }
+                return didSelect
             }
-            return workspace.selectAdjacentTab(offset: offset, in: paneID) != nil
+            if let selectedID = workspace.selectAdjacentTab(offset: offset, in: paneID) {
+                markTerminalNotificationsRead(selectedID)
+                reconcileSurfaceFocus()
+                return true
+            }
+            return false
         }
 
         return false
@@ -813,8 +832,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func focusPane(_ paneID: PaneID) {
-        guard workspace.focusedPaneID != paneID else { return }
+        guard let pane = workspace.panes[paneID] else { return }
+        if workspace.focusedPaneID == paneID {
+            markTerminalNotificationsRead(pane.selectedTabID)
+            return
+        }
         workspace.focusPane(paneID)
+        markTerminalNotificationsRead(pane.selectedTabID)
         reconcileSurfaceFocus()
     }
 
@@ -826,6 +850,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             selectWorkspace(workspaceID)
         }
         guard let paneID = workspace.paneID(containing: terminalID) else { return }
+        markTerminalNotificationsRead(terminalID)
         if workspace.focusedPaneID == paneID,
            workspace.panes[paneID]?.selectedTabID == terminalID {
             return
@@ -1318,19 +1343,22 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func focusNextPane() {
-        if workspace.focusAdjacentPane(.next) != nil {
+        if let paneID = workspace.focusAdjacentPane(.next) {
+            markSelectedTerminalNotificationsRead(in: paneID)
             reconcileSurfaceFocus()
         }
     }
 
     func focusPreviousPane() {
-        if workspace.focusAdjacentPane(.previous) != nil {
+        if let paneID = workspace.focusAdjacentPane(.previous) {
+            markSelectedTerminalNotificationsRead(in: paneID)
             reconcileSurfaceFocus()
         }
     }
 
     func focusPane(direction: FocusDirection) {
-        if workspace.focusAdjacentPane(direction) != nil {
+        if let paneID = workspace.focusAdjacentPane(direction) {
+            markSelectedTerminalNotificationsRead(in: paneID)
             reconcileSurfaceFocus()
         }
     }
@@ -1457,6 +1485,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func markTerminalNotificationsRead(_ terminalID: TerminalID) {
+        guard notifications.snapshot.unreadCount(for: terminalID) > 0 || metadata(for: terminalID).unreadCount > 0 else {
+            return
+        }
         var next = notifications
         if next.markTerminalRead(terminalID) {
             notifications = next
@@ -1464,6 +1495,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return
         }
         refreshNotificationMetadata(for: terminalID)
+    }
+
+    func recordTerminalUserActivity(_ terminalID: TerminalID) {
+        guard terminalLocation(for: terminalID) != nil else { return }
+        markTerminalNotificationsRead(terminalID)
+    }
+
+    private func markSelectedTerminalNotificationsRead(in paneID: PaneID) {
+        guard let terminalID = workspace.panes[paneID]?.selectedTabID else { return }
+        markTerminalNotificationsRead(terminalID)
     }
 
     func clearNotification(_ notificationID: UUID) {

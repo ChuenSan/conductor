@@ -8,6 +8,7 @@ final class TerminalSurface {
     let id: TerminalID
     let hostView: TerminalHostView
     var onFocusRequest: (@MainActor (TerminalID) -> Void)?
+    var onUserActivity: (@MainActor (TerminalID) -> Void)?
     var onContextMenuRequest: (@MainActor (TerminalID, NSEvent, NSView) -> Bool)?
     var onTerminalTabDropRequest: (@MainActor (TerminalID, TerminalID, TerminalTabDropTarget) -> Bool)?
     var onTerminalTabDropTargetChange: (@MainActor (TerminalID, TerminalTabDropTarget?) -> Void)?
@@ -214,6 +215,10 @@ final class TerminalSurface {
         onFocusRequest?(id)
     }
 
+    func recordUserActivity() {
+        onUserActivity?(id)
+    }
+
     @discardableResult
     func requestContextMenu(event: NSEvent, in view: NSView) -> Bool {
         onContextMenuRequest?(id, event, view) ?? false
@@ -320,7 +325,11 @@ final class TerminalSurface {
         lifecycle = .closing
         pendingText.removeAll(keepingCapacity: false)
         onFocusRequest = nil
+        onUserActivity = nil
         onContextMenuRequest = nil
+        onTerminalTabDropRequest = nil
+        onTerminalTabDropTargetChange = nil
+        hasActiveTerminalTabDrag = nil
         hostView.removeFromSuperview()
         guard let surface else {
             hostView.surface = nil
