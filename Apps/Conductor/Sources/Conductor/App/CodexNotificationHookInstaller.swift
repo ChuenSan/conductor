@@ -144,13 +144,27 @@ enum AgentNotificationHookInstaller {
     }
 
     private static func isOwnedCommand(_ command: String, provider: AgentHookProvider) -> Bool {
-        guard command.contains("CONDUCTOR_TERMINAL_ID") else { return false }
+        let normalized = command
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercased = normalized.lowercased()
+        let hasConductorMarker = lowercased.contains("conductor") || normalized.contains("CONDUCTOR_")
+        guard hasConductorMarker else { return false }
+
         switch provider {
         case .codex:
-            return command.contains(" hooks codex ")
+            return containsHookInvocation(providerToken: "codex", in: lowercased)
         case .claudeCode:
-            return command.contains(" hooks claude ") || command.contains(" hooks cc ")
+            return containsHookInvocation(providerToken: "claude", in: lowercased)
+                || containsHookInvocation(providerToken: "cc", in: lowercased)
         }
+    }
+
+    private static func containsHookInvocation(providerToken: String, in command: String) -> Bool {
+        command.range(
+            of: "(^|[;&|()[:space:]])hooks[[:space:]]+\(providerToken)($|[[:space:]])",
+            options: .regularExpression
+        ) != nil
     }
 
     private static func hookCommand(provider: AgentHookProvider, bridgePath: String, action: String) -> String {
@@ -212,13 +226,14 @@ enum AgentNotificationHookInstaller {
         hooks: [String: Any],
         hooksURL: URL
     ) -> String {
+        let entries = codexHookTrustEntries(hooks: hooks, hooksURL: hooksURL)
         var lines = content.components(separatedBy: "\n")
         removeTrustBlock(from: &lines)
+        removeTrustEntries(from: &lines, keys: Set(entries.map(\.key)))
         if lines.last == "" {
             lines.removeLast()
         }
 
-        let entries = codexHookTrustEntries(hooks: hooks, hooksURL: hooksURL)
         guard !entries.isEmpty else {
             return lines.joined(separator: "\n") + "\n"
         }
@@ -234,11 +249,36 @@ enum AgentNotificationHookInstaller {
     }
 
     private static func removeTrustBlock(from lines: inout [String]) {
-        guard let start = lines.firstIndex(of: trustBegin),
-              let end = lines[start...].firstIndex(of: trustEnd) else {
-            return
+        while let start = lines.firstIndex(of: trustBegin) {
+            guard let end = lines[start...].firstIndex(of: trustEnd) else {
+                lines.removeSubrange(start..<lines.endIndex)
+                return
+            }
+            lines.removeSubrange(start...end)
         }
-        lines.removeSubrange(start...end)
+    }
+
+    private static func removeTrustEntries(from lines: inout [String], keys: Set<String>) {
+        guard !keys.isEmpty else { return }
+        let headers = Set(keys.map { "[hooks.state.\"\(tomlEscaped($0))\"]" })
+        var index = lines.startIndex
+        while index < lines.endIndex {
+            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+            guard headers.contains(trimmed) else {
+                index = lines.index(after: index)
+                continue
+            }
+
+            var end = lines.index(after: index)
+            while end < lines.endIndex {
+                let candidate = lines[end].trimmingCharacters(in: .whitespaces)
+                if candidate.hasPrefix("[") && candidate.hasSuffix("]") {
+                    break
+                }
+                end = lines.index(after: end)
+            }
+            lines.removeSubrange(index..<end)
+        }
     }
 
     private static func codexHookTrustEntries(hooks: [String: Any], hooksURL: URL) -> [(key: String, hash: String)] {

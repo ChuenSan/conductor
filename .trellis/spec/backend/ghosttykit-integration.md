@@ -321,6 +321,12 @@ Callbacks can arrive during teardown. They must resolve by IDs and lifecycle sta
   environment variable to its child shell. Agent hooks such as Codex Stop hooks use this ID
   to report compact lifecycle notifications back to Conductor without scanning terminal
   output or depending on the focused pane at delivery time.
+- Hook installers must be idempotent. Before writing Codex or Claude Code hook entries, remove
+  existing Conductor-owned commands for that provider, including older commands that may not
+  contain the latest environment guards but still invoke `Conductor hooks <provider>`.
+- Codex trust-state updates must not accumulate duplicate `[hooks.state."<key>"]` tables.
+  Remove any previous Conductor-managed trust block and any exact trust table keys that will
+  be written again, while preserving unrelated third-party hook commands and trust entries.
 - Threading: callback may be non-main; schedule model work onto `MainActor`.
 - Async payloads: do not capture `TerminalSurface`, `GhosttyAppRuntime`, or native callback
   userdata into `Task` closures. Resolve the target synchronously and pass value payloads.
