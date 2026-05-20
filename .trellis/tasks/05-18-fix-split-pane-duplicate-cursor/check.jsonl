@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/high-performance-terminal-roadmap.md", "reason": "Check that the fix preserves the surface-first terminal architecture."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Check that split-pane SwiftUI changes do not animate or recreate live terminal surfaces unnecessarily."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Check that no terminal transcript/cursor/runtime data enters SwiftUI state."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check lifecycle, focus, resize, and surface ownership correctness."}
+{"file": ".trellis/spec/backend/ghosttykit-integration.md", "reason": "Check geometry/focus refresh behavior against Ghostty surface contract."}
