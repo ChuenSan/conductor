@@ -233,7 +233,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.workspaces = persistedWorkspaces
         self.selectedWorkspaceID = selectedID
         self.workspace = persistedWorkspaces.first { $0.id == selectedID } ?? persistedWorkspaces[0]
-        self.theme = persisted?.theme ?? .codexDark
+        self.theme = persisted?.theme ?? .graphite
         self.appearance = persisted?.appearance ?? AppearancePreferences()
         ConductorAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
@@ -243,7 +243,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     init(
         previewWorkspaces: [WorkspaceState],
         selectedWorkspaceID: WorkspaceID? = nil,
-        theme: TerminalTheme = .codexDark,
+        theme: TerminalTheme = .graphite,
         appearance: AppearancePreferences = AppearancePreferences(),
         notifications: TerminalNotificationState = TerminalNotificationState(),
         sidebarVisible: Bool = true,

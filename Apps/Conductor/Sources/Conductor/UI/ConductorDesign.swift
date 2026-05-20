@@ -10,7 +10,7 @@ private struct ConductorFontFamilyKey: EnvironmentKey {
 }
 
 private struct ConductorThemeKey: EnvironmentKey {
-    static let defaultValue = TerminalTheme.codexDark
+    static let defaultValue = TerminalTheme.graphite
 }
 
 private struct ConductorSplitResizeActiveKey: EnvironmentKey {

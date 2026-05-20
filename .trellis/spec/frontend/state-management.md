@@ -98,6 +98,8 @@ Forbidden patterns:
 
 - `AppearancePreferences` must have explicit defaults so older `window-state.json` files
   decode safely when they do not contain an `appearance` field.
+- Packaged first-run defaults are `TerminalTheme.graphite`, English language, and a
+  15pt terminal font size. Existing persisted user settings must not be overwritten.
 - `ConductorWindowModel.appearance` is the only published source of truth for shell
   appearance preferences.
 - Persistence writes the current appearance snapshot alongside workspace structure and theme.

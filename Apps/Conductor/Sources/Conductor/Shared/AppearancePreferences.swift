@@ -321,7 +321,7 @@ extension AppearanceLanguage {
 
 enum ConductorAppearanceRuntime {
     nonisolated(unsafe) static var fontFamily: AppearanceFontFamily = .system
-    nonisolated(unsafe) static var language: AppearanceLanguage = .system
+    nonisolated(unsafe) static var language: AppearanceLanguage = .english
 
     static func apply(_ appearance: AppearancePreferences) {
         fontFamily = appearance.fontFamily
@@ -336,7 +336,7 @@ enum ConductorLocalization {
 }
 
 struct AppearancePreferences: Codable, Equatable {
-    static let defaultTerminalFontSize: CGFloat = 13
+    static let defaultTerminalFontSize: CGFloat = 15
     static let minTerminalFontSize: CGFloat = 10
     static let maxTerminalFontSize: CGFloat = 22
 
@@ -353,7 +353,7 @@ struct AppearancePreferences: Codable, Equatable {
         density: AppearanceDensity = .standard,
         chromeClarity: ChromeClarity = .balanced,
         fontScale: AppearanceFontScale = .standard,
-        language: AppearanceLanguage = .system,
+        language: AppearanceLanguage = .english,
         fontFamily: AppearanceFontFamily = .system,
         terminalFontSize: CGFloat = Self.defaultTerminalFontSize,
         reducedMotion: Bool = false,
@@ -374,7 +374,7 @@ struct AppearancePreferences: Codable, Equatable {
         self.density = try container.decodeIfPresent(AppearanceDensity.self, forKey: .density) ?? .standard
         self.chromeClarity = try container.decodeIfPresent(ChromeClarity.self, forKey: .chromeClarity) ?? .balanced
         self.fontScale = try container.decodeIfPresent(AppearanceFontScale.self, forKey: .fontScale) ?? .standard
-        self.language = try container.decodeIfPresent(AppearanceLanguage.self, forKey: .language) ?? .system
+        self.language = try container.decodeIfPresent(AppearanceLanguage.self, forKey: .language) ?? .english
         self.fontFamily = try container.decodeIfPresent(AppearanceFontFamily.self, forKey: .fontFamily) ?? .system
         let decodedTerminalFontSize = try container.decodeIfPresent(CGFloat.self, forKey: .terminalFontSize) ?? Self.defaultTerminalFontSize
         self.terminalFontSize = Self.clampedTerminalFontSize(decodedTerminalFontSize)
