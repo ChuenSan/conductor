@@ -389,7 +389,7 @@ private struct AppKitSplitPairView: NSViewRepresentable {
         }
 
         private func clampedSplitFraction(_ fraction: Double) -> Double {
-            min(0.85, max(0.15, fraction))
+            SplitNode.clampedFraction(fraction)
         }
 
         private func pixelAligned(_ value: CGFloat, in view: NSView) -> CGFloat {

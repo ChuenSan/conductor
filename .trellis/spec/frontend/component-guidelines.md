@@ -253,6 +253,10 @@ styling to terminal output.
 
 - Keep pane tab rail height, tab height, tab width, and split gutter width in
   `ConductorTokens.Space`.
+- Keep split fraction clamping in `SplitNode.minimumFraction` /
+  `SplitNode.maximumFraction` and reuse `SplitNode.clampedFraction(_:)` from SwiftUI/AppKit
+  split chrome. Do not add a second wider UI-only clamp such as `0.15...0.85`; divider drag
+  should feel free until the real pixel minimum of the nested pane tree is reached.
 - Do not add or remove tab controls on hover. Reserve stable close/new-tab slots and change
   opacity, fill, or stroke only.
 - Show the active pane with a full pane border or rail accent. Do not rely on a small dot,

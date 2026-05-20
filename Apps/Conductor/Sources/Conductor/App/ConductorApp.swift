@@ -1026,9 +1026,9 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
             self.model.splitRight()
             self.model.splitDown()
-            self.model.setSplitFraction(path: [], fraction: 0.96)
-            self.model.setSplitFraction(path: [.second], fraction: 0.04)
-            let clamped = self.splitFractions(in: self.model.workspace.root) == [0.85, 0.15]
+            self.model.setSplitFraction(path: [], fraction: 0.995)
+            self.model.setSplitFraction(path: [.second], fraction: 0.005)
+            let clamped = self.splitFractions(in: self.model.workspace.root) == [SplitNode.maximumFraction, SplitNode.minimumFraction]
             self.model.equalizeSplits()
             let equalized = self.splitFractions(in: self.model.workspace.root).allSatisfy { abs($0 - 0.5) < 0.0001 }
             self.model.resizeFocusedSplit(direction: .right, amount: 12)

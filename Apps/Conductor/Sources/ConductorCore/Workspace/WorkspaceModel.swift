@@ -127,6 +127,13 @@ public indirect enum SplitNode: Equatable, Codable, Sendable {
     case leaf(PaneID)
     case split(axis: SplitAxis, first: SplitNode, second: SplitNode, fraction: Double)
 
+    public static let minimumFraction: Double = 0.02
+    public static let maximumFraction: Double = 0.98
+
+    public static func clampedFraction(_ fraction: Double) -> Double {
+        min(maximumFraction, max(minimumFraction, fraction))
+    }
+
     public var leaves: [PaneID] {
         switch self {
         case let .leaf(id):
@@ -204,7 +211,7 @@ public indirect enum SplitNode: Equatable, Codable, Sendable {
     }
 
     public func settingFraction(at path: ArraySlice<SplitPathElement>, to fraction: Double) -> SplitNode {
-        let clampedFraction = min(0.85, max(0.15, fraction))
+        let clampedFraction = Self.clampedFraction(fraction)
         guard let head = path.first else {
             switch self {
             case let .leaf(id):

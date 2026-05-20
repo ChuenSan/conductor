@@ -256,17 +256,17 @@ func checkAdjacentTabSelectionWraps() {
 func checkSplitFractionClamps() {
     var workspace = WorkspaceState()
     _ = workspace.splitFocusedPane(.right, title: "agent")
-    workspace.setSplitFraction(path: [], fraction: 0.02)
+    workspace.setSplitFraction(path: [], fraction: 0.005)
     guard case let .split(_, _, _, lowFraction) = workspace.root else {
         return require(false, "root should be split")
     }
-    require(lowFraction == 0.15, "low split fraction should clamp")
+    require(lowFraction == SplitNode.minimumFraction, "low split fraction should clamp")
 
-    workspace.setSplitFraction(path: [], fraction: 0.98)
+    workspace.setSplitFraction(path: [], fraction: 0.995)
     guard case let .split(_, _, _, highFraction) = workspace.root else {
         return require(false, "root should still be split")
     }
-    require(highFraction == 0.85, "high split fraction should clamp")
+    require(highFraction == SplitNode.maximumFraction, "high split fraction should clamp")
 }
 
 func checkNestedSplitFractionClampsTargetPathOnly() {
@@ -277,14 +277,14 @@ func checkNestedSplitFractionClampsTargetPathOnly() {
     }
 
     workspace.setSplitFraction(path: [], fraction: 0.72)
-    workspace.setSplitFraction(path: [.second], fraction: 0.04)
+    workspace.setSplitFraction(path: [.second], fraction: 0.005)
 
     guard case let .split(_, _, second, rootFraction) = workspace.root,
           case let .split(_, _, _, nestedFraction) = second else {
         return require(false, "workspace should have nested split")
     }
     require(rootFraction == 0.72, "root split fraction should stay unchanged when nested split changes")
-    require(nestedFraction == 0.15, "nested split fraction should clamp at low bound")
+    require(nestedFraction == SplitNode.minimumFraction, "nested split fraction should clamp at low bound")
 
     workspace.setSplitFraction(path: [.second], fraction: 0.99)
     guard case let .split(_, _, secondAfter, rootFractionAfter) = workspace.root,
@@ -292,7 +292,7 @@ func checkNestedSplitFractionClampsTargetPathOnly() {
         return require(false, "workspace should still have nested split")
     }
     require(rootFractionAfter == 0.72, "root split fraction should still stay unchanged")
-    require(nestedFractionAfter == 0.85, "nested split fraction should clamp at high bound")
+    require(nestedFractionAfter == SplitNode.maximumFraction, "nested split fraction should clamp at high bound")
     requireValidWorkspace(workspace, "nested split fraction clamp")
 }
 
