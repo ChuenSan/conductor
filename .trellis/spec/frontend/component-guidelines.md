@@ -263,6 +263,10 @@ styling to terminal output.
   seams against the workspace toolbar and pane rail.
 - Split gutters should have a stable hit target. Hover/drag may brighten the center handle,
   but dragging must keep split fraction updates animation-free.
+- Split resize geometry should be AppKit-owned, not SwiftUI-frame-owned. Use a stable
+  `NSSplitView` bridge for live divider dragging so AppKit adjusts the two hosted panes
+  directly, terminal host views keep their identity, and `WorkspaceState.root` receives only
+  the final divider fraction after mouse-up.
 - Split gutter cursor overrides must be released explicitly on mouse exit, drag end outside
   the divider, and view teardown; a resize cursor must not remain stuck after divider drag.
 - While a divider is being dragged, quiet adjacent pane border overlays so the gutter remains
@@ -279,6 +283,28 @@ styling to terminal output.
 Rectangle()
     .stroke(isFocused ? theme.accent.opacity(0.82) : Color.white.opacity(0.075), lineWidth: isFocused ? 1.5 : 1)
     .allowsHitTesting(false)
+```
+
+#### Wrong
+
+```swift
+GeometryReader { proxy in
+    HStack(spacing: 0) {
+        first.frame(width: dragPreviewWidth)
+        divider.onDrag { dragPreviewWidth = $0 }
+        second.frame(width: proxy.size.width - dragPreviewWidth)
+    }
+}
+```
+
+#### Correct
+
+```swift
+NSViewRepresentableSplitView(
+    first: firstHostedView,
+    second: secondHostedView,
+    onMouseUp: { model.setSplitFraction(path: path, fraction: finalFraction) }
+)
 ```
 
 ### Convention: Terminal Drag And Drop
