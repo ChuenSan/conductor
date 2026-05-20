@@ -352,11 +352,18 @@ terminal.
 - Internal tab drags may also provide a text-compatible fallback payload for macOS drag/drop
   compatibility, but SwiftUI and AppKit drop handlers must only accept that fallback while the
   active in-process tab-drag marker is set and the payload parses as a terminal-tab ID.
+- SwiftUI tab-strip `.onDrop` handlers should register only the private terminal-tab UTType.
+  Do not include `UTType.text` on the tab strip itself; text fallback belongs in the AppKit
+  terminal host path where pasteboard types can be inspected before deciding whether the drag
+  is internal or an external file/URL drop.
 - External `.fileURL`/`.URL`/legacy filename drops on a live terminal surface should be
   handled by the stable AppKit `TerminalHostView`, focus the target terminal, and insert
   shell-escaped file paths as terminal input without pressing Return. Decode file URLs first,
   then fall back to URL payloads, matching Ghostty/cmux drag-destination behavior where it
   does not conflict with app tab dragging.
+- If the AppKit host sees external file/URL pasteboard types, it must not parse the generic
+  `.string` payload as a terminal-tab fallback. This prevents Finder drags that also expose
+  string data from producing split placeholders instead of inserting paths.
 - Do not accept broad `.string` drag types on `TerminalHostView` as ordinary terminal-tab
   drops. If `.string` is registered as a compatibility fallback, the host must first verify
   the active in-process tab-drag marker and parse the payload as a terminal-tab ID before

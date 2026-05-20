@@ -449,12 +449,18 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
             return terminalID
         }
 
-        if let text = pasteboard.string(forType: .string),
-           let terminalID = terminalID(fromDroppedText: text) {
+        if !hasExternalDropPayload(pasteboard),
+           let text = pasteboard.string(forType: .string),
+           let terminalID = terminalID(fromFallbackText: text) {
             return terminalID
         }
 
         return nil
+    }
+
+    private func hasExternalDropPayload(_ pasteboard: NSPasteboard) -> Bool {
+        guard let types = pasteboard.types else { return false }
+        return !Set(types).isDisjoint(with: Self.externalFileDropTypes)
     }
 
     private func terminalID(fromDroppedText text: String) -> TerminalID? {
@@ -463,6 +469,15 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         let rawID = trimmed.hasPrefix(prefix)
             ? String(trimmed.dropFirst(prefix.count))
             : trimmed
+        guard let uuid = UUID(uuidString: rawID) else { return nil }
+        return TerminalID(uuid)
+    }
+
+    private func terminalID(fromFallbackText text: String) -> TerminalID? {
+        let prefix = "terminal:"
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(prefix) else { return nil }
+        let rawID = String(trimmed.dropFirst(prefix.count))
         guard let uuid = UUID(uuidString: rawID) else { return nil }
         return TerminalID(uuid)
     }

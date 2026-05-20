@@ -1042,7 +1042,7 @@ private struct StableTerminalTabStrip: View {
 }
 
 private let terminalTabDragType = UTType(exportedAs: "app.conductor.terminal-tab")
-private let terminalTabDropTypes: [UTType] = [terminalTabDragType, .text]
+private let terminalTabDropTypes: [UTType] = [terminalTabDragType]
 private let terminalTabDragPrefix = "terminal:"
 
 private func terminalTabDragPayload(for tabID: TerminalID) -> NSItemProvider {
@@ -1096,9 +1096,6 @@ private func stringFromDropItem(_ item: NSSecureCoding?) -> String? {
 private func terminalTabDropProvider(in info: DropInfo) -> TerminalTabDropPayloadProvider? {
     if let provider = info.itemProviders(for: [terminalTabDragType]).first {
         return TerminalTabDropPayloadProvider(provider: provider, typeIdentifier: terminalTabDragType.identifier)
-    }
-    if let provider = info.itemProviders(for: [.text]).first {
-        return TerminalTabDropPayloadProvider(provider: provider, typeIdentifier: UTType.text.identifier)
     }
     return nil
 }
