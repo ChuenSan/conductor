@@ -3513,47 +3513,63 @@ private struct ConductorSidebar: View {
             workspaceSection
                 .frame(maxHeight: .infinity)
 
-            SidebarSeparator()
+            Spacer(minLength: 8)
 
-            SidebarSectionTitle(L("状态", "Status"))
-            SidebarStatusSummary(
+            expandedSidebarDock
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private var expandedSidebarDock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SidebarDockStatusLine(
                 splitCount: model.workspace.panes.count,
                 terminalCount: terminalCount,
                 unreadCount: model.notifications.snapshot.unreadCount,
                 focusedTerminalTitle: focusedTerminalTitle
             )
 
-            SidebarSeparator()
-
-            SidebarSectionTitle(L("快捷操作", "Quick Actions"))
-            primaryQuickActions(showsLabels: true)
-
-            Spacer(minLength: 8)
-
-            expandedSidebarFooter
-        }
-        .frame(maxHeight: .infinity)
-    }
-
-    private var expandedSidebarFooter: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            SidebarActionRow(icon: "paintpalette", title: model.theme.title, help: L("切换主题", "Switch Theme")) {
-                finishWorkspaceRenameIfNeeded()
-                ConductorMotion.perform(ConductorMotion.selection) {
-                    model.cycleTheme()
+            HStack(spacing: 5) {
+                SidebarDockButton(icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
+                    finishWorkspaceRenameIfNeeded()
+                    model.performCommand(.newTerminal)
+                }
+                SidebarDockButton(icon: "rectangle.split.2x1", disabled: !model.canPerformCommand(.splitRight), help: L("向右分屏 Cmd-D", "Split Right Cmd-D")) {
+                    finishWorkspaceRenameIfNeeded()
+                    ConductorMotion.perform(ConductorMotion.layout) {
+                        model.performCommand(.splitRight)
+                    }
+                }
+                SidebarDockButton(icon: "rectangle.split.1x2", disabled: !model.canPerformCommand(.splitDown), help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D")) {
+                    finishWorkspaceRenameIfNeeded()
+                    ConductorMotion.perform(ConductorMotion.layout) {
+                        model.performCommand(.splitDown)
+                    }
+                }
+                SidebarDockButton(icon: "command", help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
+                    finishWorkspaceRenameIfNeeded()
+                    model.performCommand(.toggleCommandPalette)
+                }
+                Spacer(minLength: 0)
+                SidebarDockButton(icon: "paintpalette", help: model.theme.title) {
+                    finishWorkspaceRenameIfNeeded()
+                    ConductorMotion.perform(ConductorMotion.selection) {
+                        model.cycleTheme()
+                    }
+                }
+                .contextMenu {
+                    themeMenuItems
+                }
+                SidebarDockButton(icon: "gearshape", help: L("设置", "Settings")) {
+                    finishWorkspaceRenameIfNeeded()
+                    ConductorMotion.perform(ConductorMotion.panel) {
+                        model.performCommand(.toggleSettings)
+                    }
                 }
             }
-            .contextMenu {
-                themeMenuItems
-            }
-            SidebarActionRow(icon: "gearshape", title: L("设置", "Settings"), help: L("设置", "Settings")) {
-                finishWorkspaceRenameIfNeeded()
-                ConductorMotion.perform(ConductorMotion.panel) {
-                    model.performCommand(.toggleSettings)
-                }
-            }
         }
-        .padding(.bottom, 10)
+        .padding(.horizontal, 2)
+        .padding(.bottom, 9)
     }
 
     private var workspaceSection: some View {
@@ -3928,7 +3944,7 @@ private enum WorkspaceChromeGlyph {
     }
 }
 
-private struct SidebarStatusSummary: View {
+private struct SidebarDockStatusLine: View {
     let splitCount: Int
     let terminalCount: Int
     let unreadCount: Int
@@ -3937,57 +3953,75 @@ private struct SidebarStatusSummary: View {
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                SidebarStatusPill(title: L("分屏", "Panes"), value: "\(splitCount)")
-                SidebarStatusPill(title: L("终端", "Terms"), value: "\(terminalCount)")
-                if unreadCount > 0 {
-                    SidebarStatusPill(title: L("未读", "Unread"), value: unreadCount > 99 ? "99+" : "\(unreadCount)", highlighted: true)
-                }
+        HStack(spacing: 7) {
+            HStack(spacing: 4) {
+                Image(systemName: "rectangle.split.2x1")
+                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                Text("\(splitCount)")
+                    .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
             }
-            HStack(spacing: 6) {
-                Image(systemName: "scope")
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis.opacity(0.88))
-                    .frame(width: 14)
-                Text(L("焦点", "Focus"))
-                    .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.82))
-                Text(focusedTerminalTitle)
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.90))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+            .foregroundStyle(theme.shellChromeTextMuted.opacity(0.82))
+
+            HStack(spacing: 4) {
+                Image(systemName: "terminal")
+                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                Text("\(terminalCount)")
+                    .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
             }
+            .foregroundStyle(theme.shellChromeTextMuted.opacity(0.82))
+
+            if unreadCount > 0 {
+                Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                    .font(.conductorSystem(size: 10, weight: .bold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis)
+                    .padding(.horizontal, 6)
+                    .frame(height: 16)
+                    .background(theme.shellSelectedFill)
+                    .clipShape(Capsule())
+            }
+
+            Spacer(minLength: 0)
+
+            Text(focusedTerminalTitle)
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.86))
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.shellPanelStrong.opacity(0.36))
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row + 2, style: .continuous))
+        .frame(height: 22)
+        .padding(.horizontal, 4)
     }
 }
 
-private struct SidebarStatusPill: View {
-    let title: String
-    let value: String
-    var highlighted = false
+private struct SidebarDockButton: View {
+    let icon: String
+    var disabled = false
+    let help: String
+    let action: () -> Void
+    @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        HStack(spacing: 4) {
-            Text(title)
-                .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
-                .foregroundStyle(highlighted ? theme.floatingEmphasis.opacity(0.86) : theme.shellChromeTextMuted.opacity(0.78))
-            Text(value)
-                .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
-                .foregroundStyle(highlighted ? theme.floatingEmphasis : theme.shellChromeText.opacity(0.88))
+        Button {
+            action()
+        } label: {
+            Image(systemName: icon)
+                .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(disabled ? theme.shellChromeTextMuted.opacity(0.50) : theme.shellChromeText.opacity(0.86))
+                .frame(width: 28, height: 27)
+                .background(hovering && !disabled ? theme.shellHoverFill.opacity(0.78) : theme.shellControlFill.opacity(0.34))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .padding(.horizontal, 7)
-        .frame(height: 20)
-        .background(highlighted ? theme.shellSelectedFill : theme.shellControlFill.opacity(0.72))
-        .clipShape(Capsule())
+        .buttonStyle(ConductorPressButtonStyle())
+        .disabled(disabled)
+        .opacity(disabled ? 0.42 : 1)
+        .scaleEffect(hovering && !disabled ? 1.035 : 1)
+        .animation(ConductorMotion.hover, value: hovering)
+        .animation(ConductorMotion.micro, value: disabled)
+        .onHover { hovering = $0 }
+        .help(help)
     }
 }
 
