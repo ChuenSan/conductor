@@ -578,6 +578,10 @@ be disabled in another, or miss lifecycle cleanup and performance tracing.
   appropriate runtime/background layer after the shell state transition is recorded.
 - Keep `ConductorSignpost` coverage at the command boundary so sluggish menu, shortcut,
   toolbar, and context-menu actions can be compared in Instruments.
+- Native `NSMenu` context-menu controllers must be retained through the menu item's lifetime
+  and released only after menu tracking has fully unwound. Use a dedicated controller/action
+  registry, attach the controller to each item's `representedObject`, and delay final cleanup
+  from `menuDidClose`; otherwise the menu can visually open but selectors may miss their target.
 
 **Correct**:
 

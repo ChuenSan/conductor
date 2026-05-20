@@ -85,6 +85,26 @@ struct ToolPreviewItem: Identifiable, Equatable {
     }
 }
 
+private enum TerminalContextMenuAction {
+    case renameTerminal
+    case restoreTerminalTitle
+    case duplicateTerminal
+    case showSearch
+    case openDirectory
+    case copyDirectory
+    case newTerminal
+    case newTerminalAtDirectory
+    case splitRight
+    case splitDown
+    case closePane
+    case closeTerminal
+    case closeOtherTerminals
+    case closeTerminalsToRight
+    case renameWorkspace
+    case duplicateWorkspace
+    case closeWorkspace
+}
+
 @MainActor
 private final class TerminalContextMenuController: NSObject, NSMenuDelegate {
     private var nextActionTag = 1
@@ -108,6 +128,7 @@ private final class TerminalContextMenuController: NSObject, NSMenuDelegate {
         item.target = self
         item.tag = actionTag
         item.isEnabled = enabled
+        item.representedObject = self
         return item
     }
 
@@ -116,7 +137,9 @@ private final class TerminalContextMenuController: NSObject, NSMenuDelegate {
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        onClose?()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.onClose?()
+        }
     }
 }
 
@@ -907,15 +930,25 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         menu.delegate = controller
         activeTerminalContextMenuController = controller
 
+        let sourceWindow = view.window
+        let targetWorkspaceID = target.workspaceID
+
         func addItem(
             _ title: String,
             enabled: Bool = true,
-            action: @escaping @MainActor () -> Void
+            action: TerminalContextMenuAction
         ) {
             let item = controller.makeItem(
                 title: title,
                 enabled: enabled,
-                action: action
+                action: { [weak self] in
+                    self?.performTerminalContextMenuAction(
+                        action,
+                        terminalID: terminalID,
+                        workspaceID: targetWorkspaceID,
+                        window: sourceWindow
+                    )
+                }
             )
             menu.addItem(item)
         }
@@ -924,79 +957,131 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             menu.addItem(.separator())
         }
 
-        addItem(L("重命名当前终端...", "Rename Current Terminal...")) { [weak self] in
-            self?.promptRenameTerminal(terminalID, window: view.window)
-        }
+        addItem(L("重命名当前终端...", "Rename Current Terminal..."), action: .renameTerminal)
         if target.tab.userTitle != nil {
-            addItem(L("恢复终端标题", "Restore Terminal Title")) { [weak self] in
-                self?.clearUserTerminalTitle(terminalID)
-            }
+            addItem(L("恢复终端标题", "Restore Terminal Title"), action: .restoreTerminalTitle)
         }
-        addItem(L("复制当前终端", "Duplicate Current Terminal")) { [weak self] in
-            guard let target = self?.activateTerminalContextTarget(terminalID) else { return }
-            self?.duplicateTab(target.tab.id, in: target.paneID)
-        }
-        addItem(L("上下文搜索", "Context Search")) { [weak self] in
-            self?.showTerminalSearch(for: terminalID)
-        }
-        addItem(L("打开当前目录", "Open Current Directory"), enabled: targetDirectoryURL != nil) { [weak self] in
-            self?.openWorkingDirectory(for: terminalID)
-        }
-        addItem(L("复制当前目录路径", "Copy Current Directory Path"), enabled: targetDirectoryURL != nil) { [weak self] in
-            self?.copyWorkingDirectory(for: terminalID)
-        }
+        addItem(L("复制当前终端", "Duplicate Current Terminal"), action: .duplicateTerminal)
+        addItem(L("上下文搜索", "Context Search"), action: .showSearch)
+        addItem(
+            L("打开当前目录", "Open Current Directory"),
+            enabled: targetDirectoryURL != nil,
+            action: .openDirectory
+        )
+        addItem(
+            L("复制当前目录路径", "Copy Current Directory Path"),
+            enabled: targetDirectoryURL != nil,
+            action: .copyDirectory
+        )
 
         addSeparator()
 
-        addItem(L("新开终端", "New Terminal")) { [weak self] in
-            guard self?.activateTerminalContextTarget(terminalID) != nil else { return }
-            self?.newTerminal()
-        }
-        addItem(L("从当前目录新开终端", "New Terminal at Current Directory"), enabled: targetDirectoryURL != nil) { [weak self] in
-            self?.newTerminalAtDirectory(for: terminalID)
-        }
-        addItem(L("向右分屏", "Split Right"), enabled: target.workspace.canSplit()) { [weak self] in
-            guard self?.activateTerminalContextTarget(terminalID) != nil else { return }
-            self?.splitRight()
-        }
-        addItem(L("向下分屏", "Split Down"), enabled: target.workspace.canSplit()) { [weak self] in
-            guard self?.activateTerminalContextTarget(terminalID) != nil else { return }
-            self?.splitDown()
-        }
-        addItem(L("关闭当前分屏", "Close Current Pane"), enabled: target.workspace.canClosePane(target.paneID)) { [weak self] in
-            guard let target = self?.activateTerminalContextTarget(terminalID) else { return }
-            self?.closePane(target.paneID)
-        }
+        addItem(L("新开终端", "New Terminal"), action: .newTerminal)
+        addItem(
+            L("从当前目录新开终端", "New Terminal at Current Directory"),
+            enabled: targetDirectoryURL != nil,
+            action: .newTerminalAtDirectory
+        )
+        addItem(L("向右分屏", "Split Right"), enabled: target.workspace.canSplit(), action: .splitRight)
+        addItem(L("向下分屏", "Split Down"), enabled: target.workspace.canSplit(), action: .splitDown)
+        addItem(
+            L("关闭当前分屏", "Close Current Pane"),
+            enabled: target.workspace.canClosePane(target.paneID),
+            action: .closePane
+        )
 
         addSeparator()
 
-        addItem(L("关闭当前终端", "Close Current Terminal")) { [weak self] in
-            guard let target = self?.activateTerminalContextTarget(terminalID) else { return }
-            self?.closeTab(target.tab.id, in: target.paneID)
-        }
-        addItem(L("关闭其他终端", "Close Other Terminals"), enabled: target.workspace.canCloseOtherTabs(in: target.paneID)) { [weak self] in
-            guard let target = self?.activateTerminalContextTarget(terminalID) else { return }
-            self?.closeOtherTabs(in: target.paneID)
-        }
-        addItem(L("关闭右侧终端", "Close Terminals to the Right"), enabled: target.workspace.canCloseTabsToRight(of: terminalID, in: target.paneID)) { [weak self] in
-            guard let target = self?.activateTerminalContextTarget(terminalID) else { return }
-            self?.closeTabsToRight(in: target.paneID)
-        }
+        addItem(L("关闭当前终端", "Close Current Terminal"), action: .closeTerminal)
+        addItem(
+            L("关闭其他终端", "Close Other Terminals"),
+            enabled: target.workspace.canCloseOtherTabs(in: target.paneID),
+            action: .closeOtherTerminals
+        )
+        addItem(
+            L("关闭右侧终端", "Close Terminals to the Right"),
+            enabled: target.workspace.canCloseTabsToRight(of: terminalID, in: target.paneID),
+            action: .closeTerminalsToRight
+        )
 
         addSeparator()
 
-        addItem(L("重命名当前工作区...", "Rename Current Workspace...")) { [weak self] in
-            self?.promptRenameWorkspace(target.workspaceID, window: view.window)
-        }
-        addItem(L("复制当前工作区", "Duplicate Current Workspace")) { [weak self] in
-            self?.duplicateWorkspace(target.workspaceID)
-        }
-        addItem(L("关闭当前工作区", "Close Current Workspace"), enabled: workspaces.count > 1) { [weak self] in
-            self?.closeWorkspace(target.workspaceID)
-        }
+        addItem(L("重命名当前工作区...", "Rename Current Workspace..."), action: .renameWorkspace)
+        addItem(L("复制当前工作区", "Duplicate Current Workspace"), action: .duplicateWorkspace)
+        addItem(L("关闭当前工作区", "Close Current Workspace"), enabled: workspaces.count > 1, action: .closeWorkspace)
 
         NSMenu.popUpContextMenu(menu, with: event, for: view)
         return true
+    }
+
+    @discardableResult
+    private func performTerminalContextMenuAction(
+        _ action: TerminalContextMenuAction,
+        terminalID: TerminalID,
+        workspaceID: WorkspaceID,
+        window: NSWindow?
+    ) -> Bool {
+        switch action {
+        case .renameTerminal:
+            promptRenameTerminal(terminalID, window: window)
+            return true
+        case .restoreTerminalTitle:
+            clearUserTerminalTitle(terminalID)
+            return true
+        case .showSearch:
+            showTerminalSearch(for: terminalID)
+            return true
+        case .openDirectory:
+            openWorkingDirectory(for: terminalID)
+            return true
+        case .copyDirectory:
+            copyWorkingDirectory(for: terminalID)
+            return true
+        case .renameWorkspace:
+            promptRenameWorkspace(workspaceID, window: window)
+            return true
+        case .duplicateWorkspace:
+            duplicateWorkspace(workspaceID)
+            return true
+        case .closeWorkspace:
+            closeWorkspace(workspaceID)
+            return true
+        case .duplicateTerminal:
+            guard let target = activateTerminalContextTarget(terminalID) else { return false }
+            duplicateTab(target.tab.id, in: target.paneID)
+            return true
+        case .newTerminal:
+            guard activateTerminalContextTarget(terminalID) != nil else { return false }
+            newTerminal()
+            return true
+        case .newTerminalAtDirectory:
+            newTerminalAtDirectory(for: terminalID)
+            return true
+        case .splitRight:
+            guard activateTerminalContextTarget(terminalID) != nil else { return false }
+            splitRight()
+            return true
+        case .splitDown:
+            guard activateTerminalContextTarget(terminalID) != nil else { return false }
+            splitDown()
+            return true
+        case .closePane:
+            guard let target = activateTerminalContextTarget(terminalID) else { return false }
+            closePane(target.paneID)
+            return true
+        case .closeTerminal:
+            guard let target = activateTerminalContextTarget(terminalID) else { return false }
+            closeTab(target.tab.id, in: target.paneID)
+            return true
+        case .closeOtherTerminals:
+            guard let target = activateTerminalContextTarget(terminalID) else { return false }
+            closeOtherTabs(in: target.paneID)
+            return true
+        case .closeTerminalsToRight:
+            guard let target = activateTerminalContextTarget(terminalID) else { return false }
+            closeTabsToRight(in: target.paneID)
+            return true
+        }
     }
 
     func newWorkspace() {
