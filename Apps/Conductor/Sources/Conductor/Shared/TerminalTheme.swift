@@ -292,6 +292,41 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    var ghosttyTerminalBackgroundHex: String {
+        switch self {
+        case .macOSDark:
+            "#0e0f10"
+        case .codexDark:
+            "#0e0f12"
+        case .slateDusk:
+            "#1d2027"
+        case .carbonMist:
+            "#232220"
+        case .blueHour:
+            "#181f29"
+        case .flexoki:
+            "#fcf7eb"
+        case .aurora:
+            "#f4fcfd"
+        case .graphite:
+            "#f9fafb"
+        case .ember:
+            "#fff4e8"
+        case .midnightGlass:
+            "#090c12"
+        case .tokyoNight:
+            "#0c0b17"
+        case .paperTrail:
+            "#fefbf2"
+        case .nordicFrost:
+            "#f6fbfe"
+        case .solarDune:
+            "#fff4dd"
+        case .forestLab:
+            "#080c0a"
+        }
+    }
+
     var windowBackdropStops: [Color] {
         switch self {
         case .macOSDark:

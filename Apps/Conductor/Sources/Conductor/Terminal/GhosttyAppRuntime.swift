@@ -127,6 +127,8 @@ final class GhosttyAppRuntime {
         shell-integration = none
         font-size = \(fontSizeText)
         \(theme.ghosttyConfig)
+        background = \(theme.ghosttyTerminalBackgroundHex)
+        cursor-text = \(theme.ghosttyTerminalBackgroundHex)
         """
         text.withCString { pointer in
             ghostty_config_load_string(config, pointer, UInt(text.utf8.count), "conductor-config")

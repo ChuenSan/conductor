@@ -45,6 +45,11 @@ Using the cmux surface API route, create one app-level Ghostty runtime:
 - Create the app with `ghostty_app_new`.
 - Coalesce wakeups before calling `ghostty_app_tick`.
 - Mirror macOS app active/inactive state into `ghostty_app_set_focus`.
+- Keep Ghostty renderer background, AppKit host layer background, and SwiftUI terminal
+  container background identical. `GhosttyAppRuntime.makeConfig` appends
+  `TerminalTheme.ghosttyTerminalBackgroundHex` after the theme palette config so renderer
+  fills do not diverge from `TerminalTheme.terminalBackground` during workspace switches or
+  surface reattachment.
 
 Fallback config is required for the surface route. A broken user Ghostty config should not prevent this app from launching terminals.
 
