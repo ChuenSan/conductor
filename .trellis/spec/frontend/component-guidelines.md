@@ -597,6 +597,28 @@ guard model.canCloseFocusedPane else { return }
 model.closePane(model.workspace.focusedPaneID)
 ```
 
+### Convention: Terminal Context Search
+
+**What**: The floating terminal search surface is shell chrome for one live Ghostty terminal.
+It may hold a compact query string and target terminal ID, but search execution and result
+navigation belong to the terminal surface/runtime.
+
+**Why**: Search must feel like a native terminal find bar without moving terminal scrollback or
+match text into SwiftUI. Keyboard handling should be immediate and predictable while the live
+terminal host is not first responder.
+
+**Contract**:
+
+- Opening search with `Cmd-F` should target the currently focused terminal and focus the search
+  input after the surface enters the view tree.
+- The search input must preserve normal macOS text editing commands such as `Cmd-A`.
+- While the search input is focused, `Return` and Down navigate to the next result, Shift-Return
+  and Up navigate to the previous result, and Escape closes search.
+- Closing search must call the terminal runtime's end-search action and restore first responder
+  to the searched terminal host when it still exists.
+- Do not promote search matches, scrollback snippets, or result text into SwiftUI state. Store
+  only compact metadata such as active state, query, total count, selected index, and target ID.
+
 ### Convention: Settings Panel Navigation
 
 **What**: Settings surfaces with three or more product areas should use a compact sidebar

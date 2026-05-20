@@ -116,7 +116,6 @@ struct ConductorRootView: View {
 
 private struct TerminalContextSearchBar: View {
     @ObservedObject var model: ConductorWindowModel
-    @FocusState private var searchFocused: Bool
     @State private var query = ""
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
@@ -183,15 +182,22 @@ private struct TerminalContextSearchBar: View {
             .buttonStyle(.plain)
             .help(L("选择搜索的终端", "Choose terminal to search"))
 
-            TextField(L("搜索选中终端", "Search selected terminal"), text: $query)
-                .textFieldStyle(.plain)
-                .font(.conductorSystem(size: 11.5, weight: .medium, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText)
-                .frame(width: 168)
-                .focused($searchFocused)
-                .onSubmit {
-                    model.performCommand(.findNext)
+            TerminalSearchTextField(
+                text: $query,
+                placeholder: L("搜索选中终端", "Search selected terminal"),
+                focusToken: model.terminalSearchFocusGeneration,
+                theme: theme,
+                fontFamily: fontFamily,
+                fontScale: fontScale,
+                onNavigate: { previous in
+                    guard hasQuery else { return }
+                    model.performCommand(previous ? .findPrevious : .findNext)
+                },
+                onClose: {
+                    model.closeTerminalSearch()
                 }
+            )
+            .frame(width: 168, height: 22)
 
             Text(matchText)
                 .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
@@ -236,10 +242,6 @@ private struct TerminalContextSearchBar: View {
         }
         .onAppear {
             query = model.terminalSearchQuery
-            focusSearchField()
-        }
-        .onChange(of: model.terminalSearchFocusGeneration) { _, _ in
-            focusSearchField()
         }
         .onChange(of: query) { _, next in
             model.setTerminalSearchQuery(next)
@@ -249,11 +251,141 @@ private struct TerminalContextSearchBar: View {
             query = next
         }
     }
+}
 
-    private func focusSearchField() {
-        Task { @MainActor in
-            searchFocused = true
+private struct TerminalSearchTextField: NSViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let focusToken: Int
+    let theme: TerminalTheme
+    let fontFamily: AppearanceFontFamily
+    let fontScale: AppearanceFontScale
+    let onNavigate: (Bool) -> Void
+    let onClose: () -> Void
+
+    func makeNSView(context: Context) -> SearchNSTextField {
+        let field = SearchNSTextField()
+        field.delegate = context.coordinator
+        field.isBordered = false
+        field.isBezeled = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.lineBreakMode = .byTruncatingTail
+        field.usesSingleLineMode = true
+        field.onWindowAttached = { [weak coordinator = context.coordinator, weak field] in
+            guard let field else { return }
+            coordinator?.focusIfPossible(field)
         }
+        applyStyle(to: field)
+        return field
+    }
+
+    func updateNSView(_ field: SearchNSTextField, context: Context) {
+        context.coordinator.text = $text
+        context.coordinator.onNavigate = onNavigate
+        context.coordinator.onClose = onClose
+        context.coordinator.requestFocusIfNeeded(focusToken, field: field)
+        if field.stringValue != text {
+            field.stringValue = text
+        }
+        applyStyle(to: field)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onNavigate: onNavigate, onClose: onClose)
+    }
+
+    private func applyStyle(to field: NSTextField) {
+        field.font = .conductorSystemFont(ofSize: 11.5, weight: .medium, family: fontFamily, scale: fontScale)
+        field.textColor = NSColor(theme.shellChromeText)
+        field.placeholderAttributedString = NSAttributedString(
+            string: placeholder,
+            attributes: [
+                .foregroundColor: NSColor(theme.shellChromeText.opacity(0.42)),
+                .font: NSFont.conductorSystemFont(ofSize: 11.5, weight: .medium, family: fontFamily, scale: fontScale)
+            ]
+        )
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var text: Binding<String>
+        var onNavigate: (Bool) -> Void
+        var onClose: () -> Void
+        private var appliedFocusToken: Int?
+        private var pendingFocusToken: Int?
+
+        init(
+            text: Binding<String>,
+            onNavigate: @escaping (Bool) -> Void,
+            onClose: @escaping () -> Void
+        ) {
+            self.text = text
+            self.onNavigate = onNavigate
+            self.onClose = onClose
+        }
+
+        func requestFocusIfNeeded(_ token: Int, field: SearchNSTextField) {
+            guard appliedFocusToken != token else { return }
+            pendingFocusToken = token
+            focusIfPossible(field)
+        }
+
+        func focusIfPossible(_ field: SearchNSTextField) {
+            guard let token = pendingFocusToken,
+                  let window = field.window else {
+                return
+            }
+            DispatchQueue.main.async { [weak self, weak field, weak window] in
+                guard let self,
+                      let field,
+                      let window,
+                      self.pendingFocusToken == token else {
+                    return
+                }
+                window.makeFirstResponder(field)
+                field.selectText(nil)
+                self.appliedFocusToken = token
+                self.pendingFocusToken = nil
+            }
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            text.wrappedValue = field.stringValue
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            switch commandSelector {
+            case #selector(NSResponder.insertNewline(_:)),
+                 #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
+                let previous = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
+                onNavigate(previous)
+                return true
+            case #selector(NSResponder.moveDown(_:)):
+                onNavigate(false)
+                return true
+            case #selector(NSResponder.moveUp(_:)):
+                onNavigate(true)
+                return true
+            case #selector(NSResponder.cancelOperation(_:)):
+                onClose()
+                return true
+            default:
+                return false
+            }
+        }
+    }
+}
+
+@MainActor
+private final class SearchNSTextField: NSTextField {
+    var onWindowAttached: (() -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        onWindowAttached?()
     }
 }
 

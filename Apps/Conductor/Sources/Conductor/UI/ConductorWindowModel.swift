@@ -902,12 +902,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func closeTerminalSearch() {
+        let restoreTerminalID = terminalSearchTargetID ?? focusedTerminalID
         if terminalSearchVisible, let tab = terminalSearchTargetTab() {
             _ = surface(for: tab).endSearch()
         }
         terminalSearchVisible = false
         terminalSearchQuery = ""
         terminalSearchTargetID = nil
+        if let restoreTerminalID {
+            refreshSurfaceAfterNavigation(restoreTerminalID)
+        }
     }
 
     @discardableResult
