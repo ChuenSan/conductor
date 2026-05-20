@@ -85,9 +85,10 @@ struct ToolPreviewItem: Identifiable, Equatable {
     }
 }
 
+@MainActor
 private final class TerminalContextMenuController: NSObject, NSMenuDelegate {
     private var nextActionTag = 1
-    private var actions: [Int: () -> Void] = [:]
+    private var actions: [Int: @MainActor () -> Void] = [:]
     var onClose: (() -> Void)?
 
     func makeItem(
@@ -97,11 +98,7 @@ private final class TerminalContextMenuController: NSObject, NSMenuDelegate {
     ) -> NSMenuItem {
         let actionTag = nextActionTag
         nextActionTag += 1
-        actions[actionTag] = {
-            Task { @MainActor in
-                action()
-            }
-        }
+        actions[actionTag] = action
 
         let item = NSMenuItem(
             title: title,
@@ -422,10 +419,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     var focusedWorkingDirectoryURL: URL? {
-        guard let focusedTerminalID,
-              let path = focusedWorkingDirectoryPath(for: focusedTerminalID) else {
-            return nil
-        }
+        focusedTerminalID.flatMap { workingDirectoryURL(for: $0) }
+    }
+
+    private func workingDirectoryURL(for terminalID: TerminalID) -> URL? {
+        guard let path = focusedWorkingDirectoryPath(for: terminalID) else { return nil }
         let expanded = (path as NSString).expandingTildeInPath
         let url = URL(fileURLWithPath: expanded, isDirectory: true).standardizedFileURL
         var isDirectory: ObjCBool = false
@@ -533,8 +531,23 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         )
     }
 
+    private func newTerminalAtDirectory(for terminalID: TerminalID) {
+        let signpost = ConductorSignpost.begin("new-terminal-context-directory")
+        defer { ConductorSignpost.end("new-terminal-context-directory", signpost) }
+        guard activateTerminalContextTarget(terminalID) != nil else { return }
+        workspace.newTerminal(
+            title: nextTerminalTitle(prefix: "zsh"),
+            workingDirectory: workingDirectoryURL(for: terminalID)?.path
+        )
+    }
+
     func openFocusedDirectory() {
         guard let url = focusedWorkingDirectoryURL else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func openWorkingDirectory(for terminalID: TerminalID) {
+        guard let url = workingDirectoryURL(for: terminalID) else { return }
         NSWorkspace.shared.open(url)
     }
 
@@ -549,6 +562,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func copyFocusedDirectory() {
         guard let path = focusedWorkingDirectoryURL?.path else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(path, forType: .string)
+    }
+
+    private func copyWorkingDirectory(for terminalID: TerminalID) {
+        guard let path = workingDirectoryURL(for: terminalID)?.path else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(path, forType: .string)
     }
@@ -791,7 +810,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func showTerminalSearch() {
-        guard let terminalID = focusedTerminalID,
+        guard let terminalID = focusedTerminalID else { return }
+        showTerminalSearch(for: terminalID)
+    }
+
+    func showTerminalSearch(for terminalID: TerminalID) {
+        guard activateTerminalContextTarget(terminalID) != nil,
               let target = terminalSearchTarget(for: terminalID) else { return }
         commandPaletteVisible = false
         settingsPanelVisible = false
@@ -856,6 +880,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func showTerminalContextMenu(terminalID: TerminalID, event: NSEvent, in view: NSView) -> Bool {
         guard let target = terminalContextMenuTarget(for: terminalID) else { return false }
         focusTerminal(terminalID)
+        let targetDirectoryURL = workingDirectoryURL(for: terminalID)
 
         let menu = NSMenu(title: target.tab.title)
         menu.autoenablesItems = false
@@ -897,58 +922,54 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             }
         }
         addItem(L("复制当前终端", "Duplicate Current Terminal")) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.duplicateSelectedTab, window: view.window)
+            guard let target = self?.activateTerminalContextTarget(terminalID) else { return }
+            self?.duplicateTab(target.tab.id, in: target.paneID)
         }
         addItem(L("上下文搜索", "Context Search")) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.showTerminalSearch, window: view.window)
+            self?.showTerminalSearch(for: terminalID)
         }
-        addItem(L("打开当前目录", "Open Current Directory"), enabled: focusedWorkingDirectoryURL != nil) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.openFocusedDirectory, window: view.window)
+        addItem(L("打开当前目录", "Open Current Directory"), enabled: targetDirectoryURL != nil) { [weak self] in
+            self?.openWorkingDirectory(for: terminalID)
         }
-        addItem(L("复制当前目录路径", "Copy Current Directory Path"), enabled: focusedWorkingDirectoryURL != nil) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.copyFocusedDirectory, window: view.window)
+        addItem(L("复制当前目录路径", "Copy Current Directory Path"), enabled: targetDirectoryURL != nil) { [weak self] in
+            self?.copyWorkingDirectory(for: terminalID)
         }
 
         addSeparator()
 
         addItem(L("新开终端", "New Terminal")) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.newTerminal, window: view.window)
+            guard self?.activateTerminalContextTarget(terminalID) != nil else { return }
+            self?.newTerminal()
         }
-        addItem(L("从当前目录新开终端", "New Terminal at Current Directory"), enabled: focusedWorkingDirectoryURL != nil) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.newTerminalAtFocusedDirectory, window: view.window)
+        addItem(L("从当前目录新开终端", "New Terminal at Current Directory"), enabled: targetDirectoryURL != nil) { [weak self] in
+            self?.newTerminalAtDirectory(for: terminalID)
         }
         addItem(L("向右分屏", "Split Right"), enabled: target.workspace.canSplit()) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.splitRight, window: view.window)
+            guard self?.activateTerminalContextTarget(terminalID) != nil else { return }
+            self?.splitRight()
         }
         addItem(L("向下分屏", "Split Down"), enabled: target.workspace.canSplit()) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.splitDown, window: view.window)
+            guard self?.activateTerminalContextTarget(terminalID) != nil else { return }
+            self?.splitDown()
         }
         addItem(L("关闭当前分屏", "Close Current Pane"), enabled: target.workspace.canClosePane(target.paneID)) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.closeFocusedPane, window: view.window)
+            guard let target = self?.activateTerminalContextTarget(terminalID) else { return }
+            self?.closePane(target.paneID)
         }
 
         addSeparator()
 
         addItem(L("关闭当前终端", "Close Current Terminal")) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.closeSelectedTab, window: view.window)
+            guard let target = self?.activateTerminalContextTarget(terminalID) else { return }
+            self?.closeTab(target.tab.id, in: target.paneID)
         }
         addItem(L("关闭其他终端", "Close Other Terminals"), enabled: target.workspace.canCloseOtherTabs(in: target.paneID)) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.closeOtherTabs, window: view.window)
+            guard let target = self?.activateTerminalContextTarget(terminalID) else { return }
+            self?.closeOtherTabs(in: target.paneID)
         }
         addItem(L("关闭右侧终端", "Close Terminals to the Right"), enabled: target.workspace.canCloseTabsToRight(of: terminalID, in: target.paneID)) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.closeTabsToRight, window: view.window)
+            guard let target = self?.activateTerminalContextTarget(terminalID) else { return }
+            self?.closeTabsToRight(in: target.paneID)
         }
 
         addSeparator()
@@ -957,12 +978,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             self?.promptRenameWorkspace(target.workspaceID, window: view.window)
         }
         addItem(L("复制当前工作区", "Duplicate Current Workspace")) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.duplicateWorkspace, window: view.window)
+            self?.duplicateWorkspace(target.workspaceID)
         }
         addItem(L("关闭当前工作区", "Close Current Workspace"), enabled: workspaces.count > 1) { [weak self] in
-            self?.focusTerminal(terminalID)
-            self?.performCommand(.closeCurrentWorkspace, window: view.window)
+            self?.closeWorkspace(target.workspaceID)
         }
 
         NSMenu.popUpContextMenu(menu, with: event, for: view)
@@ -1599,6 +1618,18 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
 
         return nil
+    }
+
+    @discardableResult
+    private func activateTerminalContextTarget(_ terminalID: TerminalID) -> TerminalContextMenuTarget? {
+        guard let target = terminalContextMenuTarget(for: terminalID) else { return nil }
+        if workspace.id != target.workspaceID {
+            selectWorkspace(target.workspaceID)
+        }
+        guard let currentTarget = terminalContextMenuTarget(for: terminalID) else { return nil }
+        selectTab(terminalID, in: currentTarget.paneID)
+        refreshSurfaceAfterNavigation(terminalID)
+        return currentTarget
     }
 
     private func terminalSearchTarget(for terminalID: TerminalID) -> (paneID: PaneID, tab: TerminalTabState)? {

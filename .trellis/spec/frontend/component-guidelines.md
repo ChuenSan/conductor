@@ -639,6 +639,11 @@ Forbidden patterns:
   references, but selected-tab and selected-workspace changes should only redraw the previous
   and next selected chrome, not every visible title label.
 - Running expensive metadata probes from `body`.
+- Routing terminal context-menu actions through whatever pane or tab is focused after the
+  menu closes. A terminal context menu must capture the right-clicked terminal ID, re-resolve
+  the current workspace/pane/tab target when an item is chosen, and execute target-specific
+  model methods. Focus may be synchronized first, but it must not be the only source of truth
+  for destructive actions such as close tab, close pane, close workspace, or duplicate tab.
 - Adding or removing tab chrome on hover. Workspace and terminal tabs should reserve stable
   slots for close/status controls; hover may change color, stroke, or opacity, but must not
   insert new content, change padding, or shift titles.
