@@ -824,10 +824,10 @@ private struct TerminalPaneView: View {
         .background {
             ZStack(alignment: .bottom) {
                 model.theme.terminalBackground
-                model.theme.terminalChrome.opacity(isFocused ? 0.18 : 0.12)
+                model.theme.terminalChrome.opacity(isFocused ? 0.13 : 0.085)
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isFocused ? 0.014 : 0.008),
+                        Color.white.opacity(isFocused ? 0.010 : 0.005),
                         Color.clear
                     ],
                     startPoint: .top,
@@ -839,7 +839,7 @@ private struct TerminalPaneView: View {
             LinearGradient(
                 colors: [
                     Color.clear,
-                    model.theme.terminalOuterStroke.opacity(isFocused ? 0.48 : 0.32),
+                    model.theme.terminalOuterStroke.opacity(isFocused ? 0.30 : 0.20),
                     Color.clear
                 ],
                 startPoint: .leading,
@@ -1239,13 +1239,13 @@ private struct TerminalTabButton: View {
 
     private var tabFill: Color {
         if theme.usesDarkChrome {
-            return hovering ? theme.shellHoverFill.opacity(0.72) : theme.shellControlFill.opacity(0.12)
+            return hovering ? theme.shellHoverFill.opacity(0.88) : theme.shellControlFill.opacity(0.66)
         }
-        return hovering ? theme.shellHoverFill.opacity(0.76) : theme.shellControlFill.opacity(0.50)
+        return hovering ? theme.shellHoverFill.opacity(0.84) : theme.shellControlFill.opacity(0.58)
     }
 
     private var selectedFill: Color {
-        theme.shellSelectedFill.opacity(paneFocused ? (theme.usesDarkChrome ? 0.90 : 0.76) : 0.62)
+        theme.shellPanelStrong.opacity(paneFocused ? (theme.usesDarkChrome ? 0.66 : 0.78) : (theme.usesDarkChrome ? 0.52 : 0.64))
     }
 
     private var tabStroke: Color {
@@ -1253,9 +1253,9 @@ private struct TerminalTabButton: View {
             return theme.floatingSelectedStroke.opacity(0.95)
         }
         if isSelected {
-            return theme.shellStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.70 : 0.52) : 0.42)
+            return theme.shellStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.56 : 0.42) : 0.34)
         }
-        return theme.shellStroke.opacity(hovering ? 0.44 : 0.24)
+        return theme.shellStroke.opacity(hovering ? 0.34 : 0.18)
     }
 
     private var terminalDetailLabel: String? {

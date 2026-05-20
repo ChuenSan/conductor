@@ -788,16 +788,16 @@ struct ConductorIconButton: View {
 
     private var buttonStroke: Color {
         if theme.usesDarkChrome {
-            return Color.white.opacity(active ? 0.13 : (hovering ? 0.09 : 0.038))
+            return Color.white.opacity(active ? 0.105 : (hovering ? 0.075 : 0.034))
         }
-        return theme.shellStroke.opacity(active ? 0.72 : (hovering ? 0.52 : 0.34))
+        return theme.shellStroke.opacity(active ? 0.58 : (hovering ? 0.42 : 0.26))
     }
 
     private var buttonFill: Color {
         if theme.usesDarkChrome {
-            return Color.white.opacity(active ? 0.066 : (hovering ? 0.042 : 0.010))
+            return Color.white.opacity(active ? 0.060 : (hovering ? 0.040 : 0.008))
         }
-        return active ? theme.shellSelectedFill.opacity(0.80) : (hovering ? theme.shellHoverFill.opacity(0.76) : theme.shellControlFill.opacity(0.54))
+        return active ? theme.shellSelectedFill.opacity(0.70) : (hovering ? theme.shellHoverFill.opacity(0.66) : theme.shellControlFill.opacity(0.48))
     }
 
     var body: some View {
@@ -891,11 +891,11 @@ struct ConductorPillGroup<Content: View>: View {
             content
         }
         .padding(2)
-        .background(theme.usesDarkChrome ? theme.terminalRaisedBackground.opacity(0.64) : theme.shellControlFill.opacity(0.46))
+        .background(theme.usesDarkChrome ? theme.terminalRaisedBackground.opacity(0.46) : theme.shellControlFill.opacity(0.38))
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup - 2, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup - 2, style: .continuous)
-                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.060) : theme.shellStroke.opacity(0.42), lineWidth: 1)
+                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.046) : theme.shellStroke.opacity(0.30), lineWidth: 1)
         }
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)
@@ -921,19 +921,19 @@ struct ConductorTerminalToolbarSurface<Content: View>: View {
             .background {
                 ZStack {
                     Rectangle()
-                        .fill(theme.terminalRaisedBackground)
+                        .fill(theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.88 : 0.72))
                     LinearGradient(
                         colors: [
-                            theme.terminalRaisedBackground.opacity(0.96),
-                            theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.94 : 0.78),
-                            theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.82 : 0.68)
+                            theme.terminalRaisedBackground.opacity(theme.usesDarkChrome ? 0.82 : 0.60),
+                            theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.54 : 0.42),
+                            theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.70 : 0.56)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(theme.usesDarkChrome ? 0.016 : 0.030),
+                            Color.white.opacity(theme.usesDarkChrome ? 0.012 : 0.018),
                             Color.clear
                         ],
                         startPoint: .top,
@@ -945,8 +945,8 @@ struct ConductorTerminalToolbarSurface<Content: View>: View {
                 LinearGradient(
                     colors: [
                         Color.clear,
-                        Color.white.opacity(theme.usesDarkChrome ? 0.030 : 0.060),
-                        Color.black.opacity(theme.usesDarkChrome ? 0.20 : 0.055),
+                        theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.30 : 0.22),
+                        Color.black.opacity(theme.usesDarkChrome ? 0.10 : 0.025),
                         Color.clear
                     ],
                     startPoint: .leading,

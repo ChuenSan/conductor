@@ -770,27 +770,27 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     var shellSelectedFill: Color {
         switch self {
         case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
-            floatingEmphasis.opacity(0.10)
+            Color.white.opacity(0.085)
         default:
-            Color.black.opacity(0.090)
+            Color.black.opacity(0.070)
         }
     }
 
     var shellHoverFill: Color {
         switch self {
         case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
-            floatingEmphasis.opacity(0.055)
+            Color.white.opacity(0.055)
         default:
-            Color.black.opacity(0.060)
+            Color.black.opacity(0.045)
         }
     }
 
     var shellControlFill: Color {
         switch self {
         case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
-            Color.white.opacity(0.070)
+            Color.white.opacity(0.052)
         default:
-            Color.black.opacity(0.045)
+            Color.black.opacity(0.038)
         }
     }
 

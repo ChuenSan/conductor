@@ -208,6 +208,10 @@ rendering into SwiftUI work or making precision interactions lag behind the poin
   Avoid stacking a selected-tab underline with the pane rail separator below it; selected
   state should come from fill, stroke, text weight, and glyph emphasis instead. Keep inactive
   workspace tabs visible but low-contrast so the terminal surface remains dominant.
+- Workspace and terminal tab selected fills should stay neutral and theme-owned. Reserve
+  saturated accent colors for live terminal focus affordances, unread/progress signals, and
+  explicit theme previews; using the accent as the tab body makes the shell feel fragmented
+  and competes with the terminal surface.
 - Keep motion tokens intent-specific. Use `ConductorMotion.search` for the context-search
   chip, `ConductorMotion.panel` / `panelTransition` for floating panels, `ConductorMotion.list`
   / `rowTransition` for filtered command, overview, and notification rows, and

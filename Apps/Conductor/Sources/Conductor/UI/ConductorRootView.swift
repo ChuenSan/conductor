@@ -557,14 +557,14 @@ private struct TerminalSidebarContactWash: View {
     var body: some View {
         LinearGradient(
             colors: [
-                Color.black.opacity(theme.usesDarkChrome ? 0.10 : 0.030),
-                theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.04 : 0.018),
+                theme.shellPanelBackground.opacity(theme.usesDarkChrome ? 0.34 : 0.22),
+                theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.16 : 0.075),
                 Color.clear
             ],
             startPoint: .leading,
             endPoint: .trailing
         )
-        .frame(width: theme.usesDarkChrome ? 12 : 8)
+        .frame(width: theme.usesDarkChrome ? 22 : 18)
     }
 }
 
@@ -3646,7 +3646,7 @@ private struct ConductorSidebar: View {
 
 private struct SidebarRailShape: InsettableShape {
     var leadingRadius: CGFloat = ConductorDesign.sidebarCornerRadius
-    var trailingRadius: CGFloat = 8
+    var trailingRadius: CGFloat = 14
     var insetAmount: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
@@ -3719,16 +3719,16 @@ private struct SidebarRailSurface: View {
                 LinearGradient(
                     colors: [
                         Color.clear,
-                        Color.black.opacity(theme.usesDarkChrome ? 0.08 : 0.020)
+                        theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.16 : 0.055)
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
                 )
-                .frame(width: 10)
+                .frame(width: 16)
             }
             .overlay {
                 shape
-                    .strokeBorder(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.10), lineWidth: 0.6)
+                    .strokeBorder(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.15 : 0.070), lineWidth: 0.6)
             }
     }
 }
@@ -3769,15 +3769,15 @@ private struct SidebarBookSpineChrome: View {
             LinearGradient(
                 colors: [
                     Color.clear,
-                    theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.12 : 0.050),
-                    theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.10 : 0.028)
+                    theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.075 : 0.032),
+                    theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.080 : 0.022)
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
             )
-            .frame(width: 13)
+            .frame(width: 16)
         }
-        .opacity(0.62)
+        .opacity(0.46)
     }
 }
 
@@ -3820,10 +3820,10 @@ private struct SidebarStatusSummary: View {
                     .frame(width: 14)
                 Text(L("焦点", "Focus"))
                     .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.82))
                 Text(focusedTerminalTitle)
                     .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
+                    .foregroundStyle(theme.shellChromeText.opacity(0.90))
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -3847,10 +3847,10 @@ private struct SidebarStatusPill: View {
         HStack(spacing: 4) {
             Text(title)
                 .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
-                .foregroundStyle(highlighted ? theme.floatingEmphasis.opacity(0.86) : ConductorDesign.tertiaryText)
+                .foregroundStyle(highlighted ? theme.floatingEmphasis.opacity(0.86) : theme.shellChromeTextMuted.opacity(0.78))
             Text(value)
                 .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
-                .foregroundStyle(highlighted ? theme.floatingEmphasis : ConductorDesign.primaryText)
+                .foregroundStyle(highlighted ? theme.floatingEmphasis : theme.shellChromeText.opacity(0.88))
         }
         .padding(.horizontal, 7)
         .frame(height: 20)
@@ -3912,6 +3912,7 @@ private struct SidebarRailButton: View {
 private struct SidebarSectionTitle: View {
     let title: String
     @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
     init(_ title: String) {
         self.title = title
@@ -3920,7 +3921,7 @@ private struct SidebarSectionTitle: View {
     var body: some View {
         Text(title)
             .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-            .foregroundStyle(ConductorDesign.tertiaryText)
+            .foregroundStyle(theme.shellChromeTextMuted.opacity(0.74))
             .padding(.horizontal, 8)
             .padding(.top, 2)
     }
@@ -3940,7 +3941,7 @@ private struct SidebarRow: View {
                 .foregroundStyle(selected ? theme.floatingEmphasis.opacity(0.90) : ConductorDesign.secondaryText)
             Text(title)
                 .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.primaryText)
+                .foregroundStyle(theme.shellChromeText.opacity(selected ? 0.92 : 0.82))
             Spacer()
         }
         .padding(.horizontal, 7)
@@ -4060,13 +4061,13 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             Text(title)
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.primaryText)
+                .foregroundStyle(theme.shellChromeText.opacity(selected ? 0.94 : 0.84))
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
             Text("\(terminalCount)")
                 .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
+                .foregroundStyle(theme.shellChromeTextMuted.opacity(0.78))
                 .padding(.horizontal, 5)
                 .frame(minWidth: 17, minHeight: 17)
                 .background(selected ? theme.shellHoverFill.opacity(0.82) : Color.clear)
@@ -4124,7 +4125,7 @@ private struct SidebarActionRow: View {
                     Spacer()
                 }
             }
-            .foregroundStyle(ConductorDesign.secondaryText)
+            .foregroundStyle(theme.shellChromeTextMuted.opacity(0.86))
             .padding(.horizontal, showsTitle ? 8 : 0)
             .frame(width: showsTitle ? nil : 34, height: showsTitle ? 28 : 34)
             .background(hovering ? theme.shellHoverFill : Color.clear)
@@ -4460,20 +4461,20 @@ private struct WorkspaceTopTab: View {
 
     private var baseFill: Color {
         if theme.usesDarkChrome {
-            return hovering ? theme.shellHoverFill.opacity(0.76) : theme.shellControlFill.opacity(0.14)
+            return hovering ? theme.shellHoverFill.opacity(0.92) : theme.shellControlFill.opacity(0.72)
         }
-        return hovering ? theme.shellHoverFill.opacity(0.78) : theme.shellControlFill.opacity(0.52)
+        return hovering ? theme.shellHoverFill.opacity(0.86) : theme.shellControlFill.opacity(0.62)
     }
 
     private var selectedFill: Color {
-        theme.usesDarkChrome ? theme.shellSelectedFill.opacity(0.92) : theme.shellSelectedFill.opacity(0.78)
+        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.72) : theme.shellPanelStrong.opacity(0.82)
     }
 
     private var tabStroke: Color {
         if selected {
-            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.70 : 0.52) * appearance.chromeClarity.strokeMultiplier)
+            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.58 : 0.42) * appearance.chromeClarity.strokeMultiplier)
         }
-        return theme.shellStroke.opacity(hovering ? 0.44 : 0.24)
+        return theme.shellStroke.opacity(hovering ? 0.34 : 0.18)
     }
 
     private var titleColor: Color {
