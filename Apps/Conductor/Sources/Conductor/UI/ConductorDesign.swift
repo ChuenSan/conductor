@@ -597,7 +597,7 @@ enum ConductorMotion {
     // preserves continuity, spatial motion changes layout, and reveal motion
     // introduces transient panels. Terminal surfaces opt out of all of these.
     static var micro: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.055)
+        reducedMotion ? nil : .easeOut(duration: 0.040)
     }
 
     static var hover: Animation? {
@@ -605,23 +605,23 @@ enum ConductorMotion {
     }
 
     static var feedback: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.055)
-    }
-
-    static var press: Animation? {
         reducedMotion ? nil : .easeOut(duration: 0.045)
     }
 
+    static var press: Animation? {
+        reducedMotion ? nil : .easeOut(duration: 0.032)
+    }
+
     static var reveal: Animation? {
-        reducedMotion ? nil : .smooth(duration: 0.16, extraBounce: 0.02)
+        reducedMotion ? nil : .smooth(duration: 0.135, extraBounce: 0.012)
     }
 
     static var search: Animation? {
-        reducedMotion ? nil : .smooth(duration: 0.14, extraBounce: 0.015)
+        reducedMotion ? nil : .smooth(duration: 0.115, extraBounce: 0.010)
     }
 
     static var scroll: Animation? {
-        reducedMotion ? nil : .smooth(duration: 0.20, extraBounce: 0.0)
+        reducedMotion ? nil : .smooth(duration: 0.145, extraBounce: 0.0)
     }
 
     static var selection: Animation? {
@@ -629,19 +629,19 @@ enum ConductorMotion {
     }
 
     static var navigation: Animation? {
-        magnetic(duration: 0.18)
+        magnetic(duration: 0.125, bounce: 0.018)
     }
 
     static var standard: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.12)
+        reducedMotion ? nil : .easeOut(duration: 0.095)
     }
 
     static var panel: Animation? {
-        reducedMotion ? nil : .smooth(duration: 0.16, extraBounce: 0.018)
+        reducedMotion ? nil : .smooth(duration: 0.135, extraBounce: 0.012)
     }
 
     static var list: Animation? {
-        magnetic(duration: 0.16)
+        magnetic(duration: 0.115, bounce: 0.014)
     }
 
     static var layout: Animation? {
@@ -649,23 +649,23 @@ enum ConductorMotion {
     }
 
     static var spatial: Animation? {
-        magnetic(duration: 0.22)
+        magnetic(duration: 0.18, bounce: 0.020)
     }
 
     static var emphasized: Animation? {
-        magnetic(duration: 0.24)
+        magnetic(duration: 0.19, bounce: 0.026)
     }
 
     static var panelTransition: AnyTransition {
         reducedMotion ? .identity : .modifier(
-            active: ConductorPanelRevealModifier(opacity: 0, scale: 0.984, y: -5, blur: 3),
+            active: ConductorPanelRevealModifier(opacity: 0, scale: 0.988, y: -4, blur: 2),
             identity: ConductorPanelRevealModifier(opacity: 1, scale: 1, y: 0, blur: 0)
         )
     }
 
     static var searchTransition: AnyTransition {
         reducedMotion ? .identity : .modifier(
-            active: ConductorPanelRevealModifier(opacity: 0, scale: 0.988, y: -6, blur: 2),
+            active: ConductorPanelRevealModifier(opacity: 0, scale: 0.992, y: -4, blur: 1.5),
             identity: ConductorPanelRevealModifier(opacity: 1, scale: 1, y: 0, blur: 0)
         )
     }
@@ -675,15 +675,15 @@ enum ConductorMotion {
     }
 
     static var rowTransition: AnyTransition {
-        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.992, anchor: .center))
+        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.996, anchor: .center))
     }
 
     static func setReducedMotion(_ value: Bool) {
         reducedMotion = value
     }
 
-    static func magnetic(duration: Double = 0.18) -> Animation? {
-        reducedMotion ? nil : .smooth(duration: duration, extraBounce: 0.045)
+    static func magnetic(duration: Double = 0.18, bounce: Double = 0.045) -> Animation? {
+        reducedMotion ? nil : .smooth(duration: duration, extraBounce: bounce)
     }
 
     static func perform(_ action: () -> Void) {
@@ -732,7 +732,7 @@ struct ConductorPressButtonStyle: ButtonStyle {
     var pressedScale: CGFloat = 1.0
 
     private var effectivePressedScale: CGFloat {
-        max(pressedScale, 0.985)
+        max(pressedScale, 0.94)
     }
 
     func makeBody(configuration: Configuration) -> some View {

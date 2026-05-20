@@ -724,7 +724,7 @@ private struct CommandPaletteView: View {
             .onChange(of: query) {
                 ensureSelection()
             }
-            .animation(ConductorMotion.selection, value: selectedCommandID)
+            .animation(ConductorMotion.feedback, value: selectedCommandID)
             .onMoveCommand { direction in
                 switch direction {
                 case .up:
@@ -2522,7 +2522,7 @@ private struct WorkspaceOverviewPanel: View {
             .onExitCommand {
                 model.hideWorkspaceOverview()
             }
-            .animation(ConductorMotion.selection, value: highlightedWorkspaceID)
+            .animation(ConductorMotion.feedback, value: highlightedWorkspaceID)
         }
     }
 
@@ -2708,8 +2708,8 @@ private struct WorkspaceOverviewCard: View {
                 onHover()
             }
         }
-        .animation(ConductorMotion.selection, value: selected)
-        .animation(ConductorMotion.selection, value: highlighted)
+        .animation(ConductorMotion.standard, value: selected)
+        .animation(ConductorMotion.feedback, value: highlighted)
         .animation(ConductorMotion.emphasized, value: unreadCount)
         .help("\(workspace.title) · \(workspace.panes.count) \(L("分屏", "panes")) · \(terminalCount) \(L("终端", "terminals"))")
     }

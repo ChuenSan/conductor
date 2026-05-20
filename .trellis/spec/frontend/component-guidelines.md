@@ -218,6 +218,9 @@ rendering into SwiftUI work or making precision interactions lag behind the poin
   `ConductorMotion.scroll` for scroll-to-visible behavior in tab strips. Do not reuse
   selection motion for scroll positioning; it makes tab navigation feel sticky and hides
   whether the state changed immediately.
+- Use `ConductorMotion.feedback` for keyboard-driven row or card highlights that can move
+  many times per second. Reserve `selection` / `navigation` for lower-frequency destination
+  changes; otherwise command palettes and overview grids feel sticky under arrow keys.
 - Defer search-field focus until the floating surface has entered the view tree. Command
   Center, Workspace Overview, and terminal context search should set their `FocusState` from
   the next main-actor turn so the first responder does not race panel insertion animation.
