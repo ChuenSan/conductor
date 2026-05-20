@@ -3529,37 +3529,16 @@ private struct ConductorSidebar: View {
                 focusedTerminalTitle: focusedTerminalTitle
             )
 
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 SidebarDockButton(icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
                     finishWorkspaceRenameIfNeeded()
                     model.performCommand(.newTerminal)
-                }
-                SidebarDockButton(icon: "rectangle.split.2x1", disabled: !model.canPerformCommand(.splitRight), help: L("向右分屏 Cmd-D", "Split Right Cmd-D")) {
-                    finishWorkspaceRenameIfNeeded()
-                    ConductorMotion.perform(ConductorMotion.layout) {
-                        model.performCommand(.splitRight)
-                    }
-                }
-                SidebarDockButton(icon: "rectangle.split.1x2", disabled: !model.canPerformCommand(.splitDown), help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D")) {
-                    finishWorkspaceRenameIfNeeded()
-                    ConductorMotion.perform(ConductorMotion.layout) {
-                        model.performCommand(.splitDown)
-                    }
                 }
                 SidebarDockButton(icon: "command", help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
                     finishWorkspaceRenameIfNeeded()
                     model.performCommand(.toggleCommandPalette)
                 }
                 Spacer(minLength: 0)
-                SidebarDockButton(icon: "paintpalette", help: model.theme.title) {
-                    finishWorkspaceRenameIfNeeded()
-                    ConductorMotion.perform(ConductorMotion.selection) {
-                        model.cycleTheme()
-                    }
-                }
-                .contextMenu {
-                    themeMenuItems
-                }
                 SidebarDockButton(icon: "gearshape", help: L("设置", "Settings")) {
                     finishWorkspaceRenameIfNeeded()
                     ConductorMotion.perform(ConductorMotion.panel) {
@@ -3635,7 +3614,7 @@ private struct ConductorSidebar: View {
             SidebarSeparator()
                 .padding(.horizontal, -1)
 
-            primaryQuickActions(showsLabels: false)
+            collapsedSidebarActions
 
             Spacer(minLength: 8)
 
@@ -3643,17 +3622,21 @@ private struct ConductorSidebar: View {
         }
     }
 
+    private var collapsedSidebarActions: some View {
+        VStack(spacing: 6) {
+            SidebarRailButton(icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
+                finishWorkspaceRenameIfNeeded()
+                model.performCommand(.newTerminal)
+            }
+            SidebarRailButton(icon: "command", help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
+                finishWorkspaceRenameIfNeeded()
+                model.performCommand(.toggleCommandPalette)
+            }
+        }
+    }
+
     private var collapsedSidebarFooter: some View {
         VStack(spacing: 6) {
-            SidebarRailButton(icon: "paintpalette", help: model.theme.title) {
-                finishWorkspaceRenameIfNeeded()
-                ConductorMotion.perform(ConductorMotion.selection) {
-                    model.cycleTheme()
-                }
-            }
-            .contextMenu {
-                themeMenuItems
-            }
             SidebarRailButton(icon: "gearshape", help: L("设置", "Settings")) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.panel) {
@@ -3672,32 +3655,6 @@ private struct ConductorSidebar: View {
                 ConductorMotion.perform(ConductorMotion.selection) {
                     model.theme = theme
                 }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func primaryQuickActions(showsLabels: Bool) -> some View {
-        Group {
-            SidebarActionRow(icon: "plus.rectangle.on.rectangle", title: L("新开终端", "New Terminal"), showsTitle: showsLabels, help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
-                finishWorkspaceRenameIfNeeded()
-                model.performCommand(.newTerminal)
-            }
-            SidebarActionRow(icon: "rectangle.split.2x1", title: L("向右分屏", "Split Right"), showsTitle: showsLabels, disabled: !model.canPerformCommand(.splitRight), help: L("向右分屏 Cmd-D", "Split Right Cmd-D")) {
-                finishWorkspaceRenameIfNeeded()
-                ConductorMotion.perform(ConductorMotion.layout) {
-                    model.performCommand(.splitRight)
-                }
-            }
-            SidebarActionRow(icon: "rectangle.split.1x2", title: L("向下分屏", "Split Down"), showsTitle: showsLabels, disabled: !model.canPerformCommand(.splitDown), help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D")) {
-                finishWorkspaceRenameIfNeeded()
-                ConductorMotion.perform(ConductorMotion.layout) {
-                    model.performCommand(.splitDown)
-                }
-            }
-            SidebarActionRow(icon: "command", title: L("命令面板", "Command Center"), showsTitle: showsLabels, help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
-                finishWorkspaceRenameIfNeeded()
-                model.performCommand(.toggleCommandPalette)
             }
         }
     }
