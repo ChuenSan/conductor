@@ -652,9 +652,13 @@ public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
         guard var pane = panes[paneID], pane.tabs.contains(where: { $0.id == terminalID }) else {
             return false
         }
-        pane.selectedTabID = terminalID
-        panes[paneID] = pane
-        focusedPaneID = paneID
+        if pane.selectedTabID != terminalID {
+            pane.selectedTabID = terminalID
+            panes[paneID] = pane
+        }
+        if focusedPaneID != paneID {
+            focusedPaneID = paneID
+        }
         return true
     }
 
@@ -925,6 +929,7 @@ public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
     @discardableResult
     public mutating func focusPane(_ paneID: PaneID) -> Bool {
         guard panes[paneID] != nil else { return false }
+        guard focusedPaneID != paneID else { return true }
         focusedPaneID = paneID
         return true
     }

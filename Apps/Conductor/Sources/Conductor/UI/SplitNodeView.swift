@@ -1306,37 +1306,15 @@ private struct TerminalTabButton: View {
                     renameCancelled = false
                 }
             } else {
-                HStack(spacing: 5) {
-                    Image(systemName: "terminal")
-                        .font(.conductorSystem(size: 10, scale: fontScale))
-                        .foregroundStyle(isSelected ? theme.shellChromeText : theme.shellChromeTextMuted)
-                    Text(tab.title)
-                        .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(isSelected ? theme.shellChromeText : theme.shellChromeTextMuted)
-                        .lineLimit(1)
-                        .layoutPriority(1)
-                    if let terminalDetailLabel, isSelected {
-                        Text("· \(terminalDetailLabel)")
-                            .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
-                            .foregroundStyle(theme.shellChromeTextMuted.opacity(isSelected ? 0.92 : 0.78))
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 2)
-                    if unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0 {
-                        Circle()
-                            .fill(theme.floatingEmphasis.opacity(0.72))
-                            .frame(width: 6, height: 6)
-                    } else if metadata?.progressKind != nil {
-                        Circle()
-                            .stroke(theme.floatingEmphasis.opacity(0.72), lineWidth: 1.25)
-                            .frame(width: 7, height: 7)
-                    } else if metadata?.readonly == true {
-                        Image(systemName: "lock")
-                            .font(.conductorSystem(size: 9, scale: fontScale))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                TerminalTabButtonContent(
+                    title: tab.title,
+                    detail: terminalDetailLabel,
+                    selected: isSelected,
+                    hasUnread: unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0,
+                    showsProgress: metadata?.progressKind != nil,
+                    readonly: metadata?.readonly == true
+                )
+                .equatable()
                 .contentShape(Rectangle())
                 .onTapGesture {
                     ConductorMotion.withoutAnimation {
@@ -1506,5 +1484,59 @@ private struct TerminalTabButton: View {
         ConductorMotion.perform(ConductorMotion.selection) {
             editingTitle = false
         }
+    }
+}
+
+private struct TerminalTabButtonContent: View, Equatable {
+    let title: String
+    let detail: String?
+    let selected: Bool
+    let hasUnread: Bool
+    let showsProgress: Bool
+    let readonly: Bool
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    nonisolated static func == (lhs: TerminalTabButtonContent, rhs: TerminalTabButtonContent) -> Bool {
+        lhs.title == rhs.title &&
+            lhs.detail == rhs.detail &&
+            lhs.selected == rhs.selected &&
+            lhs.hasUnread == rhs.hasUnread &&
+            lhs.showsProgress == rhs.showsProgress &&
+            lhs.readonly == rhs.readonly
+    }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "terminal")
+                .font(.conductorSystem(size: 10, scale: fontScale))
+                .foregroundStyle(selected ? theme.shellChromeText : theme.shellChromeTextMuted)
+            Text(title)
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(selected ? theme.shellChromeText : theme.shellChromeTextMuted)
+                .lineLimit(1)
+                .layoutPriority(1)
+            if let detail, selected {
+                Text("· \(detail)")
+                    .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.92))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 2)
+            if hasUnread {
+                Circle()
+                    .fill(theme.floatingEmphasis.opacity(0.72))
+                    .frame(width: 6, height: 6)
+            } else if showsProgress {
+                Circle()
+                    .stroke(theme.floatingEmphasis.opacity(0.72), lineWidth: 1.25)
+                    .frame(width: 7, height: 7)
+            } else if readonly {
+                Image(systemName: "lock")
+                    .font(.conductorSystem(size: 9, scale: fontScale))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

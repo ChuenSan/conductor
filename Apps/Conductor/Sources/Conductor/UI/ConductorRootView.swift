@@ -4497,29 +4497,13 @@ private struct WorkspaceTopTab: View {
                     renameCancelled = false
                 }
             } else {
-                HStack(spacing: 7) {
-                    WorkspaceTabGlyph(selected: selected)
-                    Text(row.title)
-                        .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(titleColor)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("\(row.terminalCount)")
-                        .font(.conductorSystem(size: 10.2, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(selected ? theme.shellChromeText.opacity(0.72) : theme.shellChromeTextMuted.opacity(0.70))
-                        .frame(minWidth: 17, minHeight: 17)
-                    if unreadCount > 0 {
-                        Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                            .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
-                            .frame(minWidth: 15, minHeight: 14)
-                            .background(theme.floatingEmphasis.opacity(0.72))
-                            .clipShape(Capsule())
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                WorkspaceTopTabContent(
+                    title: row.title,
+                    terminalCount: row.terminalCount,
+                    unreadCount: unreadCount,
+                    selected: selected
+                )
+                .equatable()
                 .contentShape(Rectangle())
                 .onTapGesture {
                     onSelect()
@@ -4599,6 +4583,52 @@ private struct WorkspaceTopTab: View {
             .disabled(!canClose)
         }
         .help("\(row.title) · \(row.splitCount) \(L("分屏", "panes")) · \(row.terminalCount) \(L("终端", "terminals"))")
+    }
+}
+
+private struct WorkspaceTopTabContent: View, Equatable {
+    let title: String
+    let terminalCount: Int
+    let unreadCount: Int
+    let selected: Bool
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    nonisolated static func == (lhs: WorkspaceTopTabContent, rhs: WorkspaceTopTabContent) -> Bool {
+        lhs.title == rhs.title &&
+        lhs.terminalCount == rhs.terminalCount &&
+        lhs.unreadCount == rhs.unreadCount &&
+        lhs.selected == rhs.selected
+    }
+
+    private var titleColor: Color {
+        selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86)
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            WorkspaceTabGlyph(selected: selected)
+            Text(title)
+                .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
+                .foregroundStyle(titleColor)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("\(terminalCount)")
+                .font(.conductorSystem(size: 10.2, weight: .semibold, scale: fontScale))
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.72) : theme.shellChromeTextMuted.opacity(0.70))
+                .frame(minWidth: 17, minHeight: 17)
+            if unreadCount > 0 {
+                Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                    .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .frame(minWidth: 15, minHeight: 14)
+                    .background(theme.floatingEmphasis.opacity(0.72))
+                    .clipShape(Capsule())
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

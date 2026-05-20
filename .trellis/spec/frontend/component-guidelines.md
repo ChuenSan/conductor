@@ -633,6 +633,11 @@ Forbidden patterns:
 - Using transcript length as SwiftUI state.
 - Recreating terminal host views during tab selection, split resize, or workspace switching.
 - Passing a whole app store into terminal pane leaf views.
+- Rendering repeated tab/list title content directly from a broad observed model. Workspace
+  rows, workspace tabs, and terminal tabs should feed title text, badges, and status glyphs
+  through compact `Equatable` content views. Action wrappers may still hold closures or model
+  references, but selected-tab and selected-workspace changes should only redraw the previous
+  and next selected chrome, not every visible title label.
 - Running expensive metadata probes from `body`.
 - Adding or removing tab chrome on hover. Workspace and terminal tabs should reserve stable
   slots for close/status controls; hover may change color, stroke, or opacity, but must not

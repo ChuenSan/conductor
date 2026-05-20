@@ -754,12 +754,21 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func selectTab(_ terminalID: TerminalID, in paneID: PaneID) {
         let signpost = ConductorSignpost.begin("select-tab")
         defer { ConductorSignpost.end("select-tab", signpost) }
+        guard let pane = workspace.panes[paneID],
+              pane.tabs.contains(where: { $0.id == terminalID }) else {
+            return
+        }
+        if pane.selectedTabID == terminalID, workspace.focusedPaneID == paneID {
+            markTerminalNotificationsRead(terminalID)
+            return
+        }
         workspace.selectTab(terminalID, in: paneID)
         markTerminalNotificationsRead(terminalID)
         reconcileSurfaceFocus()
     }
 
     func focusPane(_ paneID: PaneID) {
+        guard workspace.focusedPaneID != paneID else { return }
         workspace.focusPane(paneID)
         reconcileSurfaceFocus()
     }
@@ -1307,7 +1316,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func markTerminalNotificationsRead(_ terminalID: TerminalID) {
-        mutateNotifications { $0.markTerminalRead(terminalID) }
+        var next = notifications
+        if next.markTerminalRead(terminalID) {
+            notifications = next
+        } else if metadata(for: terminalID).unreadCount == notifications.snapshot.unreadCount(for: terminalID) {
+            return
+        }
         refreshNotificationMetadata(for: terminalID)
     }
 
