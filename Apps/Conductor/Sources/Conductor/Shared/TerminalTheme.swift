@@ -50,6 +50,10 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     case slateDusk
     case carbonMist
     case blueHour
+    case stoneVeil
+    case harborFog
+    case clayAsh
+    case lichenMist
     case flexoki
     case aurora
     case graphite
@@ -75,6 +79,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             "Carbon Mist"
         case .blueHour:
             "Blue Hour"
+        case .stoneVeil:
+            "Stone Veil"
+        case .harborFog:
+            "Harbor Fog"
+        case .clayAsh:
+            "Clay Ash"
+        case .lichenMist:
+            "Lichen Mist"
         case .flexoki:
             "Flexoki"
         case .aurora:
@@ -110,6 +122,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             .minimal
         case .blueHour:
             .glass
+        case .stoneVeil:
+            .studio
+        case .harborFog:
+            .glass
+        case .clayAsh:
+            .warm
+        case .lichenMist:
+            .botanical
         case .flexoki:
             .paper
         case .aurora:
@@ -145,6 +165,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             "Soft charcoal chrome with warmer mid-dark panels."
         case .blueHour:
             "Blue-gray evening shell with calmer terminal contrast."
+        case .stoneVeil:
+            "Soft mineral gray surfaces for a lighter dark workspace."
+        case .harborFog:
+            "Blue fog chrome with lifted panels and quiet waterline focus."
+        case .clayAsh:
+            "Warm ash panels with earthy contrast and a softer terminal bed."
+        case .lichenMist:
+            "Moss-gray shell with muted green instrumentation."
         case .flexoki:
             "Ink-and-paper warmth with restrained terminal contrast."
         case .aurora:
@@ -176,7 +204,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var usesDarkChrome: Bool {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             true
         case .flexoki, .aurora, .graphite, .ember, .paperTrail, .nordicFrost, .solarDune:
             false
@@ -199,6 +227,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color(red: 0.150, green: 0.145, blue: 0.138)
         case .blueHour:
             Color(red: 0.105, green: 0.132, blue: 0.172)
+        case .stoneVeil:
+            Color(red: 0.182, green: 0.192, blue: 0.204)
+        case .harborFog:
+            Color(red: 0.130, green: 0.178, blue: 0.220)
+        case .clayAsh:
+            Color(red: 0.196, green: 0.176, blue: 0.158)
+        case .lichenMist:
+            Color(red: 0.138, green: 0.184, blue: 0.160)
         case .flexoki:
             Color(red: 0.946, green: 0.928, blue: 0.880)
         case .aurora:
@@ -234,6 +270,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color(red: 0.188, green: 0.184, blue: 0.176)
         case .blueHour:
             Color(red: 0.142, green: 0.174, blue: 0.226)
+        case .stoneVeil:
+            Color(red: 0.220, green: 0.232, blue: 0.246)
+        case .harborFog:
+            Color(red: 0.160, green: 0.220, blue: 0.270)
+        case .clayAsh:
+            Color(red: 0.236, green: 0.210, blue: 0.186)
+        case .lichenMist:
+            Color(red: 0.170, green: 0.228, blue: 0.198)
         case .flexoki:
             Color(red: 0.972, green: 0.952, blue: 0.904)
         case .aurora:
@@ -269,6 +313,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color(red: 0.136, green: 0.132, blue: 0.126)
         case .blueHour:
             Color(red: 0.096, green: 0.122, blue: 0.160)
+        case .stoneVeil:
+            Color(red: 0.166, green: 0.176, blue: 0.188)
+        case .harborFog:
+            Color(red: 0.118, green: 0.162, blue: 0.200)
+        case .clayAsh:
+            Color(red: 0.182, green: 0.160, blue: 0.142)
+        case .lichenMist:
+            Color(red: 0.122, green: 0.164, blue: 0.142)
         case .flexoki:
             Color(red: 0.988, green: 0.968, blue: 0.920)
         case .aurora:
@@ -304,6 +356,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             "#232220"
         case .blueHour:
             "#181f29"
+        case .stoneVeil:
+            "#2a2d30"
+        case .harborFog:
+            "#1e2933"
+        case .clayAsh:
+            "#2e2925"
+        case .lichenMist:
+            "#1f2a24"
         case .flexoki:
             "#fcf7eb"
         case .aurora:
@@ -358,6 +418,30 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
                 Color(red: 0.180, green: 0.225, blue: 0.292),
                 Color(red: 0.128, green: 0.158, blue: 0.210),
                 Color(red: 0.074, green: 0.092, blue: 0.128)
+            ]
+        case .stoneVeil:
+            [
+                Color(red: 0.300, green: 0.318, blue: 0.340),
+                Color(red: 0.226, green: 0.242, blue: 0.266),
+                Color(red: 0.150, green: 0.162, blue: 0.182)
+            ]
+        case .harborFog:
+            [
+                Color(red: 0.260, green: 0.330, blue: 0.386),
+                Color(red: 0.190, green: 0.260, blue: 0.315),
+                Color(red: 0.118, green: 0.164, blue: 0.206)
+            ]
+        case .clayAsh:
+            [
+                Color(red: 0.348, green: 0.294, blue: 0.250),
+                Color(red: 0.266, green: 0.222, blue: 0.190),
+                Color(red: 0.174, green: 0.150, blue: 0.130)
+            ]
+        case .lichenMist:
+            [
+                Color(red: 0.260, green: 0.326, blue: 0.286),
+                Color(red: 0.190, green: 0.258, blue: 0.220),
+                Color(red: 0.122, green: 0.166, blue: 0.142)
             ]
         case .flexoki:
             [
@@ -434,6 +518,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color(red: 0.64, green: 0.55, blue: 0.44).opacity(0.080)
         case .blueHour:
             Color(red: 0.34, green: 0.58, blue: 0.86).opacity(0.095)
+        case .stoneVeil:
+            Color(red: 0.58, green: 0.64, blue: 0.72).opacity(0.080)
+        case .harborFog:
+            Color(red: 0.38, green: 0.66, blue: 0.86).opacity(0.095)
+        case .clayAsh:
+            Color(red: 0.74, green: 0.50, blue: 0.34).opacity(0.085)
+        case .lichenMist:
+            Color(red: 0.42, green: 0.70, blue: 0.48).opacity(0.085)
         case .flexoki:
             Color(red: 0.98, green: 0.74, blue: 0.34).opacity(0.15)
         case .aurora:
@@ -469,6 +561,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color(red: 0.168, green: 0.160, blue: 0.150).opacity(0.965)
         case .blueHour:
             Color(red: 0.120, green: 0.148, blue: 0.190).opacity(0.965)
+        case .stoneVeil:
+            Color(red: 0.190, green: 0.202, blue: 0.218).opacity(0.968)
+        case .harborFog:
+            Color(red: 0.145, green: 0.196, blue: 0.240).opacity(0.968)
+        case .clayAsh:
+            Color(red: 0.210, green: 0.184, blue: 0.162).opacity(0.968)
+        case .lichenMist:
+            Color(red: 0.154, green: 0.202, blue: 0.174).opacity(0.968)
         case .flexoki:
             Color(red: 0.930, green: 0.900, blue: 0.835).opacity(0.90)
         case .aurora:
@@ -504,6 +604,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color(red: 0.205, green: 0.196, blue: 0.184).opacity(0.965)
         case .blueHour:
             Color(red: 0.155, green: 0.188, blue: 0.238).opacity(0.965)
+        case .stoneVeil:
+            Color(red: 0.230, green: 0.244, blue: 0.262).opacity(0.968)
+        case .harborFog:
+            Color(red: 0.178, green: 0.238, blue: 0.286).opacity(0.968)
+        case .clayAsh:
+            Color(red: 0.250, green: 0.220, blue: 0.194).opacity(0.968)
+        case .lichenMist:
+            Color(red: 0.186, green: 0.238, blue: 0.206).opacity(0.968)
         case .flexoki:
             Color(red: 0.956, green: 0.924, blue: 0.862).opacity(0.94)
         case .aurora:
@@ -555,6 +663,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color(red: 0.184, green: 0.176, blue: 0.166).opacity(0.980)
         case .blueHour:
             Color(red: 0.138, green: 0.166, blue: 0.214).opacity(0.980)
+        case .stoneVeil:
+            Color(red: 0.216, green: 0.230, blue: 0.248).opacity(0.982)
+        case .harborFog:
+            Color(red: 0.166, green: 0.222, blue: 0.270).opacity(0.982)
+        case .clayAsh:
+            Color(red: 0.236, green: 0.206, blue: 0.180).opacity(0.982)
+        case .lichenMist:
+            Color(red: 0.174, green: 0.226, blue: 0.196).opacity(0.982)
         case .flexoki:
             Color(red: 0.966, green: 0.940, blue: 0.884).opacity(0.965)
         case .aurora:
@@ -590,6 +706,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color(red: 0.62, green: 0.54, blue: 0.44).opacity(0.048)
         case .blueHour:
             Color(red: 0.34, green: 0.54, blue: 0.80).opacity(0.054)
+        case .stoneVeil:
+            Color(red: 0.58, green: 0.64, blue: 0.72).opacity(0.050)
+        case .harborFog:
+            Color(red: 0.36, green: 0.62, blue: 0.82).opacity(0.056)
+        case .clayAsh:
+            Color(red: 0.70, green: 0.50, blue: 0.36).opacity(0.052)
+        case .lichenMist:
+            Color(red: 0.40, green: 0.66, blue: 0.46).opacity(0.052)
         case .flexoki:
             Color(red: 0.62, green: 0.52, blue: 0.38).opacity(0.050)
         case .aurora:
@@ -615,7 +739,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingControlFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.075)
         default:
             Color.white.opacity(0.50)
@@ -624,7 +748,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingControlStrongFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.115)
         default:
             Color.white.opacity(0.68)
@@ -643,6 +767,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color.white.opacity(0.112)
         case .blueHour:
             Color(red: 0.58, green: 0.74, blue: 1.0).opacity(0.135)
+        case .stoneVeil:
+            Color.white.opacity(0.125)
+        case .harborFog:
+            Color(red: 0.58, green: 0.78, blue: 0.94).opacity(0.145)
+        case .clayAsh:
+            Color(red: 0.86, green: 0.68, blue: 0.52).opacity(0.135)
+        case .lichenMist:
+            Color(red: 0.62, green: 0.84, blue: 0.64).opacity(0.135)
         case .flexoki:
             Color(red: 0.42, green: 0.31, blue: 0.18).opacity(0.14)
         case .aurora:
@@ -682,6 +814,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color(red: 0.70, green: 0.62, blue: 0.52)
         case .blueHour:
             Color(red: 0.46, green: 0.64, blue: 0.88)
+        case .stoneVeil:
+            Color(red: 0.66, green: 0.70, blue: 0.76)
+        case .harborFog:
+            Color(red: 0.50, green: 0.72, blue: 0.88)
+        case .clayAsh:
+            Color(red: 0.76, green: 0.60, blue: 0.46)
+        case .lichenMist:
+            Color(red: 0.56, green: 0.74, blue: 0.56)
         case .flexoki:
             Color(red: 0.52, green: 0.43, blue: 0.30)
         case .aurora:
@@ -707,7 +847,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingSelectedFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.090)
         default:
             Color.black.opacity(0.060)
@@ -716,7 +856,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingHoverFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.055)
         default:
             Color.black.opacity(0.038)
@@ -725,7 +865,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingSelectedStroke: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.145)
         default:
             Color.black.opacity(0.135)
@@ -744,6 +884,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color.white.opacity(0.094)
         case .blueHour:
             Color(red: 0.58, green: 0.74, blue: 1.0).opacity(0.125)
+        case .stoneVeil:
+            Color.white.opacity(0.112)
+        case .harborFog:
+            Color(red: 0.56, green: 0.76, blue: 0.94).opacity(0.140)
+        case .clayAsh:
+            Color(red: 0.84, green: 0.66, blue: 0.50).opacity(0.130)
+        case .lichenMist:
+            Color(red: 0.58, green: 0.78, blue: 0.58).opacity(0.128)
         case .flexoki:
             Color(red: 0.42, green: 0.31, blue: 0.18).opacity(0.16)
         case .aurora:
@@ -769,7 +917,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellSelectedFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.085)
         default:
             Color.black.opacity(0.070)
@@ -778,7 +926,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellHoverFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.055)
         default:
             Color.black.opacity(0.045)
@@ -787,7 +935,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellControlFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.052)
         default:
             Color.black.opacity(0.038)
@@ -800,7 +948,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellChromeText: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color(red: 0.894, green: 0.918, blue: 0.953)
         case .flexoki:
             Color(red: 0.165, green: 0.135, blue: 0.095)
@@ -821,7 +969,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellChromeTextMuted: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .midnightGlass, .tokyoNight, .forestLab:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color(red: 0.494, green: 0.537, blue: 0.612)
         default:
             shellChromeText.opacity(0.58)
@@ -840,6 +988,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color.white.opacity(0.155)
         case .blueHour:
             Color(red: 0.52, green: 0.70, blue: 1.0).opacity(0.260)
+        case .stoneVeil:
+            Color.white.opacity(0.190)
+        case .harborFog:
+            Color(red: 0.56, green: 0.78, blue: 0.98).opacity(0.280)
+        case .clayAsh:
+            Color(red: 0.88, green: 0.66, blue: 0.48).opacity(0.250)
+        case .lichenMist:
+            Color(red: 0.56, green: 0.82, blue: 0.58).opacity(0.240)
         case .flexoki:
             Color(red: 0.18, green: 0.12, blue: 0.08).opacity(0.70)
         case .aurora:
@@ -875,6 +1031,14 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             Color(red: 0.72, green: 0.58, blue: 0.42)
         case .blueHour:
             Color(red: 0.42, green: 0.62, blue: 0.92)
+        case .stoneVeil:
+            Color(red: 0.66, green: 0.70, blue: 0.78)
+        case .harborFog:
+            Color(red: 0.46, green: 0.70, blue: 0.88)
+        case .clayAsh:
+            Color(red: 0.78, green: 0.54, blue: 0.36)
+        case .lichenMist:
+            Color(red: 0.48, green: 0.72, blue: 0.48)
         case .flexoki:
             Color(red: 0.75, green: 0.50, blue: 0.16)
         case .aurora:
@@ -1024,6 +1188,106 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             cursor-text = #182333
             selection-background = #314966
             selection-foreground = #f3f9ff
+            """
+        case .stoneVeil:
+            """
+            palette = 0=#1f2226
+            palette = 1=#e18489
+            palette = 2=#9ecb8d
+            palette = 3=#d9bc76
+            palette = 4=#92b6df
+            palette = 5=#c3a7d8
+            palette = 6=#8bc9c2
+            palette = 7=#dfe3e7
+            palette = 8=#707780
+            palette = 9=#f09aa0
+            palette = 10=#b7dca7
+            palette = 11=#e6cb88
+            palette = 12=#a8c6ea
+            palette = 13=#d0b9e4
+            palette = 14=#a1d9d2
+            palette = 15=#f5f7fa
+            background = #2a2d30
+            foreground = #edf0f3
+            cursor-color = #a8b0bd
+            cursor-text = #2a2d30
+            selection-background = #474d55
+            selection-foreground = #f5f7fa
+            """
+        case .harborFog:
+            """
+            palette = 0=#17232c
+            palette = 1=#e8878a
+            palette = 2=#96cfa8
+            palette = 3=#d9bf78
+            palette = 4=#87bde8
+            palette = 5=#bcaee3
+            palette = 6=#80d4dd
+            palette = 7=#dce8ef
+            palette = 8=#647784
+            palette = 9=#f29fa2
+            palette = 10=#b0e2bd
+            palette = 11=#e7cf8a
+            palette = 12=#9fcaf0
+            palette = 13=#cbc0ec
+            palette = 14=#9be4ea
+            palette = 15=#f4fbff
+            background = #1e2933
+            foreground = #e6f1f7
+            cursor-color = #87c7ea
+            cursor-text = #1e2933
+            selection-background = #3a5364
+            selection-foreground = #f4fbff
+            """
+        case .clayAsh:
+            """
+            palette = 0=#211b18
+            palette = 1=#e58b78
+            palette = 2=#a8c989
+            palette = 3=#d7b66d
+            palette = 4=#90add0
+            palette = 5=#c7a2c2
+            palette = 6=#8fc8bd
+            palette = 7=#e6d8cc
+            palette = 8=#7a6e65
+            palette = 9=#f2a28e
+            palette = 10=#bddc9f
+            palette = 11=#e4c582
+            palette = 12=#a6bedc
+            palette = 13=#d5b5d0
+            palette = 14=#a5d8ce
+            palette = 15=#f8efe8
+            background = #2e2925
+            foreground = #efe6dc
+            cursor-color = #d09a6f
+            cursor-text = #2e2925
+            selection-background = #54483f
+            selection-foreground = #f8efe8
+            """
+        case .lichenMist:
+            """
+            palette = 0=#172019
+            palette = 1=#df8577
+            palette = 2=#91c889
+            palette = 3=#d3bb72
+            palette = 4=#8db8d8
+            palette = 5=#bba5d1
+            palette = 6=#85cfc0
+            palette = 7=#dce9df
+            palette = 8=#66766b
+            palette = 9=#ee9d90
+            palette = 10=#abe0a4
+            palette = 11=#e2cc88
+            palette = 12=#a3c9e6
+            palette = 13=#cab8de
+            palette = 14=#9ce0d2
+            palette = 15=#f1fbf3
+            background = #1f2a24
+            foreground = #e6f1e8
+            cursor-color = #8fcf8a
+            cursor-text = #1f2a24
+            selection-background = #3d5343
+            selection-foreground = #f1fbf3
             """
         case .flexoki:
             """

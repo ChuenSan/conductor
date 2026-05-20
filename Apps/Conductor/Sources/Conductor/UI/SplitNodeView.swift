@@ -778,7 +778,7 @@ private struct TerminalPaneView: View {
                 if let paneDropTarget {
                     TerminalDetachDropOverlay(target: paneDropTarget)
                         .allowsHitTesting(false)
-                        .transition(.opacity)
+                        .transition(ConductorMotion.dropPreviewTransition)
                 }
 
                 TerminalPaneFlashOverlay(
@@ -789,6 +789,7 @@ private struct TerminalPaneView: View {
             }
         }
         .clipped()
+        .animation(model.shellAnimation(ConductorMotion.dragPreview), value: paneDropTarget)
         .onChange(of: model.paneFlashTokens[pane.id] ?? 0) { _, token in
             guard token > 0 else { return }
             triggerFocusFlash()
@@ -959,6 +960,7 @@ private struct StableTerminalTabStrip: View {
     @Binding var highlightedDropTabID: TerminalID?
     @Namespace private var selectionNamespace
     @State private var scrollTargetID: TerminalID?
+    @State private var visualSelectedTabID: TerminalID?
 
     private let tabSpacing: CGFloat = 4
     private let tabEdgePadding: CGFloat = 0
@@ -972,7 +974,7 @@ private struct StableTerminalTabStrip: View {
             HStack(spacing: tabSpacing) {
                 ForEach(pane.tabs) { tab in
                     tabView(for: tab)
-                        .transition(.identity)
+                        .transition(ConductorMotion.tabTransition)
                 }
             }
             .padding(.horizontal, tabEdgePadding)
@@ -990,17 +992,23 @@ private struct StableTerminalTabStrip: View {
             )
         )
         .onAppear {
+            setVisualSelection(pane.selectedTabID, animated: false)
             syncScrollTarget(animated: false)
         }
         .onChange(of: pane.selectedTabID) {
+            setVisualSelection(pane.selectedTabID, animated: true)
             syncScrollTarget(animated: true)
         }
         .onChange(of: tabIDs) {
+            if visualSelectedTabID == nil || !tabIDs.contains(visualSelectedTabID!) {
+                setVisualSelection(pane.selectedTabID, animated: false)
+            }
             syncScrollTarget(animated: true)
         }
         .frame(height: model.appearance.density.paneTabHeight)
         .clipped()
         .mask(ConductorHorizontalFadeMask())
+        .animation(model.shellAnimation(ConductorMotion.list), value: tabIDs)
     }
 
     private func syncScrollTarget(animated: Bool) {
@@ -1019,13 +1027,18 @@ private struct StableTerminalTabStrip: View {
         TerminalTabButton(
             tab: tab,
             isSelected: tab.id == pane.selectedTabID,
+            visuallySelected: visualSelectedTabID == tab.id,
             paneFocused: paneFocused,
             isDropTarget: highlightedDropTabID == tab.id,
             metadata: model.metadataByTerminalID[tab.id],
             unreadCount: model.notifications.snapshot.unreadCount(for: tab.id),
             selectionNamespace: selectionNamespace,
             model: model,
-            paneID: pane.id
+            paneID: pane.id,
+            isDragging: model.isTerminalTabDragging(tab.id),
+            onVisualSelect: {
+                setVisualSelection(tab.id, animated: true)
+            }
         )
         .frame(width: model.appearance.density.paneTabWidth)
         .id(tab.id)
@@ -1038,6 +1051,17 @@ private struct StableTerminalTabStrip: View {
                 model: model
             )
         )
+    }
+
+    private func setVisualSelection(_ terminalID: TerminalID, animated: Bool) {
+        let update = {
+            visualSelectedTabID = terminalID
+        }
+        if animated {
+            model.performShellMotion(ConductorMotion.selectionGlide, update)
+        } else {
+            ConductorMotion.withoutAnimation(update)
+        }
     }
 }
 
@@ -1192,13 +1216,14 @@ private struct PaneBarButton: View {
                 hovering = value
             }
         }
-        .help(help)
+        .conductorTooltip(help, enabled: !showsTitle)
     }
 }
 
 private struct TerminalTabButton: View {
     let tab: TerminalTabState
     let isSelected: Bool
+    let visuallySelected: Bool
     let paneFocused: Bool
     let isDropTarget: Bool
     let metadata: TerminalDisplayMetadata?
@@ -1206,6 +1231,8 @@ private struct TerminalTabButton: View {
     let selectionNamespace: Namespace.ID
     @ObservedObject var model: ConductorWindowModel
     let paneID: PaneID
+    let isDragging: Bool
+    let onVisualSelect: () -> Void
     @State private var editingTitle = false
     @State private var titleDraft = ""
     @State private var hovering = false
@@ -1314,6 +1341,7 @@ private struct TerminalTabButton: View {
                 .equatable()
                 .contentShape(Rectangle())
                 .onTapGesture {
+                    onVisualSelect()
                     ConductorMotion.withoutAnimation {
                         model.selectTab(tab.id, in: paneID)
                     }
@@ -1353,12 +1381,14 @@ private struct TerminalTabButton: View {
         )
         .background {
             let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
-            if isSelected {
-                shape
-                    .fill(selectedFill)
-            } else {
+            ZStack {
                 shape
                     .fill(tabFill)
+                if visuallySelected {
+                    shape
+                        .fill(selectedFill)
+                        .matchedGeometryEffect(id: "terminal-tab-selection", in: selectionNamespace)
+                }
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
@@ -1366,10 +1396,19 @@ private struct TerminalTabButton: View {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
                 .stroke(tabStroke, lineWidth: isDropTarget ? 1.25 : 1)
         }
+        .opacity(isDragging ? 0.74 : 1)
+        .scaleEffect(isDragging ? 0.986 : 1)
+        .shadow(
+            color: theme.usesDarkChrome ? Color.black.opacity(isDragging ? 0.24 : 0) : Color.black.opacity(isDragging ? 0.11 : 0),
+            radius: isDragging ? 9 : 0,
+            x: 0,
+            y: isDragging ? 4 : 0
+        )
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.micro, value: isDropTarget)
         .animation(ConductorMotion.selection, value: editingTitle)
-        .animation(ConductorMotion.emphasized, value: unreadCount)
+        .animation(ConductorMotion.attention, value: unreadCount)
+        .animation(ConductorMotion.dragPreview, value: isDragging)
         .onHover { value in
             ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value

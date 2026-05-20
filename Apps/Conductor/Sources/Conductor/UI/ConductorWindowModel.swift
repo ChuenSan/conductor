@@ -208,7 +208,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var terminalSearchTargetID: TerminalID?
     @Published private(set) var paneFlashTokens: [PaneID: UInt64] = [:]
     @Published private(set) var terminalTabDropTargetByPaneID: [PaneID: TerminalTabDropTarget] = [:]
-    private var activeTerminalTabDragID: TerminalID?
+    @Published private(set) var activeTerminalTabDragID: TerminalID?
     private var terminalTabDragGeneration: UInt64 = 0
 
     var onNotificationPanelVisibilityChange: ((Bool) -> Void)?
@@ -407,6 +407,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         activeTerminalTabDragID != nil
     }
 
+    func isTerminalTabDragging(_ terminalID: TerminalID) -> Bool {
+        activeTerminalTabDragID == terminalID
+    }
+
     func setTerminalTabDropTarget(for terminalID: TerminalID, target: TerminalTabDropTarget?) {
         guard let paneID = workspace.paneID(containing: terminalID) else { return }
         if let target {
@@ -503,6 +507,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         if let surface = surfaces[tab.id] {
             return surface
         }
+        ConductorLog.performance.debug("surface create requested terminal=\(tab.id.description, privacy: .public) activeBefore=\(self.surfaces.count, privacy: .public)")
         let surface = TerminalSurface(
             id: tab.id,
             theme: theme,
@@ -942,6 +947,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @discardableResult
     func showTerminalContextMenu(terminalID: TerminalID, event: NSEvent, in view: NSView) -> Bool {
         guard let target = terminalContextMenuTarget(for: terminalID) else { return false }
+        ConductorLog.performance.debug("context menu terminal=\(terminalID.description, privacy: .public) workspace=\(target.workspaceID.description, privacy: .public) pane=\(target.paneID.description, privacy: .public)")
         focusTerminal(terminalID)
         let targetDirectoryURL = workingDirectoryURL(for: terminalID)
 
@@ -1050,6 +1056,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspaceID: WorkspaceID,
         window: NSWindow?
     ) -> Bool {
+        ConductorLog.performance.debug("context menu action=\(String(describing: action), privacy: .public) terminal=\(terminalID.description, privacy: .public) workspace=\(workspaceID.description, privacy: .public)")
         switch action {
         case .renameTerminal:
             promptRenameTerminal(terminalID, window: window)
@@ -1470,6 +1477,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         guard let notification = notifications.records.first(where: { $0.id == notificationID }) else {
             return false
         }
+        ConductorLog.performance.debug("open notification id=\(notificationID.uuidString, privacy: .public) terminal=\(notification.terminalID.description, privacy: .public)")
         focusTerminal(notification.terminalID)
         markNotificationRead(notificationID)
         refreshSurfaceAfterNavigation(notification.terminalID)
@@ -1488,6 +1496,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         guard notifications.snapshot.unreadCount(for: terminalID) > 0 || metadata(for: terminalID).unreadCount > 0 else {
             return
         }
+        ConductorLog.performance.debug("mark notifications read terminal=\(terminalID.description, privacy: .public)")
         var next = notifications
         if next.markTerminalRead(terminalID) {
             notifications = next
@@ -1681,6 +1690,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func closeSurfaces(for terminalIDs: [TerminalID]) {
+        if !terminalIDs.isEmpty {
+            ConductorLog.performance.debug("surface close requested count=\(terminalIDs.count, privacy: .public) activeBefore=\(self.surfaces.count, privacy: .public)")
+        }
         if let targetID = terminalSearchTargetID, terminalIDs.contains(targetID) {
             terminalSearchVisible = false
             terminalSearchQuery = ""

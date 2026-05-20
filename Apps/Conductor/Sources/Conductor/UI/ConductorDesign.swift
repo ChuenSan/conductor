@@ -628,6 +628,10 @@ enum ConductorMotion {
         navigation
     }
 
+    static var selectionGlide: Animation? {
+        magnetic(duration: 0.155, bounce: 0.016)
+    }
+
     static var navigation: Animation? {
         magnetic(duration: 0.125, bounce: 0.018)
     }
@@ -656,6 +660,14 @@ enum ConductorMotion {
         magnetic(duration: 0.19, bounce: 0.026)
     }
 
+    static var attention: Animation? {
+        reducedMotion ? nil : .smooth(duration: 0.165, extraBounce: 0.024)
+    }
+
+    static var dragPreview: Animation? {
+        reducedMotion ? nil : .easeOut(duration: 0.075)
+    }
+
     static var panelTransition: AnyTransition {
         reducedMotion ? .identity : .modifier(
             active: ConductorPanelRevealModifier(opacity: 0, scale: 0.988, y: -4, blur: 2),
@@ -676,6 +688,17 @@ enum ConductorMotion {
 
     static var rowTransition: AnyTransition {
         reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.996, anchor: .center))
+    }
+
+    static var notificationRowTransition: AnyTransition {
+        reducedMotion ? .identity : .asymmetric(
+            insertion: .opacity.combined(with: .offset(y: -4)),
+            removal: .opacity.combined(with: .scale(scale: 0.992, anchor: .center))
+        )
+    }
+
+    static var dropPreviewTransition: AnyTransition {
+        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.992, anchor: .center))
     }
 
     static func setReducedMotion(_ value: Bool) {
@@ -770,6 +793,137 @@ struct ConductorMagneticGlow: View {
     }
 }
 
+private struct ConductorTooltipHost: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        view.toolTip = text
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        nsView.toolTip = text
+    }
+}
+
+struct ConductorTooltipCandidate: Identifiable {
+    let id: String
+    let text: String
+    let anchor: Anchor<CGRect>
+}
+
+struct ConductorTooltipPreferenceKey: PreferenceKey {
+    static let defaultValue: [ConductorTooltipCandidate] = []
+
+    static func reduce(value: inout [ConductorTooltipCandidate], nextValue: () -> [ConductorTooltipCandidate]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+private struct ConductorTooltipModifier: ViewModifier {
+    let text: String
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .help(text)
+            .accessibilityLabel(Text(text))
+            .background(ConductorTooltipHost(text: text))
+            .onHover { value in
+                ConductorMotion.perform(ConductorMotion.hover) {
+                    hovering = value
+                }
+            }
+            .anchorPreference(key: ConductorTooltipPreferenceKey.self, value: .bounds) { anchor in
+                hovering ? [ConductorTooltipCandidate(id: text, text: text, anchor: anchor)] : []
+            }
+    }
+}
+
+struct ConductorTooltipOverlay: View {
+    let candidates: [ConductorTooltipCandidate]
+    let proxy: GeometryProxy
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        if let candidate = candidates.last {
+            let rect = proxy[candidate.anchor]
+            let placement = placement(for: candidate.text, source: rect, container: proxy.size)
+            HStack(spacing: 0) {
+                if placement.isRight {
+                    tooltipPointer
+                }
+                Text(candidate.text)
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(tooltipTextColor)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(tooltipFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.34 : 0.16), radius: 10, y: 5)
+                if !placement.isRight {
+                    tooltipPointer
+                }
+            }
+            .position(x: placement.x, y: placement.y)
+            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            .animation(ConductorMotion.micro, value: candidate.text)
+            .allowsHitTesting(false)
+        }
+    }
+
+    private var tooltipFill: Color {
+        theme.usesDarkChrome ? Color.white.opacity(0.92) : Color(red: 0.12, green: 0.13, blue: 0.15).opacity(0.94)
+    }
+
+    private var tooltipTextColor: Color {
+        theme.usesDarkChrome ? Color.black.opacity(0.86) : Color.white.opacity(0.96)
+    }
+
+    private var tooltipPointer: some View {
+        Rectangle()
+            .fill(tooltipFill)
+            .frame(width: 9, height: 9)
+            .rotationEffect(.degrees(45))
+            .offset(x: 0)
+    }
+
+    private func placement(
+        for text: String,
+        source rect: CGRect,
+        container size: CGSize
+    ) -> (x: CGFloat, y: CGFloat, isRight: Bool) {
+        let textWidth = min(max(CGFloat(text.count) * 7 + 26, 58), 230)
+        let totalWidth = textWidth + 9
+        let margin: CGFloat = 8
+        let gap: CGFloat = 10
+        let rightX = rect.maxX + gap + totalWidth / 2
+        let leftX = rect.minX - gap - totalWidth / 2
+        let isRight = rightX + totalWidth / 2 <= size.width - margin || leftX - totalWidth / 2 < margin
+        let x = isRight ? min(rightX, size.width - margin - totalWidth / 2) : max(leftX, margin + totalWidth / 2)
+        let y = min(max(rect.midY, margin + 14), size.height - margin - 14)
+        return (x, y, isRight)
+    }
+}
+
+extension View {
+    func conductorTooltip(_ text: String) -> some View {
+        modifier(ConductorTooltipModifier(text: text))
+    }
+
+    @ViewBuilder
+    func conductorTooltip(_ text: String, enabled: Bool) -> some View {
+        if enabled {
+            conductorTooltip(text)
+        } else {
+            help(text)
+        }
+    }
+}
+
 struct ConductorIconButton: View {
     let systemImage: String
     let help: String
@@ -836,7 +990,7 @@ struct ConductorIconButton: View {
         .onHover { hovering = $0 }
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)
-        .help(help)
+        .conductorTooltip(help, enabled: title == nil)
     }
 }
 

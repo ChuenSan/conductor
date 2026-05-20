@@ -19,6 +19,7 @@ Before UI work, read [High Performance Terminal Roadmap](../guides/high-performa
 | [Directory Structure](./directory-structure.md) | Module organization and file layout | To fill |
 | [Component Guidelines](./component-guidelines.md) | SwiftUI/AppKit component boundaries | Filled: initial route |
 | [Hook Guidelines](./hook-guidelines.md) | Custom hooks, data fetching patterns | To fill |
+| [Motion Language](./motion-language.md) | Product motion map and interaction animation contracts | Filled: initial motion contract |
 | [State Management](./state-management.md) | State boundaries for high-frequency terminal data | Filled: initial route |
 | [Quality Guidelines](./quality-guidelines.md) | UI performance and review standards | Filled: initial route |
 | [Type Safety](./type-safety.md) | Type patterns, validation | To fill |

@@ -91,7 +91,7 @@ final class ConductorWindow: NSWindow {
         guard event.window === self else { return false }
         let location = event.locationInWindow
         let size = frame.size
-        let borderHitWidth: CGFloat = 18
+        let borderHitWidth: CGFloat = 6
         return location.x <= borderHitWidth ||
             location.x >= size.width - borderHitWidth ||
             location.y <= borderHitWidth ||
@@ -156,6 +156,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     private var shellKeyMonitor: Any?
     private var cancellables = Set<AnyCancellable>()
     private let model = ConductorWindowModel()
+    private let mainThreadWatchdog = ConductorMainThreadWatchdog()
     private var didStart = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -187,6 +188,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         }
         installShellKeyMonitor()
         installAgentHookObserver()
+        mainThreadWatchdog.start()
         GhosttyAppRuntime.shared.actionDelegate = model
         let contentContainer = NSView()
         contentContainer.wantsLayer = true
@@ -236,6 +238,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         if let shellKeyMonitor {
             NSEvent.removeMonitor(shellKeyMonitor)
         }
+        mainThreadWatchdog.stop()
         model.closeAllSurfaces()
         GhosttyAppRuntime.shared.actionDelegate = nil
     }

@@ -68,6 +68,12 @@ struct ConductorRootView: View {
                 }
             }
         }
+        .overlayPreferenceValue(ConductorTooltipPreferenceKey.self) { candidates in
+            GeometryReader { proxy in
+                ConductorTooltipOverlay(candidates: candidates, proxy: proxy)
+            }
+            .allowsHitTesting(false)
+        }
         .animation(model.shellAnimation(ConductorMotion.panel), value: model.commandPaletteVisible)
         .animation(model.shellAnimation(ConductorMotion.panel), value: model.settingsPanelVisible)
         .animation(model.shellAnimation(ConductorMotion.panel), value: model.workspaceOverviewVisible)
@@ -204,6 +210,8 @@ private struct TerminalContextSearchBar: View {
                 .foregroundStyle(theme.shellChromeText.opacity(0.52))
                 .monospacedDigit()
                 .frame(minWidth: 48, alignment: .trailing)
+                .contentTransition(.opacity)
+                .animation(ConductorMotion.feedback, value: matchText)
 
             TerminalSearchIconButton(
                 systemImage: "chevron.up",
@@ -414,7 +422,7 @@ private struct TerminalSearchIconButton: View {
         .disabled(disabled)
         .onHover { hovering = $0 }
         .animation(ConductorMotion.hover, value: hovering)
-        .help(help)
+        .conductorTooltip(help)
     }
 }
 
@@ -815,6 +823,7 @@ private struct CommandPaletteView: View {
     @ObservedObject var model: ConductorWindowModel
     @State private var query = ""
     @State private var selectedCommandID: String?
+    @Namespace private var commandSelectionNamespace
     @FocusState private var searchFocused: Bool
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
@@ -933,6 +942,7 @@ private struct CommandPaletteView: View {
                             CommandButton(
                                 command: command,
                                 selected: command.id == selectedCommandID,
+                                selectionNamespace: commandSelectionNamespace,
                                 action: command.action,
                                 onHover: {
                                     if !command.disabled {
@@ -1337,6 +1347,7 @@ private struct CommandSectionTitle: View {
 private struct CommandButton: View {
     let command: CommandPaletteItem
     var selected = false
+    let selectionNamespace: Namespace.ID
     let action: () -> Void
     var onHover: () -> Void = {}
     @State private var hovering = false
@@ -1378,7 +1389,7 @@ private struct CommandButton: View {
             }
             .padding(.horizontal, 8)
             .frame(height: command.disabledReason != nil && command.disabled ? 42 : 36)
-            .background(rowFill)
+            .background(rowBackground)
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
             .overlay {
@@ -1389,7 +1400,7 @@ private struct CommandButton: View {
         .buttonStyle(.plain)
         .disabled(command.disabled)
         .opacity(command.disabled ? 0.62 : 1)
-        .animation(ConductorMotion.selection, value: selected)
+        .animation(ConductorMotion.selectionGlide, value: selected)
         .animation(ConductorMotion.hover, value: hovering)
         .onHover { value in
             ConductorMotion.perform(ConductorMotion.hover) {
@@ -1401,14 +1412,17 @@ private struct CommandButton: View {
         }
     }
 
-    private var rowFill: Color {
-        if selected {
-            return theme.floatingSelectedFill
+    private var rowBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+        return ZStack {
+            shape
+                .fill(hovering ? theme.floatingHoverFill : theme.floatingControlFill.opacity(0.50))
+            if selected {
+                shape
+                    .fill(theme.floatingSelectedFill)
+                    .matchedGeometryEffect(id: "command-selection", in: selectionNamespace)
+            }
         }
-        if hovering {
-            return theme.floatingHoverFill
-        }
-        return theme.floatingControlFill.opacity(0.50)
     }
 
     private var iconColor: Color {
@@ -1429,6 +1443,7 @@ private struct CommandButton: View {
 private struct AppearanceSettingsPanel: View {
     @ObservedObject var model: ConductorWindowModel
     @State private var selectedSection: SettingsPanelSection = .themes
+    @Namespace private var settingsSelectionNamespace
     @Environment(\.conductorTheme) private var theme
 
     private let themeCardColumns = [
@@ -1488,9 +1503,10 @@ private struct AppearanceSettingsPanel: View {
                 ForEach(SettingsPanelSection.allCases) { section in
                     SettingsSidebarItem(
                         section: section,
-                        selected: selectedSection == section
+                        selected: selectedSection == section,
+                        selectionNamespace: settingsSelectionNamespace
                     ) {
-                        model.performShellMotion(ConductorMotion.selection) {
+                        model.performShellMotion(ConductorMotion.selectionGlide) {
                             selectedSection = section
                         }
                     }
@@ -1532,6 +1548,9 @@ private struct AppearanceSettingsPanel: View {
                 themeSettings
             }
         }
+        .id(selectedSection)
+        .transition(.opacity)
+        .animation(model.shellAnimation(ConductorMotion.feedback), value: selectedSection)
     }
 
     private var interfaceSettings: some View {
@@ -2088,6 +2107,7 @@ private extension AppearanceFontFamily {
 private struct SettingsSidebarItem: View {
     let section: SettingsPanelSection
     let selected: Bool
+    let selectionNamespace: Namespace.ID
     let action: () -> Void
     @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
@@ -2110,7 +2130,7 @@ private struct SettingsSidebarItem: View {
             }
             .padding(.horizontal, 7)
             .frame(height: 32)
-            .background(rowFill)
+            .background(rowBackground)
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
         }
@@ -2120,19 +2140,22 @@ private struct SettingsSidebarItem: View {
                 hovering = value
             }
         }
-        .animation(ConductorMotion.selection, value: selected)
+        .animation(ConductorMotion.selectionGlide, value: selected)
         .animation(ConductorMotion.hover, value: hovering)
         .help(section.title)
     }
 
-    private var rowFill: Color {
-        if selected {
-            return theme.floatingSelectedFill
+    private var rowBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+        return ZStack {
+            shape
+                .fill(hovering ? theme.floatingHoverFill : Color.clear)
+            if selected {
+                shape
+                    .fill(theme.floatingSelectedFill)
+                    .matchedGeometryEffect(id: "settings-section-selection", in: selectionNamespace)
+            }
         }
-        if hovering {
-            return theme.floatingHoverFill
-        }
-        return Color.clear
     }
 }
 
@@ -2744,7 +2767,12 @@ private struct WorkspaceOverviewPanel: View {
     }
 
     private func openWorkspace(_ workspaceID: WorkspaceID) {
-        model.selectWorkspace(workspaceID)
+        ConductorMotion.withoutAnimation {
+            model.selectWorkspace(workspaceID)
+        }
+        model.performShellMotion(ConductorMotion.panel) {
+            model.hideWorkspaceOverview()
+        }
     }
 
     private func focusSearchField() {
@@ -2840,9 +2868,17 @@ private struct WorkspaceOverviewCard: View {
                 onHover()
             }
         }
+        .scaleEffect(hovering ? 1.006 : 1)
+        .shadow(
+            color: Color.black.opacity(hovering ? (theme.usesDarkChrome ? 0.16 : 0.08) : 0),
+            radius: hovering ? 10 : 0,
+            x: 0,
+            y: hovering ? 5 : 0
+        )
         .animation(ConductorMotion.standard, value: selected)
         .animation(ConductorMotion.feedback, value: highlighted)
-        .animation(ConductorMotion.emphasized, value: unreadCount)
+        .animation(ConductorMotion.hover, value: hovering)
+        .animation(ConductorMotion.attention, value: unreadCount)
         .help("\(workspace.title) · \(workspace.panes.count) \(L("分屏", "panes")) · \(terminalCount) \(L("终端", "terminals"))")
     }
 
@@ -3066,7 +3102,7 @@ struct NotificationPanelView: View {
                                         model.clearNotification(notification.id)
                                     }
                                 )
-                                .transition(ConductorMotion.rowTransition)
+                                .transition(ConductorMotion.notificationRowTransition)
                             }
                         }
                         .padding(8)
@@ -3082,7 +3118,7 @@ struct NotificationPanelView: View {
             minHeight: ConductorTokens.Space.notificationPanelMinHeight
         )
         .animation(ConductorMotion.list, value: model.notifications.records.map(\.id))
-        .animation(ConductorMotion.emphasized, value: model.notifications.snapshot.unreadCount)
+        .animation(ConductorMotion.attention, value: model.notifications.snapshot.unreadCount)
     }
 
     private var notificationHeader: some View {
@@ -3236,7 +3272,7 @@ private struct NotificationRowView: View {
                 )
         }
         .animation(ConductorMotion.hover, value: hovering)
-        .animation(ConductorMotion.emphasized, value: unread)
+        .animation(ConductorMotion.attention, value: unread)
         .onHover { value in
             ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
@@ -3354,13 +3390,13 @@ private struct NotificationRowView: View {
 
 private struct WindowControlButtons: View {
     private let controls: [WindowControl] = [
-        WindowControl(id: "close", color: Color(red: 1.0, green: 0.33, blue: 0.32), accessibilityLabel: "关闭窗口") {
+        WindowControl(id: "close", color: Color(red: 1.0, green: 0.33, blue: 0.32), accessibilityLabel: L("关闭窗口", "Close Window")) {
             NSApp.keyWindow?.performClose(nil)
         },
-        WindowControl(id: "minimize", color: Color(red: 1.0, green: 0.75, blue: 0.10), accessibilityLabel: "最小化窗口") {
+        WindowControl(id: "minimize", color: Color(red: 1.0, green: 0.75, blue: 0.10), accessibilityLabel: L("最小化窗口", "Minimize Window")) {
             NSApp.keyWindow?.performMiniaturize(nil)
         },
-        WindowControl(id: "fullscreen", color: Color(red: 0.14, green: 0.78, blue: 0.27), accessibilityLabel: "切换全屏") {
+        WindowControl(id: "fullscreen", color: Color(red: 0.14, green: 0.78, blue: 0.27), accessibilityLabel: L("切换全屏", "Toggle Full Screen")) {
             NSApp.keyWindow?.toggleFullScreen(nil)
         }
     ]
@@ -3398,14 +3434,12 @@ private struct ConductorSidebar: View {
     @State private var renamingWorkspaceID: WorkspaceID?
     @State private var workspaceTitleDraft = ""
     @State private var sidebarToggleHovering = false
+    @Namespace private var sidebarSelectionNamespace
+    @State private var visualSelectedSidebarWorkspaceID: WorkspaceID?
     @Environment(\.conductorFontScale) private var fontScale
 
     private var terminalCount: Int {
         model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
-    }
-
-    private var focusedTerminalTitle: String {
-        model.workspace.focusedPane?.selectedTab?.title ?? L("无", "None")
     }
 
     private var workspaceRows: [WorkspaceChromeDisplayModel] {
@@ -3423,6 +3457,10 @@ private struct ConductorSidebar: View {
         }
     }
 
+    private var workspaceIDs: [WorkspaceID] {
+        workspaceRows.map(\.id)
+    }
+
     private var sidebarHeaderHeight: CGFloat {
         model.sidebarVisible ? 54 : 82
     }
@@ -3433,8 +3471,10 @@ private struct ConductorSidebar: View {
 
             if model.sidebarVisible {
                 expandedSidebar
+                    .transition(.opacity)
             } else {
                 collapsedSidebar
+                    .transition(.opacity)
             }
         }
         .padding(.horizontal, model.sidebarVisible ? ConductorTokens.Space.sidebarX : 6)
@@ -3454,6 +3494,19 @@ private struct ConductorSidebar: View {
             .allowsHitTesting(false)
         }
         .clipShape(SidebarRailShape())
+        .animation(model.shellAnimation(ConductorMotion.layout), value: model.sidebarVisible)
+        .onAppear {
+            setVisualSidebarSelection(model.workspace.id, animated: false)
+        }
+        .onChange(of: model.workspace.id) {
+            setVisualSidebarSelection(model.workspace.id, animated: true)
+        }
+        .onChange(of: workspaceIDs) {
+            if visualSelectedSidebarWorkspaceID == nil || !workspaceIDs.contains(visualSelectedSidebarWorkspaceID!) {
+                setVisualSidebarSelection(model.workspace.id, animated: false)
+            }
+        }
+        .animation(model.shellAnimation(ConductorMotion.standard), value: model.theme)
     }
 
     @ViewBuilder
@@ -3482,10 +3535,8 @@ private struct ConductorSidebar: View {
 
     private var sidebarToggleButton: some View {
         Button {
-            withoutShellAnimation {
-                finishWorkspaceRenameIfNeeded()
-                model.sidebarVisible.toggle()
-            }
+            finishWorkspaceRenameIfNeeded()
+            model.sidebarVisible.toggle()
         } label: {
             Image(systemName: model.sidebarVisible ? "chevron.left" : "sidebar.left")
                 .font(.conductorSystem(size: 11.5, weight: .bold, scale: fontScale))
@@ -3498,7 +3549,7 @@ private struct ConductorSidebar: View {
         .onHover { value in
             sidebarToggleHovering = value
         }
-        .help(model.sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
+        .conductorTooltip(model.sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
     }
 
     private var sidebarToggleFill: Color {
@@ -3522,13 +3573,6 @@ private struct ConductorSidebar: View {
 
     private var expandedSidebarDock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SidebarDockStatusLine(
-                splitCount: model.workspace.panes.count,
-                terminalCount: terminalCount,
-                unreadCount: model.notifications.snapshot.unreadCount,
-                focusedTerminalTitle: focusedTerminalTitle
-            )
-
             HStack(spacing: 6) {
                 SidebarDockButton(icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
                     finishWorkspaceRenameIfNeeded()
@@ -3555,6 +3599,11 @@ private struct ConductorSidebar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 SidebarSectionTitle(L("工作区", "Workspaces"))
+                SidebarWorkspaceHeaderStats(
+                    splitCount: model.workspace.panes.count,
+                    terminalCount: terminalCount,
+                    unreadCount: model.notifications.snapshot.unreadCount
+                )
                 Spacer()
                 Button {
                     ConductorMotion.perform(ConductorMotion.list) {
@@ -3569,7 +3618,7 @@ private struct ConductorSidebar: View {
                         .contentShape(RoundedRectangle(cornerRadius: 5))
                 }
                 .buttonStyle(ConductorPressButtonStyle())
-                .help(L("新建工作区 Cmd-N", "New Workspace Cmd-N"))
+                .conductorTooltip(L("新建工作区 Cmd-N", "New Workspace Cmd-N"))
             }
             .padding(.trailing, 5)
 
@@ -3578,6 +3627,7 @@ private struct ConductorSidebar: View {
                     ForEach(workspaceRows) { row in
                         workspaceRow(for: row)
                             .id(row.id)
+                            .transition(ConductorMotion.rowTransition)
                     }
                 }
                 .padding(.vertical, 2)
@@ -3585,6 +3635,7 @@ private struct ConductorSidebar: View {
             .mask(ConductorVerticalFadeMask())
             .frame(minHeight: 72, maxHeight: .infinity)
             .animation(nil, value: model.workspace.id)
+            .animation(model.shellAnimation(ConductorMotion.list), value: workspaceIDs)
         }
     }
 
@@ -3665,11 +3716,14 @@ private struct ConductorSidebar: View {
             terminalCount: row.terminalCount,
             unreadCount: row.unreadCount,
             selected: row.selected,
+            visuallySelected: visualSelectedSidebarWorkspaceID == row.id,
+            selectionNamespace: sidebarSelectionNamespace,
             editing: renamingWorkspaceID == row.id,
             titleDraft: $workspaceTitleDraft,
             onCommitRename: commitWorkspaceRename,
             onCancelRename: cancelWorkspaceRename
         ) {
+            setVisualSidebarSelection(row.id, animated: true)
             finishWorkspaceRenameIfNeeded(except: row.id)
             withoutShellAnimation {
                 model.selectWorkspace(row.id)
@@ -3747,25 +3801,32 @@ private struct ConductorSidebar: View {
         renamingWorkspaceID = nil
     }
 
+    private func setVisualSidebarSelection(_ workspaceID: WorkspaceID, animated: Bool) {
+        let update = {
+            visualSelectedSidebarWorkspaceID = workspaceID
+        }
+        if animated {
+            model.performShellMotion(ConductorMotion.selectionGlide, update)
+        } else {
+            ConductorMotion.withoutAnimation(update)
+        }
+    }
+
 }
 
 private struct SidebarRailShape: InsettableShape {
-    var leadingRadius: CGFloat = ConductorDesign.sidebarCornerRadius
-    var trailingRadius: CGFloat = 14
+    var bottomLeadingRadius: CGFloat = ConductorDesign.sidebarCornerRadius
+    var bottomTrailingRadius: CGFloat = 14
     var insetAmount: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
         let rect = rect.insetBy(dx: insetAmount, dy: insetAmount)
-        let leading = min(leadingRadius, rect.width / 2, rect.height / 2)
-        let trailing = min(trailingRadius, rect.width / 2, rect.height / 2)
+        let leading = min(bottomLeadingRadius, rect.width / 2, rect.height / 2)
+        let trailing = min(bottomTrailingRadius, rect.width / 2, rect.height / 2)
 
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX + leading, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - trailing, y: rect.minY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX, y: rect.minY + trailing),
-            control: CGPoint(x: rect.maxX, y: rect.minY)
-        )
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - trailing))
         path.addQuadCurve(
             to: CGPoint(x: rect.maxX - trailing, y: rect.maxY),
@@ -3776,11 +3837,7 @@ private struct SidebarRailShape: InsettableShape {
             to: CGPoint(x: rect.minX, y: rect.maxY - leading),
             control: CGPoint(x: rect.minX, y: rect.maxY)
         )
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + leading))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX + leading, y: rect.minY),
-            control: CGPoint(x: rect.minX, y: rect.minY)
-        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
         path.closeSubpath()
         return path
     }
@@ -3901,52 +3958,54 @@ private enum WorkspaceChromeGlyph {
     }
 }
 
-private struct SidebarDockStatusLine: View {
+private struct SidebarWorkspaceHeaderStats: View {
     let splitCount: Int
     let terminalCount: Int
     let unreadCount: Int
-    let focusedTerminalTitle: String
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        HStack(spacing: 7) {
-            HStack(spacing: 4) {
-                Image(systemName: "rectangle.split.2x1")
-                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                Text("\(splitCount)")
-                    .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
-            }
-            .foregroundStyle(theme.shellChromeTextMuted.opacity(0.82))
-
-            HStack(spacing: 4) {
-                Image(systemName: "terminal")
-                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                Text("\(terminalCount)")
-                    .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
-            }
-            .foregroundStyle(theme.shellChromeTextMuted.opacity(0.82))
+        HStack(spacing: 4) {
+            metric(systemImage: "rectangle.split.2x1", value: splitCount, help: L("当前工作区分屏数", "Panes in current workspace"))
+            metric(systemImage: "terminal", value: terminalCount, help: L("当前工作区终端数", "Terminals in current workspace"))
 
             if unreadCount > 0 {
-                Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                    .font(.conductorSystem(size: 10, weight: .bold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis)
-                    .padding(.horizontal, 6)
-                    .frame(height: 16)
-                    .background(theme.shellSelectedFill)
-                    .clipShape(Capsule())
+                metric(systemImage: "bell", valueText: unreadCount > 99 ? "99+" : "\(unreadCount)", emphasis: true, help: L("未读通知", "Unread notifications"))
             }
-
-            Spacer(minLength: 0)
-
-            Text(focusedTerminalTitle)
-                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.86))
-                .lineLimit(1)
-                .truncationMode(.middle)
         }
-        .frame(height: 22)
-        .padding(.horizontal, 4)
+        .padding(.leading, 3)
+        .accessibilityElement(children: .combine)
+        .help("\(splitCount) \(L("个分屏", "panes")) · \(terminalCount) \(L("个终端", "terminals"))")
+    }
+
+    private func metric(
+        systemImage: String,
+        value: Int,
+        emphasis: Bool = false,
+        help: String
+    ) -> some View {
+        metric(systemImage: systemImage, valueText: "\(value)", emphasis: emphasis, help: help)
+    }
+
+    private func metric(
+        systemImage: String,
+        valueText: String,
+        emphasis: Bool = false,
+        help: String
+    ) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+            Text(valueText)
+                .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
+        }
+        .foregroundStyle(emphasis ? theme.floatingEmphasis : theme.shellChromeTextMuted.opacity(0.72))
+        .padding(.horizontal, 5)
+        .frame(height: 16)
+        .background(emphasis ? theme.shellSelectedFill.opacity(0.90) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.22 : 0.14))
+        .clipShape(Capsule())
+        .conductorTooltip(help)
     }
 }
 
@@ -3978,7 +4037,7 @@ private struct SidebarDockButton: View {
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.micro, value: disabled)
         .onHover { hovering = $0 }
-        .help(help)
+        .conductorTooltip(help)
     }
 }
 
@@ -4028,7 +4087,7 @@ private struct SidebarRailButton: View {
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.selection, value: selected)
         .onHover { hovering = $0 }
-        .help(help)
+        .conductorTooltip(help)
     }
 }
 
@@ -4079,6 +4138,8 @@ private struct WorkspaceSidebarRow: View {
     let terminalCount: Int
     let unreadCount: Int
     let selected: Bool
+    let visuallySelected: Bool
+    let selectionNamespace: Namespace.ID
     let editing: Bool
     @Binding var titleDraft: String
     let onCommitRename: () -> Void
@@ -4128,7 +4189,9 @@ private struct WorkspaceSidebarRow: View {
         }
         .padding(.horizontal, 7)
         .frame(height: 32)
-        .background(selected ? theme.shellSelectedFill : theme.shellHoverFill)
+        .background {
+            sidebarRowBackground
+        }
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .onAppear {
@@ -4143,6 +4206,8 @@ private struct WorkspaceSidebarRow: View {
                 terminalCount: terminalCount,
                 unreadCount: unreadCount,
                 selected: selected,
+                visuallySelected: visuallySelected,
+                selectionNamespace: selectionNamespace,
                 hovering: hovering
             )
             .equatable()
@@ -4155,6 +4220,19 @@ private struct WorkspaceSidebarRow: View {
             }
         )
     }
+
+    private var sidebarRowBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+        return ZStack {
+            shape
+                .fill(hovering ? theme.shellHoverFill : Color.clear)
+            if visuallySelected {
+                shape
+                    .fill(theme.shellSelectedFill)
+                    .matchedGeometryEffect(id: "sidebar-workspace-selection", in: selectionNamespace)
+            }
+        }
+    }
 }
 
 private struct WorkspaceSidebarRowContent: View, Equatable {
@@ -4162,6 +4240,8 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
     let terminalCount: Int
     let unreadCount: Int
     let selected: Bool
+    let visuallySelected: Bool
+    let selectionNamespace: Namespace.ID
     let hovering: Bool
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
@@ -4171,6 +4251,7 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         lhs.terminalCount == rhs.terminalCount &&
         lhs.unreadCount == rhs.unreadCount &&
         lhs.selected == rhs.selected &&
+        lhs.visuallySelected == rhs.visuallySelected &&
         lhs.hovering == rhs.hovering
     }
 
@@ -4209,11 +4290,13 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         .padding(.trailing, 7)
         .frame(height: 32)
         .background {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+            shape
                 .fill(hovering ? theme.shellHoverFill : Color.clear)
-            if selected {
-                RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+            if visuallySelected {
+                shape
                     .fill(theme.shellSelectedFill)
+                    .matchedGeometryEffect(id: "sidebar-workspace-selection", in: selectionNamespace)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
@@ -4266,7 +4349,7 @@ private struct SidebarActionRow: View {
                 hovering = value
             }
         }
-        .help(help ?? title)
+        .conductorTooltip(help ?? title, enabled: !showsTitle)
     }
 }
 
@@ -4375,6 +4458,7 @@ private struct ConductorToolbar: View {
             .frame(height: ConductorDesign.toolbarHeight(for: model.appearance))
         }
         .frame(height: ConductorDesign.toolbarHeight(for: model.appearance))
+        .animation(model.shellAnimation(ConductorMotion.standard), value: model.theme)
     }
 
     private func beginRenameWorkspace(_ row: WorkspaceChromeDisplayModel) {
@@ -4409,7 +4493,9 @@ private struct WorkspaceTabStrip: View {
     let onBeginRename: (WorkspaceChromeDisplayModel) -> Void
     let onCommitRename: () -> Void
     let onCancelRename: () -> Void
+    @Namespace private var selectionNamespace
     @State private var scrollTargetID: WorkspaceID?
+    @State private var visualSelectedWorkspaceID: WorkspaceID?
 
     private var workspaceRows: [WorkspaceChromeDisplayModel] {
         let selectedWorkspaceID = model.workspace.id
@@ -4444,12 +4530,17 @@ private struct WorkspaceTabStrip: View {
         .scrollTargetBehavior(.viewAligned)
         .scrollPosition(id: $scrollTargetID, anchor: .center)
         .onAppear {
+            setVisualSelection(model.workspace.id, animated: false)
             syncScrollTarget(animated: false)
         }
         .onChange(of: model.workspace.id) {
+            setVisualSelection(model.workspace.id, animated: true)
             syncScrollTarget(animated: true)
         }
         .onChange(of: workspaceIDs) {
+            if visualSelectedWorkspaceID == nil || !workspaceIDs.contains(visualSelectedWorkspaceID!) {
+                setVisualSelection(model.workspace.id, animated: false)
+            }
             syncScrollTarget(animated: true)
         }
         .frame(
@@ -4461,6 +4552,7 @@ private struct WorkspaceTabStrip: View {
         )
         .clipped()
         .mask(ConductorHorizontalFadeMask())
+        .animation(model.shellAnimation(ConductorMotion.list), value: workspaceIDs)
     }
 
     private func syncScrollTarget(animated: Bool) {
@@ -4479,10 +4571,13 @@ private struct WorkspaceTabStrip: View {
         WorkspaceTopTab(
             row: row,
             appearance: model.appearance,
+            visuallySelected: visualSelectedWorkspaceID == row.id,
+            selectionNamespace: selectionNamespace,
             canClose: model.workspaces.count > 1,
             editing: editingWorkspaceID == row.id,
             titleDraft: $workspaceTitleDraft,
             onSelect: {
+                setVisualSelection(row.id, animated: true)
                 finishWorkspaceRenameIfNeeded(except: row.id)
                 ConductorMotion.withoutAnimation {
                     model.selectWorkspace(row.id)
@@ -4535,6 +4630,17 @@ private struct WorkspaceTabStrip: View {
         }
         onCommitRename()
     }
+
+    private func setVisualSelection(_ workspaceID: WorkspaceID, animated: Bool) {
+        let update = {
+            visualSelectedWorkspaceID = workspaceID
+        }
+        if animated {
+            model.performShellMotion(ConductorMotion.selectionGlide, update)
+        } else {
+            ConductorMotion.withoutAnimation(update)
+        }
+    }
 }
 
 private enum WorkspaceTabMetrics {
@@ -4553,6 +4659,8 @@ private enum WorkspaceTabMetrics {
 private struct WorkspaceTopTab: View {
     let row: WorkspaceChromeDisplayModel
     let appearance: AppearancePreferences
+    let visuallySelected: Bool
+    let selectionNamespace: Namespace.ID
     let canClose: Bool
     let editing: Bool
     @Binding var titleDraft: String
@@ -4661,12 +4769,14 @@ private struct WorkspaceTopTab: View {
             height: WorkspaceTabMetrics.height(for: appearance)
         )
         .background {
-            if selected {
-                tabShape
-                    .fill(selectedFill)
-            } else {
+            ZStack {
                 tabShape
                     .fill(baseFill)
+                if visuallySelected {
+                    tabShape
+                        .fill(selectedFill)
+                        .matchedGeometryEffect(id: "workspace-tab-selection", in: selectionNamespace)
+                }
             }
         }
         .clipShape(tabShape)
@@ -4677,7 +4787,7 @@ private struct WorkspaceTopTab: View {
         .scaleEffect(hovering && !selected ? 1.006 : 1)
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.selection, value: editing)
-        .animation(ConductorMotion.emphasized, value: unreadCount)
+        .animation(ConductorMotion.attention, value: unreadCount)
         .onHover { value in
             ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
