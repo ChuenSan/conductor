@@ -411,6 +411,12 @@ height.
   icon, fill, and stroke changes atomic.
 - Keep native horizontal indicators hidden inside 21-25px tab rails; use fixed-height viewports
   and edge fades or external affordances instead.
+- Keep close buttons outside the parent tab selection tap region. Tapping a close button must
+  not also select the tab/workspace; selection belongs to the title/glyph content region, while
+  close is a separate instant action.
+- Close-tab and close-workspace actions should use a non-animated transaction. Animated layout
+  closes can briefly select/recenter the closing item, make neighboring tabs look like they are
+  cycling into the first slot, or animate live terminal surfaces during removal.
 
 **Correct**:
 
@@ -426,6 +432,16 @@ ScrollView(.horizontal, showsIndicators: false) {
 }
 .scrollTargetBehavior(.viewAligned)
 .scrollPosition(id: $scrollTargetID, anchor: .center)
+
+TabTitleContent(...)
+    .contentShape(Rectangle())
+    .onTapGesture { selectTab() }
+
+Button {
+    ConductorMotion.withoutAnimation { closeTab() }
+} label: {
+    Image(systemName: "xmark")
+}
 ```
 
 ### Convention: Auxiliary Panel Focus

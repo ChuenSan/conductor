@@ -958,6 +958,7 @@ private struct StableTerminalTabStrip: View {
     let paneFocused: Bool
     @Binding var highlightedDropTabID: TerminalID?
     @Namespace private var selectionNamespace
+    @State private var scrollTargetID: TerminalID?
 
     private let tabSpacing: CGFloat = 4
     private let tabEdgePadding: CGFloat = 0
@@ -967,43 +968,45 @@ private struct StableTerminalTabStrip: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: tabSpacing) {
-                    ForEach(pane.tabs) { tab in
-                        tabView(for: tab)
-                            .transition(.identity)
-                    }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: tabSpacing) {
+                ForEach(pane.tabs) { tab in
+                    tabView(for: tab)
+                        .transition(.identity)
                 }
-                .padding(.horizontal, tabEdgePadding)
             }
-            .onDrop(
-                of: terminalTabDropTypes,
-                delegate: TerminalTabDropDelegate(
-                    targetTabID: nil,
-                    paneID: pane.id,
-                    highlightedTabID: $highlightedDropTabID,
-                    model: model
-                )
+            .padding(.horizontal, tabEdgePadding)
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollPosition(id: $scrollTargetID, anchor: .center)
+        .onDrop(
+            of: terminalTabDropTypes,
+            delegate: TerminalTabDropDelegate(
+                targetTabID: nil,
+                paneID: pane.id,
+                highlightedTabID: $highlightedDropTabID,
+                model: model
             )
-            .onAppear {
-                scrollToSelectedTab(proxy, animated: false)
-            }
-            .onChange(of: pane.selectedTabID) {
-                scrollToSelectedTab(proxy, animated: true)
-            }
-            .onChange(of: tabIDs) {
-                scrollToSelectedTab(proxy, animated: true)
-            }
+        )
+        .onAppear {
+            syncScrollTarget(animated: false)
+        }
+        .onChange(of: pane.selectedTabID) {
+            syncScrollTarget(animated: true)
+        }
+        .onChange(of: tabIDs) {
+            syncScrollTarget(animated: true)
         }
         .frame(height: model.appearance.density.paneTabHeight)
         .clipped()
         .mask(ConductorHorizontalFadeMask())
     }
 
-    private func scrollToSelectedTab(_ proxy: ScrollViewProxy, animated: Bool) {
+    private func syncScrollTarget(animated: Bool) {
+        guard tabIDs.contains(pane.selectedTabID) else { return }
         let update = {
-            proxy.scrollTo(pane.selectedTabID, anchor: .center)
+            scrollTargetID = pane.selectedTabID
         }
         if animated {
             model.performShellMotion(ConductorMotion.scroll, update)
@@ -1335,12 +1338,23 @@ private struct TerminalTabButton: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
+                .onTapGesture {
+                    ConductorMotion.withoutAnimation {
+                        model.selectTab(tab.id, in: paneID)
+                    }
+                }
+                .simultaneousGesture(
+                    TapGesture(count: 2).onEnded {
+                        guard !editingTitle else { return }
+                        beginRename()
+                    }
+                )
                 .help(terminalHelpText)
             }
 
             if !editingTitle {
                 Button {
-                    ConductorMotion.perform(ConductorMotion.layout) {
+                    ConductorMotion.withoutAnimation {
                         model.closeTab(tab.id, in: paneID)
                     }
                 } label: {
@@ -1387,17 +1401,10 @@ private struct TerminalTabButton: View {
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab))
-        .onTapGesture {
-            model.selectTab(tab.id, in: paneID)
-        }
-        .simultaneousGesture(
-            TapGesture(count: 2).onEnded {
-                guard !editingTitle else { return }
-                beginRename()
-            }
-        )
         .onDrag {
-            model.selectTab(tab.id, in: paneID)
+            ConductorMotion.withoutAnimation {
+                model.selectTab(tab.id, in: paneID)
+            }
             model.beginTerminalTabDrag(tab.id)
             return terminalTabDragPayload(for: tab.id)
         }
@@ -1422,20 +1429,20 @@ private struct TerminalTabButton: View {
             }
             Divider()
             Button(L("关闭标签", "Close Tab")) {
-                ConductorMotion.perform(ConductorMotion.layout) {
+                ConductorMotion.withoutAnimation {
                     model.selectTab(tab.id, in: paneID)
                     model.performCommand(.closeSelectedTab)
                 }
             }
             Button(L("关闭其他标签", "Close Other Tabs")) {
-                ConductorMotion.perform(ConductorMotion.layout) {
+                ConductorMotion.withoutAnimation {
                     model.selectTab(tab.id, in: paneID)
                     model.performCommand(.closeOtherTabs)
                 }
             }
             .disabled(!model.workspace.canCloseOtherTabs(in: paneID))
             Button(L("关闭右侧标签", "Close Tabs to the Right")) {
-                ConductorMotion.perform(ConductorMotion.layout) {
+                ConductorMotion.withoutAnimation {
                     model.selectTab(tab.id, in: paneID)
                     model.performCommand(.closeTabsToRight)
                 }

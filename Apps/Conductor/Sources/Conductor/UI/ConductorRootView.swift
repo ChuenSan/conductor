@@ -4337,7 +4337,6 @@ private struct WorkspaceTabStrip: View {
         )
         .clipped()
         .mask(ConductorHorizontalFadeMask())
-        .animation(ConductorMotion.list, value: workspaceIDs)
     }
 
     private func syncScrollTarget(animated: Bool) {
@@ -4361,7 +4360,9 @@ private struct WorkspaceTabStrip: View {
             titleDraft: $workspaceTitleDraft,
             onSelect: {
                 finishWorkspaceRenameIfNeeded(except: row.id)
-                model.selectWorkspace(row.id)
+                ConductorMotion.withoutAnimation {
+                    model.selectWorkspace(row.id)
+                }
             },
             onRename: {
                 ConductorMotion.perform(ConductorMotion.selection) {
@@ -4520,6 +4521,16 @@ private struct WorkspaceTopTab: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
+                .onTapGesture {
+                    onSelect()
+                }
+                .simultaneousGesture(
+                    TapGesture(count: 2).onEnded {
+                        guard !editing else { return }
+                        onSelect()
+                        onRename()
+                    }
+                )
                 Button {
                     onClose()
                 } label: {
@@ -4565,16 +4576,6 @@ private struct WorkspaceTopTab: View {
             }
         }
         .contentShape(tabShape)
-        .onTapGesture {
-            onSelect()
-        }
-        .simultaneousGesture(
-            TapGesture(count: 2).onEnded {
-                guard !editing else { return }
-                onSelect()
-                onRename()
-            }
-        )
         .contextMenu {
             Button(L("重命名工作区...", "Rename Workspace...")) {
                 onRename()
