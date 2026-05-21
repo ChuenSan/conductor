@@ -144,6 +144,7 @@ grep -qx 'terminals=4' /tmp/conductor-stress-ok.txt
 grep -qx 'zoomed=false' /tmp/conductor-stress-ok.txt
 
 wait_for_conductor_exit
+sleep 1
 
 rm -f /tmp/conductor-resize-stress-ok.txt
 CONDUCTOR_RESIZE_STRESS_AUTORUN=1 \

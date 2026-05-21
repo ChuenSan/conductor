@@ -46,50 +46,12 @@ struct TerminalDisplayMetadata: Equatable {
     var bellCount = 0
 }
 
-enum ToolPreviewKind: String, Equatable {
-    case image
-    case text
-    case unsupported
-}
-
-struct ToolPreviewItem: Identifiable, Equatable {
-    let url: URL
-    let kind: ToolPreviewKind
-
-    var id: String {
-        "\(kind.rawValue):\(url.standardizedFileURL.path)"
-    }
-
-    var title: String {
-        url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent
-    }
-
-    var subtitle: String {
-        url.deletingLastPathComponent().path
-    }
-
-    init(url: URL) {
-        self.url = url.standardizedFileURL
-        self.kind = ToolPreviewItem.kind(for: self.url)
-    }
-
-    private static func kind(for url: URL) -> ToolPreviewKind {
-        switch url.pathExtension.lowercased() {
-        case "png", "jpg", "jpeg", "gif", "heic", "tiff", "webp":
-            return .image
-        case "txt", "log", "json", "jsonl", "yaml", "yml", "toml", "swift", "sh", "zsh", "bash", "py", "js", "ts", "tsx", "jsx", "html", "css", "xml":
-            return .text
-        default:
-            return .unsupported
-        }
-    }
-}
-
 private enum TerminalContextMenuAction {
     case renameTerminal
     case restoreTerminalTitle
     case duplicateTerminal
     case showSearch
+    case showFileManager
     case openDirectory
     case copyDirectory
     case newTerminal
@@ -150,6 +112,25 @@ private struct TerminalContextMenuTarget {
     let tab: TerminalTabState
 }
 
+struct ConductorWorkspaceFileTab: Identifiable, Equatable, Hashable, Sendable {
+    var id: String { fileURL.standardizedFileURL.path }
+    let fileURL: URL
+    let rootURL: URL
+    let title: String
+
+    init(fileURL: URL, rootURL: URL) {
+        let file = fileURL.standardizedFileURL
+        self.fileURL = file
+        self.rootURL = rootURL.standardizedFileURL
+        self.title = file.lastPathComponent
+    }
+}
+
+enum ConductorWorkspaceContentTabID: Equatable, Hashable {
+    case terminal(TerminalID)
+    case file(String)
+}
+
 @MainActor
 final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDelegate {
     @Published var workspace: WorkspaceState {
@@ -201,7 +182,19 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published var settingsPanelVisible = false
     @Published var workspaceOverviewVisible = false
     @Published var terminalSearchVisible = false
-    @Published var toolPreviewItem: ToolPreviewItem?
+    @Published var fileManagerPanelRequest: FileManagerPanelRequest?
+    @Published private(set) var workspaceFileTabs: [ConductorWorkspaceFileTab] = []
+    @Published private(set) var dirtyWorkspaceFileTabIDs: Set<String> = []
+    @Published private(set) var externallyChangedWorkspaceFileTabIDs: Set<String> = []
+    @Published private(set) var workspaceFileEditorSaveRequestTokensByTabID: [String: Int] = [:]
+    @Published private(set) var workspaceFileEditorSaveAndCloseRequestTokensByTabID: [String: Int] = [:]
+    @Published private(set) var workspaceFileSearchFocusGeneration = 0
+    @Published private(set) var workspaceFileSearchNextGeneration = 0
+    @Published private(set) var workspaceFileSearchPreviousGeneration = 0
+    @Published private(set) var fileManagerSearchFocusGeneration = 0
+    @Published private(set) var fileManagerSearchNextGeneration = 0
+    @Published private(set) var fileManagerSearchPreviousGeneration = 0
+    @Published private(set) var selectedWorkspaceContentTabID: ConductorWorkspaceContentTabID?
     @Published var terminalSearchQuery = ""
     @Published private(set) var agentHookSettingsMessage: String?
     @Published private(set) var terminalSearchFocusGeneration = 0
@@ -212,6 +205,28 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var terminalTabDragGeneration: UInt64 = 0
 
     var onNotificationPanelVisibilityChange: ((Bool) -> Void)?
+
+    var selectedWorkspaceFileTab: ConductorWorkspaceFileTab? {
+        guard case .file(let selectedWorkspaceFileTabID) = selectedWorkspaceContentTabID else { return nil }
+        return workspaceFileTabs.first { $0.id == selectedWorkspaceFileTabID }
+    }
+
+    var selectedWorkspaceFileTabID: String? {
+        guard case .file(let selectedWorkspaceFileTabID) = selectedWorkspaceContentTabID else { return nil }
+        return selectedWorkspaceFileTabID
+    }
+
+    var selectedWorkspaceTerminalTabID: TerminalID? {
+        if case .terminal(let terminalID) = selectedWorkspaceContentTabID,
+           workspace.paneID(containing: terminalID) != nil {
+            return terminalID
+        }
+        return focusedTerminalID
+    }
+
+    var workspaceTerminalContentTabs: [TerminalTabState] {
+        workspace.focusedPane?.selectedTab.map { [$0] } ?? []
+    }
 
     private let persistence = WorkspacePersistence()
     private var surfaces: [TerminalID: TerminalSurface] = [:]
@@ -553,26 +568,29 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func newTerminal() {
         let signpost = ConductorSignpost.begin("new-terminal")
         defer { ConductorSignpost.end("new-terminal", signpost) }
-        workspace.newTerminal(title: nextTerminalTitle(prefix: "zsh"))
+        let terminalID = workspace.newTerminal(title: nextTerminalTitle(prefix: "zsh"))
+        selectedWorkspaceContentTabID = .terminal(terminalID)
     }
 
     func newTerminalAtFocusedDirectory() {
         let signpost = ConductorSignpost.begin("new-terminal-current-directory")
         defer { ConductorSignpost.end("new-terminal-current-directory", signpost) }
-        workspace.newTerminal(
+        let terminalID = workspace.newTerminal(
             title: nextTerminalTitle(prefix: "zsh"),
             workingDirectory: focusedWorkingDirectoryURL?.path
         )
+        selectedWorkspaceContentTabID = .terminal(terminalID)
     }
 
     private func newTerminalAtDirectory(for terminalID: TerminalID) {
         let signpost = ConductorSignpost.begin("new-terminal-context-directory")
         defer { ConductorSignpost.end("new-terminal-context-directory", signpost) }
         guard activateTerminalContextTarget(terminalID) != nil else { return }
-        workspace.newTerminal(
+        let newTerminalID = workspace.newTerminal(
             title: nextTerminalTitle(prefix: "zsh"),
             workingDirectory: workingDirectoryURL(for: terminalID)?.path
         )
+        selectedWorkspaceContentTabID = .terminal(newTerminalID)
     }
 
     func openFocusedDirectory() {
@@ -580,18 +598,269 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         NSWorkspace.shared.open(url)
     }
 
+    func toggleFileManagerPanel() {
+        if fileManagerPanelRequest != nil {
+            closeFileManagerPanel()
+            return
+        }
+        showFileManagerForFocusedDirectory()
+    }
+
+    func showFileManagerForFocusedDirectory() {
+        guard let url = focusedWorkingDirectoryURL else { return }
+        showFileManager(rootURL: url)
+    }
+
+    @discardableResult
+    func showFileManager(for terminalID: TerminalID) -> Bool {
+        guard activateTerminalContextTarget(terminalID) != nil,
+              let url = workingDirectoryURL(for: terminalID) else {
+            return false
+        }
+        showFileManager(rootURL: url)
+        return true
+    }
+
+    func closeFileManagerPanel() {
+        fileManagerPanelRequest = nil
+    }
+
+    func openFileInWorkspace(_ fileURL: URL, rootURL: URL? = nil) {
+        let standardizedFile = fileURL.standardizedFileURL
+        let resolvedRoot = (rootURL ?? standardizedFile.deletingLastPathComponent()).standardizedFileURL
+        let tab = ConductorWorkspaceFileTab(fileURL: standardizedFile, rootURL: resolvedRoot)
+        if workspaceFileTabs.contains(where: { $0.id == tab.id }) == false {
+            workspaceFileTabs.append(tab)
+        }
+        selectedWorkspaceContentTabID = .file(tab.id)
+        terminalSearchVisible = false
+        workspaceOverviewVisible = false
+    }
+
+    func selectWorkspaceFileTab(_ tabID: String) {
+        guard workspaceFileTabs.contains(where: { $0.id == tabID }) else { return }
+        selectedWorkspaceContentTabID = .file(tabID)
+        terminalSearchVisible = false
+        workspaceOverviewVisible = false
+    }
+
+    func closeWorkspaceFileTab(_ tab: ConductorWorkspaceFileTab) {
+        guard workspaceFileTabs.contains(where: { $0.id == tab.id }) else { return }
+        guard isWorkspaceFileTabDirty(tab.id) else {
+            closeWorkspaceFileTabWithoutConfirmation(tab)
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = L("保存对 \(tab.title) 的更改？", "Save changes to \(tab.title)?")
+        alert.informativeText = L("如果不保存，最近的编辑会丢失。", "If you do not save, recent edits will be lost.")
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L("保存", "Save"))
+        alert.addButton(withTitle: L("不保存", "Don't Save"))
+        alert.addButton(withTitle: L("取消", "Cancel"))
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            requestSaveAndCloseWorkspaceFileTab(tab)
+        case .alertSecondButtonReturn:
+            closeWorkspaceFileTabWithoutConfirmation(tab)
+        default:
+            break
+        }
+    }
+
+    @discardableResult
+    func closeWorkspaceFileTabAfterSaving(tabID: String) -> Bool {
+        guard let tab = workspaceFileTabs.first(where: { $0.id == tabID }) else { return false }
+        closeWorkspaceFileTabWithoutConfirmation(tab)
+        return true
+    }
+
+    func closeWorkspaceFileTabs(matchingDeletedPaths deletedPaths: Set<String>) {
+        guard !deletedPaths.isEmpty else { return }
+        let standardizedPaths = Set(deletedPaths.map { URL(fileURLWithPath: $0).standardizedFileURL.path })
+        let tabsToClose = workspaceFileTabs.filter { tab in
+            let path = tab.fileURL.standardizedFileURL.path
+            return standardizedPaths.contains { deletedPath in
+                path == deletedPath || path.hasPrefix(deletedPath + "/")
+            }
+        }
+        for tab in tabsToClose {
+            closeWorkspaceFileTabWithoutConfirmation(tab)
+        }
+    }
+
+    func updateWorkspaceFileTabs(moving oldPath: String, to newURL: URL, isDirectory: Bool) {
+        let oldPath = URL(fileURLWithPath: oldPath).standardizedFileURL.path
+        let newPath = newURL.standardizedFileURL.path
+        guard oldPath != newPath else { return }
+
+        var dirtyIDs = dirtyWorkspaceFileTabIDs
+        var externalIDs = externallyChangedWorkspaceFileTabIDs
+        var saveTokens = workspaceFileEditorSaveRequestTokensByTabID
+        var saveAndCloseTokens = workspaceFileEditorSaveAndCloseRequestTokensByTabID
+        var movedSelectedFileTabID: String?
+
+        workspaceFileTabs = workspaceFileTabs.map { tab in
+            let filePath = tab.fileURL.standardizedFileURL.path
+            guard filePath == oldPath || (isDirectory && filePath.hasPrefix(oldPath + "/")) else {
+                return tab
+            }
+
+            let suffix = filePath == oldPath ? "" : String(filePath.dropFirst(oldPath.count))
+            let movedFileURL = suffix.isEmpty ? newURL.standardizedFileURL : URL(fileURLWithPath: newPath + suffix).standardizedFileURL
+            let movedRootURL = movedRootURL(for: tab.rootURL, oldPath: oldPath, newPath: newPath, isDirectory: isDirectory)
+            let movedTab = ConductorWorkspaceFileTab(fileURL: movedFileURL, rootURL: movedRootURL)
+
+            moveWorkspaceFileTabState(
+                from: tab.id,
+                to: movedTab.id,
+                dirtyIDs: &dirtyIDs,
+                externalIDs: &externalIDs,
+                saveTokens: &saveTokens,
+                saveAndCloseTokens: &saveAndCloseTokens
+            )
+            if selectedWorkspaceFileTabID == tab.id {
+                movedSelectedFileTabID = movedTab.id
+            }
+            return movedTab
+        }
+
+        if let movedSelectedFileTabID {
+            selectedWorkspaceContentTabID = .file(movedSelectedFileTabID)
+        }
+        dirtyWorkspaceFileTabIDs = dirtyIDs
+        externallyChangedWorkspaceFileTabIDs = externalIDs
+        workspaceFileEditorSaveRequestTokensByTabID = saveTokens
+        workspaceFileEditorSaveAndCloseRequestTokensByTabID = saveAndCloseTokens
+    }
+
+    func setWorkspaceFileTabDirty(_ tabID: String, isDirty: Bool) {
+        guard workspaceFileTabs.contains(where: { $0.id == tabID }) else { return }
+        if isDirty {
+            dirtyWorkspaceFileTabIDs.insert(tabID)
+        } else {
+            dirtyWorkspaceFileTabIDs.remove(tabID)
+        }
+    }
+
+    func isWorkspaceFileTabDirty(_ tabID: String) -> Bool {
+        dirtyWorkspaceFileTabIDs.contains(tabID)
+    }
+
+    func setWorkspaceFileTabExternallyChanged(_ tabID: String, changed: Bool) {
+        guard workspaceFileTabs.contains(where: { $0.id == tabID }) else { return }
+        if changed {
+            externallyChangedWorkspaceFileTabIDs.insert(tabID)
+        } else {
+            externallyChangedWorkspaceFileTabIDs.remove(tabID)
+        }
+    }
+
+    func isWorkspaceFileTabExternallyChanged(_ tabID: String) -> Bool {
+        externallyChangedWorkspaceFileTabIDs.contains(tabID)
+    }
+
+    func workspaceFileEditorSaveRequestToken(for tabID: String) -> Int {
+        workspaceFileEditorSaveRequestTokensByTabID[tabID] ?? 0
+    }
+
+    func workspaceFileEditorSaveAndCloseRequestToken(for tabID: String) -> Int {
+        workspaceFileEditorSaveAndCloseRequestTokensByTabID[tabID] ?? 0
+    }
+
+    @discardableResult
+    func requestSaveWorkspaceFileTab(_ tab: ConductorWorkspaceFileTab) -> Bool {
+        guard workspaceFileTabs.contains(where: { $0.id == tab.id }) else { return false }
+        workspaceFileEditorSaveRequestTokensByTabID[tab.id, default: 0] += 1
+        return true
+    }
+
+    private func requestSaveAndCloseWorkspaceFileTab(_ tab: ConductorWorkspaceFileTab) {
+        guard workspaceFileTabs.contains(where: { $0.id == tab.id }) else { return }
+        selectedWorkspaceContentTabID = .file(tab.id)
+        workspaceFileEditorSaveAndCloseRequestTokensByTabID[tab.id, default: 0] += 1
+    }
+
+    private func closeWorkspaceFileTabWithoutConfirmation(_ tab: ConductorWorkspaceFileTab) {
+        guard let index = workspaceFileTabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        workspaceFileTabs.remove(at: index)
+        dirtyWorkspaceFileTabIDs.remove(tab.id)
+        externallyChangedWorkspaceFileTabIDs.remove(tab.id)
+        workspaceFileEditorSaveRequestTokensByTabID.removeValue(forKey: tab.id)
+        workspaceFileEditorSaveAndCloseRequestTokensByTabID.removeValue(forKey: tab.id)
+        if selectedWorkspaceFileTabID == tab.id {
+            if workspaceFileTabs.isEmpty {
+                selectedWorkspaceContentTabID = focusedTerminalID.map { .terminal($0) }
+            } else {
+                selectedWorkspaceContentTabID = .file(workspaceFileTabs[min(index, workspaceFileTabs.count - 1)].id)
+            }
+        }
+    }
+
+    private func movedRootURL(for rootURL: URL, oldPath: String, newPath: String, isDirectory: Bool) -> URL {
+        guard isDirectory else { return rootURL }
+        let rootPath = rootURL.standardizedFileURL.path
+        guard rootPath == oldPath || rootPath.hasPrefix(oldPath + "/") else { return rootURL }
+        let suffix = rootPath == oldPath ? "" : String(rootPath.dropFirst(oldPath.count))
+        return URL(fileURLWithPath: newPath + suffix).standardizedFileURL
+    }
+
+    private func moveWorkspaceFileTabState(
+        from oldID: String,
+        to newID: String,
+        dirtyIDs: inout Set<String>,
+        externalIDs: inout Set<String>,
+        saveTokens: inout [String: Int],
+        saveAndCloseTokens: inout [String: Int]
+    ) {
+        guard oldID != newID else { return }
+        if dirtyIDs.remove(oldID) != nil {
+            dirtyIDs.insert(newID)
+        }
+        if externalIDs.remove(oldID) != nil {
+            externalIDs.insert(newID)
+        }
+        if let token = saveTokens.removeValue(forKey: oldID) {
+            saveTokens[newID] = token
+        }
+        if let token = saveAndCloseTokens.removeValue(forKey: oldID) {
+            saveAndCloseTokens[newID] = token
+        }
+    }
+
+    func selectTerminalStage() {
+        if let tab = workspace.focusedPane?.selectedTab {
+            selectedWorkspaceContentTabID = .terminal(tab.id)
+            focusTerminal(tab.id)
+        }
+    }
+
+    func selectWorkspaceTerminalTab(_ terminalID: TerminalID) {
+        guard workspace.paneID(containing: terminalID) != nil else { return }
+        selectedWorkspaceContentTabID = .terminal(terminalID)
+        terminalSearchVisible = false
+        workspaceOverviewVisible = false
+        focusTerminal(terminalID)
+    }
+
+    @discardableResult
+    func insertPathIntoFocusedTerminal(_ url: URL) -> Bool {
+        guard let tab = workspace.focusedPane?.selectedTab else { return false }
+        focusTerminal(tab.id)
+        surface(for: tab).sendText(Self.shellEscapedText(url.standardizedFileURL.path) + " ")
+        refreshSurfaceAfterNavigation(tab.id)
+        return true
+    }
+
+    private func showFileManager(rootURL: URL, selectedURL: URL? = nil) {
+        let standardizedRoot = rootURL.standardizedFileURL
+        fileManagerPanelRequest = FileManagerPanelRequest(rootURL: standardizedRoot, selectedURL: selectedURL)
+    }
+
     private func openWorkingDirectory(for terminalID: TerminalID) {
         guard let url = workingDirectoryURL(for: terminalID) else { return }
         NSWorkspace.shared.open(url)
-    }
-
-    func closeToolPreview() {
-        toolPreviewItem = nil
-    }
-
-    func revealToolPreviewInFinder() {
-        guard let item = toolPreviewItem else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([item.url])
     }
 
     func copyFocusedDirectory() {
@@ -872,6 +1141,22 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func showTerminalSearch() {
+        if selectedWorkspaceFileTab != nil {
+            commandPaletteVisible = false
+            settingsPanelVisible = false
+            workspaceOverviewVisible = false
+            terminalSearchVisible = false
+            workspaceFileSearchFocusGeneration &+= 1
+            return
+        }
+        if fileManagerPanelRequest != nil {
+            commandPaletteVisible = false
+            settingsPanelVisible = false
+            workspaceOverviewVisible = false
+            terminalSearchVisible = false
+            fileManagerSearchFocusGeneration &+= 1
+            return
+        }
         guard let terminalID = focusedTerminalID else { return }
         showTerminalSearch(for: terminalID)
     }
@@ -926,6 +1211,22 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func navigateTerminalSearch(previous: Bool) {
+        if selectedWorkspaceFileTab != nil {
+            if previous {
+                workspaceFileSearchPreviousGeneration &+= 1
+            } else {
+                workspaceFileSearchNextGeneration &+= 1
+            }
+            return
+        }
+        if fileManagerPanelRequest != nil {
+            if previous {
+                fileManagerSearchPreviousGeneration &+= 1
+            } else {
+                fileManagerSearchNextGeneration &+= 1
+            }
+            return
+        }
         guard terminalSearchVisible,
               let tab = terminalSearchTargetTab() else { return }
         _ = surface(for: tab).navigateSearch(previous: previous)
@@ -999,6 +1300,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         addItem(L("复制当前终端", "Duplicate Current Terminal"), action: .duplicateTerminal)
         addItem(L("上下文搜索", "Context Search"), action: .showSearch)
         addItem(
+            L("浏览当前目录", "Browse Current Directory"),
+            enabled: targetDirectoryURL != nil,
+            action: .showFileManager
+        )
+        addItem(
             L("打开当前目录", "Open Current Directory"),
             enabled: targetDirectoryURL != nil,
             action: .openDirectory
@@ -1067,6 +1373,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         case .showSearch:
             showTerminalSearch(for: terminalID)
             return true
+        case .showFileManager:
+            return showFileManager(for: terminalID)
         case .openDirectory:
             openWorkingDirectory(for: terminalID)
             return true
@@ -1926,11 +2234,28 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
 
         if isDirectory.boolValue {
-            NSWorkspace.shared.open(fileURL)
+            showFileManager(rootURL: fileURL)
         } else {
-            toolPreviewItem = ToolPreviewItem(url: fileURL)
+            showFileManager(rootURL: fileURL.deletingLastPathComponent(), selectedURL: fileURL)
+            openFileInWorkspace(fileURL, rootURL: fileURL.deletingLastPathComponent())
         }
         return true
+    }
+
+    private static func shellEscapedText(_ value: String) -> String {
+        if value.contains(where: { $0 == "\n" || $0 == "\r" }) {
+            return shellSingleQuoted(value)
+        }
+
+        var result = value
+        for character in "\\ ()[]{}<>\"'`!#$&;|*?\t" {
+            result = result.replacingOccurrences(of: String(character), with: "\\\(character)")
+        }
+        return result
+    }
+
+    private static func shellSingleQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
     private func updateMetadata(for terminalID: TerminalID, _ update: (inout TerminalDisplayMetadata) -> Void) {

@@ -793,134 +793,474 @@ struct ConductorMagneticGlow: View {
     }
 }
 
-private struct ConductorTooltipHost: NSViewRepresentable {
-    let text: String
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        view.toolTip = text
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        nsView.toolTip = text
-    }
-}
-
-struct ConductorTooltipCandidate: Identifiable {
-    let id: String
-    let text: String
-    let anchor: Anchor<CGRect>
-}
-
-struct ConductorTooltipPreferenceKey: PreferenceKey {
-    static let defaultValue: [ConductorTooltipCandidate] = []
-
-    static func reduce(value: inout [ConductorTooltipCandidate], nextValue: () -> [ConductorTooltipCandidate]) {
-        value.append(contentsOf: nextValue())
-    }
-}
-
-private struct ConductorTooltipModifier: ViewModifier {
-    let text: String
-    @State private var hovering = false
-
-    func body(content: Content) -> some View {
-        content
-            .help(text)
-            .accessibilityLabel(Text(text))
-            .background(ConductorTooltipHost(text: text))
-            .onHover { value in
-                ConductorMotion.perform(ConductorMotion.hover) {
-                    hovering = value
-                }
+private final class MacNativeTooltipView: NSView {
+    var text: String = "" {
+        didSet {
+            toolTip = text
+            updateActiveTarget()
+            if isHovering {
+                showTooltip()
             }
-            .anchorPreference(key: ConductorTooltipPreferenceKey.self, value: .bounds) { anchor in
-                hovering ? [ConductorTooltipCandidate(id: text, text: text, anchor: anchor)] : []
-            }
-    }
-}
-
-struct ConductorTooltipOverlay: View {
-    let candidates: [ConductorTooltipCandidate]
-    let proxy: GeometryProxy
-    @Environment(\.conductorTheme) private var theme
-    @Environment(\.conductorFontScale) private var fontScale
-
-    var body: some View {
-        if let candidate = candidates.last {
-            let rect = proxy[candidate.anchor]
-            let placement = placement(for: candidate.text, source: rect, container: proxy.size)
-            HStack(spacing: 0) {
-                if placement.isRight {
-                    tooltipPointer
-                }
-                Text(candidate.text)
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(tooltipTextColor)
-                    .lineLimit(1)
-                    .padding(.horizontal, 10)
-                    .frame(height: 28)
-                    .background(tooltipFill)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.34 : 0.16), radius: 10, y: 5)
-                if !placement.isRight {
-                    tooltipPointer
-                }
-            }
-            .position(x: placement.x, y: placement.y)
-            .transition(.opacity.combined(with: .scale(scale: 0.98)))
-            .animation(ConductorMotion.micro, value: candidate.text)
-            .allowsHitTesting(false)
         }
     }
 
-    private var tooltipFill: Color {
-        theme.usesDarkChrome ? Color.white.opacity(0.92) : Color(red: 0.12, green: 0.13, blue: 0.15).opacity(0.94)
+    private var isHovering = false
+    private var trackingAreaToken: NSTrackingArea?
+    private weak var activeTarget: NSView?
+    private var previousTargetTooltip: String?
+    private weak var registeredToolTipView: NSView?
+    private var registeredToolTipTag: NSView.ToolTipTag?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
     }
 
-    private var tooltipTextColor: Color {
-        theme.usesDarkChrome ? Color.black.opacity(0.86) : Color.white.opacity(0.96)
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
     }
 
-    private var tooltipPointer: some View {
-        Rectangle()
-            .fill(tooltipFill)
-            .frame(width: 9, height: 9)
-            .rotationEffect(.degrees(45))
-            .offset(x: 0)
+    override func layout() {
+        super.layout()
+        rebuildTrackingArea()
+        registerWindowToolTipRect()
+        updateActiveTarget()
     }
 
-    private func placement(
-        for text: String,
-        source rect: CGRect,
-        container size: CGSize
-    ) -> (x: CGFloat, y: CGFloat, isRight: Bool) {
-        let textWidth = min(max(CGFloat(text.count) * 7 + 26, 58), 230)
-        let totalWidth = textWidth + 9
-        let margin: CGFloat = 8
-        let gap: CGFloat = 10
-        let rightX = rect.maxX + gap + totalWidth / 2
-        let leftX = rect.minX - gap - totalWidth / 2
-        let isRight = rightX + totalWidth / 2 <= size.width - margin || leftX - totalWidth / 2 < margin
-        let x = isRight ? min(rightX, size.width - margin - totalWidth / 2) : max(leftX, margin + totalWidth / 2)
-        let y = min(max(rect.midY, margin + 14), size.height - margin - 14)
-        return (x, y, isRight)
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        rebuildTrackingArea()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        isHovering = true
+        updateActiveTarget()
+        showTooltip()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        updateActiveTarget()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        isHovering = false
+        restoreActiveTarget()
+        closeTooltip()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil {
+            unregisterWindowToolTipRect()
+            restoreActiveTarget()
+            closeTooltip()
+        }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        rebuildTrackingArea()
+        registerWindowToolTipRect()
+    }
+
+    @objc func view(
+        _ view: NSView,
+        stringForToolTip tag: NSView.ToolTipTag,
+        point: NSPoint,
+        userData data: UnsafeMutableRawPointer?
+    ) -> String {
+        text
+    }
+
+    private func rebuildTrackingArea() {
+        if let trackingAreaToken {
+            removeTrackingArea(trackingAreaToken)
+        }
+        guard !bounds.isEmpty else {
+            trackingAreaToken = nil
+            return
+        }
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        trackingAreaToken = trackingArea
+        addTrackingArea(trackingArea)
+    }
+
+    private func registerWindowToolTipRect() {
+        unregisterWindowToolTipRect()
+        guard !bounds.isEmpty,
+              !text.isEmpty,
+              let contentView = window?.contentView else {
+            return
+        }
+        let rectInContent = contentView.convert(bounds, from: self)
+        guard !rectInContent.isEmpty else { return }
+        registeredToolTipView = contentView
+        registeredToolTipTag = contentView.addToolTip(rectInContent, owner: self, userData: nil)
+    }
+
+    private func unregisterWindowToolTipRect() {
+        guard let registeredToolTipView, let registeredToolTipTag else { return }
+        registeredToolTipView.removeToolTip(registeredToolTipTag)
+        self.registeredToolTipView = nil
+        self.registeredToolTipTag = nil
+    }
+
+    private func updateActiveTarget() {
+        guard !text.isEmpty,
+              let window,
+              let contentView = window.contentView else {
+            restoreActiveTarget()
+            return
+        }
+
+        let windowPoint = window.mouseLocationOutsideOfEventStream
+        let localPoint = convert(windowPoint, from: nil)
+        guard bounds.contains(localPoint) else {
+            restoreActiveTarget()
+            return
+        }
+
+        let contentPoint = contentView.convert(windowPoint, from: nil)
+        guard let target = contentView.hitTest(contentPoint), target !== self else {
+            restoreActiveTarget()
+            return
+        }
+
+        if activeTarget !== target {
+            restoreActiveTarget()
+            activeTarget = target
+            previousTargetTooltip = target.toolTip
+        }
+        target.toolTip = text
+    }
+
+    private func restoreActiveTarget() {
+        if let activeTarget {
+            activeTarget.toolTip = previousTargetTooltip
+        }
+        activeTarget = nil
+        previousTargetTooltip = nil
+    }
+
+    private func showTooltip() {
+        ConductorTooltipPanelManager.shared.show(text: text, relativeTo: self)
+    }
+
+    private func closeTooltip() {
+        ConductorTooltipPanelManager.shared.hide(for: self)
+    }
+}
+
+private struct MacNativeTooltipInstaller: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> MacNativeTooltipView {
+        let view = MacNativeTooltipView(frame: .zero)
+        view.text = text
+        return view
+    }
+
+    func updateNSView(_ nsView: MacNativeTooltipView, context: Context) {
+        nsView.text = text
     }
 }
 
 extension View {
-    func conductorTooltip(_ text: String) -> some View {
-        modifier(ConductorTooltipModifier(text: text))
+    @ViewBuilder
+    func macNativeTooltip(_ text: String, enabled: Bool = true) -> some View {
+        if enabled && !text.isEmpty {
+            self
+                .help(text)
+                .overlay {
+                    GeometryReader { _ in
+                        MacNativeTooltipInstaller(text: text)
+                    }
+                }
+        } else {
+            self
+        }
+    }
+}
+
+struct ConductorNativeIconButton: NSViewRepresentable {
+    let systemImage: String
+    let help: String
+    var size: CGFloat = 28
+    var symbolSize: CGFloat = 11
+    var opacity: CGFloat = 0.62
+    let action: () -> Void
+
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.conductorTheme) private var theme
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(action: action)
     }
 
-    @ViewBuilder
-    func conductorTooltip(_ text: String, enabled: Bool) -> some View {
-        if enabled {
-            conductorTooltip(text)
-        } else {
-            help(text)
+    func makeNSView(context: Context) -> NSButton {
+        let button = NativeTooltipButton(frame: NSRect(x: 0, y: 0, width: size, height: size))
+        button.isBordered = false
+        button.bezelStyle = .regularSquare
+        button.imagePosition = .imageOnly
+        button.setButtonType(.momentaryChange)
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.performAction)
+        button.focusRingType = .none
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.toolTip = help
+        button.tooltipText = help
+        configure(button)
+        return button
+    }
+
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.action = action
+        button.toolTip = help
+        (button as? NativeTooltipButton)?.tooltipText = help
+        button.isEnabled = isEnabled
+        configure(button)
+    }
+
+    private func configure(_ button: NSButton) {
+        button.image = NSImage(
+            systemSymbolName: systemImage,
+            accessibilityDescription: help
+        )
+        button.symbolConfiguration = NSImage.SymbolConfiguration(
+            pointSize: symbolSize,
+            weight: .semibold
+        )
+        button.contentTintColor = tintColor
+    }
+
+    private var tintColor: NSColor {
+        if theme.usesDarkChrome {
+            return NSColor.white.withAlphaComponent(opacity)
         }
+        return NSColor.labelColor.withAlphaComponent(opacity)
+    }
+
+    final class Coordinator: NSObject {
+        var action: () -> Void
+
+        init(action: @escaping () -> Void) {
+            self.action = action
+        }
+
+        @objc func performAction() {
+            action()
+        }
+    }
+
+    final class NativeTooltipButton: NSButton {
+        var tooltipText = "" {
+            didSet {
+                toolTip = tooltipText
+                if isHovering {
+                    showTooltip()
+                }
+            }
+        }
+
+        private var isHovering = false
+        private var trackingAreaToken: NSTrackingArea?
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+        }
+
+        required init?(coder: NSCoder) {
+            super.init(coder: coder)
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let trackingAreaToken {
+                removeTrackingArea(trackingAreaToken)
+            }
+            let trackingArea = NSTrackingArea(
+                rect: bounds,
+                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+            trackingAreaToken = trackingArea
+            addTrackingArea(trackingArea)
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            super.mouseEntered(with: event)
+            isHovering = true
+            showTooltip()
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            super.mouseExited(with: event)
+            isHovering = false
+            closeTooltip()
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            closeTooltip()
+            super.mouseDown(with: event)
+        }
+
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            if newWindow == nil {
+                closeTooltip()
+            }
+            super.viewWillMove(toWindow: newWindow)
+        }
+
+        private func showTooltip() {
+            ConductorTooltipPanelManager.shared.show(text: tooltipText, relativeTo: self)
+        }
+
+        private func closeTooltip() {
+            ConductorTooltipPanelManager.shared.hide(for: self)
+        }
+    }
+}
+
+@MainActor
+private final class ConductorTooltipPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+@MainActor
+private final class ConductorTooltipPanelManager {
+    static let shared = ConductorTooltipPanelManager()
+
+    private weak var sourceView: NSView?
+    private var panel: ConductorTooltipPanel?
+
+    func show(text: String, relativeTo view: NSView) {
+        guard !text.isEmpty,
+              !view.bounds.isEmpty,
+              let sourceWindow = view.window,
+              let screen = sourceWindow.screen ?? NSScreen.main else {
+            hide()
+            return
+        }
+
+        let viewController = ConductorNativeTooltipContentViewController(text: text)
+        viewController.loadViewIfNeeded()
+        let fittingSize = viewController.view.fittingSize
+        let size = NSSize(
+            width: min(260, max(48, fittingSize.width)),
+            height: max(28, fittingSize.height)
+        )
+
+        let anchorInWindow = view.convert(view.bounds, to: nil)
+        let anchorInScreen = sourceWindow.convertToScreen(anchorInWindow)
+        let visibleFrame = screen.visibleFrame
+        let spacing: CGFloat = 7
+        var origin = NSPoint(
+            x: anchorInScreen.midX - size.width / 2,
+            y: anchorInScreen.minY - size.height - spacing
+        )
+
+        if origin.y < visibleFrame.minY {
+            origin.y = anchorInScreen.maxY + spacing
+        }
+        origin.x = min(
+            max(origin.x, visibleFrame.minX + 6),
+            visibleFrame.maxX - size.width - 6
+        )
+
+        let panel = self.panel ?? makePanel()
+        self.panel = panel
+        sourceView = view
+        panel.contentViewController = viewController
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+        panel.orderFrontRegardless()
+    }
+
+    func hide(for view: NSView) {
+        guard sourceView === view else { return }
+        hide()
+    }
+
+    func hide() {
+        panel?.orderOut(nil)
+        sourceView = nil
+    }
+
+    private func makePanel() -> ConductorTooltipPanel {
+        let panel = ConductorTooltipPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 52, height: 30),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.ignoresMouseEvents = true
+        panel.hidesOnDeactivate = false
+        panel.level = .floating
+        panel.collectionBehavior = [.transient, .ignoresCycle]
+        return panel
+    }
+}
+
+private final class ConductorNativeTooltipContentViewController: NSViewController {
+    private let text: String
+
+    init(text: String) {
+        self.text = text
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        self.text = ""
+        super.init(coder: coder)
+    }
+
+    override func loadView() {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 11.5, weight: .medium)
+        label.textColor = NSColor.white.withAlphaComponent(0.92)
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 0.94).cgColor
+        container.layer?.cornerRadius = 7
+        container.layer?.masksToBounds = true
+        container.layer?.borderWidth = 1 / max(NSScreen.main?.backingScaleFactor ?? 2, 1)
+        container.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
+        container.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 9),
+            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -9),
+            label.topAnchor.constraint(equalTo: container.topAnchor, constant: 5),
+            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -5),
+            container.widthAnchor.constraint(lessThanOrEqualToConstant: 260),
+            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 48)
+        ])
+
+        view = container
     }
 }
 
@@ -990,7 +1330,7 @@ struct ConductorIconButton: View {
         .onHover { hovering = $0 }
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)
-        .conductorTooltip(help, enabled: title == nil)
+        .macNativeTooltip(help, enabled: title == nil)
     }
 }
 

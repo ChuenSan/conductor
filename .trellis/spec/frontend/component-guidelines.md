@@ -156,12 +156,13 @@ workspace overview, and compact status modules.
   Settings may include an internal category sidebar, but it should not add a second competing
   title bar inside the panel. In-window floating panels should share a common width/height
   unless the surface is a true small popover.
-- File/tool previews opened from terminal file URLs are low-frequency tool UI beside the
-  terminal, not terminal rendering. Text previews may read bounded file content into SwiftUI
-  state, but they must do file IO off the main actor, cap initial reads, and expose only the
-  preview document and file metadata. They must not inspect terminal scrollback or make
-  terminal transcript text observable. Formatted document parsing is intentionally not part of
-  the current product surface.
+- Files opened from terminal file URLs are low-frequency tool UI beside the terminal, not
+  terminal rendering. Route local files and directories into the app-owned right-side file
+  manager surface instead of a one-off preview panel. Directory scans and text previews must
+  do file IO off the main actor, cap initial reads, and expose only compact file metadata and
+  bounded preview documents. They must not inspect terminal scrollback or make terminal
+  transcript text observable. Formatted document parsing is intentionally not part of the
+  current product surface.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.
@@ -171,6 +172,83 @@ workspace overview, and compact status modules.
   scrollback, cursor movement, or terminal redraws.
 - Xcode live preview scenarios should use compact preview fixtures. Prefer `PreviewProvider`
   while SwiftPM command-line builds cannot resolve Xcode's `#Preview` macro plugin.
+
+## Scenario: Right-Side File Manager Surface
+
+### 1. Scope / Trigger
+
+- Trigger: Adding or changing the shell file manager, terminal `file://` handling, or commands
+  that open local files/directories beside the terminal.
+
+### 2. Signatures
+
+- `ConductorShellCommand.toggleFileManager`
+- `ConductorWindowModel.fileManagerPanelRequest: FileManagerPanelRequest?`
+- `ConductorWindowModel.showFileManagerForFocusedDirectory()`
+- `ConductorWindowModel.showFileManager(for terminalID: TerminalID) -> Bool`
+- `ConductorWindowModel.insertPathIntoFocusedTerminal(_ url: URL) -> Bool`
+- `FileManagerPanelRequest(rootURL:selectedURL:)`
+
+### 3. Contracts
+
+- Toolbar, command palette, and terminal context-menu entry points must share the
+  `toggleFileManager` / `showFileManager` model path.
+- The panel root defaults to the focused terminal working directory. Terminal-originated file
+  URLs open the panel at the file's parent directory with that file selected.
+- Directory listing state may enter SwiftUI as compact metadata only: URL, display name,
+  directory flag, symlink flag, and file size. Directory IO and text-preview IO run off the
+  main actor.
+- Text previews must be bounded. Large or binary files show an explicit state instead of
+  loading complete contents into SwiftUI.
+- Inserting a path into the focused terminal sends shell-escaped text plus a trailing space,
+  and does not press Return.
+
+### 4. Validation & Error Matrix
+
+- No focused terminal cwd -> toolbar/command action is disabled unless the file panel is
+  already visible and can be closed.
+- Missing terminal-originated file -> handled by Conductor notification/error UI and the
+  Ghostty fallback must not show a LaunchServices alert.
+- Unreadable directory -> show a panel error state; do not crash or block the terminal host.
+- Unsupported or binary file -> show a preview message and keep Reveal/Copy/Insert actions
+  available.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `file://.../foo.swift` from terminal opens the file manager, selects `foo.swift`,
+  and previews bounded text.
+- Base: A folder row is clicked; the row expands or collapses its children inline without
+  replacing the whole directory view or introducing a split tree.
+- Bad: A directory scan runs synchronously inside `body`.
+- Bad: A local file URL from Ghostty is passed directly to `NSWorkspace.open`.
+
+### 6. Tests Required
+
+- `swift build`
+- `swift run ConductorModelCheck`
+- Full gate: `./Scripts/check-conductor.sh`
+- Manual smoke: open the file panel from toolbar, command palette, and terminal context menu;
+  select text/image/binary files; insert a path into the focused terminal.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```swift
+if url.isFileURL {
+    NSWorkspace.shared.open(url)
+}
+```
+
+#### Correct
+
+```swift
+if isDirectory {
+    showFileManager(rootURL: fileURL)
+} else {
+    showFileManager(rootURL: fileURL.deletingLastPathComponent(), selectedURL: fileURL)
+}
+```
 
 ### Convention: Shell Motion
 

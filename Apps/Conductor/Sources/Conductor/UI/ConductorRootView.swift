@@ -68,12 +68,6 @@ struct ConductorRootView: View {
                 }
             }
         }
-        .overlayPreferenceValue(ConductorTooltipPreferenceKey.self) { candidates in
-            GeometryReader { proxy in
-                ConductorTooltipOverlay(candidates: candidates, proxy: proxy)
-            }
-            .allowsHitTesting(false)
-        }
         .animation(model.shellAnimation(ConductorMotion.panel), value: model.commandPaletteVisible)
         .animation(model.shellAnimation(ConductorMotion.panel), value: model.settingsPanelVisible)
         .animation(model.shellAnimation(ConductorMotion.panel), value: model.workspaceOverviewVisible)
@@ -86,11 +80,17 @@ struct ConductorRootView: View {
 
             VStack(spacing: 0) {
                 ConductorToolbar(model: model)
-                HStack(spacing: ConductorTokens.Space.splitGutter) {
-                    terminalStage
-                    if let item = model.toolPreviewItem {
-                        ToolPreviewPanel(model: model, item: item)
-                            .frame(width: 390)
+                HStack(spacing: 0) {
+                    primaryWorkspaceContent
+                    if let request = model.fileManagerPanelRequest {
+                        FileManagerPanel(
+                            model: model,
+                            request: request,
+                            searchFocusToken: model.fileManagerSearchFocusGeneration,
+                            searchNextToken: model.fileManagerSearchNextGeneration,
+                            searchPreviousToken: model.fileManagerSearchPreviousGeneration
+                        )
+                            .frame(width: 468)
                     }
                 }
             }
@@ -100,6 +100,16 @@ struct ConductorRootView: View {
                 TerminalSidebarContactWash(theme: model.theme)
                     .allowsHitTesting(false)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var primaryWorkspaceContent: some View {
+        if model.selectedWorkspaceFileTab != nil {
+            ConductorFileWorkspaceView(model: model)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            terminalStage
         }
     }
 
@@ -123,6 +133,7 @@ struct ConductorRootView: View {
 private struct TerminalContextSearchBar: View {
     @ObservedObject var model: ConductorWindowModel
     @State private var query = ""
+    @State private var searchHistory = ConductorSearchHistory.load(scope: "terminal")
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorFontFamily) private var fontFamily
@@ -151,7 +162,7 @@ private struct TerminalContextSearchBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 7) {
+        ConductorContextSearchSurface {
             Image(systemName: "magnifyingglass")
                 .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
                 .foregroundStyle(theme.shellChromeText.opacity(0.58))
@@ -186,9 +197,28 @@ private struct TerminalContextSearchBar: View {
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
-            .help(L("选择搜索的终端", "Choose terminal to search"))
+            .macNativeTooltip(L("选择搜索的终端", "Choose terminal to search"))
 
-            TerminalSearchTextField(
+            if !searchHistory.isEmpty {
+                Menu {
+                    ForEach(searchHistory, id: \.self) { savedQuery in
+                        Button(savedQuery) {
+                            query = savedQuery
+                            recordSearchQuery()
+                        }
+                    }
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.56))
+                        .frame(width: 22, height: 22)
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .macNativeTooltip(L("搜索历史", "Search History"))
+            }
+
+            ConductorContextSearchTextField(
                 text: $query,
                 placeholder: L("搜索选中终端", "Search selected terminal"),
                 focusToken: model.terminalSearchFocusGeneration,
@@ -197,9 +227,11 @@ private struct TerminalContextSearchBar: View {
                 fontScale: fontScale,
                 onNavigate: { previous in
                     guard hasQuery else { return }
+                    recordSearchQuery()
                     model.performCommand(previous ? .findPrevious : .findNext)
                 },
                 onClose: {
+                    recordSearchQuery()
                     model.closeTerminalSearch()
                 }
             )
@@ -213,40 +245,31 @@ private struct TerminalContextSearchBar: View {
                 .contentTransition(.opacity)
                 .animation(ConductorMotion.feedback, value: matchText)
 
-            TerminalSearchIconButton(
+            ConductorContextSearchIconButton(
                 systemImage: "chevron.up",
                 help: L("上一个结果 Shift-Cmd-G", "Previous result Shift-Cmd-G"),
                 disabled: !hasQuery
             ) {
+                recordSearchQuery()
                 model.performCommand(.findPrevious)
             }
 
-            TerminalSearchIconButton(
+            ConductorContextSearchIconButton(
                 systemImage: "chevron.down",
                 help: L("下一个结果 Cmd-G", "Next result Cmd-G"),
                 disabled: !hasQuery
             ) {
+                recordSearchQuery()
                 model.performCommand(.findNext)
             }
 
-            TerminalSearchIconButton(
+            ConductorContextSearchIconButton(
                 systemImage: "xmark",
                 help: L("关闭搜索 Esc", "Close search Esc")
             ) {
+                recordSearchQuery()
                 model.closeTerminalSearch()
             }
-        }
-        .padding(.leading, 10)
-        .padding(.trailing, 6)
-        .frame(height: 32)
-        .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.96 : 0.92))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.10 : 0.18), lineWidth: 1)
-                }
-                .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.26 : 0.14), radius: 14, x: 0, y: 8)
         }
         .onAppear {
             query = model.terminalSearchQuery
@@ -259,424 +282,10 @@ private struct TerminalContextSearchBar: View {
             query = next
         }
     }
-}
 
-private struct TerminalSearchTextField: NSViewRepresentable {
-    @Binding var text: String
-    let placeholder: String
-    let focusToken: Int
-    let theme: TerminalTheme
-    let fontFamily: AppearanceFontFamily
-    let fontScale: AppearanceFontScale
-    let onNavigate: (Bool) -> Void
-    let onClose: () -> Void
-
-    func makeNSView(context: Context) -> SearchNSTextField {
-        let field = SearchNSTextField()
-        field.delegate = context.coordinator
-        field.isBordered = false
-        field.isBezeled = false
-        field.drawsBackground = false
-        field.focusRingType = .none
-        field.lineBreakMode = .byTruncatingTail
-        field.usesSingleLineMode = true
-        field.onWindowAttached = { [weak coordinator = context.coordinator, weak field] in
-            guard let field else { return }
-            coordinator?.focusIfPossible(field)
-        }
-        applyStyle(to: field)
-        return field
-    }
-
-    func updateNSView(_ field: SearchNSTextField, context: Context) {
-        context.coordinator.text = $text
-        context.coordinator.onNavigate = onNavigate
-        context.coordinator.onClose = onClose
-        context.coordinator.requestFocusIfNeeded(focusToken, field: field)
-        if field.stringValue != text {
-            field.stringValue = text
-        }
-        applyStyle(to: field)
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, onNavigate: onNavigate, onClose: onClose)
-    }
-
-    private func applyStyle(to field: NSTextField) {
-        field.font = .conductorSystemFont(ofSize: 11.5, weight: .medium, family: fontFamily, scale: fontScale)
-        field.textColor = NSColor(theme.shellChromeText)
-        field.placeholderAttributedString = NSAttributedString(
-            string: placeholder,
-            attributes: [
-                .foregroundColor: NSColor(theme.shellChromeText.opacity(0.42)),
-                .font: NSFont.conductorSystemFont(ofSize: 11.5, weight: .medium, family: fontFamily, scale: fontScale)
-            ]
-        )
-    }
-
-    @MainActor
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        var text: Binding<String>
-        var onNavigate: (Bool) -> Void
-        var onClose: () -> Void
-        private var appliedFocusToken: Int?
-        private var pendingFocusToken: Int?
-
-        init(
-            text: Binding<String>,
-            onNavigate: @escaping (Bool) -> Void,
-            onClose: @escaping () -> Void
-        ) {
-            self.text = text
-            self.onNavigate = onNavigate
-            self.onClose = onClose
-        }
-
-        func requestFocusIfNeeded(_ token: Int, field: SearchNSTextField) {
-            guard appliedFocusToken != token else { return }
-            pendingFocusToken = token
-            focusIfPossible(field)
-        }
-
-        func focusIfPossible(_ field: SearchNSTextField) {
-            guard let token = pendingFocusToken,
-                  let window = field.window else {
-                return
-            }
-            DispatchQueue.main.async { [weak self, weak field, weak window] in
-                guard let self,
-                      let field,
-                      let window,
-                      self.pendingFocusToken == token else {
-                    return
-                }
-                window.makeFirstResponder(field)
-                field.selectText(nil)
-                self.appliedFocusToken = token
-                self.pendingFocusToken = nil
-            }
-        }
-
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            text.wrappedValue = field.stringValue
-        }
-
-        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-            switch commandSelector {
-            case #selector(NSResponder.insertNewline(_:)),
-                 #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
-                let previous = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
-                onNavigate(previous)
-                return true
-            case #selector(NSResponder.moveDown(_:)):
-                onNavigate(false)
-                return true
-            case #selector(NSResponder.moveUp(_:)):
-                onNavigate(true)
-                return true
-            case #selector(NSResponder.cancelOperation(_:)):
-                onClose()
-                return true
-            default:
-                return false
-            }
-        }
-    }
-}
-
-@MainActor
-private final class SearchNSTextField: NSTextField {
-    var onWindowAttached: (() -> Void)?
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        guard window != nil else { return }
-        onWindowAttached?()
-    }
-}
-
-private struct TerminalSearchIconButton: View {
-    let systemImage: String
-    let help: String
-    var disabled = false
-    let action: () -> Void
-    @State private var hovering = false
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        Button {
-            guard !disabled else { return }
-            action()
-        } label: {
-            Image(systemName: systemImage)
-                .font(.system(size: 10.5, weight: .bold))
-                .foregroundStyle(theme.shellChromeText.opacity(disabled ? 0.26 : (hovering ? 0.82 : 0.56)))
-                .frame(width: 22, height: 22)
-                .background(Color.white.opacity(hovering && !disabled ? 0.070 : 0.018))
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }
-        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.95))
-        .disabled(disabled)
-        .onHover { hovering = $0 }
-        .animation(ConductorMotion.hover, value: hovering)
-        .conductorTooltip(help)
-    }
-}
-
-private struct ToolPreviewPanel: View {
-    @ObservedObject var model: ConductorWindowModel
-    let item: ToolPreviewItem
-    @State private var textState = PreviewTextState.loading
-    @State private var reloadToken = 0
-    @Environment(\.conductorTheme) private var theme
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorFontFamily) private var fontFamily
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 9) {
-                Image(systemName: iconName)
-                    .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.72))
-                    .frame(width: 24, height: 24)
-                    .background(theme.floatingControlFill)
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(item.title)
-                        .font(.conductorSystem(size: 12.5, weight: .bold, family: fontFamily, scale: fontScale))
-                        .foregroundStyle(theme.shellChromeText.opacity(0.88))
-                        .lineLimit(1)
-                    Text(item.subtitle)
-                        .font(.conductorSystem(size: 10, weight: .medium, family: fontFamily, scale: fontScale))
-                        .foregroundStyle(theme.shellChromeText.opacity(0.45))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-
-                Spacer(minLength: 8)
-
-                TerminalSearchIconButton(systemImage: "arrow.clockwise", help: L("重新读取", "Reload Preview")) {
-                    reloadToken += 1
-                }
-                TerminalSearchIconButton(systemImage: "doc.on.doc", help: L("复制文件路径", "Copy File Path")) {
-                    copyPreviewPath()
-                }
-                TerminalSearchIconButton(systemImage: "folder", help: L("在 Finder 中显示", "Reveal in Finder")) {
-                    model.revealToolPreviewInFinder()
-                }
-                TerminalSearchIconButton(systemImage: "xmark", help: L("关闭预览", "Close Preview")) {
-                    model.closeToolPreview()
-                }
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 46)
-
-            previewInfoBar
-
-            Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.60 : 0.45))
-                .frame(height: 1)
-
-            previewContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.98 : 0.94))
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane, style: .continuous)
-                .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.80 : 0.55), lineWidth: 1)
-        }
-        .task(id: "\(item.id)-\(reloadToken)") {
-            await loadTextIfNeeded()
-        }
-        .onChange(of: item.id) {
-            reloadToken = 0
-        }
-    }
-
-    private var previewInfoBar: some View {
-        HStack(spacing: 7) {
-            ToolPreviewInfoPill(title: kindTitle)
-            if let size = fileSizeLabel {
-                ToolPreviewInfoPill(title: size)
-            }
-            if case .loaded(let document, _) = textState {
-                ToolPreviewInfoPill(title: L("\(document.lineCount) 行", "\(document.lineCount) lines"))
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-    }
-
-    @ViewBuilder
-    private var previewContent: some View {
-        switch item.kind {
-        case .image:
-            if let image = NSImage(contentsOf: item.url) {
-                GeometryReader { proxy in
-                    Image(nsImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: proxy.size.width, height: proxy.size.height)
-                        .background(theme.terminalBackground)
-                }
-            } else {
-                previewMessage(L("图片无法读取", "Image could not be loaded"))
-            }
-        case .text:
-            loadedText()
-        case .unsupported:
-            previewMessage(L("这个文件类型暂时只支持在 Finder 中显示", "This file type can be revealed in Finder for now"))
-        }
-    }
-
-    private var iconName: String {
-        switch item.kind {
-        case .image:
-            "photo"
-        case .text:
-            "doc.text"
-        case .unsupported:
-            "doc"
-        }
-    }
-
-    @ViewBuilder
-    private func loadedText() -> some View {
-        switch textState {
-        case .loading:
-            previewMessage(L("读取中", "Loading"))
-        case .failed(let message):
-            previewMessage(message)
-        case .loaded(let document, let truncated):
-            plainTextReader(document.text, truncated: truncated)
-        }
-    }
-
-    private func plainTextReader(_ text: String, truncated: Bool) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                if truncated {
-                    previewWarning(L("文件较大，只预览前 1 MB。", "Large file: previewing the first 1 MB."))
-                }
-                Text(text)
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                    .lineSpacing(3)
-                    .textSelection(.enabled)
-            }
-            .foregroundStyle(theme.shellChromeText.opacity(0.82))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-        }
-        .scrollIndicators(.visible)
-    }
-
-    private func previewWarning(_ text: String) -> some View {
-        Text(text)
-            .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.50))
-            .padding(.horizontal, 9)
-            .frame(height: 24)
-            .background(theme.floatingControlFill.opacity(0.70))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private var kindTitle: String {
-        switch item.kind {
-        case .image:
-            return L("图片", "Image")
-        case .text:
-            return L("文本", "Text")
-        case .unsupported:
-            return L("文件", "File")
-        }
-    }
-
-    private var fileSizeLabel: String? {
-        guard let size = try? FileManager.default
-            .attributesOfItem(atPath: item.url.path)[.size] as? NSNumber else {
-            return nil
-        }
-        return ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file)
-    }
-
-    private func copyPreviewPath() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(item.url.path, forType: .string)
-    }
-
-    private func previewMessage(_ text: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: iconName)
-                .font(.conductorSystem(size: 22, weight: .medium, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.30))
-            Text(text)
-                .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.52))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func loadTextIfNeeded() async {
-        guard item.kind == .text else { return }
-        textState = .loading
-        let url = item.url
-        let result = await Task.detached(priority: .userInitiated) { () -> PreviewTextState in
-            do {
-                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-                let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
-                let limit = 1_000_000
-                let handle = try FileHandle(forReadingFrom: url)
-                defer { try? handle.close() }
-                let data = try handle.read(upToCount: min(max(size, 0), limit)) ?? Data()
-                let text = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
-                return .loaded(PreviewTextDocument(text: text), truncated: size > limit)
-            } catch {
-                return .failed(error.localizedDescription)
-            }
-        }.value
-        textState = result
-    }
-}
-
-private enum PreviewTextState: Equatable {
-    case loading
-    case loaded(PreviewTextDocument, truncated: Bool)
-    case failed(String)
-}
-
-private struct ToolPreviewInfoPill: View {
-    let title: String
-    @Environment(\.conductorTheme) private var theme
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorFontFamily) private var fontFamily
-
-    var body: some View {
-        Text(title)
-            .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.52))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .frame(height: 19)
-            .background(theme.floatingControlFill.opacity(0.56))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-    }
-}
-
-private struct PreviewTextDocument: Equatable {
-    let text: String
-    let lineCount: Int
-
-    init(text: String) {
-        self.text = text
-        self.lineCount = max(1, text.components(separatedBy: .newlines).count)
+    private func recordSearchQuery() {
+        ConductorSearchHistory.record(query, scope: "terminal")
+        searchHistory = ConductorSearchHistory.load(scope: "terminal")
     }
 }
 
@@ -784,7 +393,7 @@ private struct FloatingPanelHeader<Trailing: View>: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
-            .help(closeHelp)
+            .macNativeTooltip(closeHelp)
         }
     }
 }
@@ -1028,6 +637,8 @@ private struct CommandPaletteItem: Identifiable {
             "arrow.turn.down.right"
         case "open-current-directory":
             "folder"
+        case "file-manager":
+            "folder"
         case "copy-current-directory":
             "doc.on.doc"
         case "duplicate-tab", "duplicate-workspace":
@@ -1156,6 +767,17 @@ private enum ConductorCommandCatalog {
                 keywords: "copy path cwd folder directory"
             ) {
                 perform(.copyFocusedDirectory)
+            },
+            CommandPaletteItem(
+                id: "file-manager",
+                section: L("上下文", "Context"),
+                title: L("文件管理器", "File Manager"),
+                shortcut: "Files",
+                disabled: !canPerform(.toggleFileManager),
+                disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
+                keywords: "file files browser manager cwd folder directory preview"
+            ) {
+                perform(.toggleFileManager)
             },
             CommandPaletteItem(id: "split-right", section: L("创建", "Create"), title: L("向右分屏", "Split Right"), shortcut: "Cmd-D", disabled: !canPerform(.splitRight), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split right vertical") {
                 perform(.splitRight)
@@ -2142,7 +1764,7 @@ private struct SettingsSidebarItem: View {
         }
         .animation(ConductorMotion.selectionGlide, value: selected)
         .animation(ConductorMotion.hover, value: hovering)
-        .help(section.title)
+        .macNativeTooltip(section.title)
     }
 
     private var rowBackground: some View {
@@ -2357,7 +1979,7 @@ private struct ThemeGalleryCard: View {
         }
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.selection, value: selected)
-        .help(theme.title)
+        .macNativeTooltip(theme.title)
     }
 
     private var cardFill: Color {
@@ -2879,7 +2501,7 @@ private struct WorkspaceOverviewCard: View {
         .animation(ConductorMotion.feedback, value: highlighted)
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.attention, value: unreadCount)
-        .help("\(workspace.title) · \(workspace.panes.count) \(L("分屏", "panes")) · \(terminalCount) \(L("终端", "terminals"))")
+        .macNativeTooltip("\(workspace.title) · \(workspace.panes.count) \(L("分屏", "panes")) · \(terminalCount) \(L("终端", "terminals"))")
     }
 
     private var cardFill: Color {
@@ -3257,7 +2879,7 @@ private struct NotificationRowView: View {
                     .clipShape(Circle())
             }
             .buttonStyle(ConductorPressButtonStyle())
-            .help(L("清除通知", "Clear Notification"))
+            .macNativeTooltip(L("清除通知", "Clear Notification"))
         }
         .padding(.leading, 9)
         .padding(.trailing, 6)
@@ -3415,7 +3037,7 @@ private struct WindowControlButtons: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(control.accessibilityLabel)
-                .help(control.accessibilityLabel)
+                .macNativeTooltip(control.accessibilityLabel)
             }
         }
         .frame(height: 20)
@@ -3549,7 +3171,7 @@ private struct ConductorSidebar: View {
         .onHover { value in
             sidebarToggleHovering = value
         }
-        .conductorTooltip(model.sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
+        .macNativeTooltip(model.sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
     }
 
     private var sidebarToggleFill: Color {
@@ -3618,7 +3240,7 @@ private struct ConductorSidebar: View {
                         .contentShape(RoundedRectangle(cornerRadius: 5))
                 }
                 .buttonStyle(ConductorPressButtonStyle())
-                .conductorTooltip(L("新建工作区 Cmd-N", "New Workspace Cmd-N"))
+                .macNativeTooltip(L("新建工作区 Cmd-N", "New Workspace Cmd-N"))
             }
             .padding(.trailing, 5)
 
@@ -3976,7 +3598,7 @@ private struct SidebarWorkspaceHeaderStats: View {
         }
         .padding(.leading, 3)
         .accessibilityElement(children: .combine)
-        .help("\(splitCount) \(L("个分屏", "panes")) · \(terminalCount) \(L("个终端", "terminals"))")
+        .macNativeTooltip("\(splitCount) \(L("个分屏", "panes")) · \(terminalCount) \(L("个终端", "terminals"))")
     }
 
     private func metric(
@@ -4005,7 +3627,7 @@ private struct SidebarWorkspaceHeaderStats: View {
         .frame(height: 16)
         .background(emphasis ? theme.shellSelectedFill.opacity(0.90) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.22 : 0.14))
         .clipShape(Capsule())
-        .conductorTooltip(help)
+        .macNativeTooltip(help)
     }
 }
 
@@ -4037,7 +3659,7 @@ private struct SidebarDockButton: View {
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.micro, value: disabled)
         .onHover { hovering = $0 }
-        .conductorTooltip(help)
+        .macNativeTooltip(help)
     }
 }
 
@@ -4087,7 +3709,7 @@ private struct SidebarRailButton: View {
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.selection, value: selected)
         .onHover { hovering = $0 }
-        .conductorTooltip(help)
+        .macNativeTooltip(help)
     }
 }
 
@@ -4169,7 +3791,7 @@ private struct WorkspaceSidebarRow: View {
                 hovering = value
             }
         }
-        .help(title)
+        .macNativeTooltip(title)
     }
 
     private var editingRow: some View {
@@ -4349,7 +3971,7 @@ private struct SidebarActionRow: View {
                 hovering = value
             }
         }
-        .conductorTooltip(help ?? title, enabled: !showsTitle)
+        .macNativeTooltip(help ?? title)
     }
 }
 
@@ -4424,6 +4046,17 @@ private struct ConductorToolbar: View {
                     ) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.showTerminalSearch)
+                    }
+                    ConductorSegmentDivider()
+                    ConductorIconButton(
+                        systemImage: "folder",
+                        help: L("文件管理器", "File Manager"),
+                        title: L("文件", "Files"),
+                        disabled: !model.canPerformCommand(.toggleFileManager),
+                        active: model.fileManagerPanelRequest != nil
+                    ) {
+                        finishWorkspaceRenameIfNeeded()
+                        model.performCommand(.toggleFileManager)
                     }
                     ConductorSegmentDivider()
                     ConductorIconButton(
@@ -4523,6 +4156,29 @@ private struct WorkspaceTabStrip: View {
                     workspaceTabView(for: row)
                         .transition(ConductorMotion.tabTransition)
                 }
+
+                if !model.workspaceFileTabs.isEmpty {
+                    WorkspaceTabSectionDivider()
+                    ForEach(model.workspaceFileTabs) { tab in
+                        WorkspaceFileTopTab(
+                            tab: tab,
+                            appearance: model.appearance,
+                            selected: model.selectedWorkspaceFileTab?.id == tab.id,
+                            dirty: model.isWorkspaceFileTabDirty(tab.id),
+                            onSelect: {
+                                finishWorkspaceRenameIfNeeded()
+                                model.selectWorkspaceFileTab(tab.id)
+                            },
+                            onClose: {
+                                withoutShellAnimation {
+                                    finishWorkspaceRenameIfNeeded()
+                                    model.closeWorkspaceFileTab(tab)
+                                }
+                            }
+                        )
+                        .transition(ConductorMotion.tabTransition)
+                    }
+                }
             }
             .padding(.horizontal, WorkspaceTabMetrics.edgePadding)
             .scrollTargetLayout()
@@ -4571,7 +4227,8 @@ private struct WorkspaceTabStrip: View {
         WorkspaceTopTab(
             row: row,
             appearance: model.appearance,
-            visuallySelected: visualSelectedWorkspaceID == row.id,
+            active: row.selected && model.selectedWorkspaceFileTab == nil,
+            visuallySelected: visualSelectedWorkspaceID == row.id && model.selectedWorkspaceFileTab == nil,
             selectionNamespace: selectionNamespace,
             canClose: model.workspaces.count > 1,
             editing: editingWorkspaceID == row.id,
@@ -4581,6 +4238,7 @@ private struct WorkspaceTabStrip: View {
                 finishWorkspaceRenameIfNeeded(except: row.id)
                 ConductorMotion.withoutAnimation {
                     model.selectWorkspace(row.id)
+                    model.selectTerminalStage()
                 }
             },
             onRename: {
@@ -4643,6 +4301,17 @@ private struct WorkspaceTabStrip: View {
     }
 }
 
+private struct WorkspaceTabSectionDivider: View {
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Rectangle()
+            .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.45 : 0.28))
+            .frame(width: 1, height: 20)
+            .padding(.horizontal, 4)
+    }
+}
+
 private enum WorkspaceTabMetrics {
     static func width(for appearance: AppearancePreferences) -> CGFloat {
         appearance.density.workspaceTabWidth
@@ -4656,9 +4325,136 @@ private enum WorkspaceTabMetrics {
     static let edgePadding: CGFloat = 0
 }
 
+private struct WorkspaceFileTopTab: View {
+    let tab: ConductorWorkspaceFileTab
+    let appearance: AppearancePreferences
+    let selected: Bool
+    let dirty: Bool
+    let onSelect: () -> Void
+    let onClose: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var tabShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous)
+    }
+
+    private var baseFill: Color {
+        if theme.usesDarkChrome {
+            return hovering ? theme.shellHoverFill.opacity(0.92) : theme.shellControlFill.opacity(0.58)
+        }
+        return hovering ? theme.shellHoverFill.opacity(0.86) : theme.shellControlFill.opacity(0.52)
+    }
+
+    private var selectedFill: Color {
+        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.72) : theme.shellPanelStrong.opacity(0.82)
+    }
+
+    private var tabStroke: Color {
+        if selected {
+            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.58 : 0.42) * appearance.chromeClarity.strokeMultiplier)
+        }
+        return theme.shellStroke.opacity(hovering ? 0.34 : 0.18)
+    }
+
+    private var titleColor: Color {
+        selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86)
+    }
+
+    private var fileIcon: String {
+        let ext = tab.fileURL.pathExtension.lowercased()
+        if ext == "md" || ext == "markdown" {
+            return "doc.richtext"
+        }
+        if let type = UTType(filenameExtension: ext), type.conforms(to: .image) {
+            return "photo"
+        }
+        return "doc.text"
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            HStack(spacing: 7) {
+                Image(systemName: fileIcon)
+                    .font(.system(size: 10.8, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
+                    .frame(width: 17, height: 17)
+                Text(tab.title)
+                    .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(titleColor)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Circle()
+                    .fill(theme.floatingEmphasis.opacity(0.92))
+                    .frame(width: 5, height: 5)
+                    .opacity(dirty ? 1 : 0)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onSelect()
+            }
+
+            Button {
+                onClose()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
+                    .foregroundStyle(titleColor.opacity(selected || hovering ? 0.74 : 0.52))
+                    .frame(width: 13, height: 13)
+                    .clipShape(Circle())
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(ConductorPressButtonStyle())
+            .macNativeTooltip(L("关闭文件", "Close File"))
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 6)
+        .frame(
+            width: WorkspaceTabMetrics.width(for: appearance),
+            height: WorkspaceTabMetrics.height(for: appearance)
+        )
+        .background {
+            ZStack {
+                tabShape
+                    .fill(baseFill)
+                if selected {
+                    tabShape
+                        .fill(selectedFill)
+                }
+            }
+        }
+        .clipShape(tabShape)
+        .overlay {
+            tabShape
+                .stroke(tabStroke, lineWidth: 1)
+        }
+        .scaleEffect(hovering && !selected ? 1.006 : 1)
+        .animation(ConductorMotion.hover, value: hovering)
+        .onHover { value in
+            ConductorMotion.perform(ConductorMotion.hover) {
+                hovering = value
+            }
+        }
+        .contentShape(tabShape)
+        .contextMenu {
+            Button(L("关闭文件", "Close File")) {
+                onClose()
+            }
+            Button(L("在访达中显示", "Reveal in Finder")) {
+                NSWorkspace.shared.activateFileViewerSelecting([tab.fileURL])
+            }
+        }
+        .macNativeTooltip(tab.fileURL.path)
+    }
+}
+
 private struct WorkspaceTopTab: View {
     let row: WorkspaceChromeDisplayModel
     let appearance: AppearancePreferences
+    let active: Bool
     let visuallySelected: Bool
     let selectionNamespace: Namespace.ID
     let canClose: Bool
@@ -4679,7 +4475,7 @@ private struct WorkspaceTopTab: View {
     @Environment(\.conductorTheme) private var theme
 
     private var selected: Bool {
-        row.selected
+        active
     }
 
     private var unreadCount: Int {
@@ -4759,7 +4555,7 @@ private struct WorkspaceTopTab: View {
                 }
                 .buttonStyle(ConductorPressButtonStyle())
                 .disabled(!canClose)
-                .help(L("关闭工作区", "Close Workspace"))
+                .macNativeTooltip(L("关闭工作区", "Close Workspace"))
             }
         }
         .padding(.leading, 8)
@@ -4816,7 +4612,7 @@ private struct WorkspaceTopTab: View {
             }
             .disabled(!canClose)
         }
-        .help("\(row.title) · \(row.splitCount) \(L("分屏", "panes")) · \(row.terminalCount) \(L("终端", "terminals"))")
+        .macNativeTooltip("\(row.title) · \(row.splitCount) \(L("分屏", "panes")) · \(row.terminalCount) \(L("终端", "terminals"))")
     }
 }
 

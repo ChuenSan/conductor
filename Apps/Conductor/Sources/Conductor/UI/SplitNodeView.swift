@@ -558,7 +558,7 @@ private struct SplitDivider: View {
             }
             .animation(active ? nil : ConductorMotion.micro, value: active)
             .animation(active ? nil : ConductorMotion.hover, value: hovering)
-            .help("拖拽调整分屏")
+            .macNativeTooltip("拖拽调整分屏")
     }
 
     private var resizeRailFill: Color {
@@ -1216,7 +1216,7 @@ private struct PaneBarButton: View {
                 hovering = value
             }
         }
-        .conductorTooltip(help, enabled: !showsTitle)
+        .macNativeTooltip(help)
     }
 }
 
@@ -1352,7 +1352,7 @@ private struct TerminalTabButton: View {
                         beginRename()
                     }
                 )
-                .help(terminalHelpText)
+                .macNativeTooltip(terminalHelpText)
             }
 
             if !editingTitle {
@@ -1368,7 +1368,7 @@ private struct TerminalTabButton: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(ConductorPressButtonStyle())
-                .help(L("关闭标签", "Close Tab"))
+                .macNativeTooltip(L("关闭标签", "Close Tab"))
             }
         }
         .padding(.leading, 9)

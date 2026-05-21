@@ -12,7 +12,13 @@ let package = Package(
         .executable(name: "ConductorModelCheck", targets: ["ConductorModelCheck"]),
         .library(name: "ConductorCore", targets: ["ConductorCore"])
     ],
-    dependencies: [],
+    dependencies: [
+        .package(path: "Packages/CodeEditSourceEditor"),
+        .package(
+            url: "https://github.com/CodeEditApp/CodeEditLanguages.git",
+            exact: "0.1.20"
+        )
+    ],
     targets: [
         .binaryTarget(
             name: "GhosttyKit",
@@ -25,7 +31,9 @@ let package = Package(
             name: "Conductor",
             dependencies: [
                 "ConductorCore",
-                "GhosttyKit"
+                "GhosttyKit",
+                "CodeEditSourceEditor",
+                "CodeEditLanguages"
             ],
             linkerSettings: [
                 .linkedLibrary("c++"),

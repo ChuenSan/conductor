@@ -70,21 +70,63 @@ final class ConductorWindow: NSWindow {
         let flags = event.modifierFlags
             .intersection(.deviceIndependentFlagsMask)
             .subtracting([.numericPad, .function, .capsLock])
-        guard flags == .command,
-              event.charactersIgnoringModifiers?.lowercased() == "a" else {
+        guard flags == .command || flags == [.command, .shift],
+              let character = event.charactersIgnoringModifiers?.lowercased() else {
             return false
         }
 
-        if let textView = responder as? NSTextView {
-            textView.selectAll(nil)
+        switch (character, flags.contains(.shift)) {
+        case ("a", false):
+            return performTextCommand(#selector(NSResponder.selectAll(_:)), responder: responder)
+        case ("c", false):
+            return performTextCommand(#selector(NSText.copy(_:)), responder: responder)
+        case ("x", false):
+            return performTextCommand(#selector(NSText.cut(_:)), responder: responder)
+        case ("v", false):
+            return performTextCommand(#selector(NSText.paste(_:)), responder: responder)
+        case ("z", false):
+            return performUndoCommand(redo: false, responder: responder)
+        case ("z", true):
+            return performUndoCommand(redo: true, responder: responder)
+        default:
+            return false
+        }
+    }
+
+    private func performTextCommand(_ action: Selector, responder: NSResponder) -> Bool {
+        if responder.tryToPerform(action, with: self) {
             return true
         }
+
+        if let textView = responder as? NSTextView,
+           textView.responds(to: action) {
+            textView.perform(action, with: self)
+            return true
+        }
+
         if let control = responder as? NSControl,
-           let editor = control.currentEditor() as? NSTextView {
-            editor.selectAll(nil)
+           let editor = control.currentEditor() as? NSTextView,
+           editor.responds(to: action) {
+            editor.perform(action, with: self)
             return true
         }
-        return NSApp.sendAction(#selector(NSResponder.selectAll(_:)), to: nil, from: self)
+
+        return NSApp.sendAction(action, to: nil, from: self)
+    }
+
+    private func performUndoCommand(redo: Bool, responder: NSResponder) -> Bool {
+        if let undoManager = (responder as? NSView)?.undoManager ?? undoManager {
+            if redo, undoManager.canRedo {
+                undoManager.redo()
+                return true
+            }
+            if !redo, undoManager.canUndo {
+                undoManager.undo()
+                return true
+            }
+        }
+        let action = NSSelectorFromString(redo ? "redo:" : "undo:")
+        return responder.tryToPerform(action, with: self) || NSApp.sendAction(action, to: nil, from: self)
     }
 
     private func isChromeBorderDoubleClick(_ event: NSEvent) -> Bool {
@@ -306,7 +348,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
         let findMenuItem = NSMenuItem()
         let findMenu = NSMenu(title: "Find")
-        findMenu.addItem(menuItem("Find in Terminal", "f", [], #selector(findInTerminalCommand)))
+        findMenu.addItem(menuItem("Context Search", "f", [], #selector(findInTerminalCommand)))
         findMenu.addItem(menuItem("Find Next", "g", [], #selector(findNextCommand)))
         findMenu.addItem(menuItem("Find Previous", "g", [.shift], #selector(findPreviousCommand)))
         findMenuItem.submenu = findMenu

@@ -134,11 +134,11 @@ Current implementation contract:
 - `ConductorWindowModel.ghosttyRuntimeDidRequestOpenURL(terminalID:url:)` must return `true`
   for every local file URL, including missing files, so the runtime fallback never shows a
   system alert for terminal-originated file paths.
-- Existing directories open in Finder; existing files become `ToolPreviewItem`s in the
-  app-owned right-side preview panel; missing files surface as compact Conductor
-  notifications when a terminal can be resolved.
-- Right-side file previews are product metadata/tool UI. They must not inspect terminal
-  scrollback or make terminal transcript text observable by SwiftUI.
+- Existing directories open in the app-owned right-side file manager. Existing files open the
+  same file manager at their parent directory with the file selected for preview. Missing
+  files surface as compact Conductor notifications when a terminal can be resolved.
+- Right-side file manager previews are product metadata/tool UI. They must not inspect
+  terminal scrollback or make terminal transcript text observable by SwiftUI.
 
 ## SwiftUI Bridge
 

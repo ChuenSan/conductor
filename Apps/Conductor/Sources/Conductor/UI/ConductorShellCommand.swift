@@ -35,6 +35,7 @@ enum ConductorShellCommand: String, CaseIterable {
     case toggleWorkspaceOverview
     case toggleSettings
     case toggleNotifications
+    case toggleFileManager
     case jumpToLatestUnread
     case toggleFullScreen
     case resetWorkspace
@@ -83,6 +84,8 @@ enum ConductorShellCommand: String, CaseIterable {
             return "command-toggle-settings"
         case .toggleNotifications:
             return "command-toggle-notifications"
+        case .toggleFileManager:
+            return "command-file-manager"
         case .jumpToLatestUnread:
             return "command-jump-unread"
         case .toggleFullScreen:
@@ -131,8 +134,12 @@ enum ConductorShellCommand: String, CaseIterable {
             model.canMoveSelectedTabToNewSplit
         case .jumpToLatestUnread:
             model.notifications.snapshot.latestUnread != nil
+        case .showTerminalSearch:
+            model.selectedWorkspaceFileTab != nil || model.fileManagerPanelRequest != nil || model.focusedTerminalID != nil
         case .findNext, .findPrevious:
-            model.terminalSearchVisible
+            model.terminalSearchVisible || model.selectedWorkspaceFileTab != nil || model.fileManagerPanelRequest != nil
+        case .toggleFileManager:
+            model.fileManagerPanelRequest != nil || model.focusedWorkingDirectoryURL != nil
         case .clearNotifications:
             !model.notifications.records.isEmpty
         case .closeCurrentWorkspace:
@@ -210,6 +217,8 @@ enum ConductorShellCommand: String, CaseIterable {
             model.toggleSettingsPanel()
         case .toggleNotifications:
             model.toggleNotificationPanel()
+        case .toggleFileManager:
+            model.toggleFileManagerPanel()
         case .jumpToLatestUnread:
             _ = model.jumpToLatestUnread()
         case .toggleFullScreen:
