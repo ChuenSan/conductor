@@ -190,6 +190,13 @@ workspace overview, and compact status modules.
   then apply one final frame update when resizing ends; pair this with browser-side
   `content-visibility` for repeated Markdown blocks so offscreen document content does not
   repeatedly reflow during window drags.
+- Document workbench commands such as search, next/previous match, and renderer-specific
+  actions must bridge into the stable WebKit/AppKit renderer after navigation finishes. Do not
+  leave old SwiftUI text-editor state wired to toolbar buttons after routing Markdown/code/PDF
+  through WebKit; those controls will look available but operate on an empty stale snapshot.
+  For bundled browser workers such as PDF.js, pass worker code as an unescaped blob payload
+  (for example base64 decoded in JavaScript), not as HTML-escaped `<script type="text/plain">`
+  content, because raw script text does not entity-decode back into valid JavaScript.
 - Formatted file views should share one document workbench skeleton: a theme-owned header with
   title/path/status badges, bounded metadata metrics, a typed reader body, and an optional
   outline column only when the format can provide useful headings. Markdown, log, TeX, and text

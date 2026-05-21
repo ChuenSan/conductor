@@ -2213,7 +2213,12 @@ struct FileManagerPanel: View {
                 title: url.lastPathComponent,
                 theme: theme,
                 fontSize: model.appearance.terminalFontSize,
-                isActive: false
+                isActive: false,
+                searchQuery: "",
+                searchRevision: 0,
+                searchNextToken: 0,
+                searchPreviousToken: 0,
+                onSearchStatusChange: { _ in }
             )
         case .nativePreview(let url, let descriptor):
             VStack(spacing: 0) {

@@ -14,13 +14,23 @@ struct ConductorDocumentWorkspaceView: View {
     let theme: TerminalTheme
     let fontSize: CGFloat
     let isActive: Bool
+    let searchQuery: String
+    let searchRevision: Int
+    let searchNextToken: Int
+    let searchPreviousToken: Int
+    let onSearchStatusChange: (String) -> Void
 
     @StateObject private var loader = ConductorDocumentViewerLoader()
 
     var body: some View {
         ConductorDocumentWebView(
             payload: loader.payload,
-            theme: ConductorDocumentWebTheme(theme: theme, fontSize: fontSize)
+            theme: ConductorDocumentWebTheme(theme: theme, fontSize: fontSize),
+            searchQuery: searchQuery,
+            searchRevision: searchRevision,
+            searchNextToken: searchNextToken,
+            searchPreviousToken: searchPreviousToken,
+            onSearchStatusChange: onSearchStatusChange
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.terminalBackground)
@@ -346,7 +356,7 @@ private struct ConductorDocumentWebTheme: Equatable {
 }
 
 private final class ConductorDocumentWebContainerView: NSView {
-    private let webView: WKWebView
+    let webView: WKWebView
     private let resizeCover = CALayer()
     private var isFreezingWebViewResize = false
     private var pendingFrameAfterResize = false
@@ -424,6 +434,11 @@ private final class ConductorDocumentWebContainerView: NSView {
 private struct ConductorDocumentWebView: NSViewRepresentable {
     let payload: ConductorDocumentPayload
     let theme: ConductorDocumentWebTheme
+    let searchQuery: String
+    let searchRevision: Int
+    let searchNextToken: Int
+    let searchPreviousToken: Int
+    let onSearchStatusChange: (String) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -434,6 +449,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.suppressesIncrementalRendering = false
+        configuration.userContentController.add(context.coordinator, name: "documentSearch")
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -445,14 +461,92 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
     }
 
     func updateNSView(_ container: ConductorDocumentWebContainerView, context: Context) {
+        context.coordinator.onSearchStatusChange = onSearchStatusChange
         let signature = "\(payload.renderID)|\(theme.signature)"
-        guard context.coordinator.loadedSignature != signature else { return }
-        context.coordinator.loadedSignature = signature
-        container.loadHTMLString(Self.html(payload: payload, theme: theme), baseURL: payload.baseURL, backgroundColor: theme.backgroundColor)
+        context.coordinator.currentSearchQuery = searchQuery
+        if context.coordinator.loadedSignature != signature {
+            context.coordinator.loadedSignature = signature
+            context.coordinator.hasFinishedNavigation = false
+            context.coordinator.searchSignature = nil
+            context.coordinator.nextToken = searchNextToken
+            context.coordinator.previousToken = searchPreviousToken
+            container.loadHTMLString(Self.html(payload: payload, theme: theme), baseURL: payload.baseURL, backgroundColor: theme.backgroundColor)
+            return
+        }
+        context.coordinator.applySearchStateIfNeeded(
+            to: container,
+            query: searchQuery,
+            revision: searchRevision,
+            nextToken: searchNextToken,
+            previousToken: searchPreviousToken
+        )
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var loadedSignature: String?
+        var searchSignature: String?
+        var nextToken = 0
+        var previousToken = 0
+        var currentSearchQuery = ""
+        var hasFinishedNavigation = false
+        var onSearchStatusChange: ((String) -> Void)?
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            hasFinishedNavigation = true
+            applySearchScript(to: webView, query: currentSearchQuery)
+        }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "documentSearch" else { return }
+            publishSearchStatus(message.body)
+        }
+
+        func applySearchStateIfNeeded(
+            to container: ConductorDocumentWebContainerView,
+            query: String,
+            revision: Int,
+            nextToken: Int,
+            previousToken: Int
+        ) {
+            guard hasFinishedNavigation else { return }
+            let signature = "\(revision)|\(query)"
+            if searchSignature != signature {
+                searchSignature = signature
+                currentSearchQuery = query
+                applySearchScript(to: container.webView, query: query)
+            }
+            if self.nextToken != nextToken {
+                self.nextToken = nextToken
+                navigateSearch(in: container.webView, delta: 1)
+            }
+            if self.previousToken != previousToken {
+                self.previousToken = previousToken
+                navigateSearch(in: container.webView, delta: -1)
+            }
+        }
+
+        private func applySearchScript(to webView: WKWebView, query: String) {
+            let queryLiteral = ConductorDocumentWebView.jsonStringLiteral(query)
+            webView.evaluateJavaScript("window.ConductorDocumentViewer?.setSearch(\(queryLiteral))") { [weak self] result, _ in
+                self?.publishSearchStatus(result)
+            }
+        }
+
+        private func navigateSearch(in webView: WKWebView, delta: Int) {
+            webView.evaluateJavaScript("window.ConductorDocumentViewer?.navigateSearch(\(delta))") { [weak self] result, _ in
+                self?.publishSearchStatus(result)
+            }
+        }
+
+        private func publishSearchStatus(_ result: Any?) {
+            if let dictionary = result as? [String: Any],
+               let current = dictionary["current"] as? Int,
+               let total = dictionary["total"] as? Int {
+                onSearchStatusChange?("\(current)/\(total)")
+                return
+            }
+            onSearchStatusChange?("0/0")
+        }
     }
 
     private static func html(payload: ConductorDocumentPayload, theme: ConductorDocumentWebTheme) -> String {
@@ -474,7 +568,6 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         <script>\(vendorScript("katex.min"))</script>
         <script>\(vendorScript("katex-auto-render.min"))</script>
         <script>\(vendorScript("pdf.min"))</script>
-        <script id="pdf-worker" type="text/plain">\(escapedScriptText(vendorScript("pdf.worker.min")))</script>
         <script>\(vendorScript("mammoth.browser.min"))</script>
         <script>\(vendorScript("xlsx.full.min"))</script>
         </head>
@@ -483,6 +576,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         <script>
         window.__CONDUCTOR_DOCUMENT__ = \(payloadJSON);
         window.__CONDUCTOR_THEME__ = \(themeJSON);
+        window.__CONDUCTOR_PDF_WORKER_BASE64__ = "\(vendorScriptBase64("pdf.worker.min"))";
         \(rendererJavaScript)
         </script>
         </body>
@@ -521,11 +615,16 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         return rewritten
     }
 
-    private static func escapedScriptText(_ script: String) -> String {
-        script
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
+    private static func vendorScriptBase64(_ name: String) -> String {
+        Data(vendorScript(name).utf8).base64EncodedString()
+    }
+
+    private static func jsonStringLiteral(_ value: String) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: [value], options: [.withoutEscapingSlashes]),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+        return String(encoded.dropFirst().dropLast())
     }
 
     private static func jsonLiteral(_ object: [String: Any]) -> String {
@@ -954,6 +1053,17 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         .large-note strong {
           color: var(--text);
         }
+        mark.conductor-search-match {
+          color: var(--text);
+          background: color-mix(in srgb, var(--accent) 34%, transparent);
+          border-radius: 4px;
+          padding: 0 .08em;
+        }
+        mark.conductor-search-match.active {
+          color: color-mix(in srgb, var(--text) 90%, white 10%);
+          background: color-mix(in srgb, var(--accent) 72%, black 10%);
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 62%, transparent);
+        }
         .hljs-comment, .hljs-quote { color: var(--muted); }
         .hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: var(--accent); }
         .hljs-string, .hljs-number, .hljs-literal { color: color-mix(in srgb, var(--accent) 58%, var(--text)); }
@@ -979,6 +1089,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         const payload = window.__CONDUCTOR_DOCUMENT__;
         const theme = window.__CONDUCTOR_THEME__;
         const root = document.getElementById('root');
+        const searchState = { query: '', matches: [], index: -1 };
 
         function applyTheme(t) {
           const style = document.documentElement.style;
@@ -1005,6 +1116,120 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           if (!window.hljs) return;
           document.querySelectorAll('pre code').forEach(block => window.hljs.highlightElement(block));
         }
+
+        function currentSearchStatus() {
+          const total = searchState.matches.length;
+          return { current: total > 0 ? searchState.index + 1 : 0, total };
+        }
+
+        function publishSearchStatus(status) {
+          try {
+            window.webkit?.messageHandlers?.documentSearch?.postMessage(status || currentSearchStatus());
+          } catch (_) {}
+        }
+
+        function clearSearchMarks() {
+          const marks = Array.from(root.querySelectorAll('mark.conductor-search-match'));
+          marks.forEach(mark => {
+            const parent = mark.parentNode;
+            if (!parent) return;
+            parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+            parent.normalize();
+          });
+          searchState.matches = [];
+          searchState.index = -1;
+        }
+
+        function searchTextNodes(container) {
+          const nodes = [];
+          const walker = document.createTreeWalker(
+            container,
+            NodeFilter.SHOW_TEXT,
+            {
+              acceptNode(node) {
+                const parent = node.parentElement;
+                if (!parent || !node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                if (parent.closest('script, style, textarea, input, mark.conductor-search-match')) return NodeFilter.FILTER_REJECT;
+                return NodeFilter.FILTER_ACCEPT;
+              }
+            }
+          );
+          while (walker.nextNode()) nodes.push(walker.currentNode);
+          return nodes;
+        }
+
+        function markSearchMatches(query) {
+          const needle = String(query || '').trim().toLocaleLowerCase();
+          if (!needle) return;
+          const nodes = searchTextNodes(root);
+          const maxMatches = 5000;
+          for (const node of nodes) {
+            if (searchState.matches.length >= maxMatches) break;
+            const text = node.nodeValue || '';
+            const lower = text.toLocaleLowerCase();
+            let start = 0;
+            const fragments = [];
+            let matched = false;
+            while (start < text.length && searchState.matches.length < maxMatches) {
+              const index = lower.indexOf(needle, start);
+              if (index < 0) break;
+              if (index > start) fragments.push(document.createTextNode(text.slice(start, index)));
+              const mark = document.createElement('mark');
+              mark.className = 'conductor-search-match';
+              mark.textContent = text.slice(index, index + needle.length);
+              fragments.push(mark);
+              searchState.matches.push(mark);
+              matched = true;
+              start = index + Math.max(needle.length, 1);
+            }
+            if (!matched) continue;
+            if (start < text.length) fragments.push(document.createTextNode(text.slice(start)));
+            const parent = node.parentNode;
+            if (!parent) continue;
+            fragments.forEach(fragment => parent.insertBefore(fragment, node));
+            parent.removeChild(node);
+          }
+        }
+
+        function activateSearchMatch(index, scroll = true) {
+          searchState.matches.forEach(node => node.classList.remove('active'));
+          let status;
+          if (!searchState.matches.length) {
+            searchState.index = -1;
+            status = currentSearchStatus();
+            publishSearchStatus(status);
+            return status;
+          }
+          searchState.index = Math.max(0, Math.min(searchState.matches.length - 1, index));
+          const active = searchState.matches[searchState.index];
+          active.classList.add('active');
+          if (scroll) {
+            active.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+          }
+          status = currentSearchStatus();
+          publishSearchStatus(status);
+          return status;
+        }
+
+        window.ConductorDocumentViewer = {
+          setSearch(query) {
+            const normalized = String(query || '');
+            if (searchState.query === normalized && searchState.matches.length) {
+              return activateSearchMatch(searchState.index, false);
+            }
+            searchState.query = normalized;
+            clearSearchMarks();
+            markSearchMatches(normalized);
+            return activateSearchMatch(0, Boolean(normalized.trim()));
+          },
+          navigateSearch(delta) {
+            if (!searchState.matches.length) return currentSearchStatus();
+            return activateSearchMatch((searchState.index + delta + searchState.matches.length) % searchState.matches.length);
+          },
+          status() {
+            return currentSearchStatus();
+          }
+        };
 
         function formatBytes(value) {
           const bytes = Number(value || 0);
@@ -1127,6 +1352,9 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
               </div>
             </section>
           `;
+          if (searchState.query.trim()) {
+            setTimeout(() => window.ConductorDocumentViewer.setSearch(searchState.query), 0);
+          }
         }
 
         function largeNotice(kind) {
@@ -1158,6 +1386,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           if (window.renderMathInElement) {
             try {
               window.renderMathInElement(root, {
+                ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
                 delimiters: [
                   { left: '$$', right: '$$', display: true },
                   { left: '\\\\[', right: '\\\\]', display: true },
@@ -1182,7 +1411,11 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
                   fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif'
                 }
               });
-              window.mermaid.run({ querySelector: '.mermaid' });
+              window.mermaid.run({ querySelector: '.mermaid' }).catch(error => {
+                document.querySelectorAll('.mermaid').forEach(node => {
+                  node.innerHTML = `<pre><code>${escapeHTML(node.textContent || String(error))}</code></pre>`;
+                });
+              });
             } catch (error) {
               document.querySelectorAll('.mermaid').forEach(node => {
                 node.innerHTML = `<pre><code>${escapeHTML(node.textContent || String(error))}</code></pre>`;
@@ -1333,7 +1566,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
             return;
           }
           try {
-            const workerScript = document.getElementById('pdf-worker')?.textContent || '';
+            const workerScript = atob(window.__CONDUCTOR_PDF_WORKER_BASE64__ || '');
             const workerURL = URL.createObjectURL(new Blob([workerScript], { type: 'text/javascript' }));
             window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerURL;
             const pdf = await window.pdfjsLib.getDocument({ data: base64ToUint8Array(payload.binaryBase64) }).promise;

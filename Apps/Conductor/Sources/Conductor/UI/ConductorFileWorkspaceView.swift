@@ -345,9 +345,10 @@ private struct ConductorWorkspaceFileEditorView: View {
     @State private var searchPending = false
     @State private var sourceSelectionRange: NSRange?
     @State private var sourceSelectionToken = 0
-    @State private var largeSearchStatus = "0/0"
-    @State private var largeSearchNextToken = 0
-    @State private var largeSearchPreviousToken = 0
+    @State private var documentSearchStatus = "0/0"
+    @State private var documentSearchRevision = 0
+    @State private var documentSearchNextToken = 0
+    @State private var documentSearchPreviousToken = 0
 
     init(model: ConductorWindowModel, tab: ConductorWorkspaceFileTab, isSelected: Bool) {
         self.model = model
@@ -375,7 +376,7 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     private var supportsToolbarSearch: Bool {
-        return false
+        return true
     }
 
     private var searchMatches: [NSRange] {
@@ -434,6 +435,7 @@ private struct ConductorWorkspaceFileEditorView: View {
             moveSearchSelection(-1)
         }
         .onChange(of: searchQuery) {
+            documentSearchRevision &+= 1
             refreshSearchMatches(resetSelection: true)
         }
         .onDisappear {
@@ -573,7 +575,14 @@ private struct ConductorWorkspaceFileEditorView: View {
             title: tab.title,
             theme: theme,
             fontSize: model.appearance.terminalFontSize,
-            isActive: isSelected
+            isActive: isSelected,
+            searchQuery: searchVisible ? searchQuery : "",
+            searchRevision: documentSearchRevision,
+            searchNextToken: documentSearchNextToken,
+            searchPreviousToken: documentSearchPreviousToken,
+            onSearchStatusChange: { status in
+                documentSearchStatus = status
+            }
         )
     }
 
@@ -649,7 +658,8 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     private var searchStatus: String {
-        if isLargeText { return largeSearchStatus }
+        if supportsToolbarSearch { return documentSearchStatus }
+        if isLargeText { return documentSearchStatus }
         if searchPending { return L("搜索中", "Searching") }
         guard !searchMatches.isEmpty else { return "0/0" }
         return "\(selectedSearchIndex + 1)/\(searchMatches.count)"
@@ -755,24 +765,25 @@ private struct ConductorWorkspaceFileEditorView: View {
 
     private func showSearch() {
         searchVisible = true
-        selectCurrentSearchMatch()
+        documentSearchRevision &+= 1
     }
 
     private func closeSearch() {
         recordSearchQuery()
         searchVisible = false
         searchQuery = ""
+        documentSearchStatus = "0/0"
+        documentSearchRevision &+= 1
         sourceSelectionRange = nil
     }
 
     private func moveSearchSelection(_ delta: Int) {
-        if isMarkdown && !isLargeText { return }
         searchVisible = true
-        if isLargeText {
+        if supportsToolbarSearch {
             if delta < 0 {
-                largeSearchPreviousToken &+= 1
+                documentSearchPreviousToken &+= 1
             } else {
-                largeSearchNextToken &+= 1
+                documentSearchNextToken &+= 1
             }
             return
         }
@@ -797,6 +808,14 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     private func refreshSearchMatches(resetSelection: Bool) {
+        guard !supportsToolbarSearch else {
+            searchTask?.cancel()
+            searchPending = false
+            cachedSearchMatches = []
+            selectedSearchIndex = 0
+            sourceSelectionRange = nil
+            return
+        }
         guard !isLargeText, !isMarkdown else {
             searchTask?.cancel()
             searchPending = false
