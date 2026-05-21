@@ -7,6 +7,7 @@ import QuartzCore
 final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     private static let legacyFilenamesPboardType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
     private static let internalTerminalTabDragType = NSPasteboard.PasteboardType("app.conductor.terminal-tab")
+    private static let internalTerminalTabDragPrefix = "terminal:"
     private static let dropTypes: Set<NSPasteboard.PasteboardType> = [
         internalTerminalTabDragType,
         .string,
@@ -419,7 +420,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         }
 
         guard let types = pasteboard.types,
-              !types.contains(Self.internalTerminalTabDragType),
+              !containsInternalTerminalTabDragType(types),
               !Set(types).isDisjoint(with: Self.externalFileDropTypes),
               droppedTerminalText(from: pasteboard) != nil else {
             return []
@@ -440,20 +441,33 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     private func terminalTabID(from pasteboard: NSPasteboard) -> TerminalID? {
         guard surface?.canAcceptTerminalTabDrop() == true else { return nil }
 
-        if let data = pasteboard.data(forType: Self.internalTerminalTabDragType),
-           let text = String(data: data, encoding: .utf8),
-           let terminalID = terminalID(fromDroppedText: text) {
-            return terminalID
-        }
-
-        if let text = pasteboard.string(forType: Self.internalTerminalTabDragType),
-           let terminalID = terminalID(fromDroppedText: text) {
-            return terminalID
+        let internalTypes = pasteboard.types?.filter(Self.isInternalTerminalTabDragType) ?? [
+            Self.internalTerminalTabDragType
+        ]
+        for type in internalTypes {
+            if let terminalID = terminalID(fromPayloadOn: pasteboard, type: type) {
+                return terminalID
+            }
         }
 
         if !hasExternalDropPayload(pasteboard),
            let text = pasteboard.string(forType: .string),
-           let terminalID = terminalID(fromFallbackText: text) {
+           let terminalID = terminalID(fromDroppedText: text, allowsBareID: false) {
+            return terminalID
+        }
+
+        return nil
+    }
+
+    private func terminalID(fromPayloadOn pasteboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> TerminalID? {
+        if let data = pasteboard.data(forType: type),
+           let text = String(data: data, encoding: .utf8),
+           let terminalID = terminalID(fromDroppedText: text, allowsBareID: true) {
+            return terminalID
+        }
+
+        if let text = pasteboard.string(forType: type),
+           let terminalID = terminalID(fromDroppedText: text, allowsBareID: true) {
             return terminalID
         }
 
@@ -465,23 +479,26 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         return !Set(types).isDisjoint(with: Self.externalFileDropTypes)
     }
 
-    private func terminalID(fromDroppedText text: String) -> TerminalID? {
-        let prefix = "terminal:"
+    private func terminalID(fromDroppedText text: String, allowsBareID: Bool = true) -> TerminalID? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rawID = trimmed.hasPrefix(prefix)
-            ? String(trimmed.dropFirst(prefix.count))
-            : trimmed
+        let rawID: String
+        if trimmed.hasPrefix(Self.internalTerminalTabDragPrefix) {
+            rawID = String(trimmed.dropFirst(Self.internalTerminalTabDragPrefix.count))
+        } else if allowsBareID {
+            rawID = trimmed
+        } else {
+            return nil
+        }
         guard let uuid = UUID(uuidString: rawID) else { return nil }
         return TerminalID(uuid)
     }
 
-    private func terminalID(fromFallbackText text: String) -> TerminalID? {
-        let prefix = "terminal:"
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix(prefix) else { return nil }
-        let rawID = String(trimmed.dropFirst(prefix.count))
-        guard let uuid = UUID(uuidString: rawID) else { return nil }
-        return TerminalID(uuid)
+    private static func isInternalTerminalTabDragType(_ type: NSPasteboard.PasteboardType) -> Bool {
+        type == internalTerminalTabDragType || type.rawValue.contains(internalTerminalTabDragType.rawValue)
+    }
+
+    private func containsInternalTerminalTabDragType(_ types: [NSPasteboard.PasteboardType]) -> Bool {
+        types.contains(where: Self.isInternalTerminalTabDragType)
     }
 
     private func terminalTabDropTarget(for location: CGPoint, size: CGSize) -> TerminalTabDropTarget {
@@ -507,7 +524,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
 
     private func droppedTerminalText(from pasteboard: NSPasteboard) -> String? {
         guard let types = pasteboard.types,
-              !types.contains(Self.internalTerminalTabDragType) else {
+              !containsInternalTerminalTabDragType(types) else {
             return nil
         }
 

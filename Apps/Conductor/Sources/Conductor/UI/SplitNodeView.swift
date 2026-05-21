@@ -1170,6 +1170,13 @@ private func terminalTabDragPayload(for tabID: TerminalID) -> NSItemProvider {
         completion(data, nil)
         return nil
     }
+    provider.registerDataRepresentation(
+        forTypeIdentifier: UTType.plainText.identifier,
+        visibility: .all
+    ) { completion in
+        completion(data, nil)
+        return nil
+    }
     return provider
 }
 
