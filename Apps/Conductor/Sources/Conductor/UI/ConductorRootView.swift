@@ -56,7 +56,7 @@ struct ConductorRootView: View {
                         .environment(\.conductorFontScale, model.appearance.fontScale)
                         .environment(\.conductorFontFamily, model.appearance.fontFamily)
                         .environment(\.locale, model.appearance.language.locale)
-                        .transition(ConductorMotion.panelTransition)
+                        .transition(ConductorMotion.settingsPanelTransition)
                 }
                 if model.workspaceOverviewVisible {
                     WorkspaceOverviewPanel(model: model)
@@ -1063,7 +1063,7 @@ private struct CommandButton: View {
 }
 
 private struct AppearanceSettingsPanel: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
     @State private var selectedSection: SettingsPanelSection = .overview
     @Namespace private var settingsSelectionNamespace
     @Environment(\.conductorTheme) private var theme
@@ -1155,9 +1155,7 @@ private struct AppearanceSettingsPanel: View {
                         selected: selectedSection == section,
                         selectionNamespace: settingsSelectionNamespace
                     ) {
-                        model.performShellMotion(ConductorMotion.selectionGlide) {
-                            selectedSection = section
-                        }
+                        selectSection(section)
                     }
                 }
             }
@@ -1169,7 +1167,9 @@ private struct AppearanceSettingsPanel: View {
             theme.floatingControlFill.opacity(0.10)
 
             ScrollView {
-                detailContent
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    detailContent
+                }
                     .frame(maxWidth: 660, alignment: .topLeading)
                     .padding(.horizontal, 22)
                     .padding(.vertical, 18)
@@ -1181,33 +1181,35 @@ private struct AppearanceSettingsPanel: View {
 
     @ViewBuilder
     private var detailContent: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SettingsPaneHeading(section: selectedSection)
+        SettingsPaneHeading(section: selectedSection)
 
-            switch selectedSection {
-            case .overview:
-                overviewSettings
-            case .interface:
-                interfaceSettings
-            case .terminal:
-                terminalSettingsDashboard
-            case .shell:
-                shellAndProxySettings
-            case .automation:
-                automationSettings
-            case .commands:
-                commandSettings
-            case .themes:
-                themeSettings
-            }
+        switch selectedSection {
+        case .overview:
+            overviewSettings
+        case .interface:
+            interfaceSettings
+        case .terminal:
+            terminalSettingsDashboard
+        case .shell:
+            shellAndProxySettings
+        case .automation:
+            automationSettings
+        case .commands:
+            commandSettings
+        case .themes:
+            themeSettings
         }
-        .id(selectedSection)
-        .transition(.opacity)
-        .animation(model.shellAnimation(ConductorMotion.feedback), value: selectedSection)
+    }
+
+    private func selectSection(_ section: SettingsPanelSection) {
+        guard selectedSection != section else { return }
+        ConductorMotion.withoutAnimation {
+            selectedSection = section
+        }
     }
 
     private var overviewSettings: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("当前状态", "Current State"),
                 subtitle: L("只展示会影响日常使用的设置摘要，点左侧分类进入调整", "A compact summary of daily-use settings; choose a category on the left to edit"),
@@ -1222,7 +1224,7 @@ private struct AppearanceSettingsPanel: View {
                             subtitle: model.appearance.terminalRenderer.selectedFontStatusTitle,
                             systemImage: "terminal"
                         ) {
-                            selectedSection = .terminal
+                            selectSection(.terminal)
                         }
 
                         SettingsQuickJumpButton(
@@ -1230,7 +1232,7 @@ private struct AppearanceSettingsPanel: View {
                             subtitle: model.theme.title,
                             systemImage: "swatchpalette"
                         ) {
-                            selectedSection = .themes
+                            selectSection(.themes)
                         }
                     }
                 }
@@ -1269,7 +1271,7 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var interfaceSettings: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("外观控制", "Appearance Controls"),
                 subtitle: L("像系统偏好设置一样直接调整，不用在卡片海里找选项", "Direct controls, tuned like a native settings inspector"),
@@ -1376,7 +1378,7 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var terminalSettingsDashboard: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        LazyVStack(alignment: .leading, spacing: 18) {
             terminalTypographySettings
 
             SettingsSectionLabel(
@@ -1399,7 +1401,7 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var shellAndProxySettings: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        LazyVStack(alignment: .leading, spacing: 18) {
             terminalShellSettings
 
             SettingsSectionLabel(
@@ -1412,7 +1414,7 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var automationSettings: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        LazyVStack(alignment: .leading, spacing: 18) {
             aiSettings
 
             SettingsSectionLabel(
@@ -2395,7 +2397,7 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var commandSettings: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("命令与快捷键", "Commands and Shortcuts"),
                 subtitle: L("保留密集列表，适合快速扫视", "Dense command list for fast scanning"),
@@ -2407,7 +2409,7 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var themeSettings: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        LazyVStack(alignment: .leading, spacing: 14) {
             SettingsPreferenceGroup(
                 title: L("主题工作台", "Theme Workbench"),
                 subtitle: L("先看大效果，再从横向主题条切换", "Inspect the full shell first, then switch from the theme rail"),
@@ -2679,7 +2681,7 @@ private struct AgentCLIStatusRow: View {
 }
 
 private struct SettingsOverviewGrid: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
     @Environment(\.conductorFontScale) private var fontScale
 
     private var columns: [GridItem] {
@@ -2879,32 +2881,14 @@ private struct GhosttyConfigReferenceCard: View {
 }
 
 private struct GhosttyFunctionalConfigBrowser: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
     @Binding var search: String
     @State private var selectedGroupID = TerminalGhosttyConfigCatalog.productGroups[0].id
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
     private var filteredGroups: [GhosttyConfigFunctionGroup] {
-        let query = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return TerminalGhosttyConfigCatalog.productGroups }
-
-        return TerminalGhosttyConfigCatalog.productGroups.compactMap { group in
-            let groupMatches = group.title.lowercased().contains(query) ||
-                group.subtitle.lowercased().contains(query)
-            let keys = groupMatches ? group.keys : group.keys.filter { key in
-                key.lowercased().contains(query) ||
-                    TerminalGhosttyConfigCatalog.description(for: key).lowercased().contains(query)
-            }
-            guard !keys.isEmpty else { return nil }
-            return GhosttyConfigFunctionGroup(
-                id: group.id,
-                title: group.title,
-                subtitle: group.subtitle,
-                systemImage: group.systemImage,
-                keys: keys
-            )
-        }
+        TerminalGhosttyConfigCatalog.filteredProductGroups(matching: search)
     }
 
     private var enabledCount: Int {
@@ -3030,7 +3014,7 @@ private struct GhosttySettingsCategoryRow: View {
 }
 
 private struct GhosttyConfigFunctionSection: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
     let group: GhosttyConfigFunctionGroup
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
@@ -3075,7 +3059,7 @@ private struct GhosttyConfigFunctionSection: View {
 }
 
 private struct GhosttyStyledConfigRow: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
     let key: String
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
@@ -4280,7 +4264,7 @@ private struct SettingsSidebarItem: View {
 }
 
 private struct CommandShortcutGuide: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
     var height: CGFloat = 178
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme

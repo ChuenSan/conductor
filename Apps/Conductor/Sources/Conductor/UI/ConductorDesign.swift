@@ -675,6 +675,10 @@ enum ConductorMotion {
         )
     }
 
+    static var settingsPanelTransition: AnyTransition {
+        reducedMotion ? .identity : .opacity
+    }
+
     static var searchTransition: AnyTransition {
         reducedMotion ? .identity : .modifier(
             active: ConductorPanelRevealModifier(opacity: 0, scale: 0.992, y: -4, blur: 1.5),

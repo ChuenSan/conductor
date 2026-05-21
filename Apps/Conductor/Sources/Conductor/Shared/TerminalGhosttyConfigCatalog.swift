@@ -22,6 +22,11 @@ struct GhosttyConfigFunctionGroup: Identifiable, Equatable {
     }
 }
 
+private struct GhosttyConfigSearchRecord {
+    let groupText: String
+    let keyTextByKey: [String: String]
+}
+
 enum GhosttyConfigControlStyle: Equatable {
     case boolean
     case choice([String])
@@ -471,6 +476,28 @@ enum TerminalGhosttyConfigCatalog {
             )
     }
 
+    static func filteredProductGroups(matching rawQuery: String) -> [GhosttyConfigFunctionGroup] {
+        let query = normalizedSearchText(rawQuery)
+        guard !query.isEmpty else { return productGroups }
+
+        return productGroups.compactMap { group in
+            guard let record = productSearchIndex[group.id] else { return nil }
+            let keys = record.groupText.contains(query)
+                ? group.keys
+                : group.keys.filter { key in
+                    record.keyTextByKey[key]?.contains(query) ?? normalizedSearchText(key).contains(query)
+                }
+            guard !keys.isEmpty else { return nil }
+            return GhosttyConfigFunctionGroup(
+                id: group.id,
+                title: group.title,
+                subtitle: group.subtitle,
+                systemImage: group.systemImage,
+                keys: keys
+            )
+        }
+    }
+
     static func description(for key: String) -> String {
         switch key {
         case "font-family":
@@ -855,4 +882,30 @@ enum TerminalGhosttyConfigCatalog {
         "clipboard-copy", "config-reload", "force-autohint", "vt-kam-allowed",
         "auto-update", "background-blur"
     ]
+
+    private static let productSearchIndex: [String: GhosttyConfigSearchRecord] = {
+        Dictionary(uniqueKeysWithValues: productGroups.map { group in
+            let groupText = normalizedSearchText([group.title, group.subtitle, group.id].joined(separator: " "))
+            let keyTextByKey = Dictionary(uniqueKeysWithValues: group.keys.map { key in
+                (
+                    key,
+                    normalizedSearchText([
+                        key,
+                        displayTitle(for: key),
+                        description(for: key),
+                        groupTitle(for: key),
+                        valueHint(for: key)
+                    ].joined(separator: " "))
+                )
+            })
+            return (group.id, GhosttyConfigSearchRecord(groupText: groupText, keyTextByKey: keyTextByKey))
+        })
+    }()
+
+    private static func normalizedSearchText(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+            .lowercased()
+    }
 }
