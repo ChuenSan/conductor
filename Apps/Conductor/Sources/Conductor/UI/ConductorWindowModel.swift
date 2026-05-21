@@ -828,9 +828,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let standardizedFile = fileURL.standardizedFileURL
         let resolvedRoot = (rootURL ?? standardizedFile.deletingLastPathComponent()).standardizedFileURL
         let tab = ConductorWorkspaceFileTab(fileURL: standardizedFile, rootURL: resolvedRoot)
-        if workspaceFileTabs.contains(where: { $0.id == tab.id }) == false {
-            workspaceFileTabs.append(tab)
-        }
+        workspaceFileTabs = [tab]
+        pruneWorkspaceFileTabState(keeping: Set([tab.id]))
         selectedWorkspaceContentTabID = .file(tab.id)
         terminalSearchVisible = false
         workspaceOverviewVisible = false
@@ -995,6 +994,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 selectedWorkspaceContentTabID = .file(workspaceFileTabs[min(index, workspaceFileTabs.count - 1)].id)
             }
         }
+    }
+
+    private func pruneWorkspaceFileTabState(keeping retainedIDs: Set<String>) {
+        dirtyWorkspaceFileTabIDs.formIntersection(retainedIDs)
+        externallyChangedWorkspaceFileTabIDs.formIntersection(retainedIDs)
+        workspaceFileEditorSaveRequestTokensByTabID = workspaceFileEditorSaveRequestTokensByTabID.filter { retainedIDs.contains($0.key) }
+        workspaceFileEditorSaveAndCloseRequestTokensByTabID = workspaceFileEditorSaveAndCloseRequestTokensByTabID.filter { retainedIDs.contains($0.key) }
     }
 
     private func movedRootURL(for rootURL: URL, oldPath: String, newPath: String, isDirectory: Bool) -> URL {

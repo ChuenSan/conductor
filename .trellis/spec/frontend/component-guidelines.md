@@ -193,6 +193,10 @@ workspace overview, and compact status modules.
   manager; route document-like previews through the same stable document renderer when possible.
   Large text files should show an explicit protected reading state and a calm source panel,
   not a broken-looking partial render.
+- The workspace file/document area is a single replaceable file slot, not a many-file tab
+  strip. Opening another file from terminal links, the file manager, or drag/drop replaces the
+  existing file tab and prunes the previous file's dirty/external/save-token state. Terminal
+  tabs remain multi-tab; document tabs do not accumulate.
 - QuickLook and other native preview surfaces should follow the same live-resize contract as
   WebKit document views. Keep the expensive child AppKit view at its previous frame while the
   window is live-resizing, cover it with a theme-colored layer, and apply one final frame update
