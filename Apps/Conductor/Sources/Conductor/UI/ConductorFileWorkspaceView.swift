@@ -1,8 +1,5 @@
 import AppKit
-import CodeEditLanguages
-import CodeEditSourceEditor
 import SwiftUI
-import UniformTypeIdentifiers
 
 private func L(_ zh: String, _ en: String) -> String {
     ConductorLocalization.text(zh: zh, en: en)
@@ -38,11 +35,6 @@ private extension EnvironmentValues {
 }
 
 private enum WorkspaceFileDocumentState: Equatable {
-    case text(String)
-    case image(URL)
-    case nativePreview(URL, ConductorNativePreviewDescriptor)
-    case largeText(WorkspaceLargeTextDocument)
-    case largeFile(Int64)
     case message(String)
 }
 
@@ -58,15 +50,6 @@ private struct WorkspaceFileLoadResult: Equatable {
     let diskSignature: WorkspaceFileDiskSignature?
 }
 
-private struct WorkspaceFilePerformanceProfile {
-    let interactiveByteLimit: Int
-    let interactiveLineLimit: Int
-    let formatTitle: String
-    let formatSystemImage: String
-    let protectedReason: String
-    let extractsOutline: Bool
-}
-
 private struct WorkspaceFileDiskSignature: Equatable {
     let modificationDate: Date?
     let byteCount: Int64
@@ -74,18 +57,6 @@ private struct WorkspaceFileDiskSignature: Equatable {
 
 private struct WorkspaceFileService {
     private let maxEditableBytes = 20 * 1024 * 1024
-    private let maxInteractiveMarkdownBytes = 192 * 1024
-    private let maxInteractiveStructuredBytes = 256 * 1024
-    private let maxInteractiveTableBytes = 256 * 1024
-    private let maxInteractiveLogBytes = 256 * 1024
-    private let maxInteractiveSourceBytes = 768 * 1024
-    private let maxInteractivePlainTextBytes = 768 * 1024
-    private let maxInteractiveMarkdownLines = 2_500
-    private let maxInteractiveStructuredLines = 2_500
-    private let maxInteractiveTableLines = 1_500
-    private let maxInteractiveLogLines = 4_000
-    private let maxInteractiveSourceLines = 6_000
-    private let maxInteractivePlainTextLines = 6_000
 
     func document(for tab: ConductorWorkspaceFileTab) -> WorkspaceFileDocument {
         let fileURL = tab.fileURL.standardizedFileURL
@@ -111,51 +82,12 @@ private struct WorkspaceFileService {
             )
         }
 
-        let isReadOnly = values.isWritable == false
-        let byteCount = Int64(values.fileSize ?? 0)
-        let type = values.contentType ?? UTType(filenameExtension: fileURL.pathExtension)
-        let pathExtension = fileURL.pathExtension.lowercased()
-        if let descriptor = ConductorNativePreviewClassifier.descriptor(for: type, extension: pathExtension) {
-            return WorkspaceFileDocument(title: tab.title, subtitle: subtitle, isReadOnly: true, state: .nativePreview(fileURL, descriptor))
-        }
-        if type?.conforms(to: .image) == true {
-            return WorkspaceFileDocument(title: tab.title, subtitle: subtitle, isReadOnly: isReadOnly, state: .image(fileURL))
-        }
-
-        let profile = performanceProfile(for: type, extension: pathExtension)
-        if let profile, byteCount > profile.interactiveByteLimit {
-            return largeTextDocument(title: tab.title, subtitle: subtitle, fileURL: fileURL, byteCount: byteCount, profile: profile)
-        }
-
-        guard byteCount <= maxEditableBytes else {
-            return WorkspaceFileDocument(
-                title: tab.title,
-                subtitle: subtitle,
-                isReadOnly: true,
-                state: .largeFile(byteCount)
-            )
-        }
-
-        do {
-            let data = try Data(contentsOf: fileURL)
-            if data.contains(0) {
-                return WorkspaceFileDocument(
-                    title: tab.title,
-                    subtitle: subtitle,
-                    isReadOnly: true,
-                    state: .message(L("二进制文件不能在这里编辑", "Binary files cannot be edited here"))
-                )
-            }
-            let text = String(data: data, encoding: .utf8) ??
-                String(data: data, encoding: .utf16) ??
-                String(decoding: data, as: UTF8.self)
-            if let profile, Self.exceedsLineLimit(text, limit: profile.interactiveLineLimit) {
-                return largeTextDocument(title: tab.title, subtitle: subtitle, fileURL: fileURL, byteCount: byteCount, profile: profile)
-            }
-            return WorkspaceFileDocument(title: tab.title, subtitle: subtitle, isReadOnly: isReadOnly, state: .text(text))
-        } catch {
-            return WorkspaceFileDocument(title: tab.title, subtitle: subtitle, isReadOnly: true, state: .message(error.localizedDescription))
-        }
+        return WorkspaceFileDocument(
+            title: tab.title,
+            subtitle: subtitle,
+            isReadOnly: true,
+            state: .message(L("由统一文档查看器打开", "Opened by the unified document viewer"))
+        )
     }
 
     func loadResult(for tab: ConductorWorkspaceFileTab) -> WorkspaceFileLoadResult {
@@ -211,130 +143,6 @@ private struct WorkspaceFileService {
             byteCount: Int64(values.fileSize ?? 0)
         )
     }
-
-    private static func decodeText(_ data: Data) -> String {
-        String(data: data, encoding: .utf8) ??
-            String(data: data, encoding: .utf16) ??
-            String(decoding: data, as: UTF8.self)
-    }
-
-    private func performanceProfile(for type: UTType?, extension pathExtension: String) -> WorkspaceFilePerformanceProfile? {
-        let ext = pathExtension.lowercased()
-
-        if Self.markdownExtensions.contains(ext) {
-            return WorkspaceFilePerformanceProfile(
-                interactiveByteLimit: maxInteractiveMarkdownBytes,
-                interactiveLineLimit: maxInteractiveMarkdownLines,
-                formatTitle: "Markdown",
-                formatSystemImage: "doc.richtext",
-                protectedReason: L("Markdown 文件较大，已跳过实时预览解析和源码编辑器", "Large Markdown file; live preview parsing and the source editor were skipped"),
-                extractsOutline: true
-            )
-        }
-
-        if Self.structuredExtensions.contains(ext) {
-            return WorkspaceFilePerformanceProfile(
-                interactiveByteLimit: maxInteractiveStructuredBytes,
-                interactiveLineLimit: maxInteractiveStructuredLines,
-                formatTitle: L("结构化", "Structured"),
-                formatSystemImage: "curlybraces",
-                protectedReason: L("结构化文件较大，已避免格式化/语法高亮造成卡顿", "Large structured file; formatting and syntax highlighting were avoided"),
-                extractsOutline: false
-            )
-        }
-
-        if Self.tableExtensions.contains(ext) {
-            return WorkspaceFilePerformanceProfile(
-                interactiveByteLimit: maxInteractiveTableBytes,
-                interactiveLineLimit: maxInteractiveTableLines,
-                formatTitle: L("表格文本", "Table Text"),
-                formatSystemImage: "tablecells",
-                protectedReason: L("表格文件较大，已避免一次性解析整表", "Large table file; full-table parsing was avoided"),
-                extractsOutline: false
-            )
-        }
-
-        if Self.logExtensions.contains(ext) {
-            return WorkspaceFilePerformanceProfile(
-                interactiveByteLimit: maxInteractiveLogBytes,
-                interactiveLineLimit: maxInteractiveLogLines,
-                formatTitle: L("日志", "Log"),
-                formatSystemImage: "list.bullet.rectangle",
-                protectedReason: L("日志文件较大，已进入只读保护预览", "Large log file opened in read-only protected preview"),
-                extractsOutline: false
-            )
-        }
-
-        if Self.sourceExtensions.contains(ext) || type?.conforms(to: .sourceCode) == true {
-            return WorkspaceFilePerformanceProfile(
-                interactiveByteLimit: maxInteractiveSourceBytes,
-                interactiveLineLimit: maxInteractiveSourceLines,
-                formatTitle: L("源码", "Source"),
-                formatSystemImage: "chevron.left.forwardslash.chevron.right",
-                protectedReason: L("源码文件较大，已跳过编辑器语法高亮", "Large source file; editor syntax highlighting was skipped"),
-                extractsOutline: false
-            )
-        }
-
-        if type?.conforms(to: .text) == true || Self.plainTextExtensions.contains(ext) {
-            return WorkspaceFilePerformanceProfile(
-                interactiveByteLimit: maxInteractivePlainTextBytes,
-                interactiveLineLimit: maxInteractivePlainTextLines,
-                formatTitle: L("文本", "Text"),
-                formatSystemImage: "doc.text",
-                protectedReason: L("文本文件较大，已进入只读保护预览", "Large text file opened in read-only protected preview"),
-                extractsOutline: false
-            )
-        }
-
-        return nil
-    }
-
-    private func largeTextDocument(
-        title: String,
-        subtitle: String,
-        fileURL: URL,
-        byteCount: Int64,
-        profile: WorkspaceFilePerformanceProfile
-    ) -> WorkspaceFileDocument {
-        WorkspaceFileDocument(
-            title: title,
-            subtitle: subtitle,
-            isReadOnly: true,
-            state: .largeText(WorkspaceLargeTextDocument(
-                fileURL: fileURL,
-                byteCount: byteCount,
-                formatTitle: profile.formatTitle,
-                formatSystemImage: profile.formatSystemImage,
-                reason: profile.protectedReason,
-                extractsOutline: profile.extractsOutline
-            ))
-        )
-    }
-
-    private static func exceedsLineLimit(_ text: String, limit: Int) -> Bool {
-        guard limit > 0 else { return false }
-        var count = 1
-        for character in text where character == "\n" {
-            count += 1
-            if count > limit {
-                return true
-            }
-        }
-        return false
-    }
-
-    private static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd"]
-    private static let structuredExtensions: Set<String> = [
-        "cfg", "conf", "env", "ini", "json", "json5", "jsonl", "plist", "properties", "toml", "xml", "yaml", "yml"
-    ]
-    private static let tableExtensions: Set<String> = ["csv", "tsv", "tab", "psv"]
-    private static let logExtensions: Set<String> = ["err", "log", "out", "stderr", "stdout", "trace"]
-    private static let sourceExtensions: Set<String> = [
-        "bash", "c", "cc", "cpp", "css", "diff", "go", "h", "hpp", "htm", "html", "java", "js", "jsx", "kt", "m",
-        "mm", "patch", "php", "py", "rb", "rs", "scss", "sh", "sql", "swift", "ts", "tsx", "zsh"
-    ]
-    private static let plainTextExtensions: Set<String> = ["adoc", "env", "ini", "properties", "rst", "text", "txt"]
 
     private func relativePath(for url: URL, rootURL: URL) -> String {
         let rootPath = rootURL.standardizedFileURL.path
@@ -563,13 +371,10 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     private var isLargeText: Bool {
-        if case .largeText = document.state { return true }
         return false
     }
 
     private var supportsToolbarSearch: Bool {
-        if isLargeText { return true }
-        if case .text = document.state { return !isMarkdown }
         return false
     }
 
@@ -666,9 +471,7 @@ private struct ConductorWorkspaceFileEditorView: View {
                     .lineLimit(1)
             }
 
-            if document.isReadOnly {
-                statusPill(systemImage: "lock", title: L("只读", "Read-only"))
-            }
+            statusPill(systemImage: "eye", title: L("预览", "Preview"))
             if externalChangeDetected {
                 statusPill(systemImage: "arrow.triangle.2.circlepath", title: L("外部已修改", "Changed externally"))
             }
@@ -676,12 +479,6 @@ private struct ConductorWorkspaceFileEditorView: View {
             if supportsToolbarSearch && (searchVisible || !searchQuery.isEmpty) {
                 fileSearchField
             }
-
-            editorButton("checkmark.circle", active: isDirty, help: L("保存", "Save")) {
-                save()
-            }
-            .disabled(!isDirty || document.isReadOnly)
-            .keyboardShortcut("s", modifiers: .command)
 
             editorButton("arrow.clockwise", help: L("重新载入", "Reload")) {
                 reload()
@@ -769,66 +566,14 @@ private struct ConductorWorkspaceFileEditorView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch document.state {
-        case .text:
-            Group {
-                if isMarkdown {
-                    ConductorMarkdownWorkspaceView(
-                        text: $text,
-                        fileURL: tab.fileURL,
-                        rootURL: tab.rootURL,
-                        fontSize: model.appearance.terminalFontSize,
-                        focusToken: editorFocusToken,
-                        snapshotToken: editorSnapshotToken,
-                        isEditable: !document.isReadOnly,
-                        searchFocusToken: searchFocusToken,
-                        searchNextToken: searchNextToken,
-                        searchPreviousToken: searchPreviousToken,
-                        onTextSnapshot: handleEditorSnapshot,
-                        openFile: { url in model.openFileInWorkspace(url, rootURL: tab.rootURL) }
-                    )
-                } else {
-                    ConductorCodeEditSourceEditor(
-                        text: $text,
-                        fileURL: tab.fileURL,
-                        theme: theme,
-                        fontSize: model.appearance.terminalFontSize,
-                        focusToken: editorFocusToken,
-                        selectionRange: sourceSelectionRange,
-                        selectionToken: sourceSelectionToken,
-                        snapshotToken: editorSnapshotToken,
-                        isEditable: !document.isReadOnly,
-                        onTextSnapshot: handleEditorSnapshot
-                    )
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-        case .largeText(let largeDocument):
-            ConductorLargeTextWorkspaceView(
-                document: largeDocument,
-                theme: theme,
-                fontSize: model.appearance.terminalFontSize,
-                searchQuery: searchQuery,
-                searchNextToken: largeSearchNextToken,
-                searchPreviousToken: largeSearchPreviousToken,
-                onSearchStatus: { largeSearchStatus = $0 },
-                isActive: isSelected
-            )
-        case .nativePreview(let url, let descriptor):
-            ConductorNativePreviewWorkspaceView(
-                url: url,
-                descriptor: descriptor,
-                theme: theme,
-                isActive: isSelected
-            )
-        case .largeFile(let byteCount):
-            largeFileView(byteCount)
-        case .image(let url):
-            imageView(url)
-        case .message(let message):
-            messageView(systemImage: "doc.badge.ellipsis", title: L("无法编辑", "Cannot Edit"), message: message)
-        }
+        ConductorDocumentWorkspaceView(
+            fileURL: tab.fileURL,
+            rootURL: tab.rootURL,
+            title: tab.title,
+            theme: theme,
+            fontSize: model.appearance.terminalFontSize,
+            isActive: isSelected
+        )
     }
 
     private var fileSearchField: some View {
@@ -1201,16 +946,9 @@ private struct ConductorWorkspaceFileEditorView: View {
         externalChangeDetected = false
         externalDiffVisible = false
         externalDiffState = .idle
-        if case .text(let loadedText) = result.document.state {
-            text = loadedText
-            if resetDirty {
-                savedText = loadedText
-            }
-        } else {
-            text = ""
-            if resetDirty {
-                savedText = ""
-            }
+        text = ""
+        if resetDirty {
+            savedText = ""
         }
         refreshSearchMatches(resetSelection: true)
         model.setWorkspaceFileTabDirty(tab.id, isDirty: false)
@@ -1324,190 +1062,4 @@ private enum WorkspaceFileDiffState: Equatable {
     case idle
     case loading
     case ready(String)
-}
-
-struct ConductorCodeEditSourceEditor: View {
-    @Binding var text: String
-    let fileURL: URL
-    let theme: TerminalTheme
-    let fontSize: CGFloat
-    let focusToken: Int
-    var jumpLine: Int?
-    var jumpLineToken = 0
-    var selectionRange: NSRange?
-    var selectionToken = 0
-    var snapshotToken = 0
-    var isEditable = true
-    var onTextSnapshot: (String) -> Void = { _ in }
-    @State private var editorState = SourceEditorState()
-    @State private var coordinator = ConductorCodeEditSourceEditorCoordinator()
-
-    private var language: CodeLanguage {
-        CodeLanguage.detectLanguageFrom(
-            url: fileURL,
-            prefixBuffer: String(text.prefix(4096)),
-            suffixBuffer: String(text.suffix(4096))
-        )
-    }
-
-    private var configuration: SourceEditorConfiguration {
-        SourceEditorConfiguration(
-            appearance: .init(
-                theme: editorTheme,
-                font: NSFont.monospacedSystemFont(ofSize: CGFloat(max(10, min(28, fontSize))), weight: .regular),
-                lineHeightMultiple: 1.36,
-                wrapLines: true,
-                tabWidth: 4
-            ),
-            behavior: .init(
-                isEditable: isEditable,
-                isSelectable: true,
-                indentOption: .spaces(count: 4)
-            ),
-            layout: .init(
-                editorOverscroll: 0.18,
-                contentInsets: NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0),
-                additionalTextInsets: NSEdgeInsets(top: 8, left: 0, bottom: 12, right: 0)
-            ),
-            peripherals: .init(
-                showGutter: true,
-                showMinimap: true,
-                showReformattingGuide: false,
-                showFoldingRibbon: true
-            )
-        )
-    }
-
-    private var editorTheme: EditorTheme {
-        let foreground = NSColor(theme.shellChromeText)
-        let background = NSColor(theme.terminalBackground)
-        let muted = NSColor(theme.shellChromeTextMuted)
-        let accent = NSColor(theme.floatingEmphasis)
-        let selection = NSColor(theme.floatingSelectedFill.opacity(0.95))
-        let comment = muted.withAlphaComponent(0.82)
-        return EditorTheme(
-            text: .init(color: foreground),
-            insertionPoint: accent,
-            invisibles: .init(color: muted.withAlphaComponent(0.45)),
-            background: background,
-            lineHighlight: selection.withAlphaComponent(0.20),
-            selection: selection,
-            keywords: .init(color: accent),
-            commands: .init(color: accent),
-            types: .init(color: NSColor.systemTeal),
-            attributes: .init(color: NSColor.systemPurple),
-            variables: .init(color: foreground),
-            values: .init(color: NSColor.systemOrange),
-            numbers: .init(color: NSColor.systemOrange),
-            strings: .init(color: NSColor.systemGreen),
-            characters: .init(color: NSColor.systemGreen),
-            comments: .init(color: comment, italic: true)
-        )
-    }
-
-    var body: some View {
-        SourceEditor(
-            $text,
-            language: language,
-            configuration: configuration,
-            state: $editorState,
-            coordinators: [coordinator]
-        )
-        .background(Color(nsColor: editorTheme.background))
-        .clipped()
-        .onAppear {
-            editorState.findPanelVisible = false
-            if focusToken > 0 {
-                coordinator.focus()
-            }
-        }
-        .onChange(of: focusToken) {
-            coordinator.focus()
-        }
-        .onChange(of: jumpLineToken) {
-            if let jumpLine {
-                coordinator.selectLine(jumpLine)
-            }
-        }
-        .onChange(of: selectionToken) {
-            if let selectionRange {
-                coordinator.selectRange(selectionRange)
-            }
-        }
-        .onChange(of: snapshotToken) {
-            onTextSnapshot(coordinator.currentText(fallback: text))
-        }
-    }
-}
-
-@MainActor
-private final class ConductorCodeEditSourceEditorCoordinator: NSObject, @preconcurrency TextViewCoordinator {
-    private weak var controller: TextViewController?
-    private var pendingFocus = false
-
-    func prepareCoordinator(controller: TextViewController) {
-        self.controller = controller
-        constrainLoadedEditorToBounds(controller)
-        if pendingFocus {
-            pendingFocus = false
-            focus()
-        }
-    }
-
-    func controllerDidAppear(controller: TextViewController) {
-        self.controller = controller
-        constrainLoadedEditorToBounds(controller)
-    }
-
-    func textViewDidChangeSelection(controller: TextViewController, newPositions: [CursorPosition]) {
-        self.controller = controller
-    }
-
-    func textViewDidChangeText(controller: TextViewController) {
-        self.controller = controller
-    }
-
-    func destroy() {
-        controller = nil
-    }
-
-    func focus() {
-        guard let controller else {
-            pendingFocus = true
-            return
-        }
-        controller.view.window?.makeFirstResponder(controller.textView)
-    }
-
-    func selectLine(_ line: Int) {
-        guard let controller else { return }
-        controller.setCursorPositions([CursorPosition(line: max(1, line), column: 1)], scrollToVisible: true)
-        controller.view.window?.makeFirstResponder(controller.textView)
-    }
-
-    func selectRange(_ range: NSRange) {
-        guard let controller else { return }
-        controller.setCursorPositions([CursorPosition(range: range)], scrollToVisible: true)
-        controller.view.window?.makeFirstResponder(controller.textView)
-    }
-
-    func currentText(fallback: String) -> String {
-        controller?.text ?? fallback
-    }
-
-    private func constrainLoadedEditorToBounds(_ controller: TextViewController) {
-        guard controller.isViewLoaded else { return }
-        let views: [NSView] = [
-            controller.view,
-            controller.scrollView,
-            controller.scrollView.contentView,
-            controller.scrollView.documentView
-        ].compactMap { $0 }
-
-        for view in views {
-            view.clipsToBounds = true
-            view.wantsLayer = true
-            view.layer?.masksToBounds = true
-        }
-    }
 }

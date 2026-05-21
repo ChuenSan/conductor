@@ -12,13 +12,6 @@ let package = Package(
         .executable(name: "ConductorModelCheck", targets: ["ConductorModelCheck"]),
         .library(name: "ConductorCore", targets: ["ConductorCore"])
     ],
-    dependencies: [
-        .package(path: "Packages/CodeEditSourceEditor"),
-        .package(
-            url: "https://github.com/CodeEditApp/CodeEditLanguages.git",
-            exact: "0.1.20"
-        )
-    ],
     targets: [
         .binaryTarget(
             name: "GhosttyKit",
@@ -31,9 +24,10 @@ let package = Package(
             name: "Conductor",
             dependencies: [
                 "ConductorCore",
-                "GhosttyKit",
-                "CodeEditSourceEditor",
-                "CodeEditLanguages"
+                "GhosttyKit"
+            ],
+            resources: [
+                .process("Resources")
             ],
             linkerSettings: [
                 .linkedLibrary("c++"),
@@ -43,7 +37,8 @@ let package = Package(
                 .linkedFramework("Metal"),
                 .linkedFramework("Quartz"),
                 .linkedFramework("QuartzCore"),
-                .linkedFramework("UniformTypeIdentifiers")
+                .linkedFramework("UniformTypeIdentifiers"),
+                .linkedFramework("WebKit")
             ]
         ),
         .executableTarget(
