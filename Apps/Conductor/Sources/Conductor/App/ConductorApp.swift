@@ -199,6 +199,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     private var cancellables = Set<AnyCancellable>()
     private let model = ConductorWindowModel()
     private let mainThreadWatchdog = ConductorMainThreadWatchdog()
+    private var stressOriginalWorkspace: WorkspaceState?
+    private var stressOriginalTheme: TerminalTheme?
+    private var resizeStressOriginalWorkspace: WorkspaceState?
+    private var resizeStressOriginalTheme: TerminalTheme?
     private var didStart = false
     private var isTerminating = false
 
@@ -234,6 +238,8 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         installAgentHookObserver()
         mainThreadWatchdog.start()
         GhosttyAppRuntime.shared.actionDelegate = model
+        prepareStressWorkspaceIfRequested()
+        prepareResizeStressWorkspaceIfRequested()
         let contentContainer = NSView()
         contentContainer.wantsLayer = true
         contentContainer.layer?.backgroundColor = NSColor.clear.cgColor
@@ -1293,32 +1299,23 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         guard ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_AUTORUN"] == "1" else { return }
         let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_OUTPUT"] ?? "/tmp/conductor-stress-ok.txt"
         let requestedCharacters = Self.positiveEnvironmentInt("CONDUCTOR_STRESS_CHARACTERS")
-        let completionDelay = TimeInterval(Self.positiveEnvironmentInt("CONDUCTOR_STRESS_WAIT_SECONDS") ?? 3)
+        let completionDelay = TimeInterval(Self.positiveEnvironmentInt("CONDUCTOR_STRESS_WAIT_SECONDS") ?? 1)
         let multiTerminalStress = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_MULTI_TERMINAL"] == "1"
         let markerRoot = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_MARKER_DIR"] ??
             "/tmp/conductor-stress-\(UUID().uuidString)"
         let tracePath = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"]
-        let originalWorkspace = model.workspace
-        let originalTheme = model.theme
+        let originalWorkspace = stressOriginalWorkspace ?? model.workspace
+        let originalTheme = stressOriginalTheme ?? model.theme
         Self.appendStressTrace("scheduled characters=\(requestedCharacters ?? 0) multi=\(multiTerminalStress)", to: tracePath)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [model] in
             Self.appendStressTrace("begin", to: tracePath)
-            model.closeAllSurfaces()
             model.commandPaletteVisible = false
-
-            var stressWorkspace = WorkspaceState(title: "Stress Automation")
-            if requestedCharacters == nil {
-                stressWorkspace.newTerminal(title: "zsh 2")
-                stressWorkspace.splitWorkspaceEdge(.right, title: "zsh 3")
-                stressWorkspace.splitWorkspaceEdge(.down, title: "zsh 4")
-                stressWorkspace.equalizeSplits()
-            } else if multiTerminalStress {
-                stressWorkspace.splitWorkspaceEdge(.right, title: "zsh 2")
-                stressWorkspace.splitWorkspaceEdge(.down, title: "zsh 3")
-                stressWorkspace.splitWorkspaceEdge(.right, title: "zsh 4")
-                stressWorkspace.equalizeSplits()
+            if self.stressOriginalWorkspace == nil {
+                model.workspace = self.makeStressWorkspace(
+                    requestedCharacters: requestedCharacters,
+                    multiTerminalStress: multiTerminalStress
+                )
             }
-            model.workspace = stressWorkspace
             Self.appendStressTrace(
                 "workspace panes=\(model.workspace.panes.count) terminals=\(model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count })",
                 to: tracePath
@@ -1454,24 +1451,46 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         """
     }
 
-    private func runResizeStressAutomationIfRequested() {
-        guard ProcessInfo.processInfo.environment["CONDUCTOR_RESIZE_STRESS_AUTORUN"] == "1" else { return }
-        let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_RESIZE_STRESS_OUTPUT"] ?? "/tmp/conductor-resize-stress-ok.txt"
-        let originalWorkspace = model.workspace
-        let originalTheme = model.theme
+    private func prepareStressWorkspaceIfRequested() {
+        guard ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_AUTORUN"] == "1" else { return }
+        guard stressOriginalWorkspace == nil else { return }
+        stressOriginalWorkspace = model.workspace
+        stressOriginalTheme = model.theme
+        model.commandPaletteVisible = false
+        model.workspace = makeStressWorkspace(
+            requestedCharacters: Self.positiveEnvironmentInt("CONDUCTOR_STRESS_CHARACTERS"),
+            multiTerminalStress: ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_MULTI_TERMINAL"] == "1"
+        )
+    }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self else { return }
-            self.model.closeAllSurfaces()
-            self.model.commandPaletteVisible = false
-
-            var stressWorkspace = WorkspaceState(title: "Resize Stress Automation")
+    private func makeStressWorkspace(
+        requestedCharacters: Int?,
+        multiTerminalStress: Bool
+    ) -> WorkspaceState {
+        var stressWorkspace = WorkspaceState(title: "Stress Automation")
+        if requestedCharacters == nil {
             stressWorkspace.newTerminal(title: "zsh 2")
             stressWorkspace.splitWorkspaceEdge(.right, title: "zsh 3")
             stressWorkspace.splitWorkspaceEdge(.down, title: "zsh 4")
             stressWorkspace.equalizeSplits()
-            self.model.workspace = stressWorkspace
-            self.model.closeAllSurfaces()
+        } else if multiTerminalStress {
+            stressWorkspace.splitWorkspaceEdge(.right, title: "zsh 2")
+            stressWorkspace.splitWorkspaceEdge(.down, title: "zsh 3")
+            stressWorkspace.splitWorkspaceEdge(.right, title: "zsh 4")
+            stressWorkspace.equalizeSplits()
+        }
+        return stressWorkspace
+    }
+
+    private func runResizeStressAutomationIfRequested() {
+        guard ProcessInfo.processInfo.environment["CONDUCTOR_RESIZE_STRESS_AUTORUN"] == "1" else { return }
+        let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_RESIZE_STRESS_OUTPUT"] ?? "/tmp/conductor-resize-stress-ok.txt"
+        let originalWorkspace = resizeStressOriginalWorkspace ?? model.workspace
+        let originalTheme = resizeStressOriginalTheme ?? model.theme
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self else { return }
+            self.model.commandPaletteVisible = false
 
             let command = "for i in {1..4000}; do echo conductor-resize-stress-$i; done\n"
             for pane in self.model.workspace.panes.values {
@@ -1487,6 +1506,21 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
                 originalTheme: originalTheme
             )
         }
+    }
+
+    private func prepareResizeStressWorkspaceIfRequested() {
+        guard ProcessInfo.processInfo.environment["CONDUCTOR_RESIZE_STRESS_AUTORUN"] == "1" else { return }
+        guard resizeStressOriginalWorkspace == nil else { return }
+        resizeStressOriginalWorkspace = model.workspace
+        resizeStressOriginalTheme = model.theme
+        model.commandPaletteVisible = false
+
+        var stressWorkspace = WorkspaceState(title: "Resize Stress Automation")
+        stressWorkspace.newTerminal(title: "zsh 2")
+        stressWorkspace.splitWorkspaceEdge(.right, title: "zsh 3")
+        stressWorkspace.splitWorkspaceEdge(.down, title: "zsh 4")
+        stressWorkspace.equalizeSplits()
+        model.workspace = stressWorkspace
     }
 
     private func performResizeStressStep(

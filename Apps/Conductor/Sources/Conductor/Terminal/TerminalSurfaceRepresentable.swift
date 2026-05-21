@@ -141,7 +141,7 @@ final class TerminalSurfaceContainerView: NSView {
             geometryChanged = true
         }
         if geometryChanged, !currentSuspendsGeometrySync {
-            currentSurface.syncGeometry(force: force)
+            schedulePostLayoutGeometrySync(for: currentSurface, force: force)
         }
         return geometryChanged
     }
@@ -184,10 +184,12 @@ final class TerminalSurfaceContainerView: NSView {
     private func restoreFocusIfNeeded() {
         guard wantsTerminalFocus,
               let surface = currentSurface,
-              window?.firstResponder !== surface.hostView else {
+              let window,
+              surface.hostView.window === window,
+              window.firstResponder !== surface.hostView else {
             return
         }
-        window?.makeFirstResponder(surface.hostView)
+        window.makeFirstResponder(surface.hostView)
     }
 
     private func resignFocusIfNeeded(for surface: TerminalSurface) {
