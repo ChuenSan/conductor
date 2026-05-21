@@ -5,6 +5,11 @@ import Foundation
 
 @MainActor
 final class TerminalSurface {
+    private struct RetainedCString {
+        let pointer: UnsafeMutablePointer<CChar>
+        let bytes: Int
+    }
+
     let id: TerminalID
     let hostView: TerminalHostView
     var onFocusRequest: (@MainActor (TerminalID) -> Void)?
@@ -29,6 +34,11 @@ final class TerminalSurface {
     private let workingDirectory: String?
     private var lifecycle: TerminalSurfaceLifecycle = .initialized
     private var retainedUserdata: Unmanaged<TerminalSurface>?
+    private var retainedInputCStrings: [RetainedCString] = []
+    private var retainedInputBytes = 0
+    private var inputEventCount = 0
+    private let maxRetainedInputCStrings = 4096
+    private let maxRetainedInputBytes = 8 * 1024 * 1024
 
     init(id: TerminalID, theme: TerminalTheme, terminalFontSize: CGFloat, workingDirectory: String?) {
         self.id = id
@@ -285,9 +295,8 @@ final class TerminalSurface {
     @discardableResult
     func performBindingAction(_ action: String) -> Bool {
         guard let surface else { return false }
-        return action.withCString { pointer in
-            ghostty_surface_binding_action(surface, pointer, UInt(action.utf8.count))
-        }
+        guard let retained = retainedCString(for: action) else { return false }
+        return ghostty_surface_binding_action(surface, UnsafePointer(retained.pointer), UInt(action.utf8.count))
     }
 
     @discardableResult
@@ -319,9 +328,9 @@ final class TerminalSurface {
             }
             return
         }
-        text.withCString { pointer in
-            ghostty_surface_text(surface, pointer, UInt(text.utf8.count))
-        }
+        guard let retained = retainedCString(for: text) else { return }
+        recordInputEvent(kind: "text", bytes: text.utf8.count)
+        ghostty_surface_text(surface, UnsafePointer(retained.pointer), UInt(text.utf8.count))
     }
 
     func sendPreedit(_ text: String?) {
@@ -330,9 +339,8 @@ final class TerminalSurface {
             ghostty_surface_preedit(surface, nil, 0)
             return
         }
-        text.withCString { pointer in
-            ghostty_surface_preedit(surface, pointer, UInt(text.utf8.count))
-        }
+        guard let retained = retainedCString(for: text) else { return }
+        ghostty_surface_preedit(surface, UnsafePointer(retained.pointer), UInt(text.utf8.count))
     }
 
     func imeRect() -> NSRect {
@@ -350,9 +358,8 @@ final class TerminalSurface {
     func completeClipboardRequest(location: ghostty_clipboard_e, state: UnsafeMutableRawPointer) {
         guard let surface else { return }
         let text = NSPasteboard.general.string(forType: .string) ?? ""
-        text.withCString { pointer in
-            ghostty_surface_complete_clipboard_request(surface, pointer, state, false)
-        }
+        guard let retained = retainedCString(for: text) else { return }
+        ghostty_surface_complete_clipboard_request(surface, UnsafePointer(retained.pointer), state, false)
     }
 
     func closeFromGhostty(needsConfirmation: Bool) {
@@ -373,6 +380,7 @@ final class TerminalSurface {
         hostView.removeFromSuperview()
         guard let surface else {
             hostView.surface = nil
+            releaseRetainedInputCStrings()
             lifecycle = .closed
             return
         }
@@ -383,6 +391,7 @@ final class TerminalSurface {
             self.surfaceConfig = nil
         }
         ghostty_surface_free(surface)
+        releaseRetainedInputCStrings()
         retainedUserdata?.release()
         retainedUserdata = nil
         lifecycle = .closed
@@ -411,10 +420,10 @@ final class TerminalSurface {
             return ghostty_surface_key(surface, keyEvent)
         }
 
-        return text.withCString { pointer in
-            keyEvent.text = pointer
-            return ghostty_surface_key(surface, keyEvent)
-        }
+        guard let retained = retainedCString(for: text) else { return false }
+        recordInputEvent(kind: "key", bytes: text.utf8.count)
+        keyEvent.text = UnsafePointer(retained.pointer)
+        return ghostty_surface_key(surface, keyEvent)
     }
 
     func forwardModifierEvent(_ event: NSEvent) {
@@ -497,6 +506,48 @@ final class TerminalSurface {
         if mods.rawValue & GHOSTTY_MODS_SHIFT.rawValue != 0 { raw |= GHOSTTY_MODS_SHIFT.rawValue }
         if mods.rawValue & GHOSTTY_MODS_ALT.rawValue != 0 { raw |= GHOSTTY_MODS_ALT.rawValue }
         return ghostty_input_mods_e(rawValue: raw)
+    }
+
+    private func retainedCString(for text: String) -> RetainedCString? {
+        guard let pointer = strdup(text) else { return nil }
+        let retained = RetainedCString(pointer: pointer, bytes: text.utf8.count + 1)
+        retainedInputCStrings.append(retained)
+        retainedInputBytes += retained.bytes
+        pruneRetainedInputCStrings()
+        return retained
+    }
+
+    private func pruneRetainedInputCStrings() {
+        while retainedInputCStrings.count > maxRetainedInputCStrings ||
+            (retainedInputBytes > maxRetainedInputBytes && retainedInputCStrings.count > 1) {
+            let removed = retainedInputCStrings.removeFirst()
+            retainedInputBytes -= removed.bytes
+            free(removed.pointer)
+        }
+    }
+
+    private func releaseRetainedInputCStrings() {
+        for retained in retainedInputCStrings {
+            free(retained.pointer)
+        }
+        retainedInputCStrings.removeAll(keepingCapacity: false)
+        retainedInputBytes = 0
+    }
+
+    private func recordInputEvent(kind: String, bytes: Int) {
+        inputEventCount &+= 1
+        guard inputEventCount == 1 || inputEventCount.isMultiple(of: 128) else { return }
+        ConductorDiagnostics.record(
+            "terminal-input",
+            fields: [
+                "terminal": id.description,
+                "kind": kind,
+                "events": inputEventCount,
+                "bytes": bytes,
+                "retained": retainedInputCStrings.count,
+                "retainedBytes": retainedInputBytes
+            ]
+        )
     }
 
     private func modifierAction(for event: NSEvent) -> ghostty_input_action_e? {

@@ -258,6 +258,8 @@ For automation, split input into text chunks and control-key events. Newline, ta
 
 The terminal host view must participate in AppKit text input. Use `NSTextInputClient`/`interpretKeyEvents` for IME and dead-key composition, then forward committed text through Ghostty key/text APIs. Do not replace terminal line editing in Swift. Chinese/Japanese/Korean preedit belongs in AppKit plus Ghostty preedit, while shell editing remains inside Ghostty/PTY.
 
+Text passed into Ghostty C input APIs must have a stable lifetime beyond the immediate Swift call frame. Do not pass high-frequency key text through temporary `String.withCString` pointers unless the API is proven to copy synchronously; keep a bounded retained C-string buffer per live surface and free it when the surface closes.
+
 ## Action Callbacks / Events
 
 For cmux-style surface hosting, route Ghostty actions into our product model:
