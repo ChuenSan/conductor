@@ -767,12 +767,16 @@ private struct TerminalPaneView: View {
         model.terminalTabDropTargetByPaneID[pane.id]
     }
 
+    private var terminalBackground: Color {
+        model.theme.terminalBackground.opacity(model.appearance.terminalRenderer.backgroundOpacity)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             tabBar
             selectedTerminal
         }
-        .background(model.theme.terminalBackground)
+        .background(terminalBackground)
         .overlay {
             ZStack {
                 if let paneDropTarget {
@@ -824,7 +828,7 @@ private struct TerminalPaneView: View {
         .frame(height: model.appearance.density.paneTabRailHeight)
         .background {
             ZStack(alignment: .bottom) {
-                model.theme.terminalBackground
+                terminalBackground
                 model.theme.terminalChrome.opacity(isFocused ? 0.13 : 0.085)
                 LinearGradient(
                     colors: [
@@ -862,7 +866,7 @@ private struct TerminalPaneView: View {
                     isFocused: terminalAcceptsInputFocus,
                     suspendsGeometrySync: false
                 )
-                .background(model.theme.terminalBackground)
+                .background(terminalBackground)
                 .transaction { transaction in
                     transaction.disablesAnimations = true
                     transaction.animation = nil

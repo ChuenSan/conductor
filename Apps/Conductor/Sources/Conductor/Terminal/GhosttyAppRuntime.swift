@@ -45,6 +45,7 @@ final class GhosttyAppRuntime {
         if getenv("NO_COLOR") != nil {
             unsetenv("NO_COLOR")
         }
+        let resourcesDir = Self.configureGhosttyResourcesEnvironment()
 
         let initResult = ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv)
         guard initResult == GHOSTTY_SUCCESS else {
@@ -114,27 +115,66 @@ final class GhosttyAppRuntime {
         self.app = created
         self.config = config
         ghostty_app_set_focus(created, NSApp.isActive)
-        ConductorLog.terminal.info("Ghostty runtime started")
+        ConductorLog.terminal.info("Ghostty runtime started resources=\(resourcesDir ?? "(unavailable)")")
     }
 
     func makeConfig(theme: TerminalTheme, terminalFontSize: CGFloat) -> ghostty_config_t? {
         guard let config = ghostty_config_new() else { return nil }
-        let resolvedFontSize = AppearancePreferences.clampedTerminalFontSize(terminalFontSize)
-        let fontSizeText = String(format: "%.1f", Double(resolvedFontSize))
-        let text = """
-        macos-background-from-layer = true
-        macos-titlebar-proxy-icon = hidden
-        shell-integration = none
-        font-size = \(fontSizeText)
-        \(theme.ghosttyConfig)
-        background = \(theme.ghosttyTerminalBackgroundHex)
-        cursor-text = \(theme.ghosttyTerminalBackgroundHex)
-        """
+        let text = TerminalGhosttyConfigBuilder.configText(
+            theme: theme,
+            terminalFontSize: terminalFontSize,
+            renderer: TerminalAppearanceRuntime.renderer
+        )
         text.withCString { pointer in
             ghostty_config_load_string(config, pointer, UInt(text.utf8.count), "conductor-config")
         }
         ghostty_config_finalize(config)
         return config
+    }
+
+    private static func configureGhosttyResourcesEnvironment() -> String? {
+        let key = "GHOSTTY_RESOURCES_DIR"
+        let lockedResourcesPath = lockedGhosttyResourcesPath()
+        if let existing = getenv(key).map({ String(cString: $0) }),
+           !existing.isEmpty,
+           existing != lockedResourcesPath {
+            ConductorLog.terminal.info(
+                "Ignoring external GHOSTTY_RESOURCES_DIR=\(existing); locked to \(lockedResourcesPath ?? "(unavailable)")"
+            )
+        }
+
+        guard let lockedResourcesPath else {
+            unsetenv(key)
+            ConductorLog.terminal.error("Locked Ghostty resources path is unavailable; shell integration cannot be injected")
+            return nil
+        }
+
+        setenv(key, lockedResourcesPath, 1)
+        return lockedResourcesPath
+    }
+
+    private static func lockedGhosttyResourcesPath() -> String? {
+        let bundlePath = Bundle.main.resourceURL?
+            .appendingPathComponent("ghostty")
+            .path(percentEncoded: false)
+        if let bundlePath, hasGhosttyShellIntegration(at: bundlePath) {
+            return bundlePath
+        }
+
+        let developmentPath = "/Applications/Ghostty.app/Contents/Resources/ghostty"
+        if hasGhosttyShellIntegration(at: developmentPath) {
+            return developmentPath
+        }
+
+        return nil
+    }
+
+    private static func hasGhosttyShellIntegration(at path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        let zshPath = URL(fileURLWithPath: path)
+            .appendingPathComponent("shell-integration/zsh/.zshenv")
+            .path
+        return FileManager.default.fileExists(atPath: zshPath, isDirectory: &isDirectory) && !isDirectory.boolValue
     }
 
     func setAppFocus(_ focused: Bool) {

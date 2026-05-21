@@ -52,6 +52,33 @@ enum AgentHookProvider: String, CaseIterable, Codable, Identifiable {
             "text.bubble"
         }
     }
+
+    var executableCandidates: [String] {
+        switch self {
+        case .codex:
+            ["codex"]
+        case .claudeCode:
+            ["claude", "claude-code"]
+        }
+    }
+
+    var installURL: URL? {
+        switch self {
+        case .codex:
+            URL(string: "https://github.com/openai/codex")
+        case .claudeCode:
+            URL(string: "https://code.claude.com/docs/en/installation")
+        }
+    }
+
+    var installHint: String {
+        switch self {
+        case .codex:
+            ConductorLocalization.text(zh: "安装 OpenAI Codex CLI 后重新检测", en: "Install OpenAI Codex CLI, then scan again")
+        case .claudeCode:
+            ConductorLocalization.text(zh: "安装 Claude Code 后重新检测", en: "Install Claude Code, then scan again")
+        }
+    }
 }
 
 enum ConductorAgentHookBridge {

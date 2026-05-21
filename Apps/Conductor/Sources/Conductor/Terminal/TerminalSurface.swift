@@ -23,6 +23,7 @@ final class TerminalSurface {
     private var currentTerminalFontSize: CGFloat
     private var appliedTheme: TerminalTheme?
     private var appliedTerminalFontSize: CGFloat?
+    private var appliedRendererPreferences: TerminalRendererPreferences?
     private var surfaceConfig: ghostty_config_t?
     private var pendingText: [String] = []
     private let workingDirectory: String?
@@ -86,22 +87,43 @@ final class TerminalSurface {
         config.wait_after_command = false
         config.scale_factor = Double(hostView.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2)
 
-        let command = "/bin/zsh"
-        let directory = workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser.path
+        let rendererPreferences = TerminalAppearanceRuntime.renderer
+        let command = rendererPreferences.activeGhosttyOverrideValue(for: "initial-command") ?? "/bin/zsh"
+        let configuredDirectory = rendererPreferences.activeGhosttyOverrideValue(for: "working-directory")
+        let directory = Self.validWorkingDirectory(configuredDirectory)
+            ?? workingDirectory
+            ?? FileManager.default.homeDirectoryForCurrentUser.path
         let terminalID = id.description
         let hookBridgePath = Bundle.main.executablePath ?? CommandLine.arguments.first ?? "Conductor"
         let terminalIDKey = "CONDUCTOR_TERMINAL_ID"
         let hookBridgeKey = "CONDUCTOR_HOOK_BRIDGE"
+        let proxyEnvironment = rendererPreferences.proxy.environment
         command.withCString { commandPointer in
             directory.withCString { directoryPointer in
                 terminalID.withCString { terminalIDPointer in
                     hookBridgePath.withCString { hookBridgePathPointer in
                         terminalIDKey.withCString { terminalIDKeyPointer in
                             hookBridgeKey.withCString { hookBridgeKeyPointer in
-                                var envVars = [
+                                var envVars: [ghostty_env_var_s] = [
                                     ghostty_env_var_s(key: terminalIDKeyPointer, value: terminalIDPointer),
                                     ghostty_env_var_s(key: hookBridgeKeyPointer, value: hookBridgePathPointer)
                                 ]
+                                var proxyStorage: [(UnsafeMutablePointer<CChar>, UnsafeMutablePointer<CChar>)] = []
+                                proxyStorage.reserveCapacity(proxyEnvironment.count)
+                                for (key, value) in proxyEnvironment.sorted(by: { $0.key < $1.key }) {
+                                    guard let keyPointer = strdup(key),
+                                          let valuePointer = strdup(value) else {
+                                        continue
+                                    }
+                                    proxyStorage.append((keyPointer, valuePointer))
+                                    envVars.append(ghostty_env_var_s(key: keyPointer, value: valuePointer))
+                                }
+                                defer {
+                                    for (keyPointer, valuePointer) in proxyStorage {
+                                        free(keyPointer)
+                                        free(valuePointer)
+                                    }
+                                }
                                 envVars.withUnsafeMutableBufferPointer { envBuffer in
                                     config.command = commandPointer
                                     config.working_directory = directoryPointer
@@ -144,9 +166,16 @@ final class TerminalSurface {
     func applyAppearance(theme: TerminalTheme, terminalFontSize: CGFloat) {
         currentTheme = theme
         currentTerminalFontSize = AppearancePreferences.clampedTerminalFontSize(terminalFontSize)
-        hostView.layer?.backgroundColor = NSColor(theme.terminalBackground).cgColor
+        let rendererPreferences = TerminalAppearanceRuntime.renderer
+        let backgroundColor = NSColor(theme.terminalBackground)
+            .usingColorSpace(.sRGB)?
+            .withAlphaComponent(rendererPreferences.backgroundOpacity)
+            .cgColor ?? NSColor(theme.terminalBackground).cgColor
+        hostView.layer?.backgroundColor = backgroundColor
         guard let surface,
-              appliedTheme != theme || appliedTerminalFontSize != currentTerminalFontSize else { return }
+              appliedTheme != theme ||
+              appliedTerminalFontSize != currentTerminalFontSize ||
+              appliedRendererPreferences != rendererPreferences else { return }
         guard let config = GhosttyAppRuntime.shared.makeConfig(theme: theme, terminalFontSize: currentTerminalFontSize) else { return }
         if let surfaceConfig {
             ghostty_config_free(surfaceConfig)
@@ -156,6 +185,7 @@ final class TerminalSurface {
         ghostty_surface_refresh(surface)
         appliedTheme = theme
         appliedTerminalFontSize = currentTerminalFontSize
+        appliedRendererPreferences = rendererPreferences
     }
 
     func syncGeometry(force: Bool = false) {
@@ -201,6 +231,16 @@ final class TerminalSurface {
         if didUpdateGeometry {
             ghostty_surface_refresh(surface)
         }
+    }
+
+    private static func validWorkingDirectory(_ path: String?) -> String? {
+        guard let path, !path.isEmpty else { return nil }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return nil
+        }
+        return path
     }
 
     func setFocused(_ focused: Bool, force: Bool = false) {

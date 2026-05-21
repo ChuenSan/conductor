@@ -3,6 +3,7 @@ import ConductorCore
 import Foundation
 import QuartzCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 private func L(_ zh: String, _ en: String) -> String {
     ConductorLocalization.text(zh: zh, en: en)
@@ -181,9 +182,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         didSet {
             guard oldValue != appearance else { return }
             ConductorAppearanceRuntime.apply(appearance)
+            TerminalAppearanceRuntime.apply(appearance)
             ConductorMotion.setReducedMotion(appearance.reducedMotion)
-            if oldValue.terminalFontSize != appearance.terminalFontSize {
-                surfaces.values.forEach { $0.applyTerminalFontSize(appearance.terminalFontSize) }
+            if oldValue.terminalFontSize != appearance.terminalFontSize ||
+                oldValue.terminalRenderer != appearance.terminalRenderer {
+                surfaces.values.forEach {
+                    $0.applyAppearance(theme: theme, terminalFontSize: appearance.terminalFontSize)
+                }
             }
             persist()
         }
@@ -204,6 +209,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published var toolPreviewItem: ToolPreviewItem?
     @Published var terminalSearchQuery = ""
     @Published private(set) var agentHookSettingsMessage: String?
+    @Published private(set) var agentCLIStatuses: [AgentHookProvider: AgentCLIStatus]
+    @Published private(set) var terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
     @Published private(set) var terminalSearchFocusGeneration = 0
     @Published private(set) var terminalSearchTargetID: TerminalID?
     @Published private(set) var paneFlashTokens: [PaneID: UInt64] = [:]
@@ -235,7 +242,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.workspace = persistedWorkspaces.first { $0.id == selectedID } ?? persistedWorkspaces[0]
         self.theme = persisted?.theme ?? .graphite
         self.appearance = persisted?.appearance ?? AppearancePreferences()
+        self.agentCLIStatuses = Dictionary(uniqueKeysWithValues: AgentHookProvider.allCases.map { ($0, .unknown(provider: $0)) })
+        self.terminalFontDownloadStates = [:]
         ConductorAppearanceRuntime.apply(self.appearance)
+        TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
     }
 
@@ -260,12 +270,15 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.theme = theme
         self.appearance = appearance
         self.notifications = notifications
+        self.agentCLIStatuses = Dictionary(uniqueKeysWithValues: AgentHookProvider.allCases.map { ($0, .unknown(provider: $0)) })
+        self.terminalFontDownloadStates = [:]
         self.sidebarVisible = sidebarVisible
         self.commandPaletteVisible = commandPaletteVisible
         self.notificationPanelVisible = notificationPanelVisible
         self.settingsPanelVisible = settingsPanelVisible
         self.workspaceOverviewVisible = workspaceOverviewVisible
         ConductorAppearanceRuntime.apply(self.appearance)
+        TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
     }
     #endif
@@ -338,6 +351,158 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         appearance.terminalFontSize = rounded
     }
 
+    func setTerminalFontPreset(_ preset: TerminalFontPreset) {
+        guard appearance.terminalRenderer.fontPreset != preset || appearance.terminalRenderer.useCustomFont else { return }
+        appearance.terminalRenderer.fontPreset = preset
+        appearance.terminalRenderer.useCustomFont = false
+    }
+
+    func openTerminalFontDownload(_ preset: TerminalFontPreset) {
+        guard let url = preset.downloadURL else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    func downloadTerminalFont(_ preset: TerminalFontPreset) {
+        guard terminalFontDownloadStates[preset]?.isDownloading != true else { return }
+        guard preset.directDownloadURL != nil else {
+            openTerminalFontDownload(preset)
+            return
+        }
+        terminalFontDownloadStates[preset] = .downloading
+        Task {
+            do {
+                let result = try await TerminalFontLibrary.downloadAndRegisterPreset(preset)
+                TerminalFontAvailability.refresh()
+                terminalFontDownloadStates[preset] = .installed(result.familyName)
+                appearance.terminalRenderer.fontPreset = result.preset
+                appearance.terminalRenderer.useCustomFont = false
+            } catch {
+                terminalFontDownloadStates[preset] = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    func setTerminalUseCustomFont(_ useCustomFont: Bool) {
+        let hasCustomFont = appearance.terminalRenderer.customFontFamilyName?.isEmpty == false
+        let resolved = useCustomFont && hasCustomFont
+        guard appearance.terminalRenderer.useCustomFont != resolved else { return }
+        if resolved {
+            TerminalFontLibrary.registerCustomFontIfNeeded(
+                path: appearance.terminalRenderer.customFontFilePath,
+                bookmarkData: appearance.terminalRenderer.customFontBookmarkData
+            )
+        }
+        appearance.terminalRenderer.useCustomFont = resolved
+    }
+
+    func importTerminalFont() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = ["ttf", "otf", "ttc"].compactMap { UTType(filenameExtension: $0) }
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.message = L("选择一个 .ttf、.otf 或 .ttc 字体文件", "Choose a .ttf, .otf, or .ttc font file")
+        guard panel.runModal() == .OK,
+              let url = panel.url,
+              TerminalFontLibrary.registerCustomFontIfNeeded(path: url.path),
+              let familyName = TerminalFontLibrary.familyName(in: url) else {
+            return
+        }
+        appearance.terminalRenderer.customFontFilePath = url.path
+        appearance.terminalRenderer.customFontBookmarkData = TerminalFontLibrary.bookmarkData(for: url)
+        appearance.terminalRenderer.customFontFamilyName = familyName
+        appearance.terminalRenderer.useCustomFont = true
+    }
+
+    func setTerminalLineHeight(_ lineHeight: CGFloat) {
+        let rounded = (min(max(lineHeight, 0.80), 1.50) * 100).rounded() / 100
+        guard appearance.terminalRenderer.lineHeight != rounded else { return }
+        appearance.terminalRenderer.lineHeight = rounded
+    }
+
+    func setTerminalBackgroundOpacity(_ opacity: CGFloat) {
+        let rounded = (min(max(opacity, 0.20), 1.0) * 100).rounded() / 100
+        guard appearance.terminalRenderer.backgroundOpacity != rounded else { return }
+        appearance.terminalRenderer.backgroundOpacity = rounded
+    }
+
+    func setTerminalCursorStyle(_ style: TerminalCursorStyle) {
+        guard appearance.terminalRenderer.cursorStyle != style else { return }
+        appearance.terminalRenderer.cursorStyle = style
+    }
+
+    func setTerminalCursorBlink(_ blink: Bool) {
+        guard appearance.terminalRenderer.cursorBlink != blink else { return }
+        appearance.terminalRenderer.cursorBlink = blink
+    }
+
+    func setTerminalShellIntegrationEnabled(_ enabled: Bool) {
+        _ = enabled
+        guard appearance.terminalRenderer.shellIntegrationEnabled != true else { return }
+        appearance.terminalRenderer.shellIntegrationEnabled = true
+    }
+
+    func resetTerminalRendererPreferences() {
+        let currentProxy = appearance.terminalRenderer.proxy
+        let defaults = TerminalRendererPreferences(proxy: currentProxy)
+        guard appearance.terminalRenderer != defaults else { return }
+        appearance.terminalRenderer = defaults
+    }
+
+    func setTerminalProxyEnabled(_ enabled: Bool) {
+        guard appearance.terminalRenderer.proxy.enabled != enabled else { return }
+        appearance.terminalRenderer.proxy.enabled = enabled
+    }
+
+    func setTerminalProxyHTTP(_ value: String) {
+        guard appearance.terminalRenderer.proxy.httpProxy != value else { return }
+        appearance.terminalRenderer.proxy.httpProxy = value
+    }
+
+    func setTerminalProxyHTTPS(_ value: String) {
+        guard appearance.terminalRenderer.proxy.httpsProxy != value else { return }
+        appearance.terminalRenderer.proxy.httpsProxy = value
+    }
+
+    func setTerminalProxyAll(_ value: String) {
+        guard appearance.terminalRenderer.proxy.allProxy != value else { return }
+        appearance.terminalRenderer.proxy.allProxy = value
+    }
+
+    func setTerminalProxyNoProxy(_ value: String) {
+        guard appearance.terminalRenderer.proxy.noProxy != value else { return }
+        appearance.terminalRenderer.proxy.noProxy = value
+    }
+
+    func setGhosttyOverrideValue(key: String, value: String) {
+        guard TerminalGhosttyConfigCatalog.knownKeySet.contains(key) else { return }
+        var overrides = appearance.terminalRenderer.ghosttyOverrides
+        if let index = overrides.firstIndex(where: { $0.key == key }) {
+            guard overrides[index].value != value else { return }
+            overrides[index].value = value
+        } else {
+            overrides.append(TerminalGhosttyConfigOverride(key: key, value: value, enabled: false))
+        }
+        appearance.terminalRenderer.ghosttyOverrides = TerminalRendererPreferences.normalizedOverrides(overrides)
+    }
+
+    func setGhosttyOverrideEnabled(key: String, enabled: Bool) {
+        guard TerminalGhosttyConfigCatalog.knownKeySet.contains(key) else { return }
+        var overrides = appearance.terminalRenderer.ghosttyOverrides
+        if let index = overrides.firstIndex(where: { $0.key == key }) {
+            guard overrides[index].enabled != enabled else { return }
+            overrides[index].enabled = enabled
+        } else {
+            overrides.append(TerminalGhosttyConfigOverride(key: key, enabled: enabled))
+        }
+        appearance.terminalRenderer.ghosttyOverrides = TerminalRendererPreferences.normalizedOverrides(overrides)
+    }
+
+    func resetGhosttyOverrides() {
+        guard !appearance.terminalRenderer.ghosttyOverrides.isEmpty else { return }
+        appearance.terminalRenderer.ghosttyOverrides = []
+    }
+
     func setReducedMotion(_ reducedMotion: Bool) {
         guard appearance.reducedMotion != reducedMotion else { return }
         appearance.reducedMotion = reducedMotion
@@ -360,6 +525,21 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         next.setEnabled(enabled, for: provider)
         guard next != appearance.agentNotifications else { return }
         appearance.agentNotifications = next
+    }
+
+    func refreshAgentCLIStatuses() {
+        agentCLIStatuses = AgentCLIStatusDetector.checkingStatuses()
+        Task.detached(priority: .utility) {
+            let statuses = AgentCLIStatusDetector.detectAll()
+            await MainActor.run {
+                self.agentCLIStatuses = statuses
+            }
+        }
+    }
+
+    func openAgentInstallPage(_ provider: AgentHookProvider) {
+        guard let url = provider.installURL else { return }
+        NSWorkspace.shared.open(url)
     }
 
     func shellAnimation(_ animation: Animation?) -> Animation? {

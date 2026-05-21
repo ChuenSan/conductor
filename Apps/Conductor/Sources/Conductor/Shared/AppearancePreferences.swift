@@ -346,6 +346,7 @@ struct AppearancePreferences: Codable, Equatable {
     var language: AppearanceLanguage
     var fontFamily: AppearanceFontFamily
     var terminalFontSize: CGFloat
+    var terminalRenderer: TerminalRendererPreferences
     var reducedMotion: Bool
     var agentNotifications: AgentNotificationPreferences
 
@@ -356,6 +357,7 @@ struct AppearancePreferences: Codable, Equatable {
         language: AppearanceLanguage = .english,
         fontFamily: AppearanceFontFamily = .system,
         terminalFontSize: CGFloat = Self.defaultTerminalFontSize,
+        terminalRenderer: TerminalRendererPreferences = TerminalRendererPreferences(),
         reducedMotion: Bool = false,
         agentNotifications: AgentNotificationPreferences = AgentNotificationPreferences()
     ) {
@@ -365,6 +367,7 @@ struct AppearancePreferences: Codable, Equatable {
         self.language = language
         self.fontFamily = fontFamily
         self.terminalFontSize = Self.clampedTerminalFontSize(terminalFontSize)
+        self.terminalRenderer = terminalRenderer
         self.reducedMotion = reducedMotion
         self.agentNotifications = agentNotifications
     }
@@ -378,6 +381,7 @@ struct AppearancePreferences: Codable, Equatable {
         self.fontFamily = try container.decodeIfPresent(AppearanceFontFamily.self, forKey: .fontFamily) ?? .system
         let decodedTerminalFontSize = try container.decodeIfPresent(CGFloat.self, forKey: .terminalFontSize) ?? Self.defaultTerminalFontSize
         self.terminalFontSize = Self.clampedTerminalFontSize(decodedTerminalFontSize)
+        self.terminalRenderer = try container.decodeIfPresent(TerminalRendererPreferences.self, forKey: .terminalRenderer) ?? TerminalRendererPreferences()
         self.reducedMotion = try container.decodeIfPresent(Bool.self, forKey: .reducedMotion) ?? false
         self.agentNotifications = try container.decodeIfPresent(AgentNotificationPreferences.self, forKey: .agentNotifications) ?? AgentNotificationPreferences()
     }
@@ -393,6 +397,7 @@ struct AppearancePreferences: Codable, Equatable {
         case language
         case fontFamily
         case terminalFontSize
+        case terminalRenderer
         case reducedMotion
         case agentNotifications
     }
