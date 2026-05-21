@@ -30,6 +30,9 @@ Always:
 - Deduplicate resize, focus, content-scale, and display-id updates.
 - Use throttled display models for sidebar rows, notification badges, and agent status.
 - Keep focus changes explicit and predictable.
+- Do not terminate the whole app just because the last main window closes. Unexpected close
+  paths can otherwise look like crashy flash-quits without producing a macOS crash report;
+  keep the process alive, log the close path, and rebuild the main window on reopen.
 - Prefer AppKit overlays for visuals that must track terminal geometry.
 - Add low-cost signposts around user-facing interaction boundaries before tuning perceived
   latency. Shell commands, workspace/tab selection, panel toggles, terminal search entry, and

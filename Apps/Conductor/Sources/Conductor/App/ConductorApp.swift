@@ -190,7 +190,7 @@ final class NotificationWindowDelegate: NSObject, NSWindowDelegate {
 }
 
 @MainActor
-final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSWindowDelegate {
     private var window: ConductorWindow?
     private var notificationWindow: NSPanel?
     private var notificationWindowDelegate: NotificationWindowDelegate?
@@ -200,6 +200,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     private let model = ConductorWindowModel()
     private let mainThreadWatchdog = ConductorMainThreadWatchdog()
     private var didStart = false
+    private var isTerminating = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         startApplication()
@@ -218,6 +219,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isOpaque = false
+        window.delegate = self
         window.backgroundColor = .clear
         window.collectionBehavior = [.fullScreenPrimary, .managed]
         applyAppearance(for: model.theme, to: window)
@@ -271,6 +273,8 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        isTerminating = true
+        ConductorLog.app.info("Conductor will terminate")
         Self.appendStressTrace("applicationWillTerminate", to: ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"])
         model.flushPersistence()
         notificationWindow?.close()
@@ -287,7 +291,28 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         Self.appendStressTrace("applicationShouldTerminateAfterLastWindowClosed", to: ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"])
-        return true
+        ConductorLog.app.warning("Last window closed; keeping Conductor process alive")
+        return false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            ConductorLog.app.info("Reopening Conductor main window after no visible windows")
+            didStart = false
+            startApplication()
+            return true
+        }
+        return false
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard notification.object as? NSWindow === window else { return }
+        ConductorLog.app.warning("Main window will close")
+        if !isTerminating {
+            model.closeAllSurfaces()
+        }
+        window = nil
+        didStart = false
     }
 
     private func installMainMenu() {
