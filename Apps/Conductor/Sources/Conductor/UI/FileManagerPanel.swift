@@ -133,6 +133,7 @@ private enum FilePreviewState: Equatable, Sendable {
     case loading
     case directory(String)
     case image(URL)
+    case nativePreview(URL, ConductorNativePreviewDescriptor)
     case text(FilePreviewTextDocument, truncated: Bool)
     case table(FilePreviewTableDocument, truncated: Bool)
     case keyValue(FilePreviewKeyValueDocument, truncated: Bool)
@@ -287,6 +288,9 @@ private struct FileManagerService {
         }
 
         let type = values.contentType ?? UTType(filenameExtension: fileURL.pathExtension)
+        if let descriptor = Self.nativePreviewDescriptor(for: fileURL, type: type) {
+            return .nativePreview(fileURL, descriptor)
+        }
         if type?.conforms(to: .image) == true {
             return .image(fileURL)
         }
@@ -324,6 +328,9 @@ private struct FileManagerService {
 
     func openMode(for url: URL) -> FileManagerOpenMode {
         let pathExtension = url.pathExtension.lowercased()
+        if ConductorNativePreviewClassifier.descriptor(for: UTType(filenameExtension: pathExtension), extension: pathExtension) != nil {
+            return .workspaceEditor
+        }
         if UTType(filenameExtension: pathExtension)?.conforms(to: .image) == true {
             return .workspaceEditor
         }
@@ -341,6 +348,10 @@ private struct FileManagerService {
             return .systemApplication
         }
         return .workspaceEditor
+    }
+
+    private static func nativePreviewDescriptor(for url: URL, type: UTType?) -> ConductorNativePreviewDescriptor? {
+        ConductorNativePreviewClassifier.descriptor(for: type, extension: url.pathExtension)
     }
 
     func fileURLsFromPasteboard(_ pasteboard: NSPasteboard = .general) -> [URL] {
@@ -2183,6 +2194,29 @@ struct FileManagerPanel: View {
                 }
             } else {
                 panelMessage(systemImage: "photo", text: L("图片无法读取", "Image could not be loaded"))
+            }
+        case .nativePreview(let url, let descriptor):
+            VStack(spacing: 0) {
+                HStack(spacing: 7) {
+                    infoPill(descriptor.title)
+                    Text(descriptor.reason)
+                        .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.48))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.72 : 0.64))
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.35))
+                        .frame(height: 1)
+                }
+
+                ConductorNativePreviewSurface(url: url)
+                    .background(theme.terminalBackground)
             }
         case .text(let document, let truncated):
             FileManagerSourcePreview(

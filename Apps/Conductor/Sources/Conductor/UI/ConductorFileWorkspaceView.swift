@@ -40,6 +40,7 @@ private extension EnvironmentValues {
 private enum WorkspaceFileDocumentState: Equatable {
     case text(String)
     case image(URL)
+    case nativePreview(URL, ConductorNativePreviewDescriptor)
     case largeText(WorkspaceLargeTextDocument)
     case largeFile(Int64)
     case message(String)
@@ -108,11 +109,14 @@ private struct WorkspaceFileService {
         let isReadOnly = values.isWritable == false
         let byteCount = Int64(values.fileSize ?? 0)
         let type = values.contentType ?? UTType(filenameExtension: fileURL.pathExtension)
+        let pathExtension = fileURL.pathExtension.lowercased()
+        if let descriptor = ConductorNativePreviewClassifier.descriptor(for: type, extension: pathExtension) {
+            return WorkspaceFileDocument(title: tab.title, subtitle: subtitle, isReadOnly: true, state: .nativePreview(fileURL, descriptor))
+        }
         if type?.conforms(to: .image) == true {
             return WorkspaceFileDocument(title: tab.title, subtitle: subtitle, isReadOnly: isReadOnly, state: .image(fileURL))
         }
 
-        let pathExtension = fileURL.pathExtension.lowercased()
         let profile = performanceProfile(for: type, extension: pathExtension)
         if let profile, byteCount > profile.interactiveByteLimit {
             return largeTextDocument(title: tab.title, subtitle: subtitle, fileURL: fileURL, byteCount: byteCount, profile: profile)
@@ -768,6 +772,13 @@ private struct ConductorWorkspaceFileEditorView: View {
                 searchNextToken: largeSearchNextToken,
                 searchPreviousToken: largeSearchPreviousToken,
                 onSearchStatus: { largeSearchStatus = $0 },
+                isActive: isSelected
+            )
+        case .nativePreview(let url, let descriptor):
+            ConductorNativePreviewWorkspaceView(
+                url: url,
+                descriptor: descriptor,
+                theme: theme,
                 isActive: isSelected
             )
         case .largeFile(let byteCount):

@@ -200,6 +200,10 @@ workspace overview, and compact status modules.
   main actor.
 - Text previews must be bounded. Large or binary files show an explicit state instead of
   loading complete contents into SwiftUI.
+- Renderable local files that macOS can preview natively, such as HTML, webarchive, PDF, SVG,
+  common media, and common office/iWork documents, should route to a stable AppKit native
+  preview surface instead of CodeEdit or SwiftUI text rendering. Do not read the full file
+  into SwiftUI just to decide how to display it; classify from `UTType` and extension metadata.
 - Inserting a path into the focused terminal sends shell-escaped text plus a trailing space,
   and does not press Return.
 

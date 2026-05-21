@@ -41,6 +41,7 @@ let package = Package(
                 .linkedFramework("Carbon"),
                 .linkedFramework("IOSurface"),
                 .linkedFramework("Metal"),
+                .linkedFramework("Quartz"),
                 .linkedFramework("QuartzCore"),
                 .linkedFramework("UniformTypeIdentifiers")
             ]
