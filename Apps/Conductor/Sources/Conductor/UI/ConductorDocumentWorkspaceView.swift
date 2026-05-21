@@ -301,8 +301,9 @@ private struct ConductorDocumentPayload: Equatable, Sendable {
     }
 
     private static let sourceExtensions: Set<String> = [
-        "bash", "c", "cc", "cpp", "css", "diff", "go", "h", "hpp", "htm", "html", "java", "js", "jsx", "kt", "m",
-        "mm", "patch", "php", "py", "rb", "rs", "scss", "sh", "sql", "swift", "ts", "tsx", "zsh"
+        "bash", "bib", "c", "cc", "cls", "cpp", "css", "diff", "go", "h", "hpp", "htm", "html", "java", "js", "jsx",
+        "kt", "latex", "m", "mm", "patch", "php", "py", "rb", "rs", "scss", "sh", "sql", "sty", "swift", "tex", "ts",
+        "tsx", "zsh"
     ]
     private static let textExtensions: Set<String> = [
         "adoc", "cfg", "conf", "env", "err", "ini", "log", "out", "plist", "properties", "rst", "stderr", "stdout",
@@ -549,6 +550,8 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           --selected: rgba(255,255,255,.08);
           --hover: rgba(255,255,255,.05);
           --font-size: 13px;
+          --code-bg: color-mix(in srgb, var(--raised) 58%, var(--bg));
+          --soft: color-mix(in srgb, var(--chrome) 58%, transparent);
         }
         * { box-sizing: border-box; }
         html, body, #root { min-height: 100%; }
@@ -556,62 +559,175 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         body {
           margin: 0;
           color: var(--text);
-          background:
-            linear-gradient(180deg, var(--chrome), transparent 120px),
-            var(--bg);
+          background: var(--bg);
           font: 500 var(--font-size) -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
           overflow: auto;
         }
         a { color: var(--accent); text-decoration: none; }
         a:hover { text-decoration: underline; }
-        .viewport { min-height: 100vh; padding: 24px 28px 40px; }
-        .document {
-          max-width: 980px;
-          margin: 0 auto;
-          line-height: 1.62;
+        .doc-shell {
+          min-height: 100vh;
+          display: grid;
+          grid-template-rows: auto 1fr;
+          background:
+            linear-gradient(180deg, var(--soft), transparent 172px),
+            var(--bg);
         }
-        .document.wide {
-          max-width: none;
+        .doc-header {
+          padding: 22px 28px 18px;
+          border-bottom: 1px solid var(--stroke);
+          background: color-mix(in srgb, var(--chrome) 72%, transparent);
+        }
+        .doc-identity {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: start;
+          gap: 18px;
+        }
+        .doc-title {
           margin: 0;
+          font-size: clamp(19px, 2vw, 28px);
+          line-height: 1.12;
+          letter-spacing: 0;
+          font-weight: 760;
+          color: var(--text);
         }
-        .meta {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          min-height: 26px;
-          margin-bottom: 18px;
+        .doc-path {
+          margin-top: 5px;
           color: var(--muted);
-          font-size: 12px;
+          font-size: 12.5px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .kind {
-          height: 24px;
+        .doc-badges {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          flex-wrap: wrap;
+          gap: 7px;
+        }
+        .badge,
+        .metric {
+          min-height: 25px;
           display: inline-flex;
           align-items: center;
+          gap: 6px;
           padding: 0 9px;
           border: 1px solid var(--stroke);
+          border-radius: 8px;
+          color: var(--muted);
+          background: color-mix(in srgb, var(--hover) 72%, transparent);
+          font-size: 12px;
+          font-weight: 720;
+          white-space: nowrap;
+        }
+        .badge.primary {
+          color: var(--text);
+          background: color-mix(in srgb, var(--selected) 72%, transparent);
+        }
+        .doc-metrics {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 16px;
+        }
+        .doc-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(188px, 252px);
+          gap: 0;
+          min-height: 0;
+        }
+        .doc-grid.no-outline {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .reader {
+          min-width: 0;
+          padding: 30px clamp(26px, 4vw, 58px) 48px;
+          line-height: 1.66;
+        }
+        .reader.narrow {
+          max-width: 1040px;
+          margin: 0 auto;
+          width: 100%;
+        }
+        .reader.wide {
+          max-width: none;
+          margin: 0;
+        }
+        .outline {
+          position: sticky;
+          top: 0;
+          align-self: start;
+          height: 100vh;
+          overflow: auto;
+          padding: 24px 18px;
+          border-left: 1px solid var(--stroke);
+          background: color-mix(in srgb, var(--chrome) 58%, transparent);
+        }
+        .outline-title {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-bottom: 14px;
+          color: var(--text);
+          font-size: 12px;
+          font-weight: 780;
+        }
+        .outline-list {
+          display: grid;
+          gap: 2px;
+        }
+        .outline a {
+          display: block;
+          padding: 6px 8px;
           border-radius: 7px;
+          color: var(--muted);
+          font-size: 12px;
+          line-height: 1.25;
+          text-decoration: none;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .outline a:hover {
           color: var(--text);
           background: var(--hover);
-          font-weight: 700;
+          text-decoration: none;
         }
+        .outline .level-1 { font-weight: 760; color: var(--text); }
+        .outline .level-2 { padding-left: 14px; }
+        .outline .level-3,
+        .outline .level-4,
+        .outline .level-5,
+        .outline .level-6 { padding-left: 24px; opacity: .86; }
         .notice {
           margin: 0 0 18px;
-          padding: 10px 12px;
+          padding: 12px 14px;
           border: 1px solid var(--stroke);
-          border-radius: 8px;
-          background: var(--selected);
+          border-radius: 9px;
+          background: color-mix(in srgb, var(--selected) 60%, transparent);
           color: var(--muted);
+        }
+        .markdown {
+          line-height: 1.62;
         }
         .markdown h1, .markdown h2, .markdown h3 {
           line-height: 1.18;
-          margin: 1.3em 0 .58em;
+          margin: 1.35em 0 .62em;
           letter-spacing: 0;
         }
-        .markdown h1 { font-size: 2.05em; padding-bottom: .35em; border-bottom: 1px solid var(--stroke); }
-        .markdown h2 { font-size: 1.45em; padding-bottom: .24em; border-bottom: 1px solid var(--stroke); }
+        .markdown h1 {
+          font-size: 2.08em;
+          padding-bottom: .42em;
+          border-bottom: 1px solid var(--stroke);
+        }
+        .markdown h2 {
+          font-size: 1.45em;
+          padding-bottom: .28em;
+          border-bottom: 1px solid color-mix(in srgb, var(--stroke) 72%, transparent);
+        }
         .markdown h3 { font-size: 1.15em; }
         .markdown h1,
         .markdown h2,
@@ -629,9 +745,9 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         }
         .markdown p, .markdown ul, .markdown ol, .markdown blockquote, .markdown table { margin: .72em 0; }
         .markdown blockquote {
-          border-left: 3px solid var(--stroke);
+          border-left: 3px solid color-mix(in srgb, var(--accent) 54%, var(--stroke));
           margin-left: 0;
-          padding: 2px 0 2px 14px;
+          padding: 3px 0 3px 15px;
           color: var(--muted);
         }
         .markdown hr { border: 0; border-top: 1px solid var(--stroke); margin: 24px 0; }
@@ -656,16 +772,16 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         }
         code {
           padding: .14em .34em;
-          border: 1px solid var(--stroke);
+          border: 1px solid color-mix(in srgb, var(--stroke) 62%, transparent);
           border-radius: 5px;
           background: var(--hover);
         }
         pre {
           overflow: auto;
-          padding: 13px 14px;
+          padding: 14px 15px;
           border: 1px solid var(--stroke);
-          border-radius: 8px;
-          background: var(--raised);
+          border-radius: 9px;
+          background: var(--code-bg);
           line-height: 1.48;
         }
         pre code { padding: 0; border: 0; background: transparent; }
@@ -690,19 +806,36 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         }
         tr:last-child td { border-bottom: 0; }
         td:last-child, th:last-child { border-right: 0; }
-        .codeframe {
-          max-width: none;
-          margin: 0;
+        .source-panel {
+          border: 1px solid var(--stroke);
+          border-radius: 10px;
+          overflow: hidden;
+          background: var(--code-bg);
         }
-        .codeframe pre {
-          min-height: calc(100vh - 92px);
+        .source-panel-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          min-height: 36px;
+          padding: 0 12px;
+          border-bottom: 1px solid var(--stroke);
+          color: var(--muted);
+          background: color-mix(in srgb, var(--chrome) 64%, transparent);
+          font-size: 12px;
+          font-weight: 720;
+        }
+        .source-panel pre {
           margin: 0;
-          border-radius: 8px;
-          background: rgba(0,0,0,.04);
+          min-height: calc(100vh - 214px);
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          color: var(--text);
+          white-space: pre;
         }
         .media {
           width: 100%;
-          height: calc(100vh - 48px);
+          height: calc(100vh - 172px);
           display: grid;
           place-items: center;
         }
@@ -714,7 +847,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         }
         .pdf-frame {
           width: 100%;
-          height: calc(100vh - 48px);
+          height: calc(100vh - 172px);
           border: 1px solid var(--stroke);
           border-radius: 8px;
           background: var(--raised);
@@ -760,7 +893,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         }
         .table-scroll {
           overflow: auto;
-          max-height: calc(100vh - 134px);
+          max-height: calc(100vh - 244px);
           border: 1px solid var(--stroke);
           border-radius: 8px;
         }
@@ -781,21 +914,63 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         }
         .html-frame {
           width: 100%;
-          height: calc(100vh - 92px);
+          height: calc(100vh - 214px);
           border: 1px solid var(--stroke);
           border-radius: 8px;
           background: white;
         }
         .empty {
-          min-height: calc(100vh - 48px);
+          min-height: calc(100vh - 172px);
           display: grid;
           place-items: center;
           color: var(--muted);
           text-align: center;
         }
+        .empty-inner {
+          max-width: 440px;
+          display: grid;
+          gap: 10px;
+          justify-items: center;
+        }
+        .empty-kind {
+          color: var(--text);
+          font-size: 13px;
+          font-weight: 780;
+        }
+        .empty-message {
+          margin: 0;
+          line-height: 1.5;
+        }
+        .large-note {
+          display: grid;
+          gap: 10px;
+          margin-bottom: 18px;
+          padding: 15px 16px;
+          border: 1px solid var(--stroke);
+          border-radius: 10px;
+          color: var(--muted);
+          background: color-mix(in srgb, var(--selected) 54%, transparent);
+        }
+        .large-note strong {
+          color: var(--text);
+        }
         .hljs-comment, .hljs-quote { color: var(--muted); }
         .hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: var(--accent); }
         .hljs-string, .hljs-number, .hljs-literal { color: color-mix(in srgb, var(--accent) 58%, var(--text)); }
+        @media (max-width: 980px) {
+          .doc-grid {
+            grid-template-columns: minmax(0, 1fr);
+          }
+          .outline {
+            display: none;
+          }
+          .doc-identity {
+            grid-template-columns: 1fr;
+          }
+          .doc-badges {
+            justify-content: flex-start;
+          }
+        }
         """
     }
 
@@ -826,14 +1001,149 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           }[ch]));
         }
 
-        function meta(kind) {
-          const size = payload.byteCount ? new Intl.NumberFormat().format(payload.byteCount) + ' bytes' : '';
-          return `<div class="meta"><span class="kind">${escapeHTML(kind)}</span><span>${escapeHTML(payload.subtitle || payload.title)}</span><span>${size}</span></div>`;
-        }
-
         function highlightAll() {
           if (!window.hljs) return;
           document.querySelectorAll('pre code').forEach(block => window.hljs.highlightElement(block));
+        }
+
+        function formatBytes(value) {
+          const bytes = Number(value || 0);
+          if (!bytes) return '0 B';
+          const units = ['B', 'KB', 'MB', 'GB'];
+          let size = bytes;
+          let index = 0;
+          while (size >= 1024 && index < units.length - 1) {
+            size /= 1024;
+            index += 1;
+          }
+          return `${size >= 10 || index === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[index]}`;
+        }
+
+        function lineCount(text) {
+          if (!text) return 0;
+          return String(text).split('\\n').length;
+        }
+
+        function kindLabel(fallback) {
+          const ext = String(payload.fileExtension || '').toLowerCase();
+          const labels = {
+            md: 'Markdown',
+            markdown: 'Markdown',
+            mdown: 'Markdown',
+            mkd: 'Markdown',
+            log: 'Log',
+            out: 'Output',
+            stdout: 'Stdout',
+            stderr: 'Stderr',
+            tex: 'TeX',
+            latex: 'LaTeX',
+            sty: 'TeX Style',
+            cls: 'TeX Class',
+            bib: 'BibTeX',
+            json: 'JSON',
+            jsonl: 'JSONL',
+            yaml: 'YAML',
+            yml: 'YAML',
+            toml: 'TOML',
+            csv: 'CSV',
+            tsv: 'TSV',
+            txt: 'Text'
+          };
+          return labels[ext] || fallback;
+        }
+
+        function isLargeText() {
+          const text = payload.text || '';
+          return payload.isTruncated || text.length > 2_500_000 || lineCount(text) > 18000;
+        }
+
+        function badgeHTML(kind) {
+          return [
+            `<span class="badge primary">${escapeHTML(kind)}</span>`,
+            payload.isTruncated ? '<span class="badge">Protected</span>' : '<span class="badge">Preview</span>',
+            '<span class="badge">Read Only</span>'
+          ].join('');
+        }
+
+        function metricHTML() {
+          const text = payload.text || '';
+          const metrics = [
+            ['Size', formatBytes(payload.byteCount)],
+            ['Lines', lineCount(text) || '-']
+          ];
+          if (payload.isTruncated) metrics.push(['Loaded', 'First 12 MB']);
+          if (payload.fileExtension) metrics.push(['Type', String(payload.fileExtension).toUpperCase()]);
+          return metrics.map(([label, value]) => `<span class="metric">${escapeHTML(label)} · ${escapeHTML(value)}</span>`).join('');
+        }
+
+        function slugify(value, index) {
+          const slug = String(value || '')
+            .trim()
+            .toLowerCase()
+            .replace(/<[^>]+>/g, '')
+            .replace(/[^a-z0-9\\u4e00-\\u9fa5]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+          return slug || `section-${index}`;
+        }
+
+        function markdownOutline(text) {
+          const headings = [];
+          String(text || '').split('\\n').some((line, index) => {
+            const match = /^(#{1,4})\\s+(.+?)\\s*#*\\s*$/.exec(line);
+            if (!match) return false;
+            const title = match[2].replace(/[`*_\\[\\]()]/g, '').trim();
+            headings.push({ level: match[1].length, title, id: slugify(title, index), line: index + 1 });
+            return headings.length >= 90;
+          });
+          return headings;
+        }
+
+        function outlineHTML(items) {
+          if (!items || !items.length) return '';
+          const links = items.map(item => (
+            `<a class="level-${Math.min(6, item.level || 2)}" href="#${escapeHTML(item.id)}" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</a>`
+          )).join('');
+          return `<aside class="outline"><div class="outline-title"><span>Outline</span><span>${items.length}</span></div><nav class="outline-list">${links}</nav></aside>`;
+        }
+
+        function shell(kind, bodyHTML, options = {}) {
+          const outline = outlineHTML(options.outline || []);
+          const gridClass = outline ? 'doc-grid' : 'doc-grid no-outline';
+          root.innerHTML = `
+            <section class="doc-shell">
+              <header class="doc-header">
+                <div class="doc-identity">
+                  <div>
+                    <h1 class="doc-title">${escapeHTML(payload.title || kind)}</h1>
+                    <div class="doc-path">${escapeHTML(payload.subtitle || payload.fileURLString || '')}</div>
+                  </div>
+                  <div class="doc-badges">${badgeHTML(kind)}</div>
+                </div>
+                <div class="doc-metrics">${metricHTML()}</div>
+              </header>
+              <div class="${gridClass}">
+                <article class="reader ${options.wide ? 'wide' : 'narrow'} ${options.className || ''}">${bodyHTML}</article>
+                ${outline}
+              </div>
+            </section>
+          `;
+        }
+
+        function largeNotice(kind) {
+          if (!isLargeText()) return '';
+          return `<div class="large-note"><strong>${escapeHTML(kind)} is in protected reading mode.</strong><span>Conductor loaded a bounded slice and avoided expensive live parsing so the terminal workspace stays responsive.</span></div>`;
+        }
+
+        function installHeadingIDs(outline) {
+          if (!outline || !outline.length) return;
+          const used = new Set();
+          document.querySelectorAll('.markdown h1, .markdown h2, .markdown h3, .markdown h4').forEach((node, index) => {
+            const matching = outline[index];
+            let id = matching ? matching.id : slugify(node.textContent, index);
+            while (used.has(id)) id = `${id}-${used.size}`;
+            used.add(id);
+            node.id = id;
+          });
         }
 
         function base64ToUint8Array(base64) {
@@ -881,7 +1191,19 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           }
         }
 
+        function renderLargeText(kind, outline = []) {
+          const text = payload.text || '';
+          const source = `<div class="source-panel"><div class="source-panel-head"><span>${escapeHTML(kind)} source</span><span>${lineCount(text)} lines</span></div><pre><code>${escapeHTML(text)}</code></pre></div>`;
+          shell(kind, largeNotice(kind) + source, { outline, wide: true });
+          highlightAll();
+        }
+
         function renderMarkdown() {
+          const outline = markdownOutline(payload.text || '');
+          if (isLargeText()) {
+            renderLargeText('Markdown', outline);
+            return;
+          }
           const md = window.markdownit ? window.markdownit({
             html: false,
             linkify: true,
@@ -906,13 +1228,21 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           }
           const unsafe = md ? md.render(payload.text || '') : `<pre><code>${escapeHTML(payload.text || '')}</code></pre>`;
           const safe = window.DOMPurify ? window.DOMPurify.sanitize(unsafe) : unsafe;
-          root.innerHTML = `<section class="viewport"><article class="document markdown">${meta('Markdown')}${payload.isTruncated ? '<div class="notice">文件较大，当前只渲染前 12 MB。</div>' : ''}${safe}</article></section>`;
+          shell('Markdown', `${largeNotice('Markdown')}<div class="markdown">${safe}</div>`, { outline, className: 'markdown' });
+          installHeadingIDs(outline);
           highlightAll();
           renderMathAndDiagrams();
         }
 
         function renderCode(kind) {
-          root.innerHTML = `<section class="viewport"><article class="document wide codeframe">${meta(kind)}${payload.isTruncated ? '<div class="notice">文件较大，当前只渲染前 12 MB。</div>' : ''}<pre><code>${escapeHTML(payload.text || '')}</code></pre></article></section>`;
+          const label = kindLabel(kind);
+          if (isLargeText()) {
+            renderLargeText(label);
+            return;
+          }
+          const text = payload.text || '';
+          const source = `<div class="source-panel"><div class="source-panel-head"><span>${escapeHTML(label)} source</span><span>${lineCount(text)} lines</span></div><pre><code>${escapeHTML(text)}</code></pre></div>`;
+          shell(label, source, { wide: true });
           highlightAll();
         }
 
@@ -929,7 +1259,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
 
         function renderHTMLDocument() {
           const srcdoc = window.DOMPurify ? window.DOMPurify.sanitize(payload.text || '', { WHOLE_DOCUMENT: true }) : payload.text || '';
-          root.innerHTML = `<section class="viewport"><article class="document wide">${meta('HTML')}<iframe class="html-frame" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${escapeHTML(srcdoc)}"></iframe></article></section>`;
+          shell('HTML', `<iframe class="html-frame" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${escapeHTML(srcdoc)}"></iframe>`, { wide: true });
         }
 
         function renderTable() {
@@ -945,7 +1275,8 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           const body = rows.slice(1);
           const header = '<tr>' + Array.from({ length: maxColumns }, (_, i) => `<th>${escapeHTML(head[i] ?? '')}</th>`).join('') + '</tr>';
           const bodyHTML = body.map(row => '<tr>' + Array.from({ length: maxColumns }, (_, i) => `<td>${escapeHTML(row[i] ?? '')}</td>`).join('') + '</tr>').join('');
-          root.innerHTML = `<section class="viewport"><article class="document wide">${meta('Table')}${payload.isTruncated || body.length >= 2499 ? '<div class="notice">表格预览已限制行数，避免一次性渲染整张大表。</div>' : ''}<div class="table-scroll"><table>${header}${bodyHTML}</table></div></article></section>`;
+          const notice = payload.isTruncated || body.length >= 2499 ? '<div class="notice">Table preview is capped to keep the workspace responsive.</div>' : '';
+          shell(kindLabel('Table'), `${notice}<div class="table-scroll"><table>${header}${bodyHTML}</table></div>`, { wide: true });
         }
 
         function renderWorkbookSheet(workbook, sheetName) {
@@ -978,7 +1309,8 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
               return;
             }
             const tabs = sheetNames.map((name, index) => `<button class="sheet-tab ${index === 0 ? 'active' : ''}" data-sheet="${escapeHTML(name)}">${escapeHTML(name)}</button>`).join('');
-            root.innerHTML = `<section class="viewport"><article class="document wide">${meta('Spreadsheet')}${payload.isTruncated ? '<div class="notice">文件较大，已停止内嵌解析。</div>' : ''}<div class="sheet-tabs">${tabs}</div><div id="sheet-body">${renderWorkbookSheet(workbook, sheetNames[0])}</div></article></section>`;
+            const notice = payload.isTruncated ? '<div class="notice">This workbook is too large for embedded parsing.</div>' : '';
+            shell('Spreadsheet', `${notice}<div class="sheet-tabs">${tabs}</div><div id="sheet-body">${renderWorkbookSheet(workbook, sheetNames[0])}</div>`, { wide: true });
             document.querySelectorAll('.sheet-tab').forEach(button => {
               button.addEventListener('click', () => {
                 document.querySelectorAll('.sheet-tab').forEach(tab => tab.classList.remove('active'));
@@ -992,12 +1324,12 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         }
 
         function renderImage() {
-          root.innerHTML = `<section class="viewport"><div class="media"><img src="${escapeHTML(payload.fileURLString)}" alt="${escapeHTML(payload.title)}"></div></section>`;
+          shell('Image', `<div class="media"><img src="${escapeHTML(payload.fileURLString)}" alt="${escapeHTML(payload.title)}"></div>`, { wide: true });
         }
 
         async function renderPDF() {
           if (!payload.binaryBase64 || !window.pdfjsLib) {
-            root.innerHTML = `<section class="viewport"><iframe class="pdf-frame" src="${escapeHTML(payload.fileURLString)}"></iframe></section>`;
+            shell('PDF', `<iframe class="pdf-frame" src="${escapeHTML(payload.fileURLString)}"></iframe>`, { wide: true });
             return;
           }
           try {
@@ -1006,7 +1338,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
             window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerURL;
             const pdf = await window.pdfjsLib.getDocument({ data: base64ToUint8Array(payload.binaryBase64) }).promise;
             const pages = Array.from({ length: pdf.numPages }, (_, i) => `<div class="pdf-page" data-page="${i + 1}"></div>`).join('');
-            root.innerHTML = `<section class="viewport"><article class="document wide">${meta('PDF.js')}<div class="pdf-pages">${pages}</div></article></section>`;
+            shell('PDF', `<div class="pdf-pages">${pages}</div>`, { wide: true });
             const renderPage = async (container) => {
               if (container.dataset.rendered) return;
               container.dataset.rendered = '1';
@@ -1027,7 +1359,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
             }, { rootMargin: '900px 0px' });
             document.querySelectorAll('.pdf-page').forEach(page => observer.observe(page));
           } catch (error) {
-            root.innerHTML = `<section class="viewport"><iframe class="pdf-frame" src="${escapeHTML(payload.fileURLString)}"></iframe></section>`;
+            shell('PDF', `<iframe class="pdf-frame" src="${escapeHTML(payload.fileURLString)}"></iframe>`, { wide: true });
           }
         }
 
@@ -1043,7 +1375,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
             const messages = (result.messages || []).length
               ? `<div class="notice">${escapeHTML(result.messages.map(item => item.message).slice(0, 3).join(' · '))}</div>`
               : '';
-            root.innerHTML = `<section class="viewport"><article class="document markdown">${meta('DOCX')}${messages}<div class="docx">${safe}</div></article></section>`;
+            shell('DOCX', `${messages}<div class="docx">${safe}</div>`, { className: 'markdown' });
             renderMathAndDiagrams();
           } catch (error) {
             renderMessage('Word');
@@ -1051,7 +1383,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         }
 
         function renderMessage(kind) {
-          root.innerHTML = `<section class="viewport"><div class="empty"><div><div class="kind">${escapeHTML(kind)}</div><p>${escapeHTML(payload.message || '无法在内嵌查看器中渲染。')}</p></div></div></section>`;
+          shell(kind, `<div class="empty"><div class="empty-inner"><div class="empty-kind">${escapeHTML(kind)}</div><p class="empty-message">${escapeHTML(payload.message || 'Unable to render this file inline.')}</p></div></div>`, { wide: true });
         }
 
         applyTheme(theme);

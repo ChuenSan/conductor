@@ -133,6 +133,7 @@ private enum FilePreviewState: Equatable, Sendable {
     case loading
     case directory(String)
     case image(URL)
+    case document(URL)
     case nativePreview(URL, ConductorNativePreviewDescriptor)
     case text(FilePreviewTextDocument, truncated: Bool)
     case table(FilePreviewTableDocument, truncated: Bool)
@@ -293,6 +294,9 @@ private struct FileManagerService {
         }
         if type?.conforms(to: .image) == true {
             return .image(fileURL)
+        }
+        if Self.documentViewerPreviewExtensions.contains(fileURL.pathExtension.lowercased()) {
+            return .document(fileURL)
         }
         guard Self.isInlineTextPreviewType(type, extension: fileURL.pathExtension) else {
             return .message(L("这个文件类型暂不支持内联预览", "This file type cannot be previewed inline yet"))
@@ -836,10 +840,15 @@ private struct FileManagerService {
     }
 
     private static let textPreviewExtensions: Set<String> = [
-        "adoc", "bash", "c", "cc", "cfg", "conf", "cpp", "css", "csv", "diff", "env", "err", "go", "h", "hpp", "htm",
-        "html", "java", "js", "json", "jsonl", "jsx", "log", "m", "md", "mm", "out", "patch", "php",
-        "plist", "properties", "py", "rb", "rs", "rst", "scss", "sh", "stderr", "stdout", "swift", "tab", "toml",
+        "adoc", "bash", "bib", "c", "cc", "cfg", "cls", "conf", "cpp", "css", "csv", "diff", "env", "err", "go", "h", "hpp", "htm",
+        "html", "java", "js", "json", "jsonl", "jsx", "latex", "log", "m", "md", "mm", "out", "patch", "php",
+        "plist", "properties", "py", "rb", "rs", "rst", "scss", "sh", "stderr", "stdout", "sty", "swift", "tab", "tex", "toml",
         "trace", "ts", "tsv", "tsx", "txt", "xml", "yaml", "yml", "zsh"
+    ]
+
+    private static let documentViewerPreviewExtensions: Set<String> = [
+        "adoc", "bib", "cls", "latex", "log", "markdown", "md", "mdown", "mkd", "out", "rst", "stderr",
+        "stdout", "sty", "tex", "text", "trace", "txt"
     ]
 
     private static let systemApplicationExtensions: Set<String> = [
@@ -2198,6 +2207,15 @@ struct FileManagerPanel: View {
                     text: isLoading ? L("正在读取图片", "Loading image") : L("图片无法读取", "Image could not be loaded")
                 )
             }
+        case .document(let url):
+            ConductorDocumentWorkspaceView(
+                fileURL: url,
+                rootURL: store.currentURL ?? request.rootURL,
+                title: url.lastPathComponent,
+                theme: theme,
+                fontSize: model.appearance.terminalFontSize,
+                isActive: false
+            )
         case .nativePreview(let url, let descriptor):
             VStack(spacing: 0) {
                 HStack(spacing: 7) {
@@ -2610,7 +2628,7 @@ private struct FileManagerInfoSheet: View {
             "curlybraces"
         case "json", "jsonl", "toml", "yaml", "yml", "xml":
             "doc.text"
-        case "md", "txt", "log":
+        case "md", "txt", "log", "tex", "latex", "sty", "cls", "bib":
             "doc.plaintext"
         case "png", "jpg", "jpeg", "gif", "webp", "heic", "tiff":
             "photo"
@@ -2647,56 +2665,56 @@ private struct FileManagerSourcePreview: View {
     var body: some View {
         VStack(spacing: 0) {
             sourceInfoBar
-            ZStack(alignment: .trailing) {
-                ScrollView([.vertical, .horizontal]) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(document.lines.enumerated()), id: \.offset) { index, line in
-                            SourcePreviewLine(
-                                number: index + 1,
-                                text: line,
-                                isHighlighted: false,
-                                theme: theme
-                            )
-                        }
+            ScrollView([.vertical, .horizontal]) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(document.lines.enumerated()), id: \.offset) { index, line in
+                        SourcePreviewLine(
+                            number: index + 1,
+                            text: line,
+                            isHighlighted: false,
+                            theme: theme
+                        )
                     }
-                    .padding(.top, 10)
-                    .padding(.bottom, 18)
-                    .padding(.trailing, 56)
                 }
-                .scrollIndicators(.visible)
-
-                SourcePreviewMinimap(lines: document.lines, theme: theme)
-                    .frame(width: 42)
-                    .padding(.trailing, 6)
-                    .padding(.vertical, 8)
-                    .allowsHitTesting(false)
+                .padding(.vertical, 12)
+                .padding(.trailing, 18)
             }
+            .scrollIndicators(.visible)
             .background(theme.terminalBackground)
         }
     }
 
     private var sourceInfoBar: some View {
-        HStack(spacing: 7) {
-            if let formatLabel = document.formatLabel {
-                infoPill(formatLabel)
-            }
-            infoPill(L("\(document.lineCount) 行", "\(document.lineCount) lines"))
-            if document.isLineLimited {
-                infoPill(L("预览前 \(document.displayedLineCount) 行", "Previewing \(document.displayedLineCount) lines"))
-            }
-            if truncated {
-                infoPill(L("仅预览前 256 KB", "First 256 KB only"))
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(document.formatLabel ?? L("文本预览", "Text Preview"))
+                    .font(.conductorSystem(size: 12, weight: .bold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(0.82))
+                Text(sourceSubtitle)
+                    .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(0.45))
+                    .lineLimit(1)
             }
             Spacer(minLength: 0)
+            infoPill(L("\(document.lineCount) 行", "\(document.lineCount) lines"))
+            if document.isLineLimited { infoPill(L("前 \(document.displayedLineCount) 行", "First \(document.displayedLineCount) lines")) }
+            if truncated { infoPill(L("前 256 KB", "First 256 KB")) }
         }
-        .padding(.horizontal, 12)
-        .frame(height: 28)
-        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.72 : 0.64))
+        .padding(.horizontal, 14)
+        .frame(height: 44)
+        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.46 : 0.26))
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.35))
+                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.30 : 0.18))
                 .frame(height: 1)
         }
+    }
+
+    private var sourceSubtitle: String {
+        if truncated || document.isLineLimited {
+            return L("轻量预览已限制读取和渲染范围，完整编辑请在工作区打开。", "Light preview is bounded; open in workspace for the full file.")
+        }
+        return L("轻量文本阅读器", "Lightweight text reader")
     }
 
     private func infoPill(_ title: String) -> some View {
@@ -2706,7 +2724,7 @@ private struct FileManagerSourcePreview: View {
             .lineLimit(1)
             .padding(.horizontal, 7)
             .frame(height: 19)
-            .background(theme.floatingControlFill.opacity(0.56))
+            .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.46 : 0.34))
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
@@ -3041,22 +3059,22 @@ private struct SourcePreviewLine: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text("\(number)")
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(theme.shellChromeText.opacity(0.34))
-                .frame(width: 34, alignment: .trailing)
+                .foregroundStyle(theme.shellChromeText.opacity(0.28))
+                .frame(width: 42, alignment: .trailing)
                 .textSelection(.disabled)
 
             Text(text.isEmpty ? " " : text)
                 .font(.system(size: 12, weight: .regular, design: .monospaced))
-                .foregroundStyle(theme.shellChromeText.opacity(0.86))
+                .foregroundStyle(theme.shellChromeText.opacity(0.82))
                 .lineLimit(1)
                 .textSelection(.enabled)
         }
-        .padding(.leading, 8)
+        .padding(.leading, 4)
         .padding(.trailing, 10)
-        .frame(minWidth: 360, maxWidth: .infinity, minHeight: 23, alignment: .leading)
+        .frame(minWidth: 420, maxWidth: .infinity, minHeight: 22, alignment: .leading)
         .background {
             Rectangle()
-                .fill(isHighlighted ? theme.floatingSelectedFill.opacity(0.35) : Color.clear)
+                .fill(isHighlighted ? theme.floatingSelectedFill.opacity(0.30) : Color.clear)
         }
     }
 

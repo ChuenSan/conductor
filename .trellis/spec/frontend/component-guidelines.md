@@ -186,6 +186,13 @@ workspace overview, and compact status modules.
   then apply one final frame update when resizing ends; pair this with browser-side
   `content-visibility` for repeated Markdown blocks so offscreen document content does not
   repeatedly reflow during window drags.
+- Formatted file views should share one document workbench skeleton: a theme-owned header with
+  title/path/status badges, bounded metadata metrics, a typed reader body, and an optional
+  outline column only when the format can provide useful headings. Markdown, log, TeX, and text
+  files should not fall back to ad hoc SwiftUI rows or high-contrast zebra stripes in the file
+  manager; route document-like previews through the same stable document renderer when possible.
+  Large text files should show an explicit protected reading state and a calm source panel,
+  not a broken-looking partial render.
 - QuickLook and other native preview surfaces should follow the same live-resize contract as
   WebKit document views. Keep the expensive child AppKit view at its previous frame while the
   window is live-resizing, cover it with a theme-colored layer, and apply one final frame update

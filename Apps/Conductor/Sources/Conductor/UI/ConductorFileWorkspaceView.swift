@@ -471,7 +471,8 @@ private struct ConductorWorkspaceFileEditorView: View {
                     .lineLimit(1)
             }
 
-            statusPill(systemImage: "eye", title: L("预览", "Preview"))
+            statusPill(systemImage: "doc.text.magnifyingglass", title: fileKindTitle)
+            statusPill(systemImage: "lock", title: L("只读", "Read Only"))
             if externalChangeDetected {
                 statusPill(systemImage: "arrow.triangle.2.circlepath", title: L("外部已修改", "Changed externally"))
             }
@@ -679,6 +680,23 @@ private struct ConductorWorkspaceFileEditorView: View {
         .frame(height: 22)
         .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.38 : 0.22))
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    private var fileKindTitle: String {
+        switch tab.fileURL.pathExtension.lowercased() {
+        case "md", "markdown", "mdown", "mkd":
+            L("Markdown 阅读", "Markdown Reader")
+        case "log", "out", "stdout", "stderr", "trace":
+            L("日志阅读", "Log Reader")
+        case "tex", "latex", "sty", "cls", "bib":
+            L("TeX 阅读", "TeX Reader")
+        case "json", "jsonl":
+            "JSON"
+        case "csv", "tsv", "tab":
+            L("表格", "Table")
+        default:
+            L("文档阅读", "Document Reader")
+        }
     }
 
     private func largeFileView(_ byteCount: Int64) -> some View {
