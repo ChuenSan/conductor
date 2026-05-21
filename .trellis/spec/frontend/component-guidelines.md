@@ -186,6 +186,11 @@ workspace overview, and compact status modules.
   then apply one final frame update when resizing ends; pair this with browser-side
   `content-visibility` for repeated Markdown blocks so offscreen document content does not
   repeatedly reflow during window drags.
+- QuickLook and other native preview surfaces should follow the same live-resize contract as
+  WebKit document views. Keep the expensive child AppKit view at its previous frame while the
+  window is live-resizing, cover it with a theme-colored layer, and apply one final frame update
+  when resizing ends. Split pane drag paths should also suspend terminal geometry sync and avoid
+  no-op `needsDisplay` invalidations so resize does not fight Ghostty surface updates.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.

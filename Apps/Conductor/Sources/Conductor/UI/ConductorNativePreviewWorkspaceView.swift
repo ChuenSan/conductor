@@ -70,7 +70,7 @@ struct ConductorNativePreviewWorkspaceView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            ConductorNativePreviewSurface(url: url)
+            ConductorNativePreviewSurface(url: url, backgroundColor: NSColor(theme.terminalBackground))
                 .background(theme.terminalBackground)
         }
         .background(theme.terminalBackground)
@@ -180,23 +180,25 @@ struct ConductorNativePreviewWorkspaceView: View {
 
 struct ConductorNativePreviewSurface: NSViewRepresentable {
     let url: URL
+    let backgroundColor: NSColor
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
-    func makeNSView(context: Context) -> QLPreviewView {
+    func makeNSView(context: Context) -> ConductorNativePreviewContainerView {
         let view = QLPreviewView(frame: .zero, style: .normal)!
         view.autostarts = true
-        return view
+        return ConductorNativePreviewContainerView(previewView: view)
     }
 
-    func updateNSView(_ nsView: QLPreviewView, context: Context) {
+    func updateNSView(_ container: ConductorNativePreviewContainerView, context: Context) {
+        container.setBackgroundColor(backgroundColor)
         guard context.coordinator.url != url else { return }
         let item = PreviewItem(url: url)
         context.coordinator.url = url
         context.coordinator.item = item
-        nsView.previewItem = item
+        container.previewItem = item
     }
 
     final class Coordinator {
@@ -212,5 +214,85 @@ struct ConductorNativePreviewSurface: NSViewRepresentable {
             self.previewItemURL = url
             self.previewItemTitle = url.lastPathComponent
         }
+    }
+}
+
+final class ConductorNativePreviewContainerView: NSView {
+    private let previewView: QLPreviewView
+    private let resizeCover = CALayer()
+    private var isFreezingPreviewResize = false
+    private var pendingFrameAfterResize = false
+
+    var previewItem: QLPreviewItem? {
+        get { previewView.previewItem }
+        set { previewView.previewItem = newValue }
+    }
+
+    init(previewView: QLPreviewView) {
+        self.previewView = previewView
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.masksToBounds = true
+        previewView.autoresizingMask = []
+        previewView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(previewView)
+        resizeCover.opacity = 0
+        layer?.addSublayer(resizeCover)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        resizeCover.frame = bounds
+        if isFreezingPreviewResize || inLiveResize {
+            pendingFrameAfterResize = true
+            resizeCover.opacity = 1
+        } else {
+            previewView.frame = bounds
+            resizeCover.opacity = 0
+            pendingFrameAfterResize = false
+        }
+        CATransaction.commit()
+    }
+
+    override func viewWillStartLiveResize() {
+        super.viewWillStartLiveResize()
+        isFreezingPreviewResize = true
+        pendingFrameAfterResize = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        resizeCover.opacity = 1
+        CATransaction.commit()
+    }
+
+    override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        isFreezingPreviewResize = false
+        applyPendingResize()
+    }
+
+    func setBackgroundColor(_ color: NSColor) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer?.backgroundColor = color.cgColor
+        resizeCover.backgroundColor = color.cgColor
+        CATransaction.commit()
+    }
+
+    private func applyPendingResize() {
+        guard pendingFrameAfterResize else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        previewView.frame = bounds
+        resizeCover.frame = bounds
+        resizeCover.opacity = 0
+        CATransaction.commit()
+        pendingFrameAfterResize = false
     }
 }

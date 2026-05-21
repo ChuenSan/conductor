@@ -2218,7 +2218,7 @@ struct FileManagerPanel: View {
                         .frame(height: 1)
                 }
 
-                ConductorNativePreviewSurface(url: url)
+                ConductorNativePreviewSurface(url: url, backgroundColor: NSColor(theme.terminalBackground))
                     .background(theme.terminalBackground)
             }
         case .text(let document, let truncated):

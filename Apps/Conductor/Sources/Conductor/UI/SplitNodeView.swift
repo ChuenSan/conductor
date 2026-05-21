@@ -110,16 +110,8 @@ private struct AppKitSplitPairView: NSViewRepresentable {
         splitView.dividerFillColor = NSColor(theme.terminalBackground)
         splitView.dividerLineColor = NSColor(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.52 : 0.42))
         splitView.activeDividerLineColor = NSColor(theme.shellChromeTextMuted.opacity(theme.usesDarkChrome ? 0.82 : 0.68))
-        splitView.needsDisplay = true
 
-        context.coordinator.firstHostingView.rootView = AnyView(
-            SplitNodeView(node: first, model: model, path: path + [.first])
-                .environment(\.conductorSplitResizeActive, context.coordinator.isUserDragging)
-        )
-        context.coordinator.secondHostingView.rootView = AnyView(
-            SplitNodeView(node: second, model: model, path: path + [.second])
-                .environment(\.conductorSplitResizeActive, context.coordinator.isUserDragging)
-        )
+        context.coordinator.refreshHostingRoots()
 
         context.coordinator.syncDividerPosition(in: splitView)
     }
@@ -183,6 +175,17 @@ private struct AppKitSplitPairView: NSViewRepresentable {
             self.path = path
             self.dividerThickness = dividerThickness
             self.model = model
+        }
+
+        func refreshHostingRoots() {
+            firstHostingView.rootView = AnyView(
+                SplitNodeView(node: first, model: model, path: path + [.first])
+                    .environment(\.conductorSplitResizeActive, isUserDragging)
+            )
+            secondHostingView.rootView = AnyView(
+                SplitNodeView(node: second, model: model, path: path + [.second])
+                    .environment(\.conductorSplitResizeActive, isUserDragging)
+            )
         }
 
         func syncDividerPosition(in splitView: NSSplitView) {
@@ -289,6 +292,7 @@ private struct AppKitSplitPairView: NSViewRepresentable {
             isUserDragging = true
             pendingDragFraction = currentFraction(in: splitView) ?? fraction
             splitView.isDividerActive = true
+            refreshHostingRoots()
             installMouseUpMonitor()
         }
 
@@ -296,6 +300,7 @@ private struct AppKitSplitPairView: NSViewRepresentable {
             guard isUserDragging else { return }
             isUserDragging = false
             splitView?.isDividerActive = false
+            refreshHostingRoots()
             if let token = mouseUpMonitorBox.token {
                 NSEvent.removeMonitor(token)
                 mouseUpMonitorBox.token = nil
@@ -405,19 +410,34 @@ private final class EventMonitorBox: @unchecked Sendable {
 
 private final class ConductorSplitView: NSSplitView {
     var dividerThicknessOverride: CGFloat = ConductorTokens.Space.splitGutter {
-        didSet { needsDisplay = true }
+        didSet {
+            guard oldValue != dividerThicknessOverride else { return }
+            needsDisplay = true
+        }
     }
     var dividerFillColor: NSColor = .clear {
-        didSet { needsDisplay = true }
+        didSet {
+            guard oldValue != dividerFillColor else { return }
+            needsDisplay = true
+        }
     }
     var dividerLineColor: NSColor = .separatorColor {
-        didSet { needsDisplay = true }
+        didSet {
+            guard oldValue != dividerLineColor else { return }
+            needsDisplay = true
+        }
     }
     var activeDividerLineColor: NSColor = .controlAccentColor {
-        didSet { needsDisplay = true }
+        didSet {
+            guard oldValue != activeDividerLineColor else { return }
+            needsDisplay = true
+        }
     }
     var isDividerActive = false {
-        didSet { needsDisplay = true }
+        didSet {
+            guard oldValue != isDividerActive else { return }
+            needsDisplay = true
+        }
     }
     var onDividerDoubleClick: (() -> Void)?
 
@@ -627,13 +647,13 @@ private struct SplitDividerTrackingView: NSViewRepresentable {
         view.onDragChanged = onDragChanged
         view.onDragEnded = onDragEnded
         view.onDoubleClick = onDoubleClick
-        view.needsDisplay = true
     }
 }
 
 private final class SplitDividerTrackingNSView: NSView {
     var axis: SplitAxis = .horizontal {
         didSet {
+            guard oldValue != axis else { return }
             discardCursorRects()
         }
     }
@@ -865,7 +885,7 @@ private struct TerminalPaneView: View {
                     surface: model.surface(for: selected),
                     theme: model.theme,
                     isFocused: terminalAcceptsInputFocus,
-                    suspendsGeometrySync: false
+                    suspendsGeometrySync: splitResizeActive
                 )
                 .background(terminalBackground)
                 .transaction { transaction in
