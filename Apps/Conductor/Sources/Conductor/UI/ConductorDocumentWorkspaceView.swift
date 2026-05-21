@@ -68,6 +68,9 @@ private enum ConductorDocumentKind: String, Sendable {
     case code
     case json
     case table
+    case spreadsheet
+    case word
+    case html
     case image
     case pdf
     case text
@@ -81,8 +84,10 @@ private struct ConductorDocumentPayload: Equatable, Sendable {
     let subtitle: String
     let kind: ConductorDocumentKind
     let text: String?
+    let binaryBase64: String?
     let fileURLString: String?
     let baseURLString: String?
+    let fileExtension: String
     let byteCount: Int64
     let isTruncated: Bool
     let message: String?
@@ -98,8 +103,10 @@ private struct ConductorDocumentPayload: Equatable, Sendable {
             subtitle: "",
             kind: .loading,
             text: nil,
+            binaryBase64: nil,
             fileURLString: nil,
             baseURLString: nil,
+            fileExtension: "",
             byteCount: 0,
             isTruncated: false,
             message: L("正在准备文档查看器", "Preparing document viewer")
@@ -123,20 +130,47 @@ private struct ConductorDocumentPayload: Equatable, Sendable {
         let byteCount = Int64(values.fileSize ?? 0)
         let kind = kind(for: fileURL, contentType: values.contentType)
         let renderID = diskSignature(fileURL: fileURL, values: values)
+        let fileExtension = fileURL.pathExtension.lowercased()
 
-        if kind == .image || kind == .pdf {
+        if kind == .image {
             return ConductorDocumentPayload(
                 renderID: renderID,
                 title: title,
                 subtitle: subtitle,
                 kind: kind,
                 text: nil,
+                binaryBase64: nil,
                 fileURLString: fileURL.absoluteString,
                 baseURLString: fileURL.deletingLastPathComponent().absoluteString,
+                fileExtension: fileExtension,
                 byteCount: byteCount,
                 isTruncated: false,
                 message: nil
             )
+        }
+
+        if kind == .pdf || kind == .word || kind == .spreadsheet {
+            do {
+                let loadedBinary = try readBinaryBase64(fileURL: fileURL, byteCount: byteCount)
+                return ConductorDocumentPayload(
+                    renderID: renderID,
+                    title: title,
+                    subtitle: subtitle,
+                    kind: kind,
+                    text: nil,
+                    binaryBase64: loadedBinary.base64,
+                    fileURLString: fileURL.absoluteString,
+                    baseURLString: fileURL.deletingLastPathComponent().absoluteString,
+                    fileExtension: fileExtension,
+                    byteCount: byteCount,
+                    isTruncated: loadedBinary.truncated,
+                    message: loadedBinary.truncated
+                        ? L("文件超过 80 MB，已停止内嵌解析以保护应用性能", "File exceeds 80 MB; embedded parsing was stopped to protect app performance")
+                        : nil
+                )
+            } catch {
+                return message(title: title, subtitle: subtitle, message: error.localizedDescription)
+            }
         }
 
         guard kind != .binary else {
@@ -146,8 +180,10 @@ private struct ConductorDocumentPayload: Equatable, Sendable {
                 subtitle: subtitle,
                 kind: .binary,
                 text: nil,
+                binaryBase64: nil,
                 fileURLString: fileURL.absoluteString,
                 baseURLString: fileURL.deletingLastPathComponent().absoluteString,
+                fileExtension: fileExtension,
                 byteCount: byteCount,
                 isTruncated: false,
                 message: L("二进制文件将交给系统应用打开", "Binary files are handed off to the system app")
@@ -162,8 +198,10 @@ private struct ConductorDocumentPayload: Equatable, Sendable {
                 subtitle: subtitle,
                 kind: kind,
                 text: loadedText.text,
+                binaryBase64: nil,
                 fileURLString: fileURL.absoluteString,
                 baseURLString: fileURL.deletingLastPathComponent().absoluteString,
+                fileExtension: fileExtension,
                 byteCount: byteCount,
                 isTruncated: loadedText.truncated,
                 message: nil
@@ -194,8 +232,10 @@ private struct ConductorDocumentPayload: Equatable, Sendable {
             subtitle: subtitle,
             kind: .message,
             text: nil,
+            binaryBase64: nil,
             fileURLString: nil,
             baseURLString: nil,
+            fileExtension: "",
             byteCount: 0,
             isTruncated: false,
             message: message
@@ -207,6 +247,9 @@ private struct ConductorDocumentPayload: Equatable, Sendable {
         if ["md", "markdown", "mdown", "mkd"].contains(ext) { return .markdown }
         if ["json", "json5", "jsonl"].contains(ext) { return .json }
         if ["csv", "tsv", "tab", "psv"].contains(ext) { return .table }
+        if ["xls", "xlsx", "xlsm", "xlsb", "ods"].contains(ext) { return .spreadsheet }
+        if ["docx"].contains(ext) { return .word }
+        if ["html", "htm", "xhtml"].contains(ext) { return .html }
         if contentType?.conforms(to: .image) == true { return .image }
         if contentType?.conforms(to: .pdf) == true || ext == "pdf" { return .pdf }
         if sourceExtensions.contains(ext) || contentType?.conforms(to: .sourceCode) == true { return .code }
@@ -236,6 +279,15 @@ private struct ConductorDocumentPayload: Equatable, Sendable {
             String(data: data, encoding: .utf16) ??
             String(decoding: data, as: UTF8.self)
         return (text, truncated)
+    }
+
+    private nonisolated static func readBinaryBase64(fileURL: URL, byteCount: Int64) throws -> (base64: String?, truncated: Bool) {
+        let maxEmbeddedBytes = 80 * 1024 * 1024
+        guard byteCount <= maxEmbeddedBytes else {
+            return (nil, true)
+        }
+        let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
+        return (data.base64EncodedString(), false)
     }
 
     private nonisolated static func relativePath(for url: URL, rootURL: URL) -> String {
@@ -331,11 +383,19 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>\(vendorStyle("katex.min"))</style>
         <style>\(css)</style>
         <script>\(vendorScript("markdown-it.min"))</script>
         <script>\(vendorScript("purify.min"))</script>
         <script>\(vendorScript("highlight.min"))</script>
         <script>\(vendorScript("papaparse.min"))</script>
+        <script>\(vendorScript("mermaid.min"))</script>
+        <script>\(vendorScript("katex.min"))</script>
+        <script>\(vendorScript("katex-auto-render.min"))</script>
+        <script>\(vendorScript("pdf.min"))</script>
+        <script id="pdf-worker" type="text/plain">\(escapedScriptText(vendorScript("pdf.worker.min")))</script>
+        <script>\(vendorScript("mammoth.browser.min"))</script>
+        <script>\(vendorScript("xlsx.full.min"))</script>
         </head>
         <body>
         <main id="root"></main>
@@ -358,6 +418,33 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
             return ""
         }
         return script
+    }
+
+    private static func vendorStyle(_ name: String) -> String {
+        guard let url = Bundle.module.url(
+            forResource: name,
+            withExtension: "css",
+            subdirectory: "DocumentViewer/vendor"
+        ), let style = try? String(contentsOf: url, encoding: .utf8) else {
+            return ""
+        }
+        var rewritten = style
+        if let fontURLs = Bundle.module.urls(forResourcesWithExtension: "woff2", subdirectory: "DocumentViewer/vendor/fonts") {
+            for fontURL in fontURLs {
+                rewritten = rewritten.replacingOccurrences(
+                    of: "url(fonts/\(fontURL.lastPathComponent))",
+                    with: "url('\(fontURL.absoluteString)')"
+                )
+            }
+        }
+        return rewritten
+    }
+
+    private static func escapedScriptText(_ script: String) -> String {
+        script
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
     }
 
     private static func jsonLiteral(_ object: [String: Any]) -> String {
@@ -454,6 +541,21 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           color: var(--muted);
         }
         .markdown hr { border: 0; border-top: 1px solid var(--stroke); margin: 24px 0; }
+        .markdown .task-list-item { list-style: none; }
+        .markdown .task-list-item input { margin: 0 .45em 0 -1.2em; }
+        .mermaid {
+          margin: 18px 0;
+          padding: 14px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--hover);
+          overflow: auto;
+        }
+        .katex-display {
+          overflow-x: auto;
+          overflow-y: hidden;
+          padding: 4px 0;
+        }
         pre, code {
           font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
           font-size: .96em;
@@ -523,6 +625,73 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           border-radius: 8px;
           background: var(--raised);
         }
+        .pdf-pages {
+          display: grid;
+          gap: 18px;
+          justify-items: center;
+        }
+        .pdf-page {
+          width: min(100%, 980px);
+          min-height: 180px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--raised);
+          overflow: hidden;
+        }
+        .pdf-page canvas {
+          display: block;
+          width: 100%;
+          height: auto;
+          background: white;
+        }
+        .sheet-tabs {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+          margin: 0 0 14px;
+        }
+        .sheet-tab {
+          border: 1px solid var(--stroke);
+          border-radius: 7px;
+          padding: 5px 9px;
+          color: var(--muted);
+          background: transparent;
+          font: inherit;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .sheet-tab.active {
+          color: var(--text);
+          background: var(--selected);
+        }
+        .table-scroll {
+          overflow: auto;
+          max-height: calc(100vh - 134px);
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+        }
+        .table-scroll table {
+          border: 0;
+          border-radius: 0;
+        }
+        .table-scroll th {
+          position: sticky;
+          top: 0;
+          z-index: 2;
+        }
+        .docx {
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          padding: 24px 30px;
+          background: color-mix(in srgb, var(--bg) 82%, white 18%);
+        }
+        .html-frame {
+          width: 100%;
+          height: calc(100vh - 92px);
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: white;
+        }
         .empty {
           min-height: calc(100vh - 48px);
           display: grid;
@@ -573,6 +742,51 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           document.querySelectorAll('pre code').forEach(block => window.hljs.highlightElement(block));
         }
 
+        function base64ToUint8Array(base64) {
+          const binary = atob(base64 || '');
+          const length = binary.length;
+          const bytes = new Uint8Array(length);
+          for (let i = 0; i < length; i += 1) bytes[i] = binary.charCodeAt(i);
+          return bytes;
+        }
+
+        function renderMathAndDiagrams() {
+          if (window.renderMathInElement) {
+            try {
+              window.renderMathInElement(root, {
+                delimiters: [
+                  { left: '$$', right: '$$', display: true },
+                  { left: '\\\\[', right: '\\\\]', display: true },
+                  { left: '$', right: '$', display: false },
+                  { left: '\\\\(', right: '\\\\)', display: false }
+                ],
+                throwOnError: false
+              });
+            } catch (_) {}
+          }
+          if (window.mermaid) {
+            try {
+              window.mermaid.initialize({
+                startOnLoad: false,
+                securityLevel: 'strict',
+                theme: theme.usesDarkChrome ? 'dark' : 'neutral',
+                themeVariables: {
+                  background: theme.background,
+                  primaryColor: theme.raised,
+                  primaryTextColor: theme.text,
+                  lineColor: theme.stroke,
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif'
+                }
+              });
+              window.mermaid.run({ querySelector: '.mermaid' });
+            } catch (error) {
+              document.querySelectorAll('.mermaid').forEach(node => {
+                node.innerHTML = `<pre><code>${escapeHTML(node.textContent || String(error))}</code></pre>`;
+              });
+            }
+          }
+        }
+
         function renderMarkdown() {
           const md = window.markdownit ? window.markdownit({
             html: false,
@@ -585,10 +799,22 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
               return escapeHTML(str);
             }
           }) : null;
+          if (md) {
+            const defaultFence = md.renderer.rules.fence;
+            md.renderer.rules.fence = (tokens, index, options, env, self) => {
+              const token = tokens[index];
+              const info = (token.info || '').trim().split(/\\s+/)[0].toLowerCase();
+              if (info === 'mermaid') {
+                return `<div class="mermaid">${escapeHTML(token.content)}</div>`;
+              }
+              return defaultFence(tokens, index, options, env, self);
+            };
+          }
           const unsafe = md ? md.render(payload.text || '') : `<pre><code>${escapeHTML(payload.text || '')}</code></pre>`;
           const safe = window.DOMPurify ? window.DOMPurify.sanitize(unsafe) : unsafe;
           root.innerHTML = `<section class="viewport"><article class="document markdown">${meta('Markdown')}${payload.isTruncated ? '<div class="notice">文件较大，当前只渲染前 12 MB。</div>' : ''}${safe}</article></section>`;
           highlightAll();
+          renderMathAndDiagrams();
         }
 
         function renderCode(kind) {
@@ -607,6 +833,11 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           renderCode('JSON');
         }
 
+        function renderHTMLDocument() {
+          const srcdoc = window.DOMPurify ? window.DOMPurify.sanitize(payload.text || '', { WHOLE_DOCUMENT: true }) : payload.text || '';
+          root.innerHTML = `<section class="viewport"><article class="document wide">${meta('HTML')}<iframe class="html-frame" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${escapeHTML(srcdoc)}"></iframe></article></section>`;
+        }
+
         function renderTable() {
           const delimiter = payload.title.toLowerCase().endsWith('.tsv') ? '\\t' : undefined;
           const parsed = window.Papa ? window.Papa.parse(payload.text || '', {
@@ -620,19 +851,113 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           const body = rows.slice(1);
           const header = '<tr>' + Array.from({ length: maxColumns }, (_, i) => `<th>${escapeHTML(head[i] ?? '')}</th>`).join('') + '</tr>';
           const bodyHTML = body.map(row => '<tr>' + Array.from({ length: maxColumns }, (_, i) => `<td>${escapeHTML(row[i] ?? '')}</td>`).join('') + '</tr>').join('');
-          root.innerHTML = `<section class="viewport"><article class="document wide">${meta('Table')}${payload.isTruncated || body.length >= 2499 ? '<div class="notice">表格预览已限制行数，避免一次性渲染整张大表。</div>' : ''}<table>${header}${bodyHTML}</table></article></section>`;
+          root.innerHTML = `<section class="viewport"><article class="document wide">${meta('Table')}${payload.isTruncated || body.length >= 2499 ? '<div class="notice">表格预览已限制行数，避免一次性渲染整张大表。</div>' : ''}<div class="table-scroll"><table>${header}${bodyHTML}</table></div></article></section>`;
+        }
+
+        function renderWorkbookSheet(workbook, sheetName) {
+          const sheet = workbook.Sheets[sheetName];
+          const rows = window.XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            blankrows: false,
+            defval: '',
+            raw: false
+          }).slice(0, 2500).map(row => row.slice(0, 80));
+          const maxColumns = Math.min(80, rows.reduce((max, row) => Math.max(max, row.length), 0));
+          const head = rows[0] || [];
+          const body = rows.slice(1);
+          const header = '<tr>' + Array.from({ length: maxColumns }, (_, i) => `<th>${escapeHTML(head[i] ?? '')}</th>`).join('') + '</tr>';
+          const bodyHTML = body.map(row => '<tr>' + Array.from({ length: maxColumns }, (_, i) => `<td>${escapeHTML(row[i] ?? '')}</td>`).join('') + '</tr>').join('');
+          return `<div class="table-scroll"><table>${header}${bodyHTML}</table></div>`;
+        }
+
+        function renderSpreadsheet() {
+          if (!payload.binaryBase64 || !window.XLSX) {
+            renderMessage('Spreadsheet');
+            return;
+          }
+          try {
+            const bytes = base64ToUint8Array(payload.binaryBase64);
+            const workbook = window.XLSX.read(bytes, { type: 'array', cellDates: true, dense: false });
+            const sheetNames = workbook.SheetNames || [];
+            if (!sheetNames.length) {
+              renderMessage('Spreadsheet');
+              return;
+            }
+            const tabs = sheetNames.map((name, index) => `<button class="sheet-tab ${index === 0 ? 'active' : ''}" data-sheet="${escapeHTML(name)}">${escapeHTML(name)}</button>`).join('');
+            root.innerHTML = `<section class="viewport"><article class="document wide">${meta('Spreadsheet')}${payload.isTruncated ? '<div class="notice">文件较大，已停止内嵌解析。</div>' : ''}<div class="sheet-tabs">${tabs}</div><div id="sheet-body">${renderWorkbookSheet(workbook, sheetNames[0])}</div></article></section>`;
+            document.querySelectorAll('.sheet-tab').forEach(button => {
+              button.addEventListener('click', () => {
+                document.querySelectorAll('.sheet-tab').forEach(tab => tab.classList.remove('active'));
+                button.classList.add('active');
+                document.getElementById('sheet-body').innerHTML = renderWorkbookSheet(workbook, button.dataset.sheet);
+              });
+            });
+          } catch (error) {
+            renderMessage('Spreadsheet');
+          }
         }
 
         function renderImage() {
           root.innerHTML = `<section class="viewport"><div class="media"><img src="${escapeHTML(payload.fileURLString)}" alt="${escapeHTML(payload.title)}"></div></section>`;
         }
 
-        function renderPDF() {
-          root.innerHTML = `<section class="viewport"><iframe class="pdf-frame" src="${escapeHTML(payload.fileURLString)}"></iframe></section>`;
+        async function renderPDF() {
+          if (!payload.binaryBase64 || !window.pdfjsLib) {
+            root.innerHTML = `<section class="viewport"><iframe class="pdf-frame" src="${escapeHTML(payload.fileURLString)}"></iframe></section>`;
+            return;
+          }
+          try {
+            const workerScript = document.getElementById('pdf-worker')?.textContent || '';
+            const workerURL = URL.createObjectURL(new Blob([workerScript], { type: 'text/javascript' }));
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerURL;
+            const pdf = await window.pdfjsLib.getDocument({ data: base64ToUint8Array(payload.binaryBase64) }).promise;
+            const pages = Array.from({ length: pdf.numPages }, (_, i) => `<div class="pdf-page" data-page="${i + 1}"></div>`).join('');
+            root.innerHTML = `<section class="viewport"><article class="document wide">${meta('PDF.js')}<div class="pdf-pages">${pages}</div></article></section>`;
+            const renderPage = async (container) => {
+              if (container.dataset.rendered) return;
+              container.dataset.rendered = '1';
+              const pageNumber = Number(container.dataset.page);
+              const page = await pdf.getPage(pageNumber);
+              const viewport = page.getViewport({ scale: 1.35 });
+              const canvas = document.createElement('canvas');
+              const context = canvas.getContext('2d', { alpha: false });
+              canvas.width = Math.floor(viewport.width);
+              canvas.height = Math.floor(viewport.height);
+              container.appendChild(canvas);
+              await page.render({ canvasContext: context, viewport }).promise;
+            };
+            const observer = new IntersectionObserver(entries => {
+              entries.forEach(entry => {
+                if (entry.isIntersecting) renderPage(entry.target);
+              });
+            }, { rootMargin: '900px 0px' });
+            document.querySelectorAll('.pdf-page').forEach(page => observer.observe(page));
+          } catch (error) {
+            root.innerHTML = `<section class="viewport"><iframe class="pdf-frame" src="${escapeHTML(payload.fileURLString)}"></iframe></section>`;
+          }
+        }
+
+        async function renderWord() {
+          if (!payload.binaryBase64 || !window.mammoth) {
+            renderMessage('Word');
+            return;
+          }
+          try {
+            const result = await window.mammoth.convertToHtml({ arrayBuffer: base64ToUint8Array(payload.binaryBase64).buffer });
+            const unsafe = result.value || '';
+            const safe = window.DOMPurify ? window.DOMPurify.sanitize(unsafe) : unsafe;
+            const messages = (result.messages || []).length
+              ? `<div class="notice">${escapeHTML(result.messages.map(item => item.message).slice(0, 3).join(' · '))}</div>`
+              : '';
+            root.innerHTML = `<section class="viewport"><article class="document markdown">${meta('DOCX')}${messages}<div class="docx">${safe}</div></article></section>`;
+            renderMathAndDiagrams();
+          } catch (error) {
+            renderMessage('Word');
+          }
         }
 
         function renderMessage(kind) {
-          root.innerHTML = `<section class="viewport"><div class="empty"><div><div class="kind">${escapeHTML(kind)}</div><p>${escapeHTML(payload.message || '')}</p></div></div></section>`;
+          root.innerHTML = `<section class="viewport"><div class="empty"><div><div class="kind">${escapeHTML(kind)}</div><p>${escapeHTML(payload.message || '无法在内嵌查看器中渲染。')}</p></div></div></section>`;
         }
 
         applyTheme(theme);
@@ -641,6 +966,9 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           case 'code': renderCode('Code'); break;
           case 'json': renderJSON(); break;
           case 'table': renderTable(); break;
+          case 'spreadsheet': renderSpreadsheet(); break;
+          case 'word': renderWord(); break;
+          case 'html': renderHTMLDocument(); break;
           case 'image': renderImage(); break;
           case 'pdf': renderPDF(); break;
           case 'text': renderCode('Text'); break;
@@ -660,8 +988,10 @@ private extension ConductorDocumentPayload {
             "subtitle": subtitle,
             "kind": kind.rawValue,
             "text": text ?? NSNull(),
+            "binaryBase64": binaryBase64 ?? NSNull(),
             "fileURLString": fileURLString ?? NSNull(),
             "baseURLString": baseURLString ?? NSNull(),
+            "fileExtension": fileExtension,
             "byteCount": byteCount,
             "isTruncated": isTruncated,
             "message": message ?? NSNull()

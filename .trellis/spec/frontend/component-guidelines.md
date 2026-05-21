@@ -174,11 +174,13 @@ workspace overview, and compact status modules.
   a compact loading/ready/error snapshot back to the view. Shared image display must use the
   async image loader/cache path instead of calling `NSImage(contentsOf:)` from `body`.
 - Workspace document tabs use a stable WebKit/AppKit renderer for formatted documents.
-  Markdown, code, JSON, CSV/TSV, image, PDF, and future rich formats should enter SwiftUI as
-  compact file metadata plus a bounded payload only; do not rebuild Markdown or large text as
-  thousands of SwiftUI rows. Community renderers such as markdown-it, DOMPurify, highlight.js,
-  and PapaParse are bundled as app resources so previews work offline and do not depend on CDN
-  availability.
+  Markdown, code, JSON, CSV/TSV, spreadsheet files, DOCX, image, PDF, HTML, and future rich
+  formats should enter SwiftUI as compact file metadata plus a bounded payload only; do not
+  rebuild Markdown or large text as thousands of SwiftUI rows. Community renderers such as
+  markdown-it, DOMPurify, highlight.js, PapaParse, Mermaid, KaTeX, PDF.js, Mammoth, and SheetJS
+  are bundled as app resources so previews work offline and do not depend on CDN availability.
+  Binary document payloads must stay capped, and large files should show an explicit protected
+  state or fall back to a cheap native surface rather than blocking the main actor.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.
