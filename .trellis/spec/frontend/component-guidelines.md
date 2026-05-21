@@ -258,6 +258,17 @@ workspace overview, and compact status modules.
   main actor.
 - Text previews must be bounded. Large or binary files show an explicit state instead of
   loading complete contents into SwiftUI.
+- File manager quality is judged by routine usability, not by preview support alone. Common
+  actions such as open in workspace, open in system app, reveal, copy name/path/shell path,
+  insert path into terminal, inspect info, refresh, create, filter, and sort should be surfaced
+  in visible low-noise chrome or context menus. Do not hide all daily file work behind one
+  right-click path.
+- File manager filters and status summaries must remain compact metadata derived from already
+  listed files: counts, selected size, type category, path, and timestamps are acceptable.
+  Do not scan file contents or parse documents just to update the file tree status bar.
+- Drag/drop should work both on folder rows and on the panel background. Keep dropped URL
+  collection shared between row-level and panel-level drop targets so copy/move behavior stays
+  consistent.
 - Renderable local files that macOS can preview natively, such as HTML, webarchive, PDF, SVG,
   common media, and common office/iWork documents, should route to a stable AppKit native
   preview surface instead of CodeEdit or SwiftUI text rendering. Do not read the full file

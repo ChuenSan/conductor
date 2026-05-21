@@ -170,6 +170,56 @@ private enum FileManagerSortMode: String, CaseIterable, Identifiable {
     }
 }
 
+private enum FileManagerKindFilter: String, CaseIterable, Identifiable {
+    case all
+    case folders
+    case documents
+    case code
+    case data
+    case images
+    case other
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all:
+            L("全部", "All")
+        case .folders:
+            L("文件夹", "Folders")
+        case .documents:
+            L("文档", "Docs")
+        case .code:
+            L("代码", "Code")
+        case .data:
+            L("数据", "Data")
+        case .images:
+            L("图片", "Images")
+        case .other:
+            L("其他", "Other")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .all:
+            "square.grid.2x2"
+        case .folders:
+            "folder"
+        case .documents:
+            "doc.text"
+        case .code:
+            "curlybraces"
+        case .data:
+            "tablecells"
+        case .images:
+            "photo"
+        case .other:
+            "ellipsis"
+        }
+    }
+}
+
 private enum FileManagerPasteboard {
     static let cutType = NSPasteboard.PasteboardType("com.conductor.file-cut")
 
@@ -880,6 +930,7 @@ private final class FileManagerPanelStore: ObservableObject {
     @Published private(set) var searchHistory: [String] = []
     @Published var includeHiddenFiles = false
     @Published var sortMode: FileManagerSortMode = .name
+    @Published var kindFilter: FileManagerKindFilter = .all
     @Published private(set) var recentFileURLs: [URL] = []
     @Published private(set) var favoriteDirectoryURLs: [URL] = []
     @Published private(set) var renamingFocusToken = 0
@@ -897,11 +948,25 @@ private final class FileManagerPanelStore: ObservableObject {
 
     var displayedRows: [FileManagerVisibleRow] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return visibleRows }
-        return knownRows(for: items, depth: 0).filter { row in
-            row.item.name.localizedCaseInsensitiveContains(query) ||
-                row.item.url.path.localizedCaseInsensitiveContains(query)
+        let baseRows = query.isEmpty ? visibleRows : knownRows(for: items, depth: 0)
+        return baseRows.filter { row in
+            matchesKindFilter(row.item) &&
+                (query.isEmpty ||
+                    row.item.name.localizedCaseInsensitiveContains(query) ||
+                    row.item.url.path.localizedCaseInsensitiveContains(query))
         }
+    }
+
+    var totalKnownItemCount: Int {
+        knownRows(for: items, depth: 0).count
+    }
+
+    var displayedFileCount: Int {
+        displayedRows.filter { !$0.item.isDirectory }.count
+    }
+
+    var displayedDirectoryCount: Int {
+        displayedRows.filter(\.item.isDirectory).count
     }
 
     func load(_ request: FileManagerPanelRequest) async {
@@ -1106,6 +1171,13 @@ private final class FileManagerPanelStore: ObservableObject {
         guard sortMode != mode else { return }
         sortMode = mode
         await refresh()
+    }
+
+    func setKindFilter(_ filter: FileManagerKindFilter) {
+        kindFilter = filter
+        if let selectedItem, !displayedRows.contains(where: { $0.item.url.path == selectedItem.url.path }) {
+            selectAdjacentRow(by: 1)
+        }
     }
 
     func recordOpenedFile(_ url: URL) {
@@ -1334,6 +1406,33 @@ private final class FileManagerPanelStore: ObservableObject {
         }
     }
 
+    private func matchesKindFilter(_ item: FileManagerItem) -> Bool {
+        switch kindFilter {
+        case .all:
+            return true
+        case .folders:
+            return item.isDirectory
+        case .documents:
+            return !item.isDirectory && Self.documentExtensions.contains(item.url.pathExtension.lowercased())
+        case .code:
+            return !item.isDirectory && Self.codeExtensions.contains(item.url.pathExtension.lowercased())
+        case .data:
+            return !item.isDirectory && Self.dataExtensions.contains(item.url.pathExtension.lowercased())
+        case .images:
+            if item.isDirectory { return false }
+            if Self.imageExtensions.contains(item.url.pathExtension.lowercased()) { return true }
+            guard let identifier = item.contentTypeIdentifier, let type = UTType(identifier) else { return false }
+            return type.conforms(to: .image)
+        case .other:
+            guard !item.isDirectory else { return false }
+            let ext = item.url.pathExtension.lowercased()
+            return !Self.documentExtensions.contains(ext) &&
+                !Self.codeExtensions.contains(ext) &&
+                !Self.dataExtensions.contains(ext) &&
+                !Self.imageExtensions.contains(ext)
+        }
+    }
+
     private func refresh(selecting selectedURL: URL?) async {
         guard let currentURL else { return }
         await openDirectory(currentURL, selecting: selectedURL, preservingExpanded: expandedDirectoryPaths)
@@ -1521,6 +1620,23 @@ private final class FileManagerPanelStore: ObservableObject {
     private static let recentFilesDefaultsKey = "conductor.fileManager.recentFiles"
     private static let favoriteDirectoriesDefaultsKey = "conductor.fileManager.favoriteDirectories"
     private static let searchHistoryScope = "file-tree"
+    private static let documentExtensions: Set<String> = [
+        "adoc", "bib", "cls", "latex", "log", "markdown", "md", "mdown", "mkd",
+        "out", "pdf", "rst", "stderr", "stdout", "sty", "tex", "text", "trace", "txt"
+    ]
+    private static let codeExtensions: Set<String> = [
+        "bash", "c", "cc", "cpp", "css", "go", "h", "hpp", "html", "java", "js",
+        "jsx", "kt", "kts", "m", "mm", "php", "py", "rb", "rs", "scss", "sh",
+        "sql", "swift", "ts", "tsx", "zsh"
+    ]
+    private static let dataExtensions: Set<String> = [
+        "cfg", "conf", "csv", "env", "ini", "json", "jsonl", "plist", "properties",
+        "tab", "toml", "tsv", "xml", "yaml", "yml"
+    ]
+    private static let imageExtensions: Set<String> = [
+        "apng", "avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png",
+        "psd", "svg", "tif", "tiff", "webp"
+    ]
 }
 
 struct FileManagerPanel: View {
@@ -1547,6 +1663,8 @@ struct FileManagerPanel: View {
             }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            divider
+            statusBar
             if let message = store.operationMessage {
                 divider
                 operationMessageBar(message)
@@ -1680,6 +1798,7 @@ struct FileManagerPanel: View {
             HStack(spacing: 5) {
                 quickAccessMenuButton
                 sortMenuButton
+                kindFilterMenuButton
 
                 toolbarSeparator
 
@@ -1770,6 +1889,28 @@ struct FileManagerPanel: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .macNativeTooltip(L("排序方式", "Sort"))
+    }
+
+    private var kindFilterMenuButton: some View {
+        Menu {
+            Section(L("类型过滤", "Kind Filter")) {
+                ForEach(FileManagerKindFilter.allCases) { filter in
+                    Button {
+                        store.setKindFilter(filter)
+                    } label: {
+                        Label(filter.title, systemImage: filter == store.kindFilter ? "checkmark" : filter.systemImage)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: store.kindFilter.systemImage)
+                .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(store.kindFilter == .all ? theme.shellChromeText.opacity(0.62) : theme.floatingEmphasis.opacity(0.86))
+                .frame(width: 28, height: 28)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .macNativeTooltip(L("类型过滤", "Kind Filter"))
     }
 
     private var toolbarSeparator: some View {
@@ -1995,6 +2136,69 @@ struct FileManagerPanel: View {
                 .scrollIndicators(.visible)
             }
         }
+        .onDrop(of: [UTType.fileURL.identifier], isTargeted: nil) { providers in
+            collectDroppedFileURLs(from: providers) { urls in
+                guard !urls.isEmpty else { return }
+                let move = NSApp.currentEvent?.modifierFlags.contains(.option) != true
+                Task { await store.pasteItems(urls, into: nil, move: move) }
+            }
+            return true
+        }
+    }
+
+    private var statusBar: some View {
+        HStack(spacing: 8) {
+            if store.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, store.kindFilter == .all {
+                statusChip(systemImage: "list.bullet", title: L("\(store.totalKnownItemCount) 项", "\(store.totalKnownItemCount) items"))
+            } else {
+                statusChip(systemImage: "line.3.horizontal.decrease", title: L("\(store.displayedRows.count)/\(store.totalKnownItemCount)", "\(store.displayedRows.count)/\(store.totalKnownItemCount)"))
+            }
+            statusChip(systemImage: "folder", title: L("\(store.displayedDirectoryCount)", "\(store.displayedDirectoryCount)"))
+            statusChip(systemImage: "doc", title: L("\(store.displayedFileCount)", "\(store.displayedFileCount)"))
+
+            if store.kindFilter != .all {
+                statusChip(systemImage: store.kindFilter.systemImage, title: store.kindFilter.title)
+            }
+
+            if !store.selectedURLs.isEmpty {
+                statusChip(systemImage: "checkmark.circle", title: selectionSummary)
+            }
+
+            Spacer(minLength: 8)
+
+            Text((store.currentURL ?? request.rootURL).path)
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(theme.shellChromeText.opacity(0.42))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.12 : 0.08))
+    }
+
+    private var selectionSummary: String {
+        let items = store.selectedItems
+        guard !items.isEmpty else { return L("0 项", "0 items") }
+        let selectedSize = items.compactMap(\.byteCount).reduce(Int64(0), +)
+        let size = selectedSize > 0 ? " · \(ByteCountFormatter.string(fromByteCount: selectedSize, countStyle: .file))" : ""
+        return L("\(items.count) 项\(size)", "\(items.count) item(s)\(size)")
+    }
+
+    private func statusChip(systemImage: String, title: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 9.5, weight: .semibold, family: fontFamily, scale: fontScale))
+            Text(title)
+                .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                .lineLimit(1)
+        }
+        .foregroundStyle(theme.shellChromeText.opacity(0.50))
+        .padding(.horizontal, 7)
+        .frame(height: 19)
+        .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.26 : 0.22))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 
     private func operationMessageBar(_ message: String) -> some View {
@@ -2165,13 +2369,35 @@ struct FileManagerPanel: View {
 
             Spacer(minLength: 8)
 
+            if !item.isDirectory {
+                panelIconButton("rectangle.split.2x1", help: L("在工作区打开", "Open in Workspace")) {
+                    openInWorkspace(item)
+                }
+
+                panelIconButton("arrow.up.forward.app", help: L("系统应用打开", "Open in System App")) {
+                    NSWorkspace.shared.open(item.url)
+                }
+            }
+
             panelIconButton("terminal", help: L("插入路径到终端", "Insert Path into Terminal")) {
                 _ = model.insertPathIntoFocusedTerminal(item.url)
             }
             .disabled(model.focusedTerminalID == nil)
 
+            panelIconButton("textformat", help: L("复制文件名", "Copy Name")) {
+                copyText(item.name)
+            }
+
             panelIconButton("doc.on.doc", help: L("复制路径", "Copy Path")) {
                 copyPath(item.url)
+            }
+
+            panelIconButton("quote.bubble", help: L("复制 Shell 路径", "Copy Shell Path")) {
+                copyText(shellEscapedPath(item.url.path))
+            }
+
+            panelIconButton("info.circle", help: L("显示信息", "Get Info")) {
+                infoItem = item
             }
 
             panelIconButton("folder", help: L("在 Finder 中显示", "Reveal in Finder")) {
@@ -2411,6 +2637,14 @@ struct FileManagerPanel: View {
         }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let characters = event.charactersIgnoringModifiers?.lowercased() ?? ""
+
+        if flags.contains(.command), flags.contains(.shift), event.keyCode == 36 {
+            if let item = store.selectedItem {
+                NSWorkspace.shared.open(item.url)
+                return true
+            }
+            return false
+        }
 
         if flags.contains(.command) {
             switch characters {
@@ -3147,6 +3381,35 @@ private final class FileDropURLCollector: @unchecked Sendable {
     }
 }
 
+private func collectDroppedFileURLs(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
+    let collector = FileDropURLCollector()
+    let group = DispatchGroup()
+    for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+        group.enter()
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            defer { group.leave() }
+            let resolvedURL: URL?
+            if let url = item as? URL {
+                resolvedURL = url.standardizedFileURL
+            } else if let data = item as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil) {
+                resolvedURL = url.standardizedFileURL
+            } else if let string = item as? String,
+                      let url = URL(string: string), url.isFileURL {
+                resolvedURL = url.standardizedFileURL
+            } else {
+                resolvedURL = nil
+            }
+            if let resolvedURL {
+                collector.append(resolvedURL)
+            }
+        }
+    }
+    group.notify(queue: .main) {
+        completion(collector.snapshot())
+    }
+}
+
 private struct FileManagerRowView: View {
     let item: FileManagerItem
     let depth: Int
@@ -3240,7 +3503,7 @@ private struct FileManagerRowView: View {
             .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTargeted) { providers in
                 guard item.isDirectory else { return false }
                 let move = NSApp.currentEvent?.modifierFlags.contains(.option) != true
-                loadDroppedFileURLs(from: providers) { urls in
+                collectDroppedFileURLs(from: providers) { urls in
                     guard !urls.isEmpty else { return }
                     dropFiles(urls, move)
                 }
@@ -3277,6 +3540,15 @@ private struct FileManagerRowView: View {
                     .controlSize(.small)
                     .scaleEffect(0.58)
                     .frame(width: 16, height: 16)
+            }
+
+            if !isRenaming {
+                Text(rowDetail)
+                    .font(.conductorSystem(size: 10.2, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(isSelected ? 0.56 : 0.34))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 150, alignment: .trailing)
             }
 
             if isMissing {
@@ -3366,6 +3638,21 @@ private struct FileManagerRowView: View {
         }
     }
 
+    private var rowDetail: String {
+        var parts: [String] = []
+        if item.isDirectory {
+            parts.append(L("文件夹", "Folder"))
+        } else if let byteCount = item.byteCount {
+            parts.append(ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file))
+        } else {
+            parts.append(item.typeLabel)
+        }
+        if let modificationDate = item.modificationDate {
+            parts.append(Self.relativeDateFormatter.localizedString(for: modificationDate, relativeTo: Date()))
+        }
+        return parts.joined(separator: " · ")
+    }
+
     private var isLargeEditableFile: Bool {
         guard !item.isDirectory, let byteCount = item.byteCount else { return false }
         return byteCount > 20 * 1024 * 1024
@@ -3433,32 +3720,9 @@ private struct FileManagerRowView: View {
         return Color.clear
     }
 
-    private func loadDroppedFileURLs(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
-        let collector = FileDropURLCollector()
-        let group = DispatchGroup()
-        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-            group.enter()
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                defer { group.leave() }
-                let resolvedURL: URL?
-                if let url = item as? URL {
-                    resolvedURL = url.standardizedFileURL
-                } else if let data = item as? Data,
-                          let url = URL(dataRepresentation: data, relativeTo: nil) {
-                    resolvedURL = url.standardizedFileURL
-                } else if let string = item as? String,
-                          let url = URL(string: string), url.isFileURL {
-                    resolvedURL = url.standardizedFileURL
-                } else {
-                    resolvedURL = nil
-                }
-                if let resolvedURL {
-                    collector.append(resolvedURL)
-                }
-            }
-        }
-        group.notify(queue: .main) {
-            completion(collector.snapshot())
-        }
-    }
+    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter
+    }()
 }
