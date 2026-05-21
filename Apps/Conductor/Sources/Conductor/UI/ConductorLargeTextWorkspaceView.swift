@@ -37,6 +37,9 @@ struct ConductorLargeTextWorkspaceView: View {
     @State private var jumpLineToken = 0
     @State private var jumpLineText = ""
     @State private var jumpLinePopoverVisible = false
+    @State private var appendSheetVisible = false
+    @State private var appendText = ""
+    @State private var currentByteCount: Int64?
     @State private var operationMessage: String?
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorFontFamily) private var fontFamily
@@ -46,7 +49,7 @@ struct ConductorLargeTextWorkspaceView: View {
             statusBar
             HStack(spacing: 0) {
                 ConductorLargeTextViewport(
-                    document: document,
+                    document: effectiveDocument,
                     theme: theme,
                     fontSize: fontSize,
                     searchQuery: searchQuery,
@@ -83,6 +86,17 @@ struct ConductorLargeTextWorkspaceView: View {
         }
     }
 
+    private var effectiveDocument: WorkspaceLargeTextDocument {
+        WorkspaceLargeTextDocument(
+            fileURL: document.fileURL,
+            byteCount: currentByteCount ?? document.byteCount,
+            formatTitle: document.formatTitle,
+            formatSystemImage: document.formatSystemImage,
+            reason: document.reason,
+            extractsOutline: document.extractsOutline
+        )
+    }
+
     private var statusBar: some View {
         HStack(spacing: 7) {
             statusPill(systemImage: document.formatSystemImage, title: document.formatTitle)
@@ -114,6 +128,14 @@ struct ConductorLargeTextWorkspaceView: View {
                 copy(document.fileURL.path, message: L("已复制路径", "Path copied"))
             }
             .keyboardShortcut("c", modifiers: [.command, .option])
+
+            iconButton("square.and.pencil", help: L("安全追加文本", "Safely Append Text")) {
+                appendText = ""
+                appendSheetVisible = true
+            }
+            .sheet(isPresented: $appendSheetVisible) {
+                appendSheet
+            }
 
             iconButton("arrow.up.right.square", help: L("系统应用打开 Cmd-O", "Open in System App Cmd-O")) {
                 NSWorkspace.shared.open(document.fileURL)
@@ -149,6 +171,36 @@ struct ConductorLargeTextWorkspaceView: View {
                 .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.30 : 0.16))
                 .frame(height: 1)
         }
+    }
+
+    private var appendSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L("安全追加文本", "Safely Append Text"))
+                .font(.conductorSystem(size: 14, weight: .bold, family: fontFamily, scale: fontScale))
+            Text(L("只把这段内容追加到文件末尾，不重写整个大文件。", "Only appends this text to the end of the file; it does not rewrite the whole large file."))
+                .font(.conductorSystem(size: 11, weight: .medium, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.56))
+            TextEditor(text: $appendText)
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .frame(width: 420, height: 160)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.35 : 0.22), lineWidth: 1)
+                }
+            HStack {
+                Spacer()
+                Button(L("取消", "Cancel")) {
+                    appendSheetVisible = false
+                }
+                Button(L("追加", "Append")) {
+                    appendLargeText()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(appendText.isEmpty)
+            }
+        }
+        .padding(16)
+        .background(theme.terminalBackground)
     }
 
     private var jumpLinePopover: some View {
@@ -265,6 +317,38 @@ struct ConductorLargeTextWorkspaceView: View {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         operationMessage = message
+    }
+
+    private func appendLargeText() {
+        let payload = appendText
+        let fileURL = document.fileURL
+        appendSheetVisible = false
+        appendText = ""
+        Task {
+            let result = await Task.detached(priority: .utility) {
+                Result {
+                    guard let data = payload.data(using: .utf8) else {
+                        throw NSError(domain: "ConductorLargeText", code: 422, userInfo: [
+                            NSLocalizedDescriptionKey: L("文本无法编码为 UTF-8", "Text could not be encoded as UTF-8")
+                        ])
+                    }
+                    let handle = try FileHandle(forWritingTo: fileURL)
+                    defer { try? handle.close() }
+                    try handle.seekToEnd()
+                    try handle.write(contentsOf: data)
+                    let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
+                    return Int64(values.fileSize ?? 0)
+                }
+            }.value
+            switch result {
+            case .success(let byteCount):
+                currentByteCount = byteCount
+                operationMessage = L("已安全追加并重新建立索引", "Safely appended and reindexed")
+            case .failure(let error):
+                operationMessage = error.localizedDescription
+                NSSound.beep()
+            }
+        }
     }
 
     private func handleKeyboardShortcut(_ event: NSEvent) -> Bool {

@@ -847,9 +847,43 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @discardableResult
     func insertPathIntoFocusedTerminal(_ url: URL) -> Bool {
         guard let tab = workspace.focusedPane?.selectedTab else { return false }
-        focusTerminal(tab.id)
-        surface(for: tab).sendText(Self.shellEscapedText(url.standardizedFileURL.path) + " ")
-        refreshSurfaceAfterNavigation(tab.id)
+        return insertTextIntoTerminal(Self.shellEscapedText(url.standardizedFileURL.path) + " ", terminalID: tab.id)
+    }
+
+    @discardableResult
+    func insertPathIntoTerminal(_ url: URL, terminalID: TerminalID) -> Bool {
+        insertTextIntoTerminal(Self.shellEscapedText(url.standardizedFileURL.path) + " ", terminalID: terminalID)
+    }
+
+    @discardableResult
+    func insertShellCommandForFocusedTerminal(_ command: String) -> Bool {
+        guard let tab = workspace.focusedPane?.selectedTab else { return false }
+        return insertTextIntoTerminal(command, terminalID: tab.id)
+    }
+
+    @discardableResult
+    func insertCDCommandIntoFocusedTerminal(_ url: URL) -> Bool {
+        let targetURL: URL
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            targetURL = url
+        } else {
+            targetURL = url.deletingLastPathComponent()
+        }
+        return insertShellCommandForFocusedTerminal("cd \(Self.shellEscapedText(targetURL.standardizedFileURL.path))")
+    }
+
+    @discardableResult
+    func insertListCommandIntoFocusedTerminal(_ url: URL) -> Bool {
+        insertShellCommandForFocusedTerminal("ls -lah \(Self.shellEscapedText(url.standardizedFileURL.path))")
+    }
+
+    @discardableResult
+    private func insertTextIntoTerminal(_ text: String, terminalID: TerminalID) -> Bool {
+        guard let target = terminalContextMenuTarget(for: terminalID) else { return false }
+        focusTerminal(target.tab.id)
+        surface(for: target.tab).sendText(text)
+        refreshSurfaceAfterNavigation(target.tab.id)
         return true
     }
 

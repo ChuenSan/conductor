@@ -748,6 +748,7 @@ private struct TerminalPaneView: View {
     let pane: PaneState
     @ObservedObject var model: ConductorWindowModel
     @State private var highlightedDropTabID: TerminalID?
+    @State private var isFileDropTargeted = false
     @State private var flashVisible = false
     @Environment(\.conductorSplitResizeActive) private var splitResizeActive
 
@@ -876,6 +877,22 @@ private struct TerminalPaneView: View {
             }
             .contentShape(Rectangle())
             .clipped()
+            .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isFileDropTargeted) { providers in
+                loadTerminalDroppedFileURLs(from: providers) { urls in
+                    for url in urls {
+                        _ = model.insertPathIntoTerminal(url, terminalID: selected.id)
+                    }
+                }
+                return true
+            }
+            .overlay {
+                if isFileDropTargeted {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(model.theme.accent.opacity(0.72), lineWidth: 2)
+                        .padding(8)
+                        .allowsHitTesting(false)
+                }
+            }
         }
     }
 
@@ -907,6 +924,55 @@ private extension TerminalTabDropTarget {
         }
     }
 
+}
+
+private final class TerminalFileDropURLCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var urls: [URL] = []
+
+    func append(_ url: URL) {
+        lock.lock()
+        urls.append(url.standardizedFileURL)
+        lock.unlock()
+    }
+
+    func snapshot() -> [URL] {
+        lock.lock()
+        let current = urls
+        lock.unlock()
+        return current
+    }
+}
+
+private func loadTerminalDroppedFileURLs(from providers: [NSItemProvider], completion: @escaping @MainActor ([URL]) -> Void) {
+    let fileProviders = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
+    guard !fileProviders.isEmpty else {
+        Task { @MainActor in completion([]) }
+        return
+    }
+
+    let group = DispatchGroup()
+    let collector = TerminalFileDropURLCollector()
+    for provider in fileProviders {
+        group.enter()
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            defer { group.leave() }
+            if let data = item as? Data,
+               let url = URL(dataRepresentation: data, relativeTo: nil) {
+                collector.append(url)
+            } else if let url = item as? URL {
+                collector.append(url)
+            } else if let nsURL = item as? NSURL {
+                collector.append(nsURL as URL)
+            }
+        }
+    }
+
+    group.notify(queue: .main) {
+        Task { @MainActor in
+            completion(collector.snapshot())
+        }
+    }
 }
 
 private struct TerminalDetachDropOverlay: View {

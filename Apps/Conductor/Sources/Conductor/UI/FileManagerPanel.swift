@@ -104,6 +104,21 @@ private struct FilePreviewKeyValueDocument: Equatable, Sendable {
     let sourceLineCount: Int
 }
 
+private struct FilePreviewStructuredDocument: Equatable, Sendable {
+    struct Row: Equatable, Sendable, Identifiable {
+        let id: String
+        let path: String
+        let key: String
+        let kind: String
+        let value: String
+        let depth: Int
+    }
+
+    let rows: [Row]
+    let formatLabel: String
+    let sourceLineCount: Int
+}
+
 private enum FilePreviewState: Equatable, Sendable {
     case empty
     case loading
@@ -112,6 +127,7 @@ private enum FilePreviewState: Equatable, Sendable {
     case text(FilePreviewTextDocument, truncated: Bool)
     case table(FilePreviewTableDocument, truncated: Bool)
     case keyValue(FilePreviewKeyValueDocument, truncated: Bool)
+    case structured(FilePreviewStructuredDocument, truncated: Bool)
     case message(String)
     case failed(String)
 }
@@ -278,6 +294,9 @@ private struct FileManagerService {
             let truncated = size > maxInlineTextBytes
             if let table = Self.tablePreview(for: text, extension: fileURL.pathExtension) {
                 return .table(table, truncated: truncated)
+            }
+            if let structured = Self.structuredPreview(for: text, extension: fileURL.pathExtension) {
+                return .structured(structured, truncated: truncated)
             }
             if let keyValue = Self.keyValuePreview(for: text, extension: fileURL.pathExtension) {
                 return .keyValue(keyValue, truncated: truncated)
@@ -554,6 +573,189 @@ private struct FileManagerService {
         }
         guard !rows.isEmpty else { return nil }
         return FilePreviewKeyValueDocument(rows: rows, formatLabel: ext.uppercased(), sourceLineCount: rawLines.count)
+    }
+
+    private static func structuredPreview(for text: String, extension pathExtension: String) -> FilePreviewStructuredDocument? {
+        let ext = pathExtension.lowercased()
+        switch ext {
+        case "json":
+            guard let data = text.data(using: .utf8) else { return nil }
+            do {
+                let object = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+                return FilePreviewStructuredDocument(
+                    rows: flattenedStructuredRows(for: object, rootPath: "$", rootKey: "$"),
+                    formatLabel: "JSON",
+                    sourceLineCount: text.components(separatedBy: .newlines).count
+                )
+            } catch {
+                return FilePreviewStructuredDocument(
+                    rows: [FilePreviewStructuredDocument.Row(
+                        id: "json-error",
+                        path: "$",
+                        key: L("解析错误", "Parse Error"),
+                        kind: L("错误", "Error"),
+                        value: error.localizedDescription,
+                        depth: 0
+                    )],
+                    formatLabel: "JSON",
+                    sourceLineCount: text.components(separatedBy: .newlines).count
+                )
+            }
+        case "jsonl":
+            let rows = text.components(separatedBy: .newlines)
+                .prefix(500)
+                .enumerated()
+                .flatMap { index, line -> [FilePreviewStructuredDocument.Row] in
+                    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { return [] }
+                    do {
+                        let object = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+                        return flattenedStructuredRows(for: object, rootPath: "$[\(index + 1)]", rootKey: "[\(index + 1)]")
+                    } catch {
+                        return [FilePreviewStructuredDocument.Row(
+                            id: "jsonl-\(index)-error",
+                            path: "$[\(index + 1)]",
+                            key: "[\(index + 1)]",
+                            kind: L("错误", "Error"),
+                            value: error.localizedDescription,
+                            depth: 0
+                        )]
+                    }
+                }
+            guard !rows.isEmpty else { return nil }
+            return FilePreviewStructuredDocument(rows: rows, formatLabel: "JSONL", sourceLineCount: text.components(separatedBy: .newlines).count)
+        case "plist":
+            guard let data = text.data(using: .utf8),
+                  let object = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) else {
+                return nil
+            }
+            return FilePreviewStructuredDocument(
+                rows: flattenedStructuredRows(for: object, rootPath: "$", rootKey: "$"),
+                formatLabel: "Plist",
+                sourceLineCount: text.components(separatedBy: .newlines).count
+            )
+        case "yaml", "yml":
+            let rows = yamlStructuredRows(for: text)
+            guard !rows.isEmpty else { return nil }
+            return FilePreviewStructuredDocument(rows: rows, formatLabel: "YAML", sourceLineCount: text.components(separatedBy: .newlines).count)
+        case "toml":
+            let rows = tomlStructuredRows(for: text)
+            guard !rows.isEmpty else { return nil }
+            return FilePreviewStructuredDocument(rows: rows, formatLabel: "TOML", sourceLineCount: text.components(separatedBy: .newlines).count)
+        default:
+            return nil
+        }
+    }
+
+    private static func flattenedStructuredRows(
+        for value: Any,
+        rootPath: String,
+        rootKey: String,
+        depth: Int = 0,
+        limit: Int = 2_000
+    ) -> [FilePreviewStructuredDocument.Row] {
+        var rows: [FilePreviewStructuredDocument.Row] = []
+
+        func append(_ value: Any, key: String, path: String, depth: Int) {
+            guard rows.count < limit else { return }
+            let kind: String
+            let displayValue: String
+            if let dictionary = value as? [String: Any] {
+                kind = L("对象", "Object")
+                displayValue = L("\(dictionary.count) 个键", "\(dictionary.count) keys")
+                rows.append(.init(id: path, path: path, key: key, kind: kind, value: displayValue, depth: depth))
+                for childKey in dictionary.keys.sorted() {
+                    guard let child = dictionary[childKey] else { continue }
+                    append(child, key: childKey, path: "\(path).\(childKey)", depth: depth + 1)
+                }
+            } else if let array = value as? [Any] {
+                kind = L("数组", "Array")
+                displayValue = L("\(array.count) 项", "\(array.count) items")
+                rows.append(.init(id: path, path: path, key: key, kind: kind, value: displayValue, depth: depth))
+                for (index, child) in array.enumerated() {
+                    append(child, key: "[\(index)]", path: "\(path)[\(index)]", depth: depth + 1)
+                }
+            } else if value is NSNull {
+                rows.append(.init(id: path, path: path, key: key, kind: "Null", value: "null", depth: depth))
+            } else if let bool = value as? Bool {
+                rows.append(.init(id: path, path: path, key: key, kind: "Bool", value: bool ? "true" : "false", depth: depth))
+            } else if let number = value as? NSNumber {
+                rows.append(.init(id: path, path: path, key: key, kind: "Number", value: number.stringValue, depth: depth))
+            } else {
+                rows.append(.init(id: path, path: path, key: key, kind: "String", value: String(describing: value), depth: depth))
+            }
+        }
+
+        append(value, key: rootKey, path: rootPath, depth: depth)
+        if rows.count >= limit {
+            rows.append(.init(
+                id: "\(rootPath)-truncated",
+                path: rootPath,
+                key: L("已截断", "Truncated"),
+                kind: L("提示", "Notice"),
+                value: L("结构节点超过 2000 项，只显示前 2000 项", "More than 2000 structured nodes; showing the first 2000"),
+                depth: 0
+            ))
+        }
+        return rows
+    }
+
+    private static func yamlStructuredRows(for text: String) -> [FilePreviewStructuredDocument.Row] {
+        var stack: [(indent: Int, key: String)] = []
+        var rows: [FilePreviewStructuredDocument.Row] = []
+        for (lineIndex, line) in text.components(separatedBy: .newlines).enumerated() {
+            guard rows.count < 2_000 else { break }
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+            let indent = line.prefix { $0 == " " }.count
+            while let last = stack.last, last.indent >= indent {
+                stack.removeLast()
+            }
+
+            var key: String
+            var value: String
+            if trimmed.hasPrefix("- ") {
+                let item = String(trimmed.dropFirst(2))
+                key = "[\(lineIndex + 1)]"
+                value = item
+            } else if let colon = trimmed.firstIndex(of: ":") {
+                key = String(trimmed[..<colon]).trimmingCharacters(in: .whitespaces)
+                value = String(trimmed[trimmed.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            } else {
+                key = "[\(lineIndex + 1)]"
+                value = trimmed
+            }
+            let parentPath = stack.map(\.key).joined(separator: ".")
+            let path = parentPath.isEmpty ? key : "\(parentPath).\(key)"
+            let kind = value.isEmpty ? L("节点", "Node") : L("值", "Value")
+            rows.append(.init(id: "yaml-\(lineIndex)", path: path, key: key, kind: kind, value: value, depth: stack.count))
+            if value.isEmpty {
+                stack.append((indent: indent, key: key))
+            }
+        }
+        return rows
+    }
+
+    private static func tomlStructuredRows(for text: String) -> [FilePreviewStructuredDocument.Row] {
+        var section: [String] = []
+        var rows: [FilePreviewStructuredDocument.Row] = []
+        for (lineIndex, line) in text.components(separatedBy: .newlines).enumerated() {
+            guard rows.count < 2_000 else { break }
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+            if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+                let name = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+                section = name.split(separator: ".").map(String.init)
+                rows.append(.init(id: "toml-section-\(lineIndex)", path: section.joined(separator: "."), key: name, kind: L("节", "Section"), value: "", depth: max(0, section.count - 1)))
+                continue
+            }
+            guard let separator = trimmed.firstIndex(of: "=") else { continue }
+            let key = String(trimmed[..<separator]).trimmingCharacters(in: .whitespaces)
+            let value = String(trimmed[trimmed.index(after: separator)...]).trimmingCharacters(in: .whitespaces)
+            let path = (section + [key]).joined(separator: ".")
+            rows.append(.init(id: "toml-\(lineIndex)", path: path, key: key, kind: L("值", "Value"), value: value, depth: section.count))
+        }
+        return rows
     }
 
     private static func parseDelimitedLine(_ line: String, delimiter: Character) -> [String] {
@@ -1728,6 +1930,8 @@ struct FileManagerPanel: View {
                                 delete: { store.markForDelete(itemsForBatch(default: row.item)) },
                                 canPaste: canPaste,
                                 insertPath: { _ = model.insertPathIntoFocusedTerminal(row.item.url) },
+                                insertCDCommand: { _ = model.insertCDCommandIntoFocusedTerminal(row.item.url) },
+                                insertListCommand: { _ = model.insertListCommandIntoFocusedTerminal(row.item.url) },
                                 reveal: { reveal(row.item.url) },
                                 dropFiles: { urls, move in
                                     Task { await store.pasteItems(urls, into: row.item, move: move) }
@@ -1968,6 +2172,14 @@ struct FileManagerPanel: View {
             )
         case .keyValue(let document, let truncated):
             FileManagerKeyValuePreview(
+                document: document,
+                truncated: truncated,
+                theme: theme,
+                fontFamily: fontFamily,
+                fontScale: fontScale
+            )
+        case .structured(let document, let truncated):
+            FileManagerStructuredPreview(
                 document: document,
                 truncated: truncated,
                 theme: theme,
@@ -2247,6 +2459,7 @@ private struct FileManagerInfoSheet: View {
                 infoRow(L("创建时间", "Created"), dateLabel(item.creationDate))
                 infoRow(L("权限", "Permissions"), permissionLabel)
                 infoRow(L("完整路径", "Full Path"), item.url.path, selectable: true)
+                infoRow(L("所在目录", "Parent"), item.url.deletingLastPathComponent().path, selectable: true)
             }
             .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.18 : 0.30))
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -2255,7 +2468,13 @@ private struct FileManagerInfoSheet: View {
                     .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.26 : 0.20), lineWidth: 1)
             }
 
-            HStack {
+            HStack(spacing: 8) {
+                Button(L("复制路径", "Copy Path")) {
+                    copyInfoText(item.url.path)
+                }
+                Button(L("复制 Shell 路径", "Copy Shell Path")) {
+                    copyInfoText("'" + item.url.path.replacingOccurrences(of: "'", with: "'\\''") + "'")
+                }
                 Spacer()
                 Button(L("完成", "Done")) {
                     dismiss()
@@ -2331,6 +2550,11 @@ private struct FileManagerInfoSheet: View {
         default:
             "doc"
         }
+    }
+
+    private func copyInfoText(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     private func dateLabel(_ date: Date?) -> String {
@@ -2637,6 +2861,110 @@ private struct FileManagerKeyValuePreview: View {
     }
 }
 
+private struct FileManagerStructuredPreview: View {
+    let document: FilePreviewStructuredDocument
+    let truncated: Bool
+    let theme: TerminalTheme
+    let fontFamily: AppearanceFontFamily
+    let fontScale: AppearanceFontScale
+
+    var body: some View {
+        VStack(spacing: 0) {
+            infoBar
+            ScrollView([.vertical, .horizontal]) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(document.rows) { row in
+                        HStack(spacing: 0) {
+                            Text(row.path)
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(theme.shellChromeText.opacity(0.72))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .padding(.leading, 10 + CGFloat(min(row.depth, 8)) * 16)
+                                .padding(.trailing, 8)
+                                .frame(width: 300, height: 28, alignment: .leading)
+                                .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.26 : 0.16))
+
+                            Text(row.kind)
+                                .font(.conductorSystem(size: 10.5, weight: .bold, family: fontFamily, scale: fontScale))
+                                .foregroundStyle(theme.shellChromeText.opacity(0.52))
+                                .lineLimit(1)
+                                .frame(width: 78, height: 28, alignment: .leading)
+
+                            Text(row.value.isEmpty ? " " : row.value)
+                                .font(.system(size: 11.2, weight: .regular, design: .monospaced))
+                                .foregroundStyle(theme.shellChromeText.opacity(0.78))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .padding(.horizontal, 8)
+                                .frame(width: 420, height: 28, alignment: .leading)
+                        }
+                        .contextMenu {
+                            Button(L("复制路径", "Copy Path")) {
+                                copyText(row.path)
+                            }
+                            Button(L("复制键", "Copy Key")) {
+                                copyText(row.key)
+                            }
+                            Button(L("复制值", "Copy Value")) {
+                                copyText(row.value)
+                            }
+                            Button(L("复制路径和值", "Copy Path and Value")) {
+                                copyText("\(row.path) = \(row.value)")
+                            }
+                        }
+                        .overlay(alignment: .bottom) {
+                            Rectangle()
+                                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.14))
+                                .frame(height: 1)
+                        }
+                    }
+                }
+                .padding(.top, 10)
+                .padding(.bottom, 18)
+                .padding(.trailing, 18)
+            }
+            .background(theme.terminalBackground)
+        }
+    }
+
+    private var infoBar: some View {
+        HStack(spacing: 7) {
+            infoPill(document.formatLabel)
+            infoPill(L("\(document.rows.count) 个节点", "\(document.rows.count) nodes"))
+            infoPill(L("\(document.sourceLineCount) 行", "\(document.sourceLineCount) lines"))
+            if truncated {
+                infoPill(L("仅读取前 1 MB", "First 1 MB only"))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 28)
+        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.72 : 0.64))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.35))
+                .frame(height: 1)
+        }
+    }
+
+    private func infoPill(_ title: String) -> some View {
+        Text(title)
+            .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
+            .foregroundStyle(theme.shellChromeText.opacity(0.52))
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .frame(height: 19)
+            .background(theme.floatingControlFill.opacity(0.56))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    private func copyText(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
 private struct SourcePreviewLine: View {
     let number: Int
     let text: String
@@ -2665,6 +2993,7 @@ private struct SourcePreviewLine: View {
                 .fill(isHighlighted ? theme.floatingSelectedFill.opacity(0.35) : Color.clear)
         }
     }
+
 }
 
 private struct SourcePreviewMinimap: View {
@@ -2760,6 +3089,8 @@ private struct FileManagerRowView: View {
     let delete: () -> Void
     let canPaste: Bool
     let insertPath: () -> Void
+    let insertCDCommand: () -> Void
+    let insertListCommand: () -> Void
     let reveal: () -> Void
     let dropFiles: ([URL], Bool) -> Void
     @Environment(\.conductorTheme) private var theme
@@ -2788,13 +3119,18 @@ private struct FileManagerRowView: View {
                     Button(L("系统应用", "System App"), action: openInSystemApp)
                     Button(L("在 Finder 中显示", "Reveal in Finder"), action: reveal)
                 }
-                Button(L("插入路径到终端", "Insert Path into Terminal"), action: insertPath)
+                Menu(L("终端", "Terminal")) {
+                    Button(L("插入路径", "Insert Path"), action: insertPath)
+                    Button(L("插入 cd 命令", "Insert cd Command"), action: insertCDCommand)
+                    Button(L("插入 ls 命令", "Insert ls Command"), action: insertListCommand)
+                }
                 Menu(L("复制为", "Copy As")) {
                     Button(L("文件名", "Name"), action: copyName)
                     Button(L("相对路径", "Relative Path"), action: copyRelativePath)
                     Button(L("绝对路径", "Absolute Path"), action: copyPath)
                     Button(L("所在目录", "Parent Directory"), action: copyDirectoryPath)
                     Button(L("Shell 转义路径", "Shell Escaped Path"), action: copyShellPath)
+                    Button(L("终端可粘贴路径", "Terminal-ready Path"), action: copyShellPath)
                 }
                 Divider()
                 Button(selectedCount > 1 ? L("复制 \(selectedCount) 项", "Copy \(selectedCount) Items") : L("复制", "Copy"), action: copyFile)
@@ -2855,6 +3191,13 @@ private struct FileManagerRowView: View {
                     .frame(width: 16, height: 16)
             }
 
+            if isMissing {
+                statusBadge(
+                    systemImage: "questionmark.diamond",
+                    help: L("项目已不存在，刷新后会移除", "Item no longer exists; refresh will remove it")
+                )
+            }
+
             if item.isSymbolicLink {
                 statusBadge(
                     systemImage: "arrowshape.turn.up.right",
@@ -2878,6 +3221,11 @@ private struct FileManagerRowView: View {
                 statusBadge(
                     systemImage: "exclamationmark.triangle",
                     help: L("超过 20 MB，将以保护模式打开", "Over 20 MB; opens in protected mode")
+                )
+            } else if isUnsupportedBinaryLikeFile {
+                statusBadge(
+                    systemImage: "nosign",
+                    help: L("二进制或暂不支持内联预览", "Binary or unsupported inline preview")
                 )
             }
         }
@@ -2933,6 +3281,29 @@ private struct FileManagerRowView: View {
     private var isLargeEditableFile: Bool {
         guard !item.isDirectory, let byteCount = item.byteCount else { return false }
         return byteCount > 20 * 1024 * 1024
+    }
+
+    private var isMissing: Bool {
+        !FileManager.default.fileExists(atPath: item.url.path)
+    }
+
+    private var isUnsupportedBinaryLikeFile: Bool {
+        guard !item.isDirectory else { return false }
+        let textishExtensions: Set<String> = [
+            "md", "markdown", "txt", "log", "json", "jsonl", "yaml", "yml", "toml", "plist",
+            "csv", "tsv", "xml", "env", "ini", "conf", "cfg", "properties", "swift", "js",
+            "jsx", "ts", "tsx", "py", "rb", "sh", "zsh", "bash", "go", "rs", "java", "kt",
+            "kts", "c", "cc", "cpp", "h", "hpp", "m", "mm", "html", "css", "scss", "sql"
+        ]
+        if textishExtensions.contains(item.url.pathExtension.lowercased()) {
+            return false
+        }
+        if let typeIdentifier = item.contentTypeIdentifier,
+           let type = UTType(typeIdentifier),
+           type.conforms(to: .image) || type.conforms(to: .text) || type.conforms(to: .sourceCode) {
+            return false
+        }
+        return true
     }
 
     private func statusBadge(systemImage: String, help: String) -> some View {

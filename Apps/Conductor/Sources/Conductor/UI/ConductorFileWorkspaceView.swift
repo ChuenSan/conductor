@@ -454,6 +454,7 @@ private struct ConductorWorkspaceFileEditorView: View {
     @State private var pendingSaveRequest: WorkspaceFileSaveRequest?
     @State private var lastKnownDiskSignature: WorkspaceFileDiskSignature?
     @State private var externalChangeDetected = false
+    @State private var externalDiffVisible = false
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorFontFamily) private var fontFamily
@@ -514,6 +515,9 @@ private struct ConductorWorkspaceFileEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
+            if externalChangeDetected {
+                externalChangeBar
+            }
             content
         }
         .background(theme.terminalBackground)
@@ -630,6 +634,51 @@ private struct ConductorWorkspaceFileEditorView: View {
             Rectangle()
                 .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.14))
                 .frame(height: 1)
+        }
+    }
+
+    private var externalChangeBar: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 9) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.conductorSystem(size: 12, weight: .bold, family: fontFamily, scale: fontScale))
+                Text(L("磁盘上的文件已变化，保存已暂停。选择重新载入、保留当前内容，或先查看差异。", "The file changed on disk; saving is paused. Reload, keep current content, or inspect the diff first."))
+                    .font(.conductorSystem(size: 11.4, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                Button(externalDiffVisible ? L("隐藏差异", "Hide Diff") : L("查看差异", "View Diff")) {
+                    externalDiffVisible.toggle()
+                }
+                Button(L("重新载入", "Reload")) {
+                    reload()
+                }
+                Button(L("保留当前", "Keep Current")) {
+                    keepCurrentVersionAfterExternalChange()
+                }
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(theme.shellChromeText.opacity(0.84))
+            .padding(.horizontal, 14)
+            .frame(minHeight: 36)
+            .background(theme.floatingControlStrongFill.opacity(theme.usesDarkChrome ? 0.34 : 0.40))
+
+            if externalDiffVisible {
+                ScrollView {
+                    Text(externalDiffSummary())
+                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.76))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .padding(12)
+                }
+                .frame(maxHeight: 150)
+                .background(theme.terminalBackground.opacity(0.98))
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.26 : 0.16))
+                        .frame(height: 1)
+                }
+            }
         }
     }
 
@@ -1000,6 +1049,51 @@ private struct ConductorWorkspaceFileEditorView: View {
         model.setWorkspaceFileTabDirty(tab.id, isDirty: false)
         model.setWorkspaceFileTabExternallyChanged(tab.id, changed: false)
         statusMessage = nil
+        externalDiffVisible = false
+    }
+
+    private func keepCurrentVersionAfterExternalChange() {
+        lastKnownDiskSignature = WorkspaceFileService().diskSignature(for: tab)
+        externalChangeDetected = false
+        externalDiffVisible = false
+        model.setWorkspaceFileTabExternallyChanged(tab.id, changed: false)
+        statusMessage = L("已保留当前编辑内容，可再次保存覆盖磁盘版本", "Keeping current edits; save again to overwrite the disk version")
+    }
+
+    private func externalDiffSummary() -> String {
+        if let values = try? tab.fileURL.resourceValues(forKeys: [.fileSizeKey]),
+           (values.fileSize ?? 0) > 2 * 1024 * 1024 {
+            return L("磁盘版本超过 2 MB，差异摘要已跳过。请重新载入或在系统工具中比较。", "The disk version is over 2 MB, so the inline diff summary was skipped. Reload or compare with an external tool.")
+        }
+        guard let diskText = try? String(contentsOf: tab.fileURL, encoding: .utf8) else {
+            return L("无法读取磁盘版本进行差异比较。", "Could not read the disk version for diff.")
+        }
+        let currentLines = text.components(separatedBy: .newlines)
+        let diskLines = diskText.components(separatedBy: .newlines)
+        let maxCount = max(currentLines.count, diskLines.count)
+        var output: [String] = [
+            L("当前编辑内容：\(currentLines.count) 行", "Current edits: \(currentLines.count) lines"),
+            L("磁盘版本：\(diskLines.count) 行", "Disk version: \(diskLines.count) lines"),
+            ""
+        ]
+        var emitted = 0
+        for index in 0..<maxCount {
+            let current = index < currentLines.count ? currentLines[index] : ""
+            let disk = index < diskLines.count ? diskLines[index] : ""
+            guard current != disk else { continue }
+            output.append("@@ \(index + 1) @@")
+            output.append("- \(disk)")
+            output.append("+ \(current)")
+            emitted += 1
+            if emitted >= 20 {
+                output.append(L("...只显示前 20 处差异", "...showing first 20 changed lines"))
+                break
+            }
+        }
+        if emitted == 0 {
+            output.append(L("文本内容一致，可能只有时间戳或权限发生变化。", "Text content matches; only metadata may have changed."))
+        }
+        return output.joined(separator: "\n")
     }
 
     private func startExternalChangeWatch() {
