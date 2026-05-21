@@ -69,15 +69,24 @@ private enum FileManagerSelectionMode {
 }
 
 private struct FilePreviewTextDocument: Equatable, Sendable {
-    let text: String
+    let lines: [String]
     let lineCount: Int
+    let displayedLineCount: Int
     let formatLabel: String?
 
     init(text: String, formatLabel: String? = nil) {
-        self.text = text
-        self.lineCount = max(1, text.components(separatedBy: .newlines).count)
+        let splitLines = text.components(separatedBy: .newlines)
+        self.lines = Array(splitLines.prefix(Self.maxRenderedLines))
+        self.lineCount = max(1, splitLines.count)
+        self.displayedLineCount = self.lines.count
         self.formatLabel = formatLabel
     }
+
+    var isLineLimited: Bool {
+        displayedLineCount < lineCount
+    }
+
+    private static let maxRenderedLines = 800
 }
 
 private struct FilePreviewTableDocument: Equatable, Sendable {
@@ -182,7 +191,13 @@ private enum FileManagerPasteboard {
 
 private struct FileManagerService {
     private let fileManager: FileManager
-    private let maxInlineTextBytes = 1_000_000
+    private static let maxInlineTextBytes = 256 * 1024
+    private static let maxTablePreviewRows = 180
+    private static let maxTablePreviewColumns = 40
+    private static let maxKeyValuePreviewLines = 300
+    private static let maxStructuredPreviewRows = 700
+    private static let maxJSONLPreviewLines = 120
+    private static let maxYAMLPreviewLines = 700
     typealias ConflictResolver = (_ sourceURL: URL, _ destinationURL: URL, _ suggestedName: String) -> String?
 
     init(fileManager: FileManager = .default) {
@@ -280,7 +295,7 @@ private struct FileManagerService {
         }
 
         let size = values.fileSize ?? 0
-        let readLimit = min(max(size, 0), maxInlineTextBytes)
+        let readLimit = min(max(size, 0), Self.maxInlineTextBytes)
         do {
             let handle = try FileHandle(forReadingFrom: fileURL)
             defer { try? handle.close() }
@@ -291,7 +306,7 @@ private struct FileManagerService {
             let text = String(data: data, encoding: .utf8) ??
                 String(data: data, encoding: .utf16) ??
                 String(decoding: data, as: UTF8.self)
-            let truncated = size > maxInlineTextBytes
+            let truncated = size > Self.maxInlineTextBytes
             if let table = Self.tablePreview(for: text, extension: fileURL.pathExtension) {
                 return .table(table, truncated: truncated)
             }
@@ -546,8 +561,8 @@ private struct FileManagerService {
 
         let rawLines = text.components(separatedBy: .newlines)
         let rows = rawLines
-            .prefix(300)
-            .map { Array(parseDelimitedLine($0, delimiter: delimiter).prefix(50)) }
+            .prefix(Self.maxTablePreviewRows)
+            .map { Array(parseDelimitedLine($0, delimiter: delimiter).prefix(Self.maxTablePreviewColumns)) }
             .filter { !$0.isEmpty }
         guard !rows.isEmpty else { return nil }
         return FilePreviewTableDocument(rows: rows, delimiterName: delimiterName, sourceLineCount: rawLines.count)
@@ -558,7 +573,7 @@ private struct FileManagerService {
         guard ["conf", "cfg", "env", "ini", "properties"].contains(ext) else { return nil }
         let separatorCandidates = ["=", ":"]
         let rawLines = text.components(separatedBy: .newlines)
-        let rows = rawLines.prefix(500).enumerated().compactMap { index, line -> FilePreviewKeyValueDocument.Row? in
+        let rows = rawLines.prefix(Self.maxKeyValuePreviewLines).enumerated().compactMap { index, line -> FilePreviewKeyValueDocument.Row? in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty,
                   !trimmed.hasPrefix("#"),
@@ -583,7 +598,7 @@ private struct FileManagerService {
             do {
                 let object = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
                 return FilePreviewStructuredDocument(
-                    rows: flattenedStructuredRows(for: object, rootPath: "$", rootKey: "$"),
+                    rows: flattenedStructuredRows(for: object, rootPath: "$", rootKey: "$", limit: Self.maxStructuredPreviewRows),
                     formatLabel: "JSON",
                     sourceLineCount: text.components(separatedBy: .newlines).count
                 )
@@ -602,35 +617,40 @@ private struct FileManagerService {
                 )
             }
         case "jsonl":
-            let rows = text.components(separatedBy: .newlines)
-                .prefix(500)
-                .enumerated()
-                .flatMap { index, line -> [FilePreviewStructuredDocument.Row] in
-                    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { return [] }
-                    do {
-                        let object = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-                        return flattenedStructuredRows(for: object, rootPath: "$[\(index + 1)]", rootKey: "[\(index + 1)]")
-                    } catch {
-                        return [FilePreviewStructuredDocument.Row(
-                            id: "jsonl-\(index)-error",
-                            path: "$[\(index + 1)]",
-                            key: "[\(index + 1)]",
-                            kind: L("错误", "Error"),
-                            value: error.localizedDescription,
-                            depth: 0
-                        )]
-                    }
+            let lines = text.components(separatedBy: .newlines)
+            var rows: [FilePreviewStructuredDocument.Row] = []
+            for (index, line) in lines.prefix(Self.maxJSONLPreviewLines).enumerated() {
+                guard rows.count < Self.maxStructuredPreviewRows else { break }
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { continue }
+                do {
+                    let object = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+                    rows.append(contentsOf: flattenedStructuredRows(
+                        for: object,
+                        rootPath: "$[\(index + 1)]",
+                        rootKey: "[\(index + 1)]",
+                        limit: max(1, Self.maxStructuredPreviewRows - rows.count)
+                    ))
+                } catch {
+                    rows.append(FilePreviewStructuredDocument.Row(
+                        id: "jsonl-\(index)-error",
+                        path: "$[\(index + 1)]",
+                        key: "[\(index + 1)]",
+                        kind: L("错误", "Error"),
+                        value: error.localizedDescription,
+                        depth: 0
+                    ))
                 }
+            }
             guard !rows.isEmpty else { return nil }
-            return FilePreviewStructuredDocument(rows: rows, formatLabel: "JSONL", sourceLineCount: text.components(separatedBy: .newlines).count)
+            return FilePreviewStructuredDocument(rows: rows, formatLabel: "JSONL", sourceLineCount: lines.count)
         case "plist":
             guard let data = text.data(using: .utf8),
                   let object = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) else {
                 return nil
             }
             return FilePreviewStructuredDocument(
-                rows: flattenedStructuredRows(for: object, rootPath: "$", rootKey: "$"),
+                rows: flattenedStructuredRows(for: object, rootPath: "$", rootKey: "$", limit: Self.maxStructuredPreviewRows),
                 formatLabel: "Plist",
                 sourceLineCount: text.components(separatedBy: .newlines).count
             )
@@ -652,7 +672,7 @@ private struct FileManagerService {
         rootPath: String,
         rootKey: String,
         depth: Int = 0,
-        limit: Int = 2_000
+        limit: Int = Self.maxStructuredPreviewRows
     ) -> [FilePreviewStructuredDocument.Row] {
         var rows: [FilePreviewStructuredDocument.Row] = []
 
@@ -688,23 +708,27 @@ private struct FileManagerService {
 
         append(value, key: rootKey, path: rootPath, depth: depth)
         if rows.count >= limit {
-            rows.append(.init(
-                id: "\(rootPath)-truncated",
-                path: rootPath,
-                key: L("已截断", "Truncated"),
-                kind: L("提示", "Notice"),
-                value: L("结构节点超过 2000 项，只显示前 2000 项", "More than 2000 structured nodes; showing the first 2000"),
-                depth: 0
-            ))
+            rows.append(truncatedStructuredRow(rootPath: rootPath, limit: limit))
         }
         return rows
+    }
+
+    private static func truncatedStructuredRow(rootPath: String, limit: Int) -> FilePreviewStructuredDocument.Row {
+        FilePreviewStructuredDocument.Row(
+            id: "\(rootPath)-truncated-\(limit)",
+            path: rootPath,
+            key: L("已截断", "Truncated"),
+            kind: L("提示", "Notice"),
+            value: L("结构节点较多，只显示前 \(limit) 项", "Large structure; showing the first \(limit) nodes"),
+            depth: 0
+        )
     }
 
     private static func yamlStructuredRows(for text: String) -> [FilePreviewStructuredDocument.Row] {
         var stack: [(indent: Int, key: String)] = []
         var rows: [FilePreviewStructuredDocument.Row] = []
-        for (lineIndex, line) in text.components(separatedBy: .newlines).enumerated() {
-            guard rows.count < 2_000 else { break }
+        for (lineIndex, line) in text.components(separatedBy: .newlines).prefix(Self.maxYAMLPreviewLines).enumerated() {
+            guard rows.count < Self.maxStructuredPreviewRows else { break }
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
             let indent = line.prefix { $0 == " " }.count
@@ -733,14 +757,17 @@ private struct FileManagerService {
                 stack.append((indent: indent, key: key))
             }
         }
+        if rows.count >= Self.maxStructuredPreviewRows {
+            rows.append(truncatedStructuredRow(rootPath: "$", limit: Self.maxStructuredPreviewRows))
+        }
         return rows
     }
 
     private static func tomlStructuredRows(for text: String) -> [FilePreviewStructuredDocument.Row] {
         var section: [String] = []
         var rows: [FilePreviewStructuredDocument.Row] = []
-        for (lineIndex, line) in text.components(separatedBy: .newlines).enumerated() {
-            guard rows.count < 2_000 else { break }
+        for (lineIndex, line) in text.components(separatedBy: .newlines).prefix(Self.maxYAMLPreviewLines).enumerated() {
+            guard rows.count < Self.maxStructuredPreviewRows else { break }
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
             if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
@@ -754,6 +781,9 @@ private struct FileManagerService {
             let value = String(trimmed[trimmed.index(after: separator)...]).trimmingCharacters(in: .whitespaces)
             let path = (section + [key]).joined(separator: ".")
             rows.append(.init(id: "toml-\(lineIndex)", path: path, key: key, kind: L("值", "Value"), value: value, depth: section.count))
+        }
+        if rows.count >= Self.maxStructuredPreviewRows {
+            rows.append(truncatedStructuredRow(rootPath: "$", limit: Self.maxStructuredPreviewRows))
         }
         return rows
     }
@@ -795,10 +825,10 @@ private struct FileManagerService {
     }
 
     private static let textPreviewExtensions: Set<String> = [
-        "bash", "c", "cc", "cfg", "conf", "cpp", "css", "csv", "env", "go", "h", "hpp", "htm",
-        "html", "java", "js", "json", "jsonl", "jsx", "log", "m", "md", "mm", "php",
-        "plist", "properties", "py", "rb", "rs", "sh", "swift", "tab", "toml", "ts", "tsv", "tsx", "txt", "xml",
-        "yaml", "yml", "zsh"
+        "adoc", "bash", "c", "cc", "cfg", "conf", "cpp", "css", "csv", "diff", "env", "err", "go", "h", "hpp", "htm",
+        "html", "java", "js", "json", "jsonl", "jsx", "log", "m", "md", "mm", "out", "patch", "php",
+        "plist", "properties", "py", "rb", "rs", "rst", "scss", "sh", "stderr", "stdout", "swift", "tab", "toml",
+        "trace", "ts", "tsv", "tsx", "txt", "xml", "yaml", "yml", "zsh"
     ]
 
     private static let systemApplicationExtensions: Set<String> = [
@@ -2577,17 +2607,13 @@ private struct FileManagerSourcePreview: View {
     let fontFamily: AppearanceFontFamily
     let fontScale: AppearanceFontScale
 
-    private var lines: [String] {
-        document.text.components(separatedBy: .newlines)
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             sourceInfoBar
             ZStack(alignment: .trailing) {
                 ScrollView([.vertical, .horizontal]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                        ForEach(Array(document.lines.enumerated()), id: \.offset) { index, line in
                             SourcePreviewLine(
                                 number: index + 1,
                                 text: line,
@@ -2602,7 +2628,7 @@ private struct FileManagerSourcePreview: View {
                 }
                 .scrollIndicators(.visible)
 
-                SourcePreviewMinimap(lines: lines, theme: theme)
+                SourcePreviewMinimap(lines: document.lines, theme: theme)
                     .frame(width: 42)
                     .padding(.trailing, 6)
                     .padding(.vertical, 8)
@@ -2618,8 +2644,11 @@ private struct FileManagerSourcePreview: View {
                 infoPill(formatLabel)
             }
             infoPill(L("\(document.lineCount) 行", "\(document.lineCount) lines"))
+            if document.isLineLimited {
+                infoPill(L("预览前 \(document.displayedLineCount) 行", "Previewing \(document.displayedLineCount) lines"))
+            }
             if truncated {
-                infoPill(L("仅预览前 1 MB", "First 1 MB only"))
+                infoPill(L("仅预览前 256 KB", "First 256 KB only"))
             }
             Spacer(minLength: 0)
         }
@@ -2712,7 +2741,7 @@ private struct FileManagerTablePreview: View {
             infoPill(L("\(document.columnCount) 列", "\(document.columnCount) columns"))
             infoPill(L("预览前 \(document.rows.count) 行", "Previewing \(document.rows.count) rows"))
             if truncated {
-                infoPill(L("仅读取前 1 MB", "First 1 MB only"))
+                infoPill(L("仅读取前 256 KB", "First 256 KB only"))
             }
             Spacer(minLength: 0)
         }
@@ -2830,7 +2859,7 @@ private struct FileManagerKeyValuePreview: View {
             infoPill(L("\(document.rows.count) 个键值", "\(document.rows.count) pairs"))
             infoPill(L("\(document.sourceLineCount) 行", "\(document.sourceLineCount) lines"))
             if truncated {
-                infoPill(L("仅读取前 1 MB", "First 1 MB only"))
+                infoPill(L("仅读取前 256 KB", "First 256 KB only"))
             }
             Spacer(minLength: 0)
         }
@@ -2934,7 +2963,7 @@ private struct FileManagerStructuredPreview: View {
             infoPill(L("\(document.rows.count) 个节点", "\(document.rows.count) nodes"))
             infoPill(L("\(document.sourceLineCount) 行", "\(document.sourceLineCount) lines"))
             if truncated {
-                infoPill(L("仅读取前 1 MB", "First 1 MB only"))
+                infoPill(L("仅读取前 256 KB", "First 256 KB only"))
             }
             Spacer(minLength: 0)
         }

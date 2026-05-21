@@ -54,6 +54,7 @@ private struct WorkspaceFileDocument: Equatable {
 
 private struct WorkspaceFilePerformanceProfile {
     let interactiveByteLimit: Int
+    let interactiveLineLimit: Int
     let formatTitle: String
     let formatSystemImage: String
     let protectedReason: String
@@ -67,12 +68,18 @@ private struct WorkspaceFileDiskSignature: Equatable {
 
 private struct WorkspaceFileService {
     private let maxEditableBytes = 20 * 1024 * 1024
-    private let maxInteractiveMarkdownBytes = 512 * 1024
-    private let maxInteractiveStructuredBytes = 768 * 1024
-    private let maxInteractiveTableBytes = 768 * 1024
-    private let maxInteractiveLogBytes = 1 * 1024 * 1024
-    private let maxInteractiveSourceBytes = 2 * 1024 * 1024
-    private let maxInteractivePlainTextBytes = 2 * 1024 * 1024
+    private let maxInteractiveMarkdownBytes = 192 * 1024
+    private let maxInteractiveStructuredBytes = 256 * 1024
+    private let maxInteractiveTableBytes = 256 * 1024
+    private let maxInteractiveLogBytes = 256 * 1024
+    private let maxInteractiveSourceBytes = 768 * 1024
+    private let maxInteractivePlainTextBytes = 768 * 1024
+    private let maxInteractiveMarkdownLines = 2_500
+    private let maxInteractiveStructuredLines = 2_500
+    private let maxInteractiveTableLines = 1_500
+    private let maxInteractiveLogLines = 4_000
+    private let maxInteractiveSourceLines = 6_000
+    private let maxInteractivePlainTextLines = 6_000
 
     func document(for tab: ConductorWorkspaceFileTab) -> WorkspaceFileDocument {
         let fileURL = tab.fileURL.standardizedFileURL
@@ -108,19 +115,7 @@ private struct WorkspaceFileService {
         let pathExtension = fileURL.pathExtension.lowercased()
         let profile = performanceProfile(for: type, extension: pathExtension)
         if let profile, byteCount > profile.interactiveByteLimit {
-            return WorkspaceFileDocument(
-                title: tab.title,
-                subtitle: subtitle,
-                isReadOnly: true,
-                state: .largeText(WorkspaceLargeTextDocument(
-                    fileURL: fileURL,
-                    byteCount: byteCount,
-                    formatTitle: profile.formatTitle,
-                    formatSystemImage: profile.formatSystemImage,
-                    reason: profile.protectedReason,
-                    extractsOutline: profile.extractsOutline
-                ))
-            )
+            return largeTextDocument(title: tab.title, subtitle: subtitle, fileURL: fileURL, byteCount: byteCount, profile: profile)
         }
 
         guard byteCount <= maxEditableBytes else {
@@ -145,6 +140,9 @@ private struct WorkspaceFileService {
             let text = String(data: data, encoding: .utf8) ??
                 String(data: data, encoding: .utf16) ??
                 String(decoding: data, as: UTF8.self)
+            if let profile, Self.exceedsLineLimit(text, limit: profile.interactiveLineLimit) {
+                return largeTextDocument(title: tab.title, subtitle: subtitle, fileURL: fileURL, byteCount: byteCount, profile: profile)
+            }
             return WorkspaceFileDocument(title: tab.title, subtitle: subtitle, isReadOnly: isReadOnly, state: .text(text))
         } catch {
             return WorkspaceFileDocument(title: tab.title, subtitle: subtitle, isReadOnly: true, state: .message(error.localizedDescription))
@@ -201,6 +199,7 @@ private struct WorkspaceFileService {
         if Self.markdownExtensions.contains(ext) {
             return WorkspaceFilePerformanceProfile(
                 interactiveByteLimit: maxInteractiveMarkdownBytes,
+                interactiveLineLimit: maxInteractiveMarkdownLines,
                 formatTitle: "Markdown",
                 formatSystemImage: "doc.richtext",
                 protectedReason: L("Markdown 文件较大，已跳过实时预览解析和源码编辑器", "Large Markdown file; live preview parsing and the source editor were skipped"),
@@ -211,6 +210,7 @@ private struct WorkspaceFileService {
         if Self.structuredExtensions.contains(ext) {
             return WorkspaceFilePerformanceProfile(
                 interactiveByteLimit: maxInteractiveStructuredBytes,
+                interactiveLineLimit: maxInteractiveStructuredLines,
                 formatTitle: L("结构化", "Structured"),
                 formatSystemImage: "curlybraces",
                 protectedReason: L("结构化文件较大，已避免格式化/语法高亮造成卡顿", "Large structured file; formatting and syntax highlighting were avoided"),
@@ -221,6 +221,7 @@ private struct WorkspaceFileService {
         if Self.tableExtensions.contains(ext) {
             return WorkspaceFilePerformanceProfile(
                 interactiveByteLimit: maxInteractiveTableBytes,
+                interactiveLineLimit: maxInteractiveTableLines,
                 formatTitle: L("表格文本", "Table Text"),
                 formatSystemImage: "tablecells",
                 protectedReason: L("表格文件较大，已避免一次性解析整表", "Large table file; full-table parsing was avoided"),
@@ -231,6 +232,7 @@ private struct WorkspaceFileService {
         if Self.logExtensions.contains(ext) {
             return WorkspaceFilePerformanceProfile(
                 interactiveByteLimit: maxInteractiveLogBytes,
+                interactiveLineLimit: maxInteractiveLogLines,
                 formatTitle: L("日志", "Log"),
                 formatSystemImage: "list.bullet.rectangle",
                 protectedReason: L("日志文件较大，已进入只读保护预览", "Large log file opened in read-only protected preview"),
@@ -241,6 +243,7 @@ private struct WorkspaceFileService {
         if Self.sourceExtensions.contains(ext) || type?.conforms(to: .sourceCode) == true {
             return WorkspaceFilePerformanceProfile(
                 interactiveByteLimit: maxInteractiveSourceBytes,
+                interactiveLineLimit: maxInteractiveSourceLines,
                 formatTitle: L("源码", "Source"),
                 formatSystemImage: "chevron.left.forwardslash.chevron.right",
                 protectedReason: L("源码文件较大，已跳过编辑器语法高亮", "Large source file; editor syntax highlighting was skipped"),
@@ -251,6 +254,7 @@ private struct WorkspaceFileService {
         if type?.conforms(to: .text) == true || Self.plainTextExtensions.contains(ext) {
             return WorkspaceFilePerformanceProfile(
                 interactiveByteLimit: maxInteractivePlainTextBytes,
+                interactiveLineLimit: maxInteractivePlainTextLines,
                 formatTitle: L("文本", "Text"),
                 formatSystemImage: "doc.text",
                 protectedReason: L("文本文件较大，已进入只读保护预览", "Large text file opened in read-only protected preview"),
@@ -261,17 +265,51 @@ private struct WorkspaceFileService {
         return nil
     }
 
+    private func largeTextDocument(
+        title: String,
+        subtitle: String,
+        fileURL: URL,
+        byteCount: Int64,
+        profile: WorkspaceFilePerformanceProfile
+    ) -> WorkspaceFileDocument {
+        WorkspaceFileDocument(
+            title: title,
+            subtitle: subtitle,
+            isReadOnly: true,
+            state: .largeText(WorkspaceLargeTextDocument(
+                fileURL: fileURL,
+                byteCount: byteCount,
+                formatTitle: profile.formatTitle,
+                formatSystemImage: profile.formatSystemImage,
+                reason: profile.protectedReason,
+                extractsOutline: profile.extractsOutline
+            ))
+        )
+    }
+
+    private static func exceedsLineLimit(_ text: String, limit: Int) -> Bool {
+        guard limit > 0 else { return false }
+        var count = 1
+        for character in text where character == "\n" {
+            count += 1
+            if count > limit {
+                return true
+            }
+        }
+        return false
+    }
+
     private static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd"]
     private static let structuredExtensions: Set<String> = [
         "cfg", "conf", "env", "ini", "json", "json5", "jsonl", "plist", "properties", "toml", "xml", "yaml", "yml"
     ]
     private static let tableExtensions: Set<String> = ["csv", "tsv", "tab", "psv"]
-    private static let logExtensions: Set<String> = ["log", "out", "trace"]
+    private static let logExtensions: Set<String> = ["err", "log", "out", "stderr", "stdout", "trace"]
     private static let sourceExtensions: Set<String> = [
-        "bash", "c", "cc", "cpp", "css", "go", "h", "hpp", "htm", "html", "java", "js", "jsx", "kt", "m",
-        "mm", "php", "py", "rb", "rs", "sh", "sql", "swift", "ts", "tsx", "zsh"
+        "bash", "c", "cc", "cpp", "css", "diff", "go", "h", "hpp", "htm", "html", "java", "js", "jsx", "kt", "m",
+        "mm", "patch", "php", "py", "rb", "rs", "scss", "sh", "sql", "swift", "ts", "tsx", "zsh"
     ]
-    private static let plainTextExtensions: Set<String> = ["env", "ini", "properties", "text", "txt"]
+    private static let plainTextExtensions: Set<String> = ["adoc", "env", "ini", "properties", "rst", "text", "txt"]
 
     private func relativePath(for url: URL, rootURL: URL) -> String {
         let rootPath = rootURL.standardizedFileURL.path
@@ -465,6 +503,7 @@ private struct ConductorWorkspaceFileEditorView: View {
     @State private var searchQuery = ""
     @State private var searchHistory: [String]
     @State private var selectedSearchIndex = 0
+    @State private var cachedSearchMatches: [NSRange] = []
     @State private var sourceSelectionRange: NSRange?
     @State private var sourceSelectionToken = 0
     @State private var largeSearchStatus = "0/0"
@@ -509,7 +548,7 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     private var searchMatches: [NSRange] {
-        Self.searchMatches(in: text, query: searchQuery)
+        cachedSearchMatches
     }
 
     var body: some View {
@@ -536,6 +575,7 @@ private struct ConductorWorkspaceFileEditorView: View {
         }
         .onChange(of: text) {
             scheduleAutosave()
+            refreshSearchMatches(resetSelection: false)
         }
         .onChange(of: isDirty) { _, newValue in
             model.setWorkspaceFileTabDirty(tab.id, isDirty: newValue)
@@ -561,7 +601,7 @@ private struct ConductorWorkspaceFileEditorView: View {
             moveSearchSelection(-1)
         }
         .onChange(of: searchQuery) {
-            selectedSearchIndex = 0
+            refreshSearchMatches(resetSelection: true)
             selectCurrentSearchMatch()
         }
         .onDisappear {
@@ -752,6 +792,7 @@ private struct ConductorWorkspaceFileEditorView: View {
                     ForEach(searchHistory, id: \.self) { query in
                         Button(query) {
                             searchQuery = query
+                            refreshSearchMatches(resetSelection: true)
                             recordSearchQuery()
                             selectCurrentSearchMatch()
                         }
@@ -940,6 +981,21 @@ private struct ConductorWorkspaceFileEditorView: View {
         sourceSelectionToken &+= 1
     }
 
+    private func refreshSearchMatches(resetSelection: Bool) {
+        guard !isLargeText, !isMarkdown else {
+            cachedSearchMatches = []
+            selectedSearchIndex = 0
+            sourceSelectionRange = nil
+            return
+        }
+        cachedSearchMatches = Self.searchMatches(in: text, query: searchQuery)
+        if resetSelection {
+            selectedSearchIndex = 0
+        } else if selectedSearchIndex >= cachedSearchMatches.count {
+            selectedSearchIndex = max(0, cachedSearchMatches.count - 1)
+        }
+    }
+
     private static func searchMatches(in text: String, query: String) -> [NSRange] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return [] }
@@ -1046,6 +1102,7 @@ private struct ConductorWorkspaceFileEditorView: View {
             text = ""
             savedText = ""
         }
+        refreshSearchMatches(resetSelection: true)
         model.setWorkspaceFileTabDirty(tab.id, isDirty: false)
         model.setWorkspaceFileTabExternallyChanged(tab.id, changed: false)
         statusMessage = nil
