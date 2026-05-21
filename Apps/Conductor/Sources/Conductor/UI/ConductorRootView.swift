@@ -1064,9 +1064,10 @@ private struct CommandButton: View {
 
 private struct AppearanceSettingsPanel: View {
     @ObservedObject var model: ConductorWindowModel
-    @State private var selectedSection: SettingsPanelSection = .themes
+    @State private var selectedSection: SettingsPanelSection = .overview
     @Namespace private var settingsSelectionNamespace
     @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
 
     private let themeCardColumns = [
         GridItem(.adaptive(minimum: 242, maximum: 286), spacing: 12)
@@ -1108,7 +1109,7 @@ private struct AppearanceSettingsPanel: View {
                     .stroke(theme.floatingStroke.opacity(0.82), lineWidth: 0.8)
                     .allowsHitTesting(false)
             }
-            .frame(width: 820, height: 540)
+            .frame(width: 900, height: 610)
             .onExitCommand {
                 model.hideSettingsPanel()
             }
@@ -1119,10 +1120,36 @@ private struct AppearanceSettingsPanel: View {
         VStack(alignment: .leading, spacing: 12) {
             SettingsSidebarSummary(theme: model.theme, appearance: model.appearance)
 
-            SidebarSectionTitle(L("分类", "Categories"))
+            sidebarGroup(
+                title: L("常用", "General"),
+                sections: [.overview, .interface, .terminal]
+            )
+
+            sidebarGroup(
+                title: L("工作流", "Workflow"),
+                sections: [.shell, .automation, .commands]
+            )
+
+            sidebarGroup(
+                title: L("外观", "Look"),
+                sections: [.themes]
+            )
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 16)
+        .frame(width: 206)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .background(theme.floatingControlFill.opacity(0.18))
+    }
+
+    private func sidebarGroup(title: String, sections: [SettingsPanelSection]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            SidebarSectionTitle(title)
 
             VStack(spacing: 3) {
-                ForEach(SettingsPanelSection.allCases) { section in
+                ForEach(sections) { section in
                     SettingsSidebarItem(
                         section: section,
                         selected: selectedSection == section,
@@ -1134,22 +1161,18 @@ private struct AppearanceSettingsPanel: View {
                     }
                 }
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(14)
-        .frame(width: 178)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var contentPane: some View {
         ZStack {
-            theme.floatingControlFill.opacity(0.16)
+            theme.floatingControlFill.opacity(0.10)
 
             ScrollView {
                 detailContent
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
+                    .frame(maxWidth: 660, alignment: .topLeading)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 18)
             }
             .scrollIndicators(.visible)
         }
@@ -1162,8 +1185,16 @@ private struct AppearanceSettingsPanel: View {
             SettingsPaneHeading(section: selectedSection)
 
             switch selectedSection {
+            case .overview:
+                overviewSettings
             case .interface:
                 interfaceSettings
+            case .terminal:
+                terminalSettingsDashboard
+            case .shell:
+                shellAndProxySettings
+            case .automation:
+                automationSettings
             case .commands:
                 commandSettings
             case .themes:
@@ -1173,6 +1204,68 @@ private struct AppearanceSettingsPanel: View {
         .id(selectedSection)
         .transition(.opacity)
         .animation(model.shellAnimation(ConductorMotion.feedback), value: selectedSection)
+    }
+
+    private var overviewSettings: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsPreferenceGroup(
+                title: L("当前状态", "Current State"),
+                subtitle: L("只展示会影响日常使用的设置摘要，点左侧分类进入调整", "A compact summary of daily-use settings; choose a category on the left to edit"),
+                systemImage: "rectangle.grid.2x2"
+            ) {
+                VStack(alignment: .leading, spacing: 12) {
+                    SettingsOverviewGrid(model: model)
+
+                    HStack(spacing: 10) {
+                        SettingsQuickJumpButton(
+                            title: L("调整终端", "Tune Terminal"),
+                            subtitle: model.appearance.terminalRenderer.selectedFontStatusTitle,
+                            systemImage: "terminal"
+                        ) {
+                            selectedSection = .terminal
+                        }
+
+                        SettingsQuickJumpButton(
+                            title: L("换主题", "Change Theme"),
+                            subtitle: model.theme.title,
+                            systemImage: "swatchpalette"
+                        ) {
+                            selectedSection = .themes
+                        }
+                    }
+                }
+            }
+
+            SettingsPreferenceGroup(
+                title: L("设置结构", "Settings Structure"),
+                subtitle: L("按真实工作流组织，不按底层配置文件字段组织", "Organized by real workflows, not by low-level config keys"),
+                systemImage: "sidebar.left"
+            ) {
+                SettingsFormSurface {
+                    SettingsInfoRow(
+                        title: L("界面", "Interface"),
+                        subtitle: L("窗口密度、面板清晰度、语言和应用字体", "Density, panel clarity, language, and shell text"),
+                        systemImage: "textformat"
+                    )
+
+                    SettingsControlDivider()
+
+                    SettingsInfoRow(
+                        title: L("终端", "Terminal"),
+                        subtitle: L("字体、光标、背景、选择、粘贴安全和键盘输入", "Font, cursor, background, selection, paste safety, and terminal input"),
+                        systemImage: "terminal"
+                    )
+
+                    SettingsControlDivider()
+
+                    SettingsInfoRow(
+                        title: L("Shell / AI / 命令", "Shell / AI / Commands"),
+                        subtitle: L("启动项、代理环境、Agent 通知和快捷键", "Startup, proxy environment, agent notifications, and shortcuts"),
+                        systemImage: "sparkles"
+                    )
+                }
+            }
+        }
     }
 
     private var interfaceSettings: some View {
@@ -1279,15 +1372,698 @@ private struct AppearanceSettingsPanel: View {
                 }
             }
 
+        }
+    }
+
+    private var terminalSettingsDashboard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            terminalTypographySettings
+
+            SettingsSectionLabel(
+                title: L("显示与光标", "Display and Cursor"),
+                subtitle: L("这些是每天打字和阅读终端时最容易感知到的项", "The controls you feel most while reading and typing in the terminal")
+            )
+
+            terminalCursorSettings
+            terminalBackgroundSettings
+
+            SettingsSectionLabel(
+                title: L("交互与安全", "Interaction and Safety"),
+                subtitle: L("复制、粘贴、鼠标和键盘输入放在一起，避免散落到不同页面", "Copy, paste, mouse, and keyboard input stay together instead of being scattered")
+            )
+
+            terminalSelectionMouseSettings
+            terminalClipboardSettings
+            terminalKeyboardSettings
+        }
+    }
+
+    private var shellAndProxySettings: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            terminalShellSettings
+
+            SettingsSectionLabel(
+                title: L("网络环境", "Network Environment"),
+                subtitle: L("写入新终端进程的代理变量，和 Shell 启动项属于同一条启动路径", "Proxy variables for new terminal processes live with startup behavior")
+            )
+
+            proxySettings
+        }
+    }
+
+    private var automationSettings: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            aiSettings
+
+            SettingsSectionLabel(
+                title: L("终端提醒", "Terminal Alerts"),
+                subtitle: L("命令完成通知和铃声是工作流反馈，不再散落在终端视觉设置里", "Command finish alerts and bell feedback belong with workflow feedback")
+            )
+
+            terminalNotificationSettings
+        }
+    }
+
+    @ViewBuilder
+    private var terminalShellSettings: some View {
+        let commandOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "initial-command")
+        let directoryOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "working-directory")
+        let scrollbackOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "scrollback-limit")
+
+        SettingsPreferenceGroup(
+            title: L("Shell 与启动", "Shell and Startup"),
+            subtitle: L("启动命令、默认目录和滚屏历史，按终端用户真正会设置的方式呈现", "Startup command, default directory, and scrollback history presented as product settings"),
+            systemImage: "terminal"
+        ) {
+            SettingsFormSurface {
+                SettingsControlRow(
+                    title: L("Shell 集成", "Shell Integration"),
+                    subtitle: L("已启用 detect，并保留 no-cursor；这里不需要手动配置", "Enabled with detect and no-cursor; no manual setup needed"),
+                    systemImage: "point.3.connected.trianglepath.dotted"
+                ) {
+                    SettingsStatusPill(title: L("自动管理", "Managed"), systemImage: "lock.fill")
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("启动命令", "Startup Command"),
+                    subtitle: L("留空时打开默认登录 shell；适合进入 tmux、ssh 或固定开发环境", "Leave empty for the default login shell; useful for tmux, ssh, or a fixed dev environment"),
+                    systemImage: "terminal"
+                ) {
+                    ShellCommandSettingControl(
+                        value: commandOverride.normalizedValue,
+                        setValue: { setGhosttyOverrideValue(key: "initial-command", value: $0) },
+                        reset: { resetGhosttyOverride(key: "initial-command") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("默认工作目录", "Default Working Directory"),
+                    subtitle: L("留空时继承工作区或新建终端时的目录", "Leave empty to inherit the workspace or new-terminal directory"),
+                    systemImage: "folder"
+                ) {
+                    WorkingDirectorySettingControl(
+                        value: directoryOverride.normalizedValue,
+                        setValue: { setGhosttyOverrideValue(key: "working-directory", value: $0) },
+                        reset: { resetGhosttyOverride(key: "working-directory") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("滚屏历史", "Scrollback History"),
+                    subtitle: L("控制终端保留多少历史输出；越大越占内存", "Controls how much terminal history is retained; larger values use more memory"),
+                    systemImage: "scroll"
+                ) {
+                    ScrollbackPresetPicker(
+                        value: scrollbackOverride.normalizedValue,
+                        setValue: { setGhosttyOverrideValue(key: "scrollback-limit", value: $0) },
+                        reset: { resetGhosttyOverride(key: "scrollback-limit") }
+                    )
+                }
+            }
+        }
+    }
+
+    private var terminalBackgroundSettings: some View {
+        let blurOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "background-blur")
+        let imageOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "background-image")
+        let imageOpacityOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "background-image-opacity")
+        let imageFitOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "background-image-fit")
+        let selectionForegroundOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "selection-foreground")
+        let selectionBackgroundOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "selection-background")
+        let searchBackgroundOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "search-background")
+
+        return SettingsPreferenceGroup(
+            title: L("背景与颜色", "Background and Colors"),
+            subtitle: L("终端画布、背景图、选区和搜索高亮；整套主题仍在主题页管理", "Terminal canvas, background image, selection, and search highlight; full themes stay in Themes"),
+            systemImage: "paintpalette"
+        ) {
+            SettingsFormSurface {
+                SettingsSliderRow(
+                    title: L("背景不透明度", "Background Opacity"),
+                    subtitle: L("降低后可以透出窗口材质，100% 最清晰", "Lower values show the window material; 100% is clearest"),
+                    systemImage: "circle.lefthalf.filled",
+                    value: model.appearance.terminalRenderer.backgroundOpacity,
+                    range: 0.35...1,
+                    step: 0.01,
+                    valueText: percentText(model.appearance.terminalRenderer.backgroundOpacity)
+                ) { opacity in
+                    model.setTerminalBackgroundOpacity(opacity)
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("背景模糊", "Background Blur"),
+                    subtitle: L("透明背景下柔化后方内容，默认跟随内置策略", "Softens content behind transparent terminals; default follows the built-in policy"),
+                    systemImage: "water.waves"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: blurOverride),
+                        action: { setBooleanOverride(key: "background-blur", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("背景图片", "Background Image"),
+                    subtitle: L("选择一张图片作为终端背景，留空时使用主题背景", "Choose an image for the terminal background, or leave empty to use the theme"),
+                    systemImage: "photo"
+                ) {
+                    GhosttyFileOverrideControl(
+                        key: "background-image",
+                        value: imageOverride.normalizedValue,
+                        setValue: { setGhosttyOverrideValue(key: "background-image", value: $0) },
+                        reset: { resetGhosttyOverride(key: "background-image") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("图片显示方式", "Image Fit"),
+                    subtitle: L("控制背景图片如何填充终端区域", "Controls how the background image fills the terminal area"),
+                    systemImage: "rectangle.resize"
+                ) {
+                    GhosttyPresetOverrideMenu(
+                        value: imageFitOverride.normalizedValue,
+                        options: [
+                            GhosttyPresetOption(title: L("完整显示", "Contain"), value: "contain"),
+                            GhosttyPresetOption(title: L("填满裁切", "Cover"), value: "cover"),
+                            GhosttyPresetOption(title: L("拉伸", "Stretch"), value: "stretch"),
+                            GhosttyPresetOption(title: L("原始大小", "Original"), value: "none")
+                        ],
+                        setValue: { setGhosttyOverrideValue(key: "background-image-fit", value: $0) },
+                        reset: { resetGhosttyOverride(key: "background-image-fit") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("图片透明度", "Image Opacity"),
+                    subtitle: L("让背景图片更轻，避免干扰终端文字", "Makes the image quieter so terminal text stays readable"),
+                    systemImage: "slider.horizontal.3"
+                ) {
+                    GhosttySliderOverrideControl(
+                        key: "background-image-opacity",
+                        value: imageOpacityOverride.normalizedValue,
+                        range: 0...1,
+                        step: 0.01,
+                        defaultValue: 1,
+                        valueText: { "\(Int(($0 * 100).rounded()))%" },
+                        setValue: { setGhosttyOverrideValue(key: "background-image-opacity", value: String(format: "%.2f", Double($0))) },
+                        reset: { resetGhosttyOverride(key: "background-image-opacity") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("选区文字", "Selection Text"),
+                    subtitle: L("选中内容时的文字颜色，默认跟随主题", "Text color for selected content; defaults to the theme"),
+                    systemImage: "text.cursor"
+                ) {
+                    GhosttyColorOverrideControl(
+                        key: "selection-foreground",
+                        value: selectionForegroundOverride.normalizedValue,
+                        setValue: { setGhosttyOverrideValue(key: "selection-foreground", value: $0) },
+                        reset: { resetGhosttyOverride(key: "selection-foreground") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("选区背景", "Selection Background"),
+                    subtitle: L("拖选文本时的高亮颜色", "Highlight color used while selecting text"),
+                    systemImage: "selection.pin.in.out"
+                ) {
+                    GhosttyColorOverrideControl(
+                        key: "selection-background",
+                        value: selectionBackgroundOverride.normalizedValue,
+                        setValue: { setGhosttyOverrideValue(key: "selection-background", value: $0) },
+                        reset: { resetGhosttyOverride(key: "selection-background") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("搜索高亮", "Search Highlight"),
+                    subtitle: L("搜索命中结果的背景色", "Background color for search matches"),
+                    systemImage: "magnifyingglass"
+                ) {
+                    GhosttyColorOverrideControl(
+                        key: "search-background",
+                        value: searchBackgroundOverride.normalizedValue,
+                        setValue: { setGhosttyOverrideValue(key: "search-background", value: $0) },
+                        reset: { resetGhosttyOverride(key: "search-background") }
+                    )
+                }
+            }
+        }
+    }
+
+    private var terminalSelectionMouseSettings: some View {
+        let clearTypingOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "selection-clear-on-typing")
+        let clearCopyOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "selection-clear-on-copy")
+        let copyOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "copy-on-select")
+        let hideMouseOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "mouse-hide-while-typing")
+        let reportingOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "mouse-reporting")
+        let scrollOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "mouse-scroll-multiplier")
+        let linkOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "link-url")
+        let previewOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "link-previews")
+
+        return SettingsPreferenceGroup(
+            title: L("选择、鼠标与链接", "Selection, Mouse, and Links"),
+            subtitle: L("日常复制、鼠标交互和链接识别，不展示底层配置细节", "Daily copy, mouse interaction, and link detection without raw config details"),
+            systemImage: "cursorarrow.click"
+        ) {
+            SettingsFormSurface {
+                SettingsControlRow(
+                    title: L("输入时清除选区", "Clear Selection While Typing"),
+                    subtitle: L("开始输入后自动取消当前选区", "Automatically clears the current selection when typing starts"),
+                    systemImage: "keyboard"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: clearTypingOverride),
+                        action: { setBooleanOverride(key: "selection-clear-on-typing", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("复制后清除选区", "Clear Selection After Copy"),
+                    subtitle: L("复制完成后收起高亮，适合连续操作", "Clears the highlight after copying"),
+                    systemImage: "doc.on.doc"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: clearCopyOverride),
+                        action: { setBooleanOverride(key: "selection-clear-on-copy", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("选中即复制", "Copy On Select"),
+                    subtitle: L("像 X11 终端一样，选中文本后立即写入剪贴板", "Copies selected text immediately, similar to X11 terminals"),
+                    systemImage: "doc.on.clipboard"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: copyOverride),
+                        action: { setBooleanOverride(key: "copy-on-select", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("输入时隐藏鼠标", "Hide Mouse While Typing"),
+                    subtitle: L("减少鼠标指针挡住终端文本的情况", "Keeps the pointer from covering terminal text while typing"),
+                    systemImage: "cursorarrow.slash"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: hideMouseOverride),
+                        action: { setBooleanOverride(key: "mouse-hide-while-typing", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("应用鼠标上报", "App Mouse Reporting"),
+                    subtitle: L("允许 vim、tmux、less 等终端应用接收鼠标事件", "Lets terminal apps such as vim, tmux, and less receive mouse events"),
+                    systemImage: "point.topleft.down.curvedto.point.bottomright.up"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: reportingOverride),
+                        action: { setBooleanOverride(key: "mouse-reporting", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("滚轮速度", "Scroll Speed"),
+                    subtitle: L("调整鼠标或触控板滚动终端历史的速度", "Adjusts mouse or trackpad scroll speed through terminal history"),
+                    systemImage: "scroll"
+                ) {
+                    GhosttyPresetOverrideMenu(
+                        value: scrollOverride.normalizedValue,
+                        options: [
+                            GhosttyPresetOption(title: L("较慢", "Slower"), value: "0.5"),
+                            GhosttyPresetOption(title: L("标准", "Standard"), value: "1"),
+                            GhosttyPresetOption(title: L("较快", "Faster"), value: "2"),
+                            GhosttyPresetOption(title: L("很快", "Fast"), value: "3")
+                        ],
+                        setValue: { setGhosttyOverrideValue(key: "mouse-scroll-multiplier", value: $0) },
+                        reset: { resetGhosttyOverride(key: "mouse-scroll-multiplier") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("链接识别", "Link Detection"),
+                    subtitle: L("识别终端输出里的 URL，方便点击打开", "Detects URLs in terminal output so they can be opened"),
+                    systemImage: "link"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: linkOverride),
+                        action: { setBooleanOverride(key: "link-url", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("链接预览", "Link Previews"),
+                    subtitle: L("悬停链接时显示预览能力，默认跟随内置支持", "Shows link preview behavior on hover when supported"),
+                    systemImage: "rectangle.on.rectangle"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: previewOverride),
+                        action: { setBooleanOverride(key: "link-previews", state: $0) }
+                    )
+                }
+            }
+        }
+    }
+
+    private var terminalClipboardSettings: some View {
+        let readOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "clipboard-read")
+        let writeOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "clipboard-write")
+        let trimOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "clipboard-trim-trailing-spaces")
+        let protectionOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "clipboard-paste-protection")
+        let bracketedOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "clipboard-paste-bracketed-safe")
+
+        return SettingsPreferenceGroup(
+            title: L("剪贴板与粘贴安全", "Clipboard and Paste Safety"),
+            subtitle: L("把安全相关行为说成人话：读写、清理空格、粘贴保护", "Human-facing controls for clipboard access, trimming, and paste protection"),
+            systemImage: "doc.on.clipboard"
+        ) {
+            SettingsFormSurface {
+                SettingsControlRow(
+                    title: L("允许读取剪贴板", "Allow Clipboard Read"),
+                    subtitle: L("终端应用可以从系统剪贴板读取内容", "Terminal apps may read from the system clipboard"),
+                    systemImage: "arrow.down.doc"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: readOverride),
+                        action: { setBooleanOverride(key: "clipboard-read", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("允许写入剪贴板", "Allow Clipboard Write"),
+                    subtitle: L("终端应用可以把内容写入系统剪贴板", "Terminal apps may write to the system clipboard"),
+                    systemImage: "arrow.up.doc"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: writeOverride),
+                        action: { setBooleanOverride(key: "clipboard-write", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("复制时清理尾随空格", "Trim Trailing Spaces"),
+                    subtitle: L("复制多行输出时去掉行尾多余空格", "Removes extra spaces at line endings when copying output"),
+                    systemImage: "text.alignleft"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: trimOverride),
+                        action: { setBooleanOverride(key: "clipboard-trim-trailing-spaces", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("危险粘贴保护", "Paste Protection"),
+                    subtitle: L("粘贴疑似多行命令或危险内容时保留确认保护", "Keeps confirmation protection for suspicious multi-line or risky pastes"),
+                    systemImage: "exclamationmark.shield"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: protectionOverride),
+                        action: { setBooleanOverride(key: "clipboard-paste-protection", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("Bracketed Paste 安全模式", "Bracketed Paste Safety"),
+                    subtitle: L("让支持的 shell 和编辑器更准确地区分键入与粘贴", "Helps supported shells and editors distinguish typed input from pasted text"),
+                    systemImage: "brackets.curly"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: bracketedOverride),
+                        action: { setBooleanOverride(key: "clipboard-paste-bracketed-safe", state: $0) }
+                    )
+                }
+            }
+        }
+    }
+
+    private var terminalNotificationSettings: some View {
+        let finishOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "notify-on-command-finish")
+        let actionOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "notify-on-command-finish-action")
+        let afterOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "notify-on-command-finish-after")
+        let bellPathOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "bell-audio-path")
+        let bellVolumeOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "bell-audio-volume")
+
+        return SettingsPreferenceGroup(
+            title: L("通知与铃声", "Notifications and Bell"),
+            subtitle: L("命令结束提醒和终端铃声；AI Agent 通知仍在 AI 页管理", "Command-finish alerts and terminal bell; AI agent notifications stay in AI"),
+            systemImage: "bell.badge"
+        ) {
+            SettingsFormSurface {
+                SettingsControlRow(
+                    title: L("命令完成通知", "Command Finish Notification"),
+                    subtitle: L("长命令结束后提醒你回来处理", "Alerts you when a long-running command finishes"),
+                    systemImage: "checkmark.circle"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: finishOverride),
+                        action: { setBooleanOverride(key: "notify-on-command-finish", state: $0) }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("通知方式", "Notification Action"),
+                    subtitle: L("选择只发系统通知，还是同时吸引注意", "Choose whether to only notify or also request attention"),
+                    systemImage: "app.badge"
+                ) {
+                    GhosttyPresetOverrideMenu(
+                        value: actionOverride.normalizedValue,
+                        options: [
+                            GhosttyPresetOption(title: L("系统通知", "Notification"), value: "notify"),
+                            GhosttyPresetOption(title: L("请求注意", "Request Attention"), value: "attention"),
+                            GhosttyPresetOption(title: L("通知并请求注意", "Notify and Attention"), value: "notify,attention")
+                        ],
+                        setValue: { setGhosttyOverrideValue(key: "notify-on-command-finish-action", value: $0) },
+                        reset: { resetGhosttyOverride(key: "notify-on-command-finish-action") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("超过多久提醒", "Notify After"),
+                    subtitle: L("只有运行时间超过这个阈值的命令才提醒", "Only commands longer than this threshold will alert"),
+                    systemImage: "timer"
+                ) {
+                    GhosttyPresetOverrideMenu(
+                        value: afterOverride.normalizedValue,
+                        options: [
+                            GhosttyPresetOption(title: L("5 秒", "5 seconds"), value: "5s"),
+                            GhosttyPresetOption(title: L("10 秒", "10 seconds"), value: "10s"),
+                            GhosttyPresetOption(title: L("30 秒", "30 seconds"), value: "30s"),
+                            GhosttyPresetOption(title: L("1 分钟", "1 minute"), value: "1m")
+                        ],
+                        setValue: { setGhosttyOverrideValue(key: "notify-on-command-finish-after", value: $0) },
+                        reset: { resetGhosttyOverride(key: "notify-on-command-finish-after") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("铃声音频", "Bell Sound"),
+                    subtitle: L("选择自定义铃声文件，留空时使用默认反馈", "Choose a custom bell sound file, or leave empty for the default feedback"),
+                    systemImage: "speaker.wave.2"
+                ) {
+                    GhosttyFileOverrideControl(
+                        key: "bell-audio-path",
+                        value: bellPathOverride.normalizedValue,
+                        setValue: { setGhosttyOverrideValue(key: "bell-audio-path", value: $0) },
+                        reset: { resetGhosttyOverride(key: "bell-audio-path") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("铃声音量", "Bell Volume"),
+                    subtitle: L("调低可以保留提示但不打断工作", "Lower volume keeps feedback without interrupting work"),
+                    systemImage: "speaker.wave.1"
+                ) {
+                    GhosttySliderOverrideControl(
+                        key: "bell-audio-volume",
+                        value: bellVolumeOverride.normalizedValue,
+                        range: 0...1,
+                        step: 0.01,
+                        defaultValue: 1,
+                        valueText: { "\(Int(($0 * 100).rounded()))%" },
+                        setValue: { setGhosttyOverrideValue(key: "bell-audio-volume", value: String(format: "%.2f", Double($0))) },
+                        reset: { resetGhosttyOverride(key: "bell-audio-volume") }
+                    )
+                }
+            }
+        }
+    }
+
+    private var terminalKeyboardSettings: some View {
+        let optionOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "macos-option-as-alt")
+        let remapOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "key-remap")
+
+        return SettingsPreferenceGroup(
+            title: L("键盘", "Keyboard"),
+            subtitle: L("这里放终端输入层设置；应用级快捷键仍在命令页管理", "Terminal input settings live here; app shortcuts stay in Commands"),
+            systemImage: "keyboard"
+        ) {
+            SettingsFormSurface {
+                SettingsControlRow(
+                    title: L("Option 作为 Alt", "Option As Alt"),
+                    subtitle: L("给 vim、emacs、tmux 等终端程序发送 Alt/Meta 组合键", "Sends Alt/Meta key combinations to terminal apps such as vim, emacs, and tmux"),
+                    systemImage: "option"
+                ) {
+                    GhosttyPresetOverrideMenu(
+                        value: optionOverride.normalizedValue,
+                        options: [
+                            GhosttyPresetOption(title: L("关闭", "Off"), value: "false"),
+                            GhosttyPresetOption(title: L("左 Option", "Left Option"), value: "left"),
+                            GhosttyPresetOption(title: L("右 Option", "Right Option"), value: "right"),
+                            GhosttyPresetOption(title: L("左右都启用", "Both Options"), value: "true")
+                        ],
+                        setValue: { setGhosttyOverrideValue(key: "macos-option-as-alt", value: $0) },
+                        reset: { resetGhosttyOverride(key: "macos-option-as-alt") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("高级键位映射", "Advanced Key Remap"),
+                    subtitle: L("只在需要兼容特殊终端工作流时填写；常用快捷键请去命令页", "Use only for special terminal workflows; common shortcuts belong in Commands"),
+                    systemImage: "keyboard.badge.ellipsis"
+                ) {
+                    GhosttyInlineTextOverrideControl(
+                        key: "key-remap",
+                        placeholder: "ctrl+a=home",
+                        value: remapOverride.normalizedValue,
+                        systemImage: "keyboard",
+                        setValue: { setGhosttyOverrideValue(key: "key-remap", value: $0) },
+                        reset: { resetGhosttyOverride(key: "key-remap") }
+                    )
+                }
+            }
+        }
+    }
+
+    private var terminalTypographySettings: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            TerminalRendererSummary(appearance: model.appearance)
+
             SettingsPreferenceGroup(
-                title: L("终端", "Terminal"),
-                subtitle: L("调整 Ghostty 渲染层的终端字号", "Adjusts the terminal font size in the Ghostty renderer"),
-                systemImage: "terminal"
+                title: L("字体与字格", "Typography"),
+                subtitle: L("管理终端实际使用的字体、字号、行高和字格密度", "Controls the terminal font, size, line height, and cell density"),
+                systemImage: "textformat.size"
             ) {
                 SettingsFormSurface {
+                    SettingsControlRow(
+                        title: L("终端字体", "Terminal Font"),
+                        subtitle: model.appearance.terminalRenderer.selectedFontStatusTitle,
+                        systemImage: "textformat"
+                    ) {
+                        HStack(spacing: 8) {
+                            TerminalFontPickerMenu(
+                                selection: model.appearance.terminalRenderer.fontPreset,
+                                downloadStates: model.terminalFontDownloadStates,
+                                action: { preset in
+                                    model.performShellMotion(ConductorMotion.selection) {
+                                        model.setTerminalFontPreset(preset)
+                                    }
+                                },
+                                download: { preset in
+                                    model.downloadTerminalFont(preset)
+                                }
+                            )
+
+                            let selectedChoice = TerminalFontLibrary.choices.first { $0.preset == model.appearance.terminalRenderer.fontPreset }
+                            if let selectedChoice, !selectedChoice.isInstalled, selectedChoice.canDownload {
+                                Button {
+                                    model.downloadTerminalFont(selectedChoice.preset)
+                                } label: {
+                                    if model.terminalFontDownloadStates[selectedChoice.preset]?.isDownloading == true {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    } else {
+                                        Label(
+                                            selectedChoice.preset.directDownloadURL == nil ? L("获取", "Get") : L("下载", "Download"),
+                                            systemImage: selectedChoice.preset.directDownloadURL == nil ? "safari" : "arrow.down.circle"
+                                        )
+                                        .labelStyle(.titleAndIcon)
+                                    }
+                                }
+                                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                                .disabled(model.terminalFontDownloadStates[selectedChoice.preset]?.isDownloading == true)
+                            }
+                        }
+                    }
+
+                    SettingsControlDivider()
+
+                    SettingsControlRow(
+                        title: L("自定义字体", "Custom Font"),
+                        subtitle: customTerminalFontSubtitle,
+                        systemImage: "square.and.arrow.down"
+                    ) {
+                        HStack(spacing: 8) {
+                            Toggle("", isOn: Binding(
+                                get: { model.appearance.terminalRenderer.useCustomFont },
+                                set: { model.setTerminalUseCustomFont($0) }
+                            ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .disabled(model.appearance.terminalRenderer.customFontFamilyName == nil)
+
+                            Button(L("导入", "Import")) {
+                                model.importTerminalFont()
+                            }
+                        }
+                    }
+
+                    SettingsControlDivider()
+
                     SettingsSliderRow(
                         title: L("终端字号", "Terminal Font Size"),
-                        subtitle: L("影响所有现有和新建终端", "Applies to existing and new terminals"),
+                        subtitle: L("调大更清晰，调小能显示更多行列", "Larger is easier to read; smaller fits more rows and columns"),
                         systemImage: "textformat.size",
                         value: model.appearance.terminalFontSize,
                         range: AppearancePreferences.minTerminalFontSize...AppearancePreferences.maxTerminalFontSize,
@@ -1296,24 +2072,265 @@ private struct AppearanceSettingsPanel: View {
                     ) { fontSize in
                         model.setTerminalFontSize(fontSize)
                     }
+
+                    SettingsControlDivider()
+
+                    SettingsSliderRow(
+                        title: L("行高", "Line Height"),
+                        subtitle: L("让输出更紧凑或更舒展", "Makes terminal output tighter or more relaxed"),
+                        systemImage: "arrow.up.and.down.text.horizontal",
+                        value: model.appearance.terminalRenderer.lineHeight,
+                        range: 0.80...1.50,
+                        step: 0.01,
+                        valueText: multiplierText(model.appearance.terminalRenderer.lineHeight)
+                    ) { lineHeight in
+                        model.setTerminalLineHeight(lineHeight)
+                    }
                 }
             }
         }
     }
 
-    private func terminalFontSizeText(_ value: CGFloat) -> String {
-        let rounded = (value * 10).rounded() / 10
-        if rounded.rounded() == rounded {
-            return "\(Int(rounded)) pt"
+    private var terminalCursorSettings: some View {
+        let colorOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "cursor-color")
+        let opacityOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "cursor-opacity")
+        let textOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "cursor-text")
+        let clickOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "cursor-click-to-move")
+
+        return SettingsPreferenceGroup(
+            title: L("光标", "Cursor"),
+            subtitle: L("光标形状、颜色、闪烁和点击移动，都是日常输入会感知到的项", "Cursor shape, color, blink, and click-to-move are visible during daily typing"),
+            systemImage: "cursorarrow"
+        ) {
+            SettingsFormSurface {
+                SettingsControlRow(
+                    title: L("光标样式", "Cursor Style"),
+                    subtitle: L("选择块、空心块、竖线或下划线光标", "Choose block, hollow block, bar, or underline"),
+                    systemImage: "cursorarrow"
+                ) {
+                    SettingsSegmentedPicker(
+                        options: TerminalCursorStyle.allCases,
+                        selection: model.appearance.terminalRenderer.cursorStyle,
+                        title: { $0.title }
+                    ) { style in
+                        model.setTerminalCursorStyle(style)
+                    }
+                }
+
+                SettingsControlDivider()
+
+                SettingsToggleRow(
+                    title: L("光标闪烁", "Cursor Blink"),
+                    subtitle: L("关闭后光标保持常亮，适合减少视觉干扰", "Keeps the cursor steady when disabled"),
+                    systemImage: "cursorarrow.motionlines",
+                    isOn: Binding(
+                        get: { model.appearance.terminalRenderer.cursorBlink },
+                        set: { model.setTerminalCursorBlink($0) }
+                    )
+                )
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("光标颜色", "Cursor Color"),
+                    subtitle: L("默认跟随主题，也可以指定一个固定颜色", "Follows the theme by default, or use a fixed color"),
+                    systemImage: "paintpalette"
+                ) {
+                    GhosttyColorOverrideControl(
+                        key: "cursor-color",
+                        value: colorOverride.normalizedValue,
+                        setValue: { setGhosttyOverrideValue(key: "cursor-color", value: $0) },
+                        reset: { resetGhosttyOverride(key: "cursor-color") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("光标透明度", "Cursor Opacity"),
+                    subtitle: L("降低后光标更轻，保持 100% 最醒目", "Lower values make the cursor quieter; 100% is most visible"),
+                    systemImage: "slider.horizontal.3"
+                ) {
+                    GhosttySliderOverrideControl(
+                        key: "cursor-opacity",
+                        value: opacityOverride.normalizedValue,
+                        range: 0.15...1,
+                        step: 0.01,
+                        defaultValue: 1,
+                        valueText: { "\(Int(($0 * 100).rounded()))%" },
+                        setValue: { setGhosttyOverrideValue(key: "cursor-opacity", value: String(format: "%.2f", Double($0))) },
+                        reset: { resetGhosttyOverride(key: "cursor-opacity") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("光标内文字颜色", "Cursor Text Color"),
+                    subtitle: L("光标覆盖字符时使用的文字颜色", "Text color used when the cursor covers a character"),
+                    systemImage: "character.cursor.ibeam"
+                ) {
+                    GhosttyColorOverrideControl(
+                        key: "cursor-text",
+                        value: textOverride.normalizedValue,
+                        setValue: { setGhosttyOverrideValue(key: "cursor-text", value: $0) },
+                        reset: { resetGhosttyOverride(key: "cursor-text") }
+                    )
+                }
+
+                SettingsControlDivider()
+
+                SettingsControlRow(
+                    title: L("点击移动光标", "Click To Move Cursor"),
+                    subtitle: L("允许鼠标点击把光标移动到目标位置", "Allows mouse clicks to move the cursor position"),
+                    systemImage: "cursorarrow.click"
+                ) {
+                    GhosttyBooleanOverridePicker(
+                        state: booleanState(for: clickOverride),
+                        action: { setBooleanOverride(key: "cursor-click-to-move", state: $0) }
+                    )
+                }
+            }
         }
-        return String(format: "%.1f pt", Double(rounded))
     }
 
-    private var commandSettings: some View {
+    private func setGhosttyOverrideValue(key: String, value: String) {
+        model.setGhosttyOverrideValue(key: key, value: value)
+        model.setGhosttyOverrideEnabled(key: key, enabled: !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func resetGhosttyOverride(key: String) {
+        model.setGhosttyOverrideEnabled(key: key, enabled: false)
+    }
+
+    private func booleanState(for override: TerminalGhosttyConfigOverride) -> GhosttyBooleanOverrideState {
+        guard override.enabled else { return .defaultValue }
+        return override.normalizedValue.lowercased() == "false" ? .off : .on
+    }
+
+    private func setBooleanOverride(key: String, state: GhosttyBooleanOverrideState) {
+        switch state {
+        case .defaultValue:
+            resetGhosttyOverride(key: key)
+        case .on:
+            setGhosttyOverrideValue(key: key, value: "true")
+        case .off:
+            setGhosttyOverrideValue(key: key, value: "false")
+        }
+    }
+
+    private var proxySettings: some View {
         VStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
+                title: L("终端代理", "Terminal Proxy"),
+                subtitle: model.appearance.terminalRenderer.proxy.statusTitle,
+                systemImage: "network"
+            ) {
+                SettingsFormSurface {
+                    SettingsToggleRow(
+                        title: L("启用代理", "Enable Proxy"),
+                        subtitle: L("写入新终端进程的 HTTP(S)/ALL_PROXY 环境变量", "Writes HTTP(S)/ALL_PROXY env vars for new terminal processes"),
+                        systemImage: "switch.2",
+                        isOn: Binding(
+                            get: { model.appearance.terminalRenderer.proxy.enabled },
+                            set: { model.setTerminalProxyEnabled($0) }
+                        )
+                    )
+
+                    SettingsControlDivider()
+
+                    SettingsTextFieldRow(
+                        title: "HTTP_PROXY",
+                        subtitle: "http://127.0.0.1:7890",
+                        systemImage: "globe",
+                        text: Binding(
+                            get: { model.appearance.terminalRenderer.proxy.httpProxy },
+                            set: { model.setTerminalProxyHTTP($0) }
+                        )
+                    )
+
+                    SettingsControlDivider()
+
+                    SettingsTextFieldRow(
+                        title: "HTTPS_PROXY",
+                        subtitle: "http://127.0.0.1:7890",
+                        systemImage: "lock.globe",
+                        text: Binding(
+                            get: { model.appearance.terminalRenderer.proxy.httpsProxy },
+                            set: { model.setTerminalProxyHTTPS($0) }
+                        )
+                    )
+
+                    SettingsControlDivider()
+
+                    SettingsTextFieldRow(
+                        title: "ALL_PROXY",
+                        subtitle: "socks5://127.0.0.1:7890",
+                        systemImage: "point.3.connected.trianglepath.dotted",
+                        text: Binding(
+                            get: { model.appearance.terminalRenderer.proxy.allProxy },
+                            set: { model.setTerminalProxyAll($0) }
+                        )
+                    )
+
+                    SettingsControlDivider()
+
+                    SettingsTextFieldRow(
+                        title: "NO_PROXY",
+                        subtitle: "localhost,127.0.0.1,::1",
+                        systemImage: "nosign",
+                        text: Binding(
+                            get: { model.appearance.terminalRenderer.proxy.noProxy },
+                            set: { model.setTerminalProxyNoProxy($0) }
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private var aiSettings: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsPreferenceGroup(
+                title: L("AI 安装检测", "AI Installation Check"),
+                subtitle: L("检测本机可用的 AI CLI，并给未安装的代理提供官方安装入口", "Detects local AI CLIs and provides official install pages for missing agents"),
+                systemImage: "magnifyingglass"
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    SettingsFormSurface {
+                        ForEach(AgentHookProvider.allCases) { provider in
+                            AgentCLIStatusRow(
+                                provider: provider,
+                                status: model.agentCLIStatuses[provider] ?? .unknown(provider: provider),
+                                install: { model.openAgentInstallPage(provider) }
+                            )
+
+                            if provider.id != AgentHookProvider.allCases.last?.id {
+                                SettingsControlDivider()
+                            }
+                        }
+                    }
+
+                    HStack {
+                        Text(L("检测 PATH、/opt/homebrew/bin 和 /usr/local/bin；安装后点重新检测。", "Scans PATH, /opt/homebrew/bin, and /usr/local/bin; scan again after installing."))
+                            .font(.conductorSystem(size: 10.3, weight: .medium, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.tertiaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer(minLength: 12)
+
+                        Button {
+                            model.refreshAgentCLIStatuses()
+                        } label: {
+                            Label(L("重新检测", "Scan Again"), systemImage: "arrow.clockwise")
+                        }
+                    }
+                }
+            }
+
+            SettingsPreferenceGroup(
                 title: L("Agent 通知", "Agent Notifications"),
-                subtitle: L("用开关直接管理本地 agent hook", "Manage local agent hooks with native switches"),
+                subtitle: L("Codex、Claude Code 等本地 agent hook", "Local agent hooks for Codex, Claude Code, and others"),
                 systemImage: "bell.badge"
             ) {
                 SettingsFormSurface {
@@ -1345,7 +2362,40 @@ private struct AppearanceSettingsPanel: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+        }
+        .onAppear {
+            if model.agentCLIStatuses.values.allSatisfy({ $0.state == .unknown }) {
+                model.refreshAgentCLIStatuses()
+            }
+        }
+    }
 
+    private var customTerminalFontSubtitle: String {
+        if let name = model.appearance.terminalRenderer.customFontFamilyName,
+           model.appearance.terminalRenderer.useCustomFont {
+            return name
+        }
+        return L("导入 .ttf/.otf/.ttc 并直接用于 Ghostty", "Import .ttf/.otf/.ttc and use it in Ghostty")
+    }
+
+    private func terminalFontSizeText(_ value: CGFloat) -> String {
+        let rounded = (value * 10).rounded() / 10
+        if rounded.rounded() == rounded {
+            return "\(Int(rounded)) pt"
+        }
+        return String(format: "%.1f pt", Double(rounded))
+    }
+
+    private func multiplierText(_ value: CGFloat) -> String {
+        String(format: "%.2fx", Double(value))
+    }
+
+    private func percentText(_ value: CGFloat) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    private var commandSettings: some View {
+        VStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("命令与快捷键", "Commands and Shortcuts"),
                 subtitle: L("保留密集列表，适合快速扫视", "Dense command list for fast scanning"),
@@ -1385,7 +2435,11 @@ private struct AppearanceSettingsPanel: View {
 }
 
 private enum SettingsPanelSection: String, CaseIterable, Identifiable {
+    case overview
     case interface
+    case terminal
+    case shell
+    case automation
     case commands
     case themes
 
@@ -1393,8 +2447,16 @@ private enum SettingsPanelSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .overview:
+            L("概览", "Overview")
         case .interface:
             L("界面", "Interface")
+        case .terminal:
+            L("终端", "Terminal")
+        case .shell:
+            L("Shell 与代理", "Shell and Proxy")
+        case .automation:
+            L("AI 代理", "AI Agents")
         case .commands:
             L("命令", "Commands")
         case .themes:
@@ -1404,10 +2466,18 @@ private enum SettingsPanelSection: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
+        case .overview:
+            L("当前配置和入口", "Current configuration and entry points")
         case .interface:
-            L("语言、字体和字号", "Language, font, and size")
+            L("窗口、语言和壳层文字", "Window, language, and shell text")
+        case .terminal:
+            L("阅读、光标、复制粘贴", "Reading, cursor, copy and paste")
+        case .shell:
+            L("启动命令、目录和代理", "Startup command, directory, and proxy")
+        case .automation:
+            L("Agent hook、通知和铃声", "Agent hooks, notifications, and bell")
         case .commands:
-            L("Agent 通知与快捷入口", "Agent notifications and shortcuts")
+            L("快捷键与命令入口", "Shortcuts and commands")
         case .themes:
             L("整套窗口、终端和强调色", "Window, terminal, and accent colors")
         }
@@ -1415,8 +2485,16 @@ private enum SettingsPanelSection: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
+        case .overview:
+            "rectangle.grid.2x2"
         case .interface:
             "textformat"
+        case .terminal:
+            "terminal"
+        case .shell:
+            "network"
+        case .automation:
+            "sparkles"
         case .commands:
             "command"
         case .themes:
@@ -1491,6 +2569,1375 @@ private struct SettingsPaneHeading: View {
             }
 
             Spacer(minLength: 0)
+        }
+    }
+}
+
+private struct SettingsSectionLabel: View {
+    let title: String
+    let subtitle: String
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.conductorSystem(size: 11.5, weight: .bold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .textCase(.uppercase)
+            Text(subtitle)
+                .font(.conductorSystem(size: 10.4, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 2)
+    }
+}
+
+private struct SettingsInfoRow: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis)
+                .frame(width: 26, height: 26)
+                .background(theme.floatingControlStrongFill)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 62)
+    }
+}
+
+private struct AgentCLIStatusRow: View {
+    let provider: AgentHookProvider
+    let status: AgentCLIStatus
+    let install: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+
+    private var subtitle: String {
+        switch status.state {
+        case .unknown:
+            return L("尚未检测，打开此页会自动扫描", "Not scanned yet; this page scans automatically")
+        case .checking:
+            return L("正在检测命令行工具是否可用", "Checking whether the CLI is available")
+        case .installed(let path):
+            return path
+        case .missing:
+            return provider.installHint
+        }
+    }
+
+    var body: some View {
+        SettingsControlRow(
+            title: provider.title,
+            subtitle: subtitle,
+            systemImage: provider.systemImage
+        ) {
+            trailing
+        }
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        switch status.state {
+        case .checking:
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 112, alignment: .trailing)
+        case .installed:
+            SettingsStatusPill(title: L("已安装", "Installed"), systemImage: "checkmark.circle.fill")
+        case .missing:
+            Button {
+                install()
+            } label: {
+                Label(L("安装", "Install"), systemImage: "arrow.down.circle")
+            }
+            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+        case .unknown:
+            SettingsStatusPill(title: L("未检测", "Not Checked"), systemImage: "questionmark.circle")
+        }
+    }
+}
+
+private struct SettingsOverviewGrid: View {
+    @ObservedObject var model: ConductorWindowModel
+    @Environment(\.conductorFontScale) private var fontScale
+
+    private var columns: [GridItem] {
+        [
+            GridItem(.flexible(minimum: 132), spacing: 10),
+            GridItem(.flexible(minimum: 132), spacing: 10),
+            GridItem(.flexible(minimum: 132), spacing: 10)
+        ]
+    }
+
+    private var terminalSizeText: String {
+        let rounded = (model.appearance.terminalFontSize * 10).rounded() / 10
+        if rounded.rounded() == rounded {
+            return "\(Int(rounded)) pt"
+        }
+        return String(format: "%.1f pt", Double(rounded))
+    }
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+            SettingsOverviewTile(
+                title: L("主题", "Theme"),
+                value: model.theme.title,
+                systemImage: "swatchpalette"
+            )
+            SettingsOverviewTile(
+                title: L("终端字体", "Terminal Font"),
+                value: model.appearance.terminalRenderer.effectiveFontFamilyName,
+                systemImage: "textformat"
+            )
+            SettingsOverviewTile(
+                title: L("字号", "Size"),
+                value: terminalSizeText,
+                systemImage: "textformat.size"
+            )
+            SettingsOverviewTile(
+                title: L("密度", "Density"),
+                value: model.appearance.density.title,
+                systemImage: "rectangle.compress.vertical"
+            )
+            SettingsOverviewTile(
+                title: L("代理", "Proxy"),
+                value: model.appearance.terminalRenderer.proxy.enabled ? L("开启", "On") : L("关闭", "Off"),
+                systemImage: "network"
+            )
+            SettingsOverviewTile(
+                title: L("AI 通知", "AI Alerts"),
+                value: model.appearance.agentNotifications.codex || model.appearance.agentNotifications.claudeCode ? L("开启", "On") : L("关闭", "Off"),
+                systemImage: "sparkles"
+            )
+        }
+    }
+}
+
+private struct SettingsOverviewTile: View {
+    let title: String
+    let value: String
+    let systemImage: String
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Image(systemName: systemImage)
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis)
+                Text(title)
+                    .font(.conductorSystem(size: 10.4, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(1)
+            }
+
+            Text(value)
+                .font(.conductorSystem(size: 13, weight: .bold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
+                .lineLimit(1)
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+        .background(theme.floatingControlFill.opacity(0.54))
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.64), lineWidth: 1)
+        }
+    }
+}
+
+private struct SettingsQuickJumpButton: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis)
+                    .frame(width: 28, height: 28)
+                    .background(theme.floatingControlStrongFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.conductorSystem(size: 12.3, weight: .bold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.primaryText)
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.conductorSystem(size: 10.3, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.conductorSystem(size: 10, weight: .bold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .background(hovering ? theme.floatingHoverFill : theme.floatingControlFill.opacity(0.50))
+            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
+                    .stroke(theme.floatingStroke.opacity(0.66), lineWidth: 1)
+            }
+        }
+        .buttonStyle(ConductorPressButtonStyle())
+        .onHover { hovering = $0 }
+    }
+}
+
+private struct GhosttyConfigReferenceCard: View {
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(TerminalGhosttyConfigCatalog.totalKeyCount)")
+                    .font(.conductorSystem(size: 24, weight: .bold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis)
+                    .monospacedDigit()
+                Text(L("个 Ghostty 上游真实配置项", "real upstream Ghostty config keys"))
+                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                Spacer(minLength: 0)
+                SettingsStatusPill(title: TerminalGhosttyConfigCatalog.sourceTitle, systemImage: "doc.text.magnifyingglass")
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 8)], alignment: .leading, spacing: 8) {
+                ForEach(TerminalGhosttyConfigCatalog.functionGroups) { group in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(group.title)
+                            .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.primaryText)
+                            .lineLimit(1)
+                        Text(group.countTitle)
+                            .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.tertiaryText)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 9)
+                    .frame(height: 42, alignment: .leading)
+                    .background(theme.floatingControlFill.opacity(0.54))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(theme.floatingStroke.opacity(0.60), lineWidth: 1)
+                    }
+                }
+            }
+
+            Text(L(
+                "当前页把上游配置按功能归类。嵌入式 surface 常用项优先使用专用控件；平台级和少见项保留为高级兼容设置。",
+                "This page groups upstream settings by function. Common embedded-surface options use dedicated controls; platform-level and uncommon keys remain advanced compatibility settings."
+            ))
+            .font(.conductorSystem(size: 10.3, weight: .medium, scale: fontScale))
+            .foregroundStyle(ConductorDesign.tertiaryText)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(theme.floatingControlFill.opacity(0.48))
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.72), lineWidth: 1)
+        }
+    }
+}
+
+private struct GhosttyFunctionalConfigBrowser: View {
+    @ObservedObject var model: ConductorWindowModel
+    @Binding var search: String
+    @State private var selectedGroupID = TerminalGhosttyConfigCatalog.productGroups[0].id
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var filteredGroups: [GhosttyConfigFunctionGroup] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return TerminalGhosttyConfigCatalog.productGroups }
+
+        return TerminalGhosttyConfigCatalog.productGroups.compactMap { group in
+            let groupMatches = group.title.lowercased().contains(query) ||
+                group.subtitle.lowercased().contains(query)
+            let keys = groupMatches ? group.keys : group.keys.filter { key in
+                key.lowercased().contains(query) ||
+                    TerminalGhosttyConfigCatalog.description(for: key).lowercased().contains(query)
+            }
+            guard !keys.isEmpty else { return nil }
+            return GhosttyConfigFunctionGroup(
+                id: group.id,
+                title: group.title,
+                subtitle: group.subtitle,
+                systemImage: group.systemImage,
+                keys: keys
+            )
+        }
+    }
+
+    private var enabledCount: Int {
+        model.appearance.terminalRenderer.activeGhosttyOverrides.count
+    }
+
+    private var selectedGroup: GhosttyConfigFunctionGroup {
+        TerminalGhosttyConfigCatalog.productGroups.first { $0.id == selectedGroupID }
+            ?? TerminalGhosttyConfigCatalog.productGroups[0]
+    }
+
+    private var isSearching: Bool {
+        !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                TextField(L("搜索设置", "Search settings"), text: $search)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+
+                SettingsStatusPill(
+                    title: L("已启用 \(enabledCount)", "\(enabledCount) enabled"),
+                    systemImage: "checklist.checked"
+                )
+
+                Button(L("清空", "Clear")) {
+                    model.resetGhosttyOverrides()
+                }
+                .disabled(model.appearance.terminalRenderer.ghosttyOverrides.isEmpty)
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(TerminalGhosttyConfigCatalog.productGroups) { group in
+                        GhosttySettingsCategoryRow(
+                            group: group,
+                            selected: !isSearching && group.id == selectedGroup.id
+                        ) {
+                            search = ""
+                            selectedGroupID = group.id
+                        }
+                    }
+                }
+                .padding(8)
+                .frame(width: 178, alignment: .topLeading)
+                .background(theme.floatingControlFill.opacity(0.42))
+                .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
+                        .stroke(theme.floatingStroke.opacity(0.66), lineWidth: 1)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    if isSearching {
+                        ForEach(filteredGroups) { group in
+                            GhosttyConfigFunctionSection(
+                                model: model,
+                                group: group
+                            )
+                        }
+                    } else {
+                        GhosttyConfigFunctionSection(
+                            model: model,
+                            group: selectedGroup
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+
+            Text(L(
+                "没有列出 Ghostty 的窗口、GTK、Linux、Quick Terminal、自动更新等无关项；这些不属于 Conductor 的嵌入式终端设置。",
+                "Ghostty window, GTK, Linux, Quick Terminal, auto-update, and other irrelevant keys are intentionally hidden from Conductor's embedded terminal settings."
+            ))
+            .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
+            .foregroundStyle(ConductorDesign.tertiaryText)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct GhosttySettingsCategoryRow: View {
+    let group: GhosttyConfigFunctionGroup
+    let selected: Bool
+    let action: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: group.systemImage)
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
+                    .frame(width: 18)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(group.title)
+                        .font(.conductorSystem(size: 11.2, weight: selected ? .bold : .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.primaryText)
+                        .lineLimit(1)
+                    Text(group.countTitle)
+                        .font(.conductorSystem(size: 9.2, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 38)
+            .background(selected ? theme.floatingSelectedFill : theme.floatingControlFill.opacity(0.54))
+            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+                    .stroke(selected ? theme.floatingSelectedStroke : theme.floatingStroke.opacity(0.66), lineWidth: 1)
+            }
+        }
+        .buttonStyle(ConductorPressButtonStyle())
+    }
+}
+
+private struct GhosttyConfigFunctionSection: View {
+    @ObservedObject var model: ConductorWindowModel
+    let group: GhosttyConfigFunctionGroup
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: group.systemImage)
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis)
+                    .frame(width: 24, height: 24)
+                    .background(theme.floatingControlStrongFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(group.title)
+                            .font(.conductorSystem(size: 12.2, weight: .bold, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.primaryText)
+                        SettingsStatusPill(title: group.countTitle, systemImage: "number")
+                    }
+                    Text(group.subtitle)
+                        .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            SettingsFormSurface {
+                ForEach(group.keys, id: \.self) { key in
+                    GhosttyStyledConfigRow(model: model, key: key)
+
+                    if key != group.keys.last {
+                        SettingsControlDivider()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct GhosttyStyledConfigRow: View {
+    @ObservedObject var model: ConductorWindowModel
+    let key: String
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var override: TerminalGhosttyConfigOverride {
+        model.appearance.terminalRenderer.ghosttyOverride(for: key)
+    }
+
+    private var isManagedByDefault: Bool {
+        TerminalGhosttyConfigCatalog.activeKeys.contains(key)
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: controlIcon)
+                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis)
+                .frame(width: 26, height: 26)
+                .background(theme.floatingControlStrongFill)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(TerminalGhosttyConfigCatalog.displayTitle(for: key))
+                        .font(.system(size: 11.3, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(ConductorDesign.primaryText)
+                        .lineLimit(1)
+
+                    Text(key)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .padding(.horizontal, 5)
+                        .frame(height: 16)
+                        .background(theme.floatingControlFill.opacity(0.75))
+                        .clipShape(Capsule())
+
+                    if isManagedByDefault {
+                        Text(L("内置", "Built-in"))
+                            .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
+                            .foregroundStyle(theme.floatingEmphasis)
+                            .padding(.horizontal, 5)
+                            .frame(height: 16)
+                            .background(theme.floatingControlStrongFill)
+                            .clipShape(Capsule())
+                    }
+                }
+
+                Text(TerminalGhosttyConfigCatalog.description(for: key))
+                    .font(.conductorSystem(size: 9.6, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 10)
+
+            control
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 68)
+        .contentShape(Rectangle())
+    }
+
+    private var controlIcon: String {
+        switch TerminalGhosttyConfigCatalog.controlStyle(for: key) {
+        case .boolean:
+            "switch.2"
+        case .choice:
+            "list.bullet.rectangle"
+        case .percent:
+            "slider.horizontal.3"
+        case .duration:
+            "timer"
+        case .color:
+            "paintpalette"
+        case .filePath:
+            "folder"
+        case .number:
+            "number"
+        case .text:
+            "text.cursor"
+        }
+    }
+
+    @ViewBuilder
+    private var control: some View {
+        switch TerminalGhosttyConfigCatalog.controlStyle(for: key) {
+        case .boolean:
+            GhosttyBooleanOverridePicker(
+                state: booleanState,
+                action: setBooleanState
+            )
+        case .choice(let choices):
+            GhosttyChoiceOverrideMenu(
+                key: key,
+                value: override.normalizedValue,
+                enabled: override.enabled,
+                choices: choices,
+                setValue: { value in
+                    model.setGhosttyOverrideValue(key: key, value: value)
+                    model.setGhosttyOverrideEnabled(key: key, enabled: true)
+                },
+                setDefault: {
+                    model.setGhosttyOverrideEnabled(key: key, enabled: false)
+                }
+            )
+        case .color:
+            GhosttyColorOverrideControl(
+                key: key,
+                value: override.normalizedValue,
+                setValue: setOverrideValue,
+                reset: resetOverride
+            )
+        case .filePath:
+            GhosttyFileOverrideControl(
+                key: key,
+                value: override.normalizedValue,
+                setValue: setOverrideValue,
+                reset: resetOverride
+            )
+        case .percent:
+            GhosttySliderOverrideControl(
+                key: key,
+                value: override.normalizedValue,
+                range: 0...1,
+                step: 0.01,
+                defaultValue: defaultNumericValue,
+                valueText: { "\(Int(($0 * 100).rounded()))%" },
+                setValue: { value in setOverrideValue(String(format: "%.2f", Double(value))) },
+                reset: resetOverride
+            )
+        case .duration:
+            GhosttyInlineTextOverrideControl(
+                key: key,
+                placeholder: TerminalGhosttyConfigCatalog.valueHint(for: key),
+                value: override.value,
+                systemImage: "timer",
+                setValue: setOverrideValue,
+                reset: resetOverride
+            )
+        case .number:
+            GhosttyInlineTextOverrideControl(
+                key: key,
+                placeholder: TerminalGhosttyConfigCatalog.valueHint(for: key),
+                value: override.value,
+                systemImage: "number",
+                setValue: setOverrideValue,
+                reset: resetOverride
+            )
+        case .text:
+            GhosttyInlineTextOverrideControl(
+                key: key,
+                placeholder: TerminalGhosttyConfigCatalog.valueHint(for: key),
+                value: override.value,
+                systemImage: "text.cursor",
+                setValue: setOverrideValue,
+                reset: resetOverride
+            )
+        }
+    }
+
+    private var defaultNumericValue: CGFloat {
+        switch key {
+        case "background-opacity", "background-image-opacity", "cursor-opacity", "minimum-contrast", "bell-audio-volume":
+            1
+        case "faint-opacity":
+            0.5
+        default:
+            0
+        }
+    }
+
+    private func setOverrideValue(_ value: String) {
+        model.setGhosttyOverrideValue(key: key, value: value)
+        model.setGhosttyOverrideEnabled(key: key, enabled: !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func resetOverride() {
+        model.setGhosttyOverrideEnabled(key: key, enabled: false)
+    }
+
+    private var booleanState: GhosttyBooleanOverrideState {
+        guard override.enabled else { return .defaultValue }
+        return override.normalizedValue.lowercased() == "false" ? .off : .on
+    }
+
+    private func setBooleanState(_ state: GhosttyBooleanOverrideState) {
+        switch state {
+        case .defaultValue:
+            model.setGhosttyOverrideEnabled(key: key, enabled: false)
+        case .on:
+            model.setGhosttyOverrideValue(key: key, value: "true")
+            model.setGhosttyOverrideEnabled(key: key, enabled: true)
+        case .off:
+            model.setGhosttyOverrideValue(key: key, value: "false")
+            model.setGhosttyOverrideEnabled(key: key, enabled: true)
+        }
+    }
+}
+
+private enum GhosttyBooleanOverrideState: String, CaseIterable, Hashable {
+    case defaultValue
+    case on
+    case off
+
+    var title: String {
+        switch self {
+        case .defaultValue:
+            L("默认", "Default")
+        case .on:
+            L("开", "On")
+        case .off:
+            L("关", "Off")
+        }
+    }
+}
+
+private struct GhosttyBooleanOverridePicker: View {
+    let state: GhosttyBooleanOverrideState
+    let action: (GhosttyBooleanOverrideState) -> Void
+
+    var body: some View {
+        Picker(
+            "",
+            selection: Binding(
+                get: { state },
+                set: { value in
+                    guard value != state else { return }
+                    action(value)
+                }
+            )
+        ) {
+            ForEach(GhosttyBooleanOverrideState.allCases, id: \.self) { option in
+                Text(option.title)
+                    .tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 236)
+    }
+}
+
+private struct GhosttyChoiceOverrideMenu: View {
+    let key: String
+    let value: String
+    let enabled: Bool
+    let choices: [String]
+    let setValue: (String) -> Void
+    let setDefault: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var title: String {
+        enabled && !value.isEmpty ? value : L("默认", "Default")
+    }
+
+    var body: some View {
+        Menu {
+            Button(L("默认", "Default")) {
+                setDefault()
+            }
+            Divider()
+            ForEach(choices, id: \.self) { choice in
+                Button(choice) {
+                    setValue(choice)
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(theme.floatingEmphasis)
+            .frame(width: 236, alignment: .trailing)
+        }
+        .menuStyle(.button)
+    }
+}
+
+private struct GhosttyPresetOption: Hashable {
+    let title: String
+    let value: String
+}
+
+private struct GhosttyPresetOverrideMenu: View {
+    let value: String
+    let options: [GhosttyPresetOption]
+    let setValue: (String) -> Void
+    let reset: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var selectedTitle: String {
+        guard !value.isEmpty else { return L("默认", "Default") }
+        return options.first { $0.value == value }?.title ?? value
+    }
+
+    var body: some View {
+        Menu {
+            Button(L("默认", "Default")) {
+                reset()
+            }
+            Divider()
+            ForEach(options, id: \.self) { option in
+                Button(option.title) {
+                    setValue(option.value)
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(selectedTitle)
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis)
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .frame(width: 236, alignment: .trailing)
+        }
+        .menuStyle(.button)
+    }
+}
+
+private struct ShellCommandSettingControl: View {
+    let value: String
+    let setValue: (String) -> Void
+    let reset: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField(L("默认登录 shell", "Default login shell"), text: Binding(
+                get: { value },
+                set: { setValue($0) }
+            ))
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .frame(width: 186)
+
+            GhosttyResetButton(
+                disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                action: reset
+            )
+        }
+        .frame(width: 236, alignment: .trailing)
+    }
+}
+
+private struct WorkingDirectorySettingControl: View {
+    let value: String
+    let setValue: (String) -> Void
+    let reset: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var displayName: String {
+        guard !value.isEmpty else { return L("继承", "Inherit") }
+        return URL(fileURLWithPath: value).lastPathComponent
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                let panel = NSOpenPanel()
+                panel.allowsMultipleSelection = false
+                panel.canChooseDirectories = true
+                panel.canChooseFiles = false
+                if panel.runModal() == .OK, let url = panel.url {
+                    setValue(url.path)
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder")
+                    Text(L("选择", "Choose"))
+                }
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+            }
+
+            Text(displayName)
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(value.isEmpty ? ConductorDesign.tertiaryText : theme.floatingEmphasis)
+                .lineLimit(1)
+                .frame(width: 110, alignment: .leading)
+
+            GhosttyResetButton(
+                disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                action: reset
+            )
+        }
+        .frame(width: 236, alignment: .trailing)
+    }
+}
+
+private struct ScrollbackPresetPicker: View {
+    private struct Preset: Hashable {
+        let title: String
+        let value: String
+    }
+
+    let value: String
+    let setValue: (String) -> Void
+    let reset: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var presets: [Preset] {
+        [
+            Preset(title: L("默认", "Default"), value: ""),
+            Preset(title: "10k", value: "10000"),
+            Preset(title: "50k", value: "50000"),
+            Preset(title: "100k", value: "100000"),
+            Preset(title: L("无限制", "Unlimited"), value: "0")
+        ]
+    }
+
+    private var selectedPreset: Preset {
+        presets.first { $0.value == value } ?? Preset(title: value, value: value)
+    }
+
+    var body: some View {
+        Menu {
+            ForEach(presets, id: \.self) { preset in
+                Button(preset.title) {
+                    if preset.value.isEmpty {
+                        reset()
+                    } else {
+                        setValue(preset.value)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(selectedPreset.title)
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis)
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .frame(width: 236, alignment: .trailing)
+        }
+        .menuStyle(.button)
+    }
+}
+
+private struct GhosttyResetButton: View {
+    let disabled: Bool
+    let action: () -> Void
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "arrow.uturn.backward")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(disabled ? ConductorDesign.tertiaryText : theme.floatingEmphasis)
+                .frame(width: 24, height: 24)
+                .background(theme.floatingControlFill)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(ConductorPressButtonStyle())
+        .disabled(disabled)
+    }
+}
+
+private struct GhosttyInlineTextOverrideControl: View {
+    let key: String
+    let placeholder: String
+    let value: String
+    let systemImage: String
+    let setValue: (String) -> Void
+    let reset: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis)
+                .frame(width: 22, height: 22)
+                .background(theme.floatingControlStrongFill)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            TextField(placeholder, text: Binding(
+                get: { value },
+                set: { setValue($0) }
+            ))
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .frame(width: 176)
+
+            GhosttyResetButton(
+                disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                action: reset
+            )
+        }
+        .frame(width: 236, alignment: .trailing)
+    }
+}
+
+private struct GhosttySliderOverrideControl: View {
+    let key: String
+    let value: String
+    let range: ClosedRange<CGFloat>
+    let step: CGFloat
+    let defaultValue: CGFloat
+    let valueText: (CGFloat) -> String
+    let setValue: (CGFloat) -> Void
+    let reset: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var currentValue: CGFloat {
+        guard let parsed = Double(value) else { return defaultValue }
+        return min(max(CGFloat(parsed), range.lowerBound), range.upperBound)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Slider(
+                value: Binding(
+                    get: { Double(currentValue) },
+                    set: { setValue(CGFloat($0)) }
+                ),
+                in: Double(range.lowerBound)...Double(range.upperBound),
+                step: Double(step)
+            )
+            .frame(width: 142)
+
+            Text(valueText(currentValue))
+                .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis)
+                .monospacedDigit()
+                .frame(width: 42, alignment: .trailing)
+
+            GhosttyResetButton(
+                disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                action: reset
+            )
+        }
+        .frame(width: 236, alignment: .trailing)
+    }
+}
+
+private struct GhosttyColorOverrideControl: View {
+    let key: String
+    let value: String
+    let setValue: (String) -> Void
+    let reset: () -> Void
+    @Environment(\.conductorTheme) private var theme
+
+    private var currentColor: Color {
+        Color.ghosttyHex(value) ?? Color(nsColor: .textColor)
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(currentColor)
+                .frame(width: 22, height: 22)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .stroke(theme.floatingStroke.opacity(0.75), lineWidth: 1)
+                }
+
+            ColorPicker("", selection: Binding(
+                get: { currentColor },
+                set: { setValue($0.ghosttyHexString ?? "#FFFFFF") }
+            ))
+            .labelsHidden()
+            .frame(width: 34)
+
+            Text(value.isEmpty ? L("默认", "Default") : value)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(theme.floatingEmphasis)
+                .lineLimit(1)
+                .frame(width: 112, alignment: .leading)
+
+            GhosttyResetButton(
+                disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                action: reset
+            )
+        }
+        .frame(width: 236, alignment: .trailing)
+    }
+}
+
+private struct GhosttyFileOverrideControl: View {
+    let key: String
+    let value: String
+    let setValue: (String) -> Void
+    let reset: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var displayName: String {
+        guard !value.isEmpty else { return L("未选择", "Not selected") }
+        return URL(fileURLWithPath: value).lastPathComponent
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                let panel = NSOpenPanel()
+                panel.allowsMultipleSelection = false
+                panel.canChooseDirectories = key == "working-directory"
+                panel.canChooseFiles = key != "working-directory"
+                if panel.runModal() == .OK, let url = panel.url {
+                    setValue(url.path)
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder")
+                    Text(L("选择", "Choose"))
+                }
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+            }
+
+            Text(displayName)
+                .font(.conductorSystem(size: 10.2, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis)
+                .lineLimit(1)
+                .frame(width: 110, alignment: .leading)
+
+            GhosttyResetButton(
+                disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                action: reset
+            )
+        }
+        .frame(width: 236, alignment: .trailing)
+    }
+}
+
+private struct TerminalRendererSummary: View {
+    let appearance: AppearancePreferences
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 8) {
+            summaryTile(
+                title: L("字体", "Font"),
+                value: appearance.terminalRenderer.effectiveFontFamilyName,
+                systemImage: "textformat"
+            )
+            summaryTile(
+                title: L("字号", "Size"),
+                value: terminalFontSizeText(appearance.terminalFontSize),
+                systemImage: "textformat.size"
+            )
+            summaryTile(
+                title: L("透明度", "Opacity"),
+                value: percentText(appearance.terminalRenderer.backgroundOpacity),
+                systemImage: "circle.lefthalf.filled"
+            )
+            summaryTile(
+                title: L("代理", "Proxy"),
+                value: appearance.terminalRenderer.proxy.enabled ? L("开启", "On") : L("关闭", "Off"),
+                systemImage: "network"
+            )
+        }
+    }
+
+    private func summaryTile(title: String, value: String, systemImage: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis)
+                .frame(width: 22, height: 22)
+                .background(theme.floatingControlStrongFill)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                Text(value)
+                    .font(.conductorSystem(size: 10.6, weight: .bold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 44)
+        .background(theme.floatingControlFill.opacity(0.54))
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.64), lineWidth: 1)
+        }
+    }
+
+    private func terminalFontSizeText(_ value: CGFloat) -> String {
+        let rounded = (value * 10).rounded() / 10
+        if rounded.rounded() == rounded {
+            return "\(Int(rounded)) pt"
+        }
+        return String(format: "%.1f pt", Double(rounded))
+    }
+
+    private func percentText(_ value: CGFloat) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+}
+
+private extension Color {
+    var ghosttyHexString: String? {
+        guard let color = NSColor(self).usingColorSpace(.deviceRGB) else { return nil }
+        let red = Int((color.redComponent * 255).rounded())
+        let green = Int((color.greenComponent * 255).rounded())
+        let blue = Int((color.blueComponent * 255).rounded())
+        return String(format: "#%02X%02X%02X", red, green, blue)
+    }
+
+    static func ghosttyHex(_ value: String) -> Color? {
+        let trimmed = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "#", with: "")
+        guard trimmed.count == 6 || trimmed.count == 8 else { return nil }
+
+        var raw: UInt64 = 0
+        guard Scanner(string: trimmed).scanHexInt64(&raw) else { return nil }
+
+        let red: CGFloat
+        let green: CGFloat
+        let blue: CGFloat
+        let alpha: CGFloat
+        if trimmed.count == 8 {
+            red = CGFloat((raw & 0xFF00_0000) >> 24) / 255
+            green = CGFloat((raw & 0x00FF_0000) >> 16) / 255
+            blue = CGFloat((raw & 0x0000_FF00) >> 8) / 255
+            alpha = CGFloat(raw & 0x0000_00FF) / 255
+        } else {
+            red = CGFloat((raw & 0xFF0000) >> 16) / 255
+            green = CGFloat((raw & 0x00FF00) >> 8) / 255
+            blue = CGFloat(raw & 0x0000FF) / 255
+            alpha = 1
+        }
+
+        return Color(nsColor: NSColor(calibratedRed: red, green: green, blue: blue, alpha: alpha))
+    }
+}
+
+private struct TerminalFontPickerMenu: View {
+    let selection: TerminalFontPreset
+    let downloadStates: [TerminalFontPreset: TerminalFontDownloadState]
+    let action: (TerminalFontPreset) -> Void
+    let download: (TerminalFontPreset) -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var selectedChoice: TerminalFontChoice {
+        TerminalFontLibrary.choices.first { $0.preset == selection }
+            ?? TerminalFontLibrary.choices[0]
+    }
+
+    var body: some View {
+        Menu {
+            ForEach(TerminalFontLibrary.choices) { choice in
+                Menu {
+                    Button {
+                        guard choice.preset != selection else { return }
+                        action(choice.preset)
+                    } label: {
+                        Label(
+                            choice.preset == selection ? L("当前使用", "Current Font") : L("设为终端字体", "Use for Terminal"),
+                            systemImage: choice.preset == selection ? "checkmark.circle" : "textformat"
+                        )
+                    }
+                    .disabled(choice.preset == selection)
+
+                    if !choice.isInstalled, choice.canDownload {
+                        Button {
+                            download(choice.preset)
+                        } label: {
+                            Label(
+                                choice.preset.directDownloadURL == nil ? L("打开获取页", "Open Get Page") : L("下载并安装", "Download and Install"),
+                                systemImage: choice.preset.directDownloadURL == nil ? "safari" : "arrow.down.circle"
+                            )
+                        }
+                        .disabled(downloadStates[choice.preset]?.isDownloading == true)
+                    }
+                } label: {
+                    Label(
+                        "\(choice.displayName) · \(menuStatusTitle(for: choice))",
+                        systemImage: menuStatusIcon(for: choice)
+                    )
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(selectedChoice.displayName)
+                        .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                        .lineLimit(1)
+                    Text(selectedChoice.statusTitle)
+                        .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
+                        .foregroundStyle(selectedChoice.isInstalled ? theme.floatingEmphasis : ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(theme.floatingEmphasis)
+            .frame(width: 212, alignment: .trailing)
+        }
+        .menuStyle(.button)
+    }
+
+    private func menuStatusTitle(for choice: TerminalFontChoice) -> String {
+        switch downloadStates[choice.preset] {
+        case .downloading:
+            return L("下载中", "Downloading")
+        case .installed(let family):
+            return L("已安装：\(family)", "Installed: \(family)")
+        case .failed:
+            return L("下载失败", "Download Failed")
+        case .idle, .none:
+            return choice.statusTitle
+        }
+    }
+
+    private func menuStatusIcon(for choice: TerminalFontChoice) -> String {
+        switch downloadStates[choice.preset] {
+        case .downloading:
+            "arrow.down.circle"
+        case .failed:
+            "exclamationmark.triangle"
+        case .installed:
+            "checkmark.circle"
+        case .idle, .none:
+            choice.isInstalled ? "checkmark.circle" : "arrow.down.circle"
+        }
+    }
+}
+
+private struct SettingsStatusPill: View {
+    let title: String
+    let systemImage: String
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
+            Text(title)
+                .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
+        }
+        .foregroundStyle(theme.floatingEmphasis)
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(theme.floatingControlStrongFill)
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .stroke(theme.floatingStroke.opacity(0.75), lineWidth: 1)
         }
     }
 }
@@ -1633,6 +4080,26 @@ private struct SettingsToggleRow: View {
     }
 }
 
+private struct SettingsTextFieldRow: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let text: Binding<String>
+
+    var body: some View {
+        SettingsControlRow(
+            title: title,
+            subtitle: subtitle,
+            systemImage: systemImage
+        ) {
+            TextField("", text: text)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .frame(width: 278)
+        }
+    }
+}
+
 private struct SettingsSliderRow: View {
     let title: String
     let subtitle: String
@@ -1708,6 +4175,37 @@ private struct SettingsSegmentedPicker<Option: Hashable>: View {
         .pickerStyle(.segmented)
         .labelsHidden()
         .frame(width: 278)
+    }
+}
+
+private struct SettingsMenuPicker<Option: Hashable>: View {
+    let options: [Option]
+    let selection: Option
+    let title: (Option) -> String
+    let action: (Option) -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Menu {
+            ForEach(options, id: \.self) { option in
+                Button(title(option)) {
+                    guard option != selection else { return }
+                    action(option)
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(title(selection))
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(theme.floatingEmphasis)
+            .frame(width: 278, alignment: .trailing)
+        }
+        .menuStyle(.button)
     }
 }
 
