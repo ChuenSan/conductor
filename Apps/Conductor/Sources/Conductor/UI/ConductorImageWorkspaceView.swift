@@ -40,7 +40,7 @@ struct ConductorImageWorkspaceView: View {
     let theme: TerminalTheme
     var isActive = true
 
-    @State private var image: NSImage?
+    @StateObject private var imageLoader = ConductorAsyncImageLoader()
     @State private var zoomMode: ConductorImageZoomMode = .fit
     @State private var zoomScale: CGFloat = 1
     @State private var statusMessage: String?
@@ -54,7 +54,7 @@ struct ConductorImageWorkspaceView: View {
         }
         .background(theme.terminalBackground)
         .task(id: url) {
-            image = NSImage(contentsOf: url)
+            imageLoader.load(url: url)
             statusMessage = nil
         }
         .background {
@@ -67,7 +67,7 @@ struct ConductorImageWorkspaceView: View {
 
     private var imageToolbar: some View {
         HStack(spacing: 8) {
-            if let image {
+            if let image = imageLoader.image {
                 statusPill(systemImage: "photo", title: dimensions(for: image))
             }
 
@@ -128,7 +128,7 @@ struct ConductorImageWorkspaceView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let image {
+        if let image = imageLoader.image {
             GeometryReader { proxy in
                 ScrollView([.vertical, .horizontal]) {
                     Image(nsImage: image)
@@ -142,10 +142,10 @@ struct ConductorImageWorkspaceView: View {
             }
         } else {
             VStack(spacing: 10) {
-                Image(systemName: "photo")
+                Image(systemName: imageLoader.isLoading ? "hourglass" : "photo")
                     .font(.conductorSystem(size: 28, weight: .semibold, family: fontFamily, scale: fontScale))
                     .foregroundStyle(theme.shellChromeText.opacity(0.28))
-                Text(L("图片无法读取", "Image Could Not Load"))
+                Text(imageLoader.isLoading ? L("正在读取图片", "Loading Image") : L("图片无法读取", "Image Could Not Load"))
                     .font(.conductorSystem(size: 13, weight: .semibold, family: fontFamily, scale: fontScale))
                     .foregroundStyle(theme.shellChromeText.opacity(0.62))
                 Text(url.lastPathComponent)

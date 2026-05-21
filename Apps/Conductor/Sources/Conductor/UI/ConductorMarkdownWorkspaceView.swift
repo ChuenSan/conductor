@@ -36,7 +36,6 @@ private enum ConductorMarkdownMode: String, CaseIterable, Identifiable {
 }
 
 struct ConductorMarkdownWorkspaceView: View {
-    @ObservedObject var model: ConductorWindowModel
     @Binding var text: String
     let fileURL: URL
     let rootURL: URL
@@ -48,6 +47,7 @@ struct ConductorMarkdownWorkspaceView: View {
     var searchNextToken = 0
     var searchPreviousToken = 0
     var onTextSnapshot: (String) -> Void = { _ in }
+    var openFile: (URL) -> Void = { _ in }
 
     @State private var selectedMode: ConductorMarkdownMode?
     @State private var outlineVisible = true
@@ -61,17 +61,21 @@ struct ConductorMarkdownWorkspaceView: View {
     @State private var searchVisible = false
     @State private var searchHistory: [String]
     @State private var document: ConductorMarkdownDocument
+    @State private var cachedSearchMatches: [ConductorMarkdownSearchMatch] = []
+    @State private var parseTask: Task<Void, Never>?
+    @State private var searchTask: Task<Void, Never>?
+    @State private var parseGeneration = 0
+    @State private var searchGeneration = 0
+    @State private var parsePending = false
+    @State private var searchPending = false
 
-    private var searchMatches: [ConductorMarkdownSearchMatch] {
-        ConductorMarkdownSearch.matches(in: text, query: searchQuery)
-    }
+    private var searchMatches: [ConductorMarkdownSearchMatch] { cachedSearchMatches }
 
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorFontFamily) private var fontFamily
 
     init(
-        model: ConductorWindowModel,
         text: Binding<String>,
         fileURL: URL,
         rootURL: URL,
@@ -82,9 +86,9 @@ struct ConductorMarkdownWorkspaceView: View {
         searchFocusToken: Int = 0,
         searchNextToken: Int = 0,
         searchPreviousToken: Int = 0,
-        onTextSnapshot: @escaping (String) -> Void = { _ in }
+        onTextSnapshot: @escaping (String) -> Void = { _ in },
+        openFile: @escaping (URL) -> Void = { _ in }
     ) {
-        self.model = model
         _text = text
         self.fileURL = fileURL
         self.rootURL = rootURL
@@ -96,7 +100,8 @@ struct ConductorMarkdownWorkspaceView: View {
         self.searchNextToken = searchNextToken
         self.searchPreviousToken = searchPreviousToken
         self.onTextSnapshot = onTextSnapshot
-        _document = State(initialValue: ConductorMarkdownParser.parse(text.wrappedValue))
+        self.openFile = openFile
+        _document = State(initialValue: .empty)
         _searchHistory = State(initialValue: ConductorSearchHistory.load(scope: "markdown"))
     }
 
@@ -108,13 +113,16 @@ struct ConductorMarkdownWorkspaceView: View {
                 markdownBody(mode: mode, width: proxy.size.width)
             }
             .background(theme.terminalBackground)
+            .onAppear {
+                scheduleMarkdownParse(delay: .zero)
+                refreshSearchMatches(resetSelection: true, delay: .zero)
+            }
             .onChange(of: text) {
-                document = ConductorMarkdownParser.parse(text)
-                clampSearchSelectionAndScroll()
+                scheduleMarkdownParse(delay: .milliseconds(180))
+                refreshSearchMatches(resetSelection: false, delay: .milliseconds(160))
             }
             .onChange(of: searchQuery) {
-                selectedSearchIndex = 0
-                jumpToCurrentSearchMatch()
+                refreshSearchMatches(resetSelection: true, delay: .milliseconds(80))
             }
             .onChange(of: searchFocusToken) { _, newValue in
                 guard newValue > 0 else { return }
@@ -128,6 +136,10 @@ struct ConductorMarkdownWorkspaceView: View {
                 guard newValue > 0 else { return }
                 moveSearchSelection(-1)
             }
+            .onDisappear {
+                parseTask?.cancel()
+                searchTask?.cancel()
+            }
         }
     }
 
@@ -138,7 +150,7 @@ struct ConductorMarkdownWorkspaceView: View {
             }
             return selectedMode
         }
-        return .source
+        return width >= 760 ? .split : .preview
     }
 
     private var sourceEditor: some View {
@@ -305,6 +317,7 @@ struct ConductorMarkdownWorkspaceView: View {
     }
 
     private var searchStatus: String {
+        if searchPending { return L("搜索中", "Searching") }
         guard !searchMatches.isEmpty else { return "0/0" }
         return "\(selectedSearchIndex + 1)/\(searchMatches.count)"
     }
@@ -453,6 +466,66 @@ struct ConductorMarkdownWorkspaceView: View {
         searchHistory = ConductorSearchHistory.load(scope: "markdown")
     }
 
+    private func scheduleMarkdownParse(delay: Duration) {
+        parseTask?.cancel()
+        parseGeneration += 1
+        let generation = parseGeneration
+        let snapshot = text
+        parsePending = true
+        parseTask = Task { @MainActor in
+            if delay != .zero {
+                try? await Task.sleep(for: delay)
+            }
+            guard !Task.isCancelled else { return }
+            DispatchQueue.global(qos: .userInitiated).async {
+                let parsed = ConductorMarkdownParser.parse(snapshot)
+                DispatchQueue.main.async {
+                    guard generation == parseGeneration else { return }
+                    parsePending = false
+                    document = parsed
+                    clampSearchSelectionAndScroll()
+                }
+            }
+        }
+    }
+
+    private func refreshSearchMatches(resetSelection: Bool, delay: Duration) {
+        let needle = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else {
+            searchTask?.cancel()
+            searchPending = false
+            cachedSearchMatches = []
+            selectedSearchIndex = 0
+            selectedPreviewBlockID = nil
+            sourceSelectionRange = nil
+            return
+        }
+
+        searchTask?.cancel()
+        searchGeneration += 1
+        let generation = searchGeneration
+        let snapshot = text
+        searchPending = true
+        searchTask = Task { @MainActor in
+            if delay != .zero {
+                try? await Task.sleep(for: delay)
+            }
+            guard !Task.isCancelled else { return }
+            let matches = await Task.detached(priority: .userInitiated) {
+                ConductorMarkdownSearch.matches(in: snapshot, query: needle, maxMatches: 20_000)
+            }.value
+            guard generation == searchGeneration else { return }
+            searchPending = false
+            cachedSearchMatches = matches
+            if resetSelection {
+                selectedSearchIndex = 0
+            } else if selectedSearchIndex >= cachedSearchMatches.count {
+                selectedSearchIndex = max(0, cachedSearchMatches.count - 1)
+            }
+            jumpToCurrentSearchMatch()
+        }
+    }
+
     private func openMarkdownURL(_ target: String) {
         if target.hasPrefix("#") {
             let anchor = ConductorMarkdownParser.slug(String(target.dropFirst()))
@@ -472,7 +545,7 @@ struct ConductorMarkdownWorkspaceView: View {
             fileURL: fileURL,
             rootURL: rootURL
         ) else { return }
-        model.openFileInWorkspace(resolved, rootURL: rootURL)
+        openFile(resolved)
     }
 }
 
@@ -664,38 +737,55 @@ private struct ConductorMarkdownBlockView: View {
 
     @ViewBuilder
     private func markdownImage(alt: String, target: String) -> some View {
-        if let imageURL = ConductorMarkdownPathResolver.resolve(target, fileURL: fileURL, rootURL: rootURL),
-           let image = NSImage(contentsOf: imageURL) {
-            VStack(alignment: .leading, spacing: 6) {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 620, maxHeight: 420)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                if !alt.isEmpty {
-                    Text(alt)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(theme.shellChromeTextMuted.opacity(0.72))
+        if let imageURL = ConductorMarkdownPathResolver.resolve(target, fileURL: fileURL, rootURL: rootURL) {
+            ConductorAsyncImage(url: imageURL) { image in
+                VStack(alignment: .leading, spacing: 6) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 620, maxHeight: 420)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    if !alt.isEmpty {
+                        Text(alt)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(theme.shellChromeTextMuted.opacity(0.72))
+                    }
                 }
+            } placeholder: { isLoading, _ in
+                markdownImageUnavailable(
+                    alt: alt,
+                    target: target,
+                    systemImage: isLoading ? "hourglass" : "photo.badge.exclamationmark",
+                    title: isLoading ? L("正在读取图片", "Loading image") : nil
+                )
             }
         } else {
-            HStack(spacing: 9) {
-                Image(systemName: "photo.badge.exclamationmark")
-                    .font(.system(size: 15, weight: .semibold))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(alt.isEmpty ? L("图片无法显示", "Image unavailable") : alt)
-                        .font(.system(size: 12.5, weight: .semibold))
-                    Text(target)
-                        .font(.system(size: 10.5, weight: .medium))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            }
-            .foregroundStyle(theme.shellChromeTextMuted.opacity(0.76))
-            .padding(10)
-            .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.35 : 0.24))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            markdownImageUnavailable(alt: alt, target: target)
         }
+    }
+
+    private func markdownImageUnavailable(
+        alt: String,
+        target: String,
+        systemImage: String = "photo.badge.exclamationmark",
+        title: String? = nil
+    ) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title ?? (alt.isEmpty ? L("图片无法显示", "Image unavailable") : alt))
+                    .font(.system(size: 12.5, weight: .semibold))
+                Text(target)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .foregroundStyle(theme.shellChromeTextMuted.opacity(0.76))
+        .padding(10)
+        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.35 : 0.24))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func markdownTable(_ rows: [[String]]) -> some View {
@@ -736,6 +826,8 @@ private struct ConductorMarkdownBlockView: View {
 private struct ConductorMarkdownDocument {
     let blocks: [ConductorMarkdownBlock]
     let headings: [ConductorMarkdownHeading]
+
+    static let empty = ConductorMarkdownDocument(blocks: [], headings: [])
 
     func block(containing utf16Location: Int) -> ConductorMarkdownBlock? {
         blocks.first { block in
@@ -800,7 +892,7 @@ private struct ConductorMarkdownSearchMatch: Equatable {
 }
 
 private enum ConductorMarkdownSearch {
-    static func matches(in text: String, query: String) -> [ConductorMarkdownSearchMatch] {
+    static func matches(in text: String, query: String, maxMatches: Int = .max) -> [ConductorMarkdownSearchMatch] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
         let nsText = text as NSString
@@ -810,6 +902,7 @@ private enum ConductorMarkdownSearch {
             let found = nsText.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive], range: searchRange)
             guard found.location != NSNotFound else { break }
             results.append(ConductorMarkdownSearchMatch(range: found))
+            if results.count >= maxMatches { break }
             let nextLocation = found.location + max(found.length, 1)
             guard nextLocation < nsText.length else { break }
             searchRange = NSRange(location: nextLocation, length: nsText.length - nextLocation)

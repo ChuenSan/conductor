@@ -53,6 +53,11 @@ private struct WorkspaceFileDocument: Equatable {
     let state: WorkspaceFileDocumentState
 }
 
+private struct WorkspaceFileLoadResult: Equatable {
+    let document: WorkspaceFileDocument
+    let diskSignature: WorkspaceFileDiskSignature?
+}
+
 private struct WorkspaceFilePerformanceProfile {
     let interactiveByteLimit: Int
     let interactiveLineLimit: Int
@@ -151,6 +156,22 @@ private struct WorkspaceFileService {
         } catch {
             return WorkspaceFileDocument(title: tab.title, subtitle: subtitle, isReadOnly: true, state: .message(error.localizedDescription))
         }
+    }
+
+    func loadResult(for tab: ConductorWorkspaceFileTab) -> WorkspaceFileLoadResult {
+        WorkspaceFileLoadResult(
+            document: document(for: tab),
+            diskSignature: diskSignature(for: tab)
+        )
+    }
+
+    func loadingDocument(for tab: ConductorWorkspaceFileTab) -> WorkspaceFileDocument {
+        WorkspaceFileDocument(
+            title: tab.title,
+            subtitle: relativePath(for: tab.fileURL.standardizedFileURL, rootURL: tab.rootURL),
+            isReadOnly: true,
+            state: .message(L("正在读取文件", "Loading file"))
+        )
     }
 
     func save(_ text: String, to tab: ConductorWorkspaceFileTab) throws {
@@ -481,7 +502,7 @@ private struct ConductorWorkspaceContentTabPill: View {
 }
 
 private struct ConductorWorkspaceFileEditorView: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
     let tab: ConductorWorkspaceFileTab
     let isSelected: Bool
     @State private var document: WorkspaceFileDocument
@@ -492,11 +513,15 @@ private struct ConductorWorkspaceFileEditorView: View {
     @State private var editorSnapshotToken = 0
     @State private var autosaveTask: Task<Void, Never>?
     @State private var externalWatchTask: Task<Void, Never>?
+    @State private var searchTask: Task<Void, Never>?
     @State private var saveGeneration = 0
+    @State private var loadGeneration = 0
+    @State private var diffGeneration = 0
     @State private var pendingSaveRequest: WorkspaceFileSaveRequest?
     @State private var lastKnownDiskSignature: WorkspaceFileDiskSignature?
     @State private var externalChangeDetected = false
     @State private var externalDiffVisible = false
+    @State private var externalDiffState: WorkspaceFileDiffState = .idle
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorFontFamily) private var fontFamily
@@ -508,6 +533,8 @@ private struct ConductorWorkspaceFileEditorView: View {
     @State private var searchHistory: [String]
     @State private var selectedSearchIndex = 0
     @State private var cachedSearchMatches: [NSRange] = []
+    @State private var searchGeneration = 0
+    @State private var searchPending = false
     @State private var sourceSelectionRange: NSRange?
     @State private var sourceSelectionToken = 0
     @State private var largeSearchStatus = "0/0"
@@ -518,16 +545,11 @@ private struct ConductorWorkspaceFileEditorView: View {
         self.model = model
         self.tab = tab
         self.isSelected = isSelected
-        let loaded = WorkspaceFileService().document(for: tab)
+        let loaded = WorkspaceFileService().loadingDocument(for: tab)
         _document = State(initialValue: loaded)
-        if case .text(let loadedText) = loaded.state {
-            _text = State(initialValue: loadedText)
-            _savedText = State(initialValue: loadedText)
-        } else {
-            _text = State(initialValue: "")
-            _savedText = State(initialValue: "")
-        }
-        _lastKnownDiskSignature = State(initialValue: WorkspaceFileService().diskSignature(for: tab))
+        _text = State(initialValue: "")
+        _savedText = State(initialValue: "")
+        _lastKnownDiskSignature = State(initialValue: nil)
         _searchHistory = State(initialValue: ConductorSearchHistory.load(scope: "workspace-file"))
     }
 
@@ -564,10 +586,12 @@ private struct ConductorWorkspaceFileEditorView: View {
             content
         }
         .background(theme.terminalBackground)
+        .task(id: tab.id) {
+            await loadDocument(resetDirty: true)
+        }
         .onAppear {
             model.setWorkspaceFileTabDirty(tab.id, isDirty: isDirty)
             model.setWorkspaceFileTabExternallyChanged(tab.id, changed: externalChangeDetected)
-            startExternalChangeWatch()
             if isSelected {
                 editorFocusToken &+= 1
             }
@@ -606,11 +630,11 @@ private struct ConductorWorkspaceFileEditorView: View {
         }
         .onChange(of: searchQuery) {
             refreshSearchMatches(resetSelection: true)
-            selectCurrentSearchMatch()
         }
         .onDisappear {
             autosaveTask?.cancel()
             externalWatchTask?.cancel()
+            searchTask?.cancel()
             if isDirty, !externalChangeDetected {
                 saveGeneration += 1
                 saveSnapshot(text, generation: saveGeneration, showStatus: false, closeAfterSave: false)
@@ -691,7 +715,7 @@ private struct ConductorWorkspaceFileEditorView: View {
                     .lineLimit(2)
                 Spacer(minLength: 8)
                 Button(externalDiffVisible ? L("隐藏差异", "Hide Diff") : L("查看差异", "View Diff")) {
-                    externalDiffVisible.toggle()
+                    toggleExternalDiff()
                 }
                 Button(L("重新载入", "Reload")) {
                     reload()
@@ -708,7 +732,7 @@ private struct ConductorWorkspaceFileEditorView: View {
 
             if externalDiffVisible {
                 ScrollView {
-                    Text(externalDiffSummary())
+                    Text(externalDiffText)
                         .font(.system(size: 11, weight: .regular, design: .monospaced))
                         .foregroundStyle(theme.shellChromeText.opacity(0.76))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -726,6 +750,23 @@ private struct ConductorWorkspaceFileEditorView: View {
         }
     }
 
+    private var externalDiffText: String {
+        switch externalDiffState {
+        case .idle:
+            L("准备比较磁盘版本", "Preparing disk comparison")
+        case .loading:
+            L("正在比较磁盘版本", "Comparing disk version")
+        case .ready(let text):
+            text
+        }
+    }
+
+    private func toggleExternalDiff() {
+        externalDiffVisible.toggle()
+        guard externalDiffVisible else { return }
+        loadExternalDiff()
+    }
+
     @ViewBuilder
     private var content: some View {
         switch document.state {
@@ -733,7 +774,6 @@ private struct ConductorWorkspaceFileEditorView: View {
             Group {
                 if isMarkdown {
                     ConductorMarkdownWorkspaceView(
-                        model: model,
                         text: $text,
                         fileURL: tab.fileURL,
                         rootURL: tab.rootURL,
@@ -744,7 +784,8 @@ private struct ConductorWorkspaceFileEditorView: View {
                         searchFocusToken: searchFocusToken,
                         searchNextToken: searchNextToken,
                         searchPreviousToken: searchPreviousToken,
-                        onTextSnapshot: handleEditorSnapshot
+                        onTextSnapshot: handleEditorSnapshot,
+                        openFile: { url in model.openFileInWorkspace(url, rootURL: tab.rootURL) }
                     )
                 } else {
                     ConductorCodeEditSourceEditor(
@@ -805,7 +846,6 @@ private struct ConductorWorkspaceFileEditorView: View {
                             searchQuery = query
                             refreshSearchMatches(resetSelection: true)
                             recordSearchQuery()
-                            selectCurrentSearchMatch()
                         }
                     }
                 } label: {
@@ -864,6 +904,7 @@ private struct ConductorWorkspaceFileEditorView: View {
 
     private var searchStatus: String {
         if isLargeText { return largeSearchStatus }
+        if searchPending { return L("搜索中", "Searching") }
         guard !searchMatches.isEmpty else { return "0/0" }
         return "\(selectedSearchIndex + 1)/\(searchMatches.count)"
     }
@@ -994,20 +1035,48 @@ private struct ConductorWorkspaceFileEditorView: View {
 
     private func refreshSearchMatches(resetSelection: Bool) {
         guard !isLargeText, !isMarkdown else {
+            searchTask?.cancel()
+            searchPending = false
             cachedSearchMatches = []
             selectedSearchIndex = 0
             sourceSelectionRange = nil
             return
         }
-        cachedSearchMatches = Self.searchMatches(in: text, query: searchQuery)
-        if resetSelection {
+
+        let needle = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else {
+            searchTask?.cancel()
+            searchPending = false
+            cachedSearchMatches = []
             selectedSearchIndex = 0
-        } else if selectedSearchIndex >= cachedSearchMatches.count {
-            selectedSearchIndex = max(0, cachedSearchMatches.count - 1)
+            sourceSelectionRange = nil
+            return
+        }
+
+        searchTask?.cancel()
+        searchGeneration += 1
+        let generation = searchGeneration
+        let snapshot = text
+        searchPending = true
+        searchTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(resetSelection ? 80 : 160))
+            guard !Task.isCancelled else { return }
+            let matches = await Task.detached(priority: .userInitiated) {
+                Self.searchMatches(in: snapshot, query: needle, maxMatches: 20_000)
+            }.value
+            guard generation == searchGeneration else { return }
+            searchPending = false
+            cachedSearchMatches = matches
+            if resetSelection {
+                selectedSearchIndex = 0
+            } else if selectedSearchIndex >= cachedSearchMatches.count {
+                selectedSearchIndex = max(0, cachedSearchMatches.count - 1)
+            }
+            selectCurrentSearchMatch()
         }
     }
 
-    private static func searchMatches(in text: String, query: String) -> [NSRange] {
+    nonisolated private static func searchMatches(in text: String, query: String, maxMatches: Int = .max) -> [NSRange] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return [] }
         let haystack = text as NSString
@@ -1017,6 +1086,7 @@ private struct ConductorWorkspaceFileEditorView: View {
             let match = haystack.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], range: range)
             guard match.location != NSNotFound else { break }
             matches.append(match)
+            if matches.count >= maxMatches { break }
             let nextLocation = match.location + max(match.length, 1)
             range = NSRange(location: nextLocation, length: haystack.length - nextLocation)
         }
@@ -1078,15 +1148,19 @@ private struct ConductorWorkspaceFileEditorView: View {
         let tab = tab
         Task {
             let result = await Task.detached(priority: .utility) {
-                Result { try WorkspaceFileService().save(snapshot, to: tab) }
+                Result {
+                    try WorkspaceFileService().save(snapshot, to: tab)
+                    return WorkspaceFileService().diskSignature(for: tab)
+                }
             }.value
             guard generation == saveGeneration else { return }
             switch result {
-            case .success:
+            case .success(let signature):
                 text = snapshot
                 savedText = snapshot
-                lastKnownDiskSignature = WorkspaceFileService().diskSignature(for: tab)
+                lastKnownDiskSignature = signature
                 externalChangeDetected = false
+                externalDiffState = .idle
                 statusMessage = showStatus ? L("已保存", "Saved") : L("已自动保存", "Autosaved")
                 model.setWorkspaceFileTabDirty(tab.id, isDirty: false)
                 model.setWorkspaceFileTabExternallyChanged(tab.id, changed: false)
@@ -1102,33 +1176,79 @@ private struct ConductorWorkspaceFileEditorView: View {
     private func reload() {
         autosaveTask?.cancel()
         saveGeneration += 1
-        let loaded = WorkspaceFileService().document(for: tab)
-        document = loaded
-        lastKnownDiskSignature = WorkspaceFileService().diskSignature(for: tab)
+        Task {
+            await loadDocument(resetDirty: true)
+        }
+    }
+
+    private func loadDocument(resetDirty: Bool) async {
+        autosaveTask?.cancel()
+        searchTask?.cancel()
+        loadGeneration += 1
+        let generation = loadGeneration
+        let tab = tab
+        statusMessage = L("正在读取文件", "Loading file")
+        let result = await Task.detached(priority: .userInitiated) {
+            WorkspaceFileService().loadResult(for: tab)
+        }.value
+        guard generation == loadGeneration else { return }
+        applyLoadedDocument(result, resetDirty: resetDirty)
+    }
+
+    private func applyLoadedDocument(_ result: WorkspaceFileLoadResult, resetDirty: Bool) {
+        document = result.document
+        lastKnownDiskSignature = result.diskSignature
         externalChangeDetected = false
-        if case .text(let loadedText) = loaded.state {
+        externalDiffVisible = false
+        externalDiffState = .idle
+        if case .text(let loadedText) = result.document.state {
             text = loadedText
-            savedText = loadedText
+            if resetDirty {
+                savedText = loadedText
+            }
         } else {
             text = ""
-            savedText = ""
+            if resetDirty {
+                savedText = ""
+            }
         }
         refreshSearchMatches(resetSelection: true)
         model.setWorkspaceFileTabDirty(tab.id, isDirty: false)
         model.setWorkspaceFileTabExternallyChanged(tab.id, changed: false)
         statusMessage = nil
-        externalDiffVisible = false
+        startExternalChangeWatch()
     }
 
     private func keepCurrentVersionAfterExternalChange() {
-        lastKnownDiskSignature = WorkspaceFileService().diskSignature(for: tab)
+        let tab = tab
+        Task {
+            lastKnownDiskSignature = await Task.detached(priority: .utility) {
+                WorkspaceFileService().diskSignature(for: tab)
+            }.value
+        }
         externalChangeDetected = false
         externalDiffVisible = false
+        externalDiffState = .idle
         model.setWorkspaceFileTabExternallyChanged(tab.id, changed: false)
         statusMessage = L("已保留当前编辑内容，可再次保存覆盖磁盘版本", "Keeping current edits; save again to overwrite the disk version")
     }
 
-    private func externalDiffSummary() -> String {
+    private func loadExternalDiff() {
+        diffGeneration += 1
+        let generation = diffGeneration
+        let tab = tab
+        let snapshot = text
+        externalDiffState = .loading
+        Task {
+            let summary = await Task.detached(priority: .utility) {
+                Self.externalDiffSummary(tab: tab, currentText: snapshot)
+            }.value
+            guard generation == diffGeneration else { return }
+            externalDiffState = .ready(summary)
+        }
+    }
+
+    nonisolated private static func externalDiffSummary(tab: ConductorWorkspaceFileTab, currentText text: String) -> String {
         if let values = try? tab.fileURL.resourceValues(forKeys: [.fileSizeKey]),
            (values.fileSize ?? 0) > 2 * 1024 * 1024 {
             return L("磁盘版本超过 2 MB，差异摘要已跳过。请重新载入或在系统工具中比较。", "The disk version is over 2 MB, so the inline diff summary was skipped. Reload or compare with an external tool.")
@@ -1170,13 +1290,16 @@ private struct ConductorWorkspaceFileEditorView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard !Task.isCancelled else { return }
-                checkExternalChange()
+                await checkExternalChange()
             }
         }
     }
 
-    private func checkExternalChange() {
-        guard let signature = WorkspaceFileService().diskSignature(for: tab) else { return }
+    private func checkExternalChange() async {
+        let tab = tab
+        guard let signature = await Task.detached(priority: .utility, operation: {
+            WorkspaceFileService().diskSignature(for: tab)
+        }).value else { return }
         guard let lastKnownDiskSignature else {
             self.lastKnownDiskSignature = signature
             return
@@ -1195,6 +1318,12 @@ private struct WorkspaceFileSaveRequest: Equatable {
     let generation: Int
     let showStatus: Bool
     let closeAfterSave: Bool
+}
+
+private enum WorkspaceFileDiffState: Equatable {
+    case idle
+    case loading
+    case ready(String)
 }
 
 struct ConductorCodeEditSourceEditor: View {

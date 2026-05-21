@@ -1515,7 +1515,7 @@ private final class FileManagerPanelStore: ObservableObject {
 }
 
 struct FileManagerPanel: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
     let request: FileManagerPanelRequest
     let searchFocusToken: Int
     let searchNextToken: Int
@@ -2184,7 +2184,7 @@ struct FileManagerPanel: View {
         case .directory(let message):
             panelMessage(systemImage: "folder", text: message)
         case .image(let url):
-            if let image = NSImage(contentsOf: url) {
+            ConductorAsyncImage(url: url) { image in
                 GeometryReader { proxy in
                     Image(nsImage: image)
                         .resizable()
@@ -2192,8 +2192,11 @@ struct FileManagerPanel: View {
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .background(theme.terminalBackground)
                 }
-            } else {
-                panelMessage(systemImage: "photo", text: L("图片无法读取", "Image could not be loaded"))
+            } placeholder: { isLoading, _ in
+                panelMessage(
+                    systemImage: isLoading ? "hourglass" : "photo",
+                    text: isLoading ? L("正在读取图片", "Loading image") : L("图片无法读取", "Image could not be loaded")
+                )
             }
         case .nativePreview(let url, let descriptor):
             VStack(spacing: 0) {

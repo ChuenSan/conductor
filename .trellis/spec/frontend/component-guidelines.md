@@ -168,6 +168,11 @@ workspace overview, and compact status modules.
   early when values are unchanged, and resize/selection/search updates should invalidate only
   the visible rect unless the whole backing document truly changed. Do not call
   `setNeedsDisplay(bounds)` from every SwiftUI update on a tall document view.
+- Document reading surfaces must keep file loading, Markdown parsing, text search, image
+  decoding, and inline diff generation outside SwiftUI `body` and view initializers. Use a
+  cancellable task, generation token, background queue, actor, or AppKit surface, then publish
+  a compact loading/ready/error snapshot back to the view. Shared image display must use the
+  async image loader/cache path instead of calling `NSImage(contentsOf:)` from `body`.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.
