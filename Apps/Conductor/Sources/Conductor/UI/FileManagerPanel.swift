@@ -2712,6 +2712,24 @@ private struct SourcePreviewMinimap: View {
     }
 }
 
+private final class FileDropURLCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var urls: [URL] = []
+
+    func append(_ url: URL) {
+        lock.lock()
+        urls.append(url)
+        lock.unlock()
+    }
+
+    func snapshot() -> [URL] {
+        lock.lock()
+        let currentURLs = urls
+        lock.unlock()
+        return currentURLs
+    }
+}
+
 private struct FileManagerRowView: View {
     let item: FileManagerItem
     let depth: Int
@@ -2957,8 +2975,7 @@ private struct FileManagerRowView: View {
     }
 
     private func loadDroppedFileURLs(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
-        var urls: [URL] = []
-        let lock = NSLock()
+        let collector = FileDropURLCollector()
         let group = DispatchGroup()
         for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
             group.enter()
@@ -2977,14 +2994,12 @@ private struct FileManagerRowView: View {
                     resolvedURL = nil
                 }
                 if let resolvedURL {
-                    lock.lock()
-                    urls.append(resolvedURL)
-                    lock.unlock()
+                    collector.append(resolvedURL)
                 }
             }
         }
         group.notify(queue: .main) {
-            completion(urls)
+            completion(collector.snapshot())
         }
     }
 }
