@@ -232,6 +232,11 @@ workspace overview, and compact status modules.
 - Missing terminal-originated file -> handled by Conductor notification/error UI and the
   Ghostty fallback must not show a LaunchServices alert.
 - Unreadable directory -> show a panel error state; do not crash or block the terminal host.
+- Document, Markdown, and image preview work must use cancellable tasks tied to view/model
+  lifetime. Do file bytes and parsing off the main actor, then publish compact UI state back on
+  the main actor. Avoid creating or mutating AppKit image/view objects from detached background
+  queues; rapid tab switching can otherwise turn preview races into app exits with little useful
+  crash context.
 - Unsupported or binary file -> show a preview message and keep Reveal/Copy/Insert actions
   available.
 

@@ -7,6 +7,7 @@ enum ConductorLog {
     static let terminal = Logger(subsystem: subsystem, category: "terminal")
     static let app = Logger(subsystem: subsystem, category: "app")
     static let performance = Logger(subsystem: subsystem, category: "performance")
+    static let diagnostics = Logger(subsystem: subsystem, category: "diagnostics")
 }
 
 enum ConductorSignpost {

@@ -477,15 +477,13 @@ struct ConductorMarkdownWorkspaceView: View {
                 try? await Task.sleep(for: delay)
             }
             guard !Task.isCancelled else { return }
-            DispatchQueue.global(qos: .userInitiated).async {
-                let parsed = ConductorMarkdownParser.parse(snapshot)
-                DispatchQueue.main.async {
-                    guard generation == parseGeneration else { return }
-                    parsePending = false
-                    document = parsed
-                    clampSearchSelectionAndScroll()
-                }
-            }
+            let parsed = await Task.detached(priority: .userInitiated) {
+                ConductorMarkdownParser.parse(snapshot)
+            }.value
+            guard !Task.isCancelled, generation == parseGeneration else { return }
+            parsePending = false
+            document = parsed
+            clampSearchSelectionAndScroll()
         }
     }
 

@@ -3,6 +3,16 @@ import Combine
 import ConductorCore
 import SwiftUI
 
+private let conductorUncaughtExceptionHandler: @convention(c) (NSException) -> Void = { exception in
+    ConductorDiagnostics.recordSync(
+        "uncaught-nsexception",
+        fields: [
+            "name": exception.name.rawValue,
+            "reasonLength": exception.reason?.count ?? 0
+        ]
+    )
+}
+
 @main
 struct ConductorApp {
     @MainActor
@@ -213,6 +223,14 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     func startApplication() {
         guard !didStart else { return }
         didStart = true
+        NSSetUncaughtExceptionHandler(conductorUncaughtExceptionHandler)
+        ConductorDiagnostics.record(
+            "app-start",
+            fields: [
+                "diagnostics": ConductorDiagnostics.logURL.path,
+                "pid": ProcessInfo.processInfo.processIdentifier
+            ]
+        )
         let window = ConductorWindow(
             contentRect: NSRect(x: 120, y: 120, width: 1320, height: 860),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -271,15 +289,18 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        ConductorDiagnostics.record("app-active")
         GhosttyAppRuntime.shared.setAppFocus(true)
     }
 
     func applicationDidResignActive(_ notification: Notification) {
+        ConductorDiagnostics.record("app-inactive")
         GhosttyAppRuntime.shared.setAppFocus(false)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         isTerminating = true
+        ConductorDiagnostics.recordSync("app-will-terminate")
         ConductorLog.app.info("Conductor will terminate")
         Self.appendStressTrace("applicationWillTerminate", to: ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"])
         model.flushPersistence()
@@ -297,12 +318,14 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         Self.appendStressTrace("applicationShouldTerminateAfterLastWindowClosed", to: ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"])
+        ConductorDiagnostics.record("last-window-closed")
         ConductorLog.app.warning("Last window closed; keeping Conductor process alive")
         return false
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
+            ConductorDiagnostics.record("app-reopen-no-visible-windows")
             ConductorLog.app.info("Reopening Conductor main window after no visible windows")
             didStart = false
             startApplication()
@@ -313,6 +336,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     func windowWillClose(_ notification: Notification) {
         guard notification.object as? NSWindow === window else { return }
+        ConductorDiagnostics.record("main-window-will-close", fields: ["terminating": isTerminating])
         ConductorLog.app.warning("Main window will close")
         if !isTerminating {
             model.closeAllSurfaces()

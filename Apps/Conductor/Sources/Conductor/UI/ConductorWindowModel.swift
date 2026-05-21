@@ -624,11 +624,30 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @discardableResult
     func performCommand(_ command: ConductorShellCommand, window: NSWindow? = nil) -> Bool {
         ConductorLog.performance.debug("shell command \(command.rawValue, privacy: .public)")
+        ConductorDiagnostics.record(
+            "shell-command",
+            fields: [
+                "name": command.rawValue,
+                "panes": workspace.panes.count,
+                "tabs": workspace.panes.values.reduce(0) { $0 + $1.tabs.count },
+                "zoomed": workspace.isZoomed
+            ]
+        )
         let signpost = ConductorSignpost.begin("shell-command")
         defer { ConductorSignpost.end("shell-command", signpost) }
         let commandSignpost = ConductorSignpost.begin(command.signpostName)
         defer { ConductorSignpost.end(command.signpostName, commandSignpost) }
-        return command.perform(model: self, window: window)
+        let performed = command.perform(model: self, window: window)
+        ConductorDiagnostics.record(
+            "shell-command-result",
+            fields: [
+                "name": command.rawValue,
+                "performed": performed,
+                "panes": workspace.panes.count,
+                "tabs": workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+            ]
+        )
+        return performed
     }
 
     var runtimeSurfaceCount: Int {

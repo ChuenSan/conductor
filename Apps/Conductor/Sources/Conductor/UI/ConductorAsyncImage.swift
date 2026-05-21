@@ -27,7 +27,7 @@ final class ConductorAsyncImageLoader: ObservableObject {
 
     private var generation = 0
     private var currentURL: URL?
-    private static let queue = DispatchQueue(label: "conductor.image-loader", qos: .userInitiated, attributes: .concurrent)
+    private var loadTask: Task<Void, Never>?
 
     func load(url: URL) {
         let standardized = url.standardizedFileURL
@@ -35,6 +35,7 @@ final class ConductorAsyncImageLoader: ObservableObject {
             return
         }
 
+        loadTask?.cancel()
         currentURL = standardized
         image = nil
         failureMessage = nil
@@ -42,34 +43,34 @@ final class ConductorAsyncImageLoader: ObservableObject {
         generation &+= 1
         let generation = generation
 
-        Self.queue.async {
-            let key = Self.cacheKey(for: standardized)
-            if let cached = ConductorSharedImageCache.shared.image(for: key) {
-                DispatchQueue.main.async { [weak self] in
-                    guard let self, self.generation == generation else { return }
-                    self.image = cached
-                    self.isLoading = false
-                }
-                return
-            }
-
-            guard let loaded = NSImage(contentsOf: standardized) else {
-                DispatchQueue.main.async { [weak self] in
-                    guard let self, self.generation == generation else { return }
-                    self.isLoading = false
-                    self.failureMessage = L("图片无法读取", "Image could not be loaded")
-                }
-                return
-            }
-
-            _ = loaded.representations
-            ConductorSharedImageCache.shared.setImage(loaded, for: key)
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.generation == generation else { return }
-                self.image = loaded
-                self.isLoading = false
-            }
+        let key = Self.cacheKey(for: standardized)
+        if let cached = ConductorSharedImageCache.shared.image(for: key) {
+            image = cached
+            isLoading = false
+            return
         }
+
+        loadTask = Task { [weak self] in
+            let data = await Task.detached(priority: .userInitiated) {
+                try? Data(contentsOf: standardized)
+            }.value
+            guard !Task.isCancelled else { return }
+            guard let data, let loaded = NSImage(data: data) else {
+                guard let self, self.generation == generation else { return }
+                self.isLoading = false
+                self.failureMessage = L("图片无法读取", "Image could not be loaded")
+                return
+            }
+
+            guard let self, self.generation == generation else { return }
+            ConductorSharedImageCache.shared.setImage(loaded, for: key)
+            self.image = loaded
+            self.isLoading = false
+        }
+    }
+
+    deinit {
+        loadTask?.cancel()
     }
 
     nonisolated private static func cacheKey(for url: URL) -> String {
