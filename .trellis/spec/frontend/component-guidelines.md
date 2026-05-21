@@ -181,6 +181,11 @@ workspace overview, and compact status modules.
   are bundled as app resources so previews work offline and do not depend on CDN availability.
   Binary document payloads must stay capped, and large files should show an explicit protected
   state or fall back to a cheap native surface rather than blocking the main actor.
+  WebKit document surfaces must also avoid resizing the web view on every live-resize tick for
+  large documents. Freeze the underlying `WKWebView` frame while AppKit reports live resize,
+  then apply one final frame update when resizing ends; pair this with browser-side
+  `content-visibility` for repeated Markdown blocks so offscreen document content does not
+  repeatedly reflow during window drags.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.

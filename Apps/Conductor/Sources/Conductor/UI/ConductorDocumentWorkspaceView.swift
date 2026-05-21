@@ -338,6 +338,86 @@ private struct ConductorDocumentWebTheme: Equatable {
         self.selectedFill = theme.floatingSelectedFill.conductorCSSRGBA
         self.hoverFill = theme.floatingHoverFill.conductorCSSRGBA
     }
+
+    var backgroundColor: NSColor {
+        NSColor(cssRGBA: background) ?? .windowBackgroundColor
+    }
+}
+
+private final class ConductorDocumentWebContainerView: NSView {
+    private let webView: WKWebView
+    private let resizeCover = CALayer()
+    private var isFreezingWebViewResize = false
+    private var pendingFrameAfterResize = false
+
+    init(webView: WKWebView) {
+        self.webView = webView
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.masksToBounds = true
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        webView.autoresizingMask = []
+        addSubview(webView)
+        resizeCover.opacity = 0
+        layer?.addSublayer(resizeCover)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        resizeCover.frame = bounds
+        if isFreezingWebViewResize || inLiveResize {
+            pendingFrameAfterResize = true
+            resizeCover.opacity = 1
+        } else {
+            webView.frame = bounds
+            resizeCover.opacity = 0
+            pendingFrameAfterResize = false
+        }
+        CATransaction.commit()
+    }
+
+    override func viewWillStartLiveResize() {
+        super.viewWillStartLiveResize()
+        isFreezingWebViewResize = true
+        pendingFrameAfterResize = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        resizeCover.opacity = 1
+        CATransaction.commit()
+    }
+
+    override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        isFreezingWebViewResize = false
+        applyPendingResize()
+    }
+
+    func loadHTMLString(_ html: String, baseURL: URL?, backgroundColor: NSColor) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer?.backgroundColor = backgroundColor.cgColor
+        resizeCover.backgroundColor = backgroundColor.cgColor
+        CATransaction.commit()
+        webView.loadHTMLString(html, baseURL: baseURL)
+    }
+
+    private func applyPendingResize() {
+        guard pendingFrameAfterResize else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        webView.frame = bounds
+        resizeCover.frame = bounds
+        resizeCover.opacity = 0
+        CATransaction.commit()
+        pendingFrameAfterResize = false
+    }
 }
 
 private struct ConductorDocumentWebView: NSViewRepresentable {
@@ -348,7 +428,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         Coordinator()
     }
 
-    func makeNSView(context: Context) -> WKWebView {
+    func makeNSView(context: Context) -> ConductorDocumentWebContainerView {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
@@ -360,14 +440,14 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         webView.underPageBackgroundColor = .clear
         webView.allowsMagnification = true
         webView.allowsBackForwardNavigationGestures = false
-        return webView
+        return ConductorDocumentWebContainerView(webView: webView)
     }
 
-    func updateNSView(_ webView: WKWebView, context: Context) {
+    func updateNSView(_ container: ConductorDocumentWebContainerView, context: Context) {
         let signature = "\(payload.renderID)|\(theme.signature)"
         guard context.coordinator.loadedSignature != signature else { return }
         context.coordinator.loadedSignature = signature
-        webView.loadHTMLString(Self.html(payload: payload, theme: theme), baseURL: payload.baseURL)
+        container.loadHTMLString(Self.html(payload: payload, theme: theme), baseURL: payload.baseURL, backgroundColor: theme.backgroundColor)
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
@@ -533,6 +613,20 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         .markdown h1 { font-size: 2.05em; padding-bottom: .35em; border-bottom: 1px solid var(--stroke); }
         .markdown h2 { font-size: 1.45em; padding-bottom: .24em; border-bottom: 1px solid var(--stroke); }
         .markdown h3 { font-size: 1.15em; }
+        .markdown h1,
+        .markdown h2,
+        .markdown h3,
+        .markdown p,
+        .markdown ul,
+        .markdown ol,
+        .markdown blockquote,
+        .markdown table,
+        .markdown pre,
+        .markdown .mermaid,
+        .markdown .katex-display {
+          content-visibility: auto;
+          contain-intrinsic-size: auto 84px;
+        }
         .markdown p, .markdown ul, .markdown ol, .markdown blockquote, .markdown table { margin: .72em 0; }
         .markdown blockquote {
           border-left: 3px solid var(--stroke);
@@ -1032,5 +1126,27 @@ private extension Color {
         let blue = Int((color.blueComponent * 255).rounded())
         let alpha = String(format: "%.3f", Double(color.alphaComponent))
         return "rgba(\(red), \(green), \(blue), \(alpha))"
+    }
+}
+
+private extension NSColor {
+    convenience init?(cssRGBA value: String) {
+        let scanner = Scanner(string: value)
+        guard scanner.scanString("rgba(") != nil,
+              let red = scanner.scanInt(),
+              scanner.scanString(",") != nil,
+              let green = scanner.scanInt(),
+              scanner.scanString(",") != nil,
+              let blue = scanner.scanInt(),
+              scanner.scanString(",") != nil,
+              let alpha = scanner.scanDouble() else {
+            return nil
+        }
+        self.init(
+            calibratedRed: CGFloat(red) / 255.0,
+            green: CGFloat(green) / 255.0,
+            blue: CGFloat(blue) / 255.0,
+            alpha: CGFloat(alpha)
+        )
     }
 }
