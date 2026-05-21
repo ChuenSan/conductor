@@ -163,6 +163,11 @@ workspace overview, and compact status modules.
   bounded preview documents. They must not inspect terminal scrollback or make terminal
   transcript text observable. Formatted document parsing is intentionally not part of the
   current product surface.
+- AppKit document/preview surfaces that own large text, native previews, or renderer state
+  must deduplicate no-op `updateNSView` work. Theme, font, and geometry setters should return
+  early when values are unchanged, and resize/selection/search updates should invalidate only
+  the visible rect unless the whole backing document truly changed. Do not call
+  `setNeedsDisplay(bounds)` from every SwiftUI update on a tall document view.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.

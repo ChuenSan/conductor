@@ -450,7 +450,7 @@ private struct ConductorLargeTextViewport: NSViewRepresentable {
     }
 }
 
-private struct ConductorLargeTextTheme {
+private struct ConductorLargeTextTheme: Equatable {
     let background: NSColor
     let text: NSColor
     let mutedText: NSColor
@@ -465,6 +465,15 @@ private struct ConductorLargeTextTheme {
         selection = NSColor(theme.floatingSelectedFill).withAlphaComponent(0.46)
         lineHighlight = NSColor(theme.floatingSelectedFill).withAlphaComponent(0.20)
         separator = NSColor(theme.terminalOuterStroke).withAlphaComponent(theme.usesDarkChrome ? 0.32 : 0.18)
+    }
+
+    static func == (lhs: ConductorLargeTextTheme, rhs: ConductorLargeTextTheme) -> Bool {
+        lhs.background.isEqual(rhs.background) &&
+            lhs.text.isEqual(rhs.text) &&
+            lhs.mutedText.isEqual(rhs.mutedText) &&
+            lhs.selection.isEqual(rhs.selection) &&
+            lhs.lineHighlight.isEqual(rhs.lineHighlight) &&
+            lhs.separator.isEqual(rhs.separator)
     }
 }
 
@@ -481,6 +490,7 @@ private final class ConductorLargeTextHostView: NSView {
     private var lastJumpLineToken = 0
     private var searchLines: [Int] = []
     private var selectedSearchIndex = 0
+    private var appliedTheme: ConductorLargeTextTheme?
     private var onMetrics: ((ConductorLargeTextMetrics) -> Void)?
     private var onHeadings: (([WorkspaceLargeTextHeading]) -> Void)?
     private var onSearchStatus: ((String) -> Void)?
@@ -535,7 +545,10 @@ private final class ConductorLargeTextHostView: NSView {
         self.onHeadings = onHeadings
         self.onSearchStatus = onSearchStatus
         canvas.apply(theme: theme, fontSize: fontSize)
-        layer?.backgroundColor = theme.background.cgColor
+        if appliedTheme != theme {
+            appliedTheme = theme
+            layer?.backgroundColor = theme.background.cgColor
+        }
 
         if self.document?.fileURL != document.fileURL || self.document?.byteCount != document.byteCount {
             self.document = document
@@ -687,16 +700,21 @@ private final class ConductorLargeTextCanvasView: NSView {
     private var loadingRanges: Set<String> = []
     private var message: String?
     var highlightedLine: Int? {
-        didSet { setNeedsDisplay(bounds) }
+        didSet { invalidateVisibleRect() }
     }
     var searchQuery = "" {
-        didSet { setNeedsDisplay(bounds) }
+        didSet { invalidateVisibleRect() }
     }
     private let gutterWidth: CGFloat = 64
     private let textLeftInset: CGFloat = 14
     private let maxDrawnCharacters = 1_000
     private var selectionAnchorLine: Int?
     private var selectedLineRange: ClosedRange<Int>?
+    private static let rightAlignedParagraphStyle: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.alignment = .right
+        return style
+    }()
 
     var lineHeight: CGFloat {
         max(18, ceil(font.pointSize * 1.46))
@@ -715,12 +733,19 @@ private final class ConductorLargeTextCanvasView: NSView {
     }
 
     func apply(theme: ConductorLargeTextTheme, fontSize: CGFloat) {
-        self.theme = theme
         let size = CGFloat(max(10, min(28, fontSize)))
+        let themeChanged = self.theme != theme
+        let fontChanged = abs(font.pointSize - size) > 0.01
+        guard themeChanged || fontChanged else { return }
+
+        self.theme = theme
         font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
         lineNumberFont = NSFont.monospacedDigitSystemFont(ofSize: max(9, size - 2), weight: .medium)
         layer?.backgroundColor = theme.background.cgColor
-        setNeedsDisplay(bounds)
+        if fontChanged {
+            updateFrameSize(lineCount: max(index?.lineCount ?? 1, 1), width: max(frame.width, 900))
+        }
+        invalidateVisibleRect()
     }
 
     func setIndex(_ index: ConductorLargeTextIndex?) {
@@ -731,21 +756,33 @@ private final class ConductorLargeTextCanvasView: NSView {
         selectionAnchorLine = nil
         selectedLineRange = nil
         let lineCount = max(index?.lineCount ?? 1, 1)
-        frame = NSRect(x: 0, y: 0, width: max(frame.width, 900), height: CGFloat(lineCount) * lineHeight + 24)
-        setNeedsDisplay(bounds)
+        updateFrameSize(lineCount: lineCount, width: max(frame.width, 900))
+        invalidateVisibleRect()
     }
 
     func setMessage(_ message: String) {
         self.message = message
         setIndex(nil)
         self.message = message
-        setNeedsDisplay(bounds)
+        invalidateVisibleRect()
     }
 
     func ensureContentWidth(atLeast width: CGFloat) {
         if abs(frame.width - width) > 1 {
             frame.size.width = width
         }
+    }
+
+    private func updateFrameSize(lineCount: Int, width: CGFloat) {
+        let next = NSSize(width: width, height: CGFloat(max(lineCount, 1)) * lineHeight + 24)
+        if abs(frame.width - next.width) > 1 || abs(frame.height - next.height) > 1 {
+            frame = NSRect(origin: frame.origin, size: next)
+        }
+    }
+
+    private func invalidateVisibleRect() {
+        let rect = visibleRect
+        setNeedsDisplay(rect.isEmpty ? bounds : rect)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -781,21 +818,21 @@ private final class ConductorLargeTextCanvasView: NSView {
         guard let line = lineNumber(at: event.locationInWindow) else { return }
         selectionAnchorLine = line
         selectedLineRange = line...line
-        setNeedsDisplay(bounds)
+        invalidateVisibleRect()
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard let anchor = selectionAnchorLine,
               let line = lineNumber(at: event.locationInWindow) else { return }
         selectedLineRange = min(anchor, line)...max(anchor, line)
-        setNeedsDisplay(bounds)
+        invalidateVisibleRect()
     }
 
     override func mouseUp(with event: NSEvent) {
         guard let anchor = selectionAnchorLine,
               let line = lineNumber(at: event.locationInWindow) else { return }
         selectedLineRange = min(anchor, line)...max(anchor, line)
-        setNeedsDisplay(bounds)
+        invalidateVisibleRect()
     }
 
     override func keyDown(with event: NSEvent) {
@@ -908,9 +945,7 @@ private final class ConductorLargeTextCanvasView: NSView {
     }
 
     private var rightAlignedParagraphStyle: NSParagraphStyle {
-        let style = NSMutableParagraphStyle()
-        style.alignment = .right
-        return style
+        Self.rightAlignedParagraphStyle
     }
 
     private func displayLine(_ text: String?) -> String? {
@@ -940,7 +975,7 @@ private final class ConductorLargeTextCanvasView: NSView {
                     self.lineCache[line] = text
                 }
                 self.loadingRanges.remove(key)
-                self.setNeedsDisplay(self.visibleRect)
+                self.invalidateVisibleRect()
             }
         }
     }
@@ -989,7 +1024,7 @@ private final class ConductorLargeTextCanvasView: NSView {
         )
         clipView.scroll(to: next)
         scrollView.reflectScrolledClipView(clipView)
-        setNeedsDisplay(visibleRect)
+        invalidateVisibleRect()
     }
 }
 
