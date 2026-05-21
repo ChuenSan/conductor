@@ -1313,7 +1313,7 @@ private struct PaneBarButton: View {
                 hovering = value
             }
         }
-        .macNativeTooltip(help)
+        .macNativeTooltip(help, enabled: !showsTitle)
     }
 }
 
@@ -1449,7 +1449,6 @@ private struct TerminalTabButton: View {
                         beginRename()
                     }
                 )
-                .macNativeTooltip(terminalHelpText)
             }
 
             if !editingTitle {

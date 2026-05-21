@@ -114,6 +114,10 @@ workspace overview, and compact status modules.
   place.
 - Prefer system-first, lightweight controls: icon buttons, compact pills, searchable command
   surfaces, popovers, inspectors, and floating control groups.
+- Tooltips should be sparse and explanatory. Use them for icon-only controls, status dots,
+  compact glyph metrics, and other controls whose purpose is not already visible. Do not add
+  hover tooltips to labeled buttons, tab titles, sidebar rows, settings/theme rows, or cards
+  that already show their own text; redundant tips make dense terminal chrome feel noisy.
 - Do not make terminal content decorative. The terminal pane remains the dark working surface;
   glass belongs to navigation and metadata chrome.
 - Treat visual themes as whole-shell presets, not terminal palettes only. A theme should own

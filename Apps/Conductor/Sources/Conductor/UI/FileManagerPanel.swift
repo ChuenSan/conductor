@@ -2026,7 +2026,6 @@ struct FileManagerPanel: View {
                 .buttonStyle(.plain)
                 .background(theme.floatingSelectedFill.opacity(0.42))
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .macNativeTooltip(L("恢复刚移到废纸篓的项目", "Restore the items just moved to Trash"))
             }
             panelIconButton("xmark", help: L("关闭提示", "Dismiss Message")) {
                 store.clearOperationMessage()

@@ -197,7 +197,6 @@ private struct TerminalContextSearchBar: View {
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
-            .macNativeTooltip(L("选择搜索的终端", "Choose terminal to search"))
 
             if !searchHistory.isEmpty {
                 Menu {
@@ -4246,7 +4245,6 @@ private struct SettingsSidebarItem: View {
         }
         .animation(ConductorMotion.selectionGlide, value: selected)
         .animation(ConductorMotion.hover, value: hovering)
-        .macNativeTooltip(section.title)
     }
 
     private var rowBackground: some View {
@@ -4461,7 +4459,6 @@ private struct ThemeGalleryCard: View {
         }
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.selection, value: selected)
-        .macNativeTooltip(theme.title)
     }
 
     private var cardFill: Color {
@@ -4983,7 +4980,6 @@ private struct WorkspaceOverviewCard: View {
         .animation(ConductorMotion.feedback, value: highlighted)
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.attention, value: unreadCount)
-        .macNativeTooltip("\(workspace.title) · \(workspace.panes.count) \(L("分屏", "panes")) · \(terminalCount) \(L("终端", "terminals"))")
     }
 
     private var cardFill: Color {
@@ -6080,7 +6076,6 @@ private struct SidebarWorkspaceHeaderStats: View {
         }
         .padding(.leading, 3)
         .accessibilityElement(children: .combine)
-        .macNativeTooltip("\(splitCount) \(L("个分屏", "panes")) · \(terminalCount) \(L("个终端", "terminals"))")
     }
 
     private func metric(
@@ -6273,7 +6268,6 @@ private struct WorkspaceSidebarRow: View {
                 hovering = value
             }
         }
-        .macNativeTooltip(title)
     }
 
     private var editingRow: some View {
@@ -6453,7 +6447,7 @@ private struct SidebarActionRow: View {
                 hovering = value
             }
         }
-        .macNativeTooltip(help ?? title)
+        .macNativeTooltip(help ?? title, enabled: !showsTitle)
     }
 }
 
@@ -6929,7 +6923,6 @@ private struct WorkspaceFileTopTab: View {
                 NSWorkspace.shared.activateFileViewerSelecting([tab.fileURL])
             }
         }
-        .macNativeTooltip(tab.fileURL.path)
     }
 }
 
@@ -7094,7 +7087,6 @@ private struct WorkspaceTopTab: View {
             }
             .disabled(!canClose)
         }
-        .macNativeTooltip("\(row.title) · \(row.splitCount) \(L("分屏", "panes")) · \(row.terminalCount) \(L("终端", "terminals"))")
     }
 }
 
