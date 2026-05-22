@@ -185,6 +185,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Fixed delayed sidebar/workspace-tab theme propagation after Settings theme changes by keeping the chrome row/tab `Equatable` optimization but adding theme and font-scale identities to the equality inputs.
   - Preserved the compact snapshot and equatable chrome pattern for normal metadata updates while allowing global appearance environment changes to restyle visible sidebar rows and top tabs immediately.
   - Updated frontend specs with the rule that Equatable shell leaves reading appearance environment must include the relevant appearance identity or avoid `.equatable()`.
+- Fifteenth implementation phase:
+  - Fixed the actual stale main-chrome path where `ConductorSidebar`, `ConductorToolbar`, and `WorkspaceTabStrip` avoided broad `@ObservedObject` subscriptions but still read `model.theme` / `model.appearance` through the unobserved model reference.
+  - Passed `TerminalTheme`, `AppearancePreferences`, and sidebar visibility into those chrome containers as explicit value inputs so Settings theme changes invalidate sidebar and top-tab chrome immediately without reintroducing broad model observation.
+  - Updated frontend specs with the rule that performance-isolated chrome containers must receive low-frequency visual state as explicit props instead of reading appearance through an unobserved model reference.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

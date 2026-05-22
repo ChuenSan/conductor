@@ -108,6 +108,10 @@ Forbidden patterns:
   strokes, controls, window backdrop, accent, and terminal pane outline.
 - Root shell must inject the selected `TerminalTheme` through `\.conductorTheme` so leaf
   shell components can update together without receiving theme parameters manually.
+- Shell chrome containers that avoid observing the full window model must receive low-frequency
+  visual state such as `TerminalTheme` and `AppearancePreferences` as explicit value inputs.
+  They may keep the model reference for commands, but must not rely on an unobserved model
+  reference for current theme/density/clarity values.
 - Density can change toolbar, workspace tab, pane tab, and sidebar chrome dimensions.
 - Chrome clarity can change material tint and stroke emphasis.
 - Font scale can change SwiftUI shell text and icon labels in toolbar, sidebar, settings,
@@ -167,6 +171,8 @@ Forbidden patterns:
 - Bad: A sidebar row or workspace tab reads `\.conductorTheme` inside an `.equatable()` leaf
   but equality ignores the theme, causing the chrome to update only after switching
   workspace/tab selection.
+- Bad: A sidebar or toolbar container is not an `@ObservedObject`, reads `model.theme` for
+  drawing, and only refreshes when `WorkspaceChromeSnapshot` changes.
 - Bad: Hard-coding fixed white/black opacity fills for selected sidebar/settings rows when a
   `TerminalTheme` shell color exists.
 - Bad: Deleting or replacing the selected workspace, assigning `workspace` to a successor,

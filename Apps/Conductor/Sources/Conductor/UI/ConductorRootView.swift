@@ -93,11 +93,22 @@ struct ConductorRootView: View {
         let workspaceSnapshot = WorkspaceChromeSnapshot(model: model)
 
         return HStack(alignment: .top, spacing: ConductorDesign.shellGap) {
-            ConductorSidebar(model: model, snapshot: workspaceSnapshot)
+            ConductorSidebar(
+                model: model,
+                snapshot: workspaceSnapshot,
+                theme: model.theme,
+                appearance: model.appearance,
+                sidebarVisible: model.sidebarVisible
+            )
             ConductorShellJoiner(theme: model.theme)
 
             VStack(spacing: 0) {
-                ConductorToolbar(model: model, workspaceSnapshot: workspaceSnapshot)
+                ConductorToolbar(
+                    model: model,
+                    workspaceSnapshot: workspaceSnapshot,
+                    theme: model.theme,
+                    appearance: model.appearance
+                )
                 ZStack(alignment: .trailing) {
                     primaryWorkspaceContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -5312,6 +5323,9 @@ private struct WindowControl: Identifiable {
 private struct ConductorSidebar: View {
     let model: ConductorWindowModel
     let snapshot: WorkspaceChromeSnapshot
+    let theme: TerminalTheme
+    let appearance: AppearancePreferences
+    let sidebarVisible: Bool
     @State private var renamingWorkspaceID: WorkspaceID?
     @State private var workspaceTitleDraft = ""
     @State private var sidebarToggleHovering = false
@@ -5320,14 +5334,14 @@ private struct ConductorSidebar: View {
     @Environment(\.conductorFontScale) private var fontScale
 
     private var sidebarHeaderHeight: CGFloat {
-        model.sidebarVisible ? 54 : 82
+        sidebarVisible ? 54 : 82
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             sidebarHeader
 
-            if model.sidebarVisible {
+            if sidebarVisible {
                 expandedSidebar
                     .transition(.opacity)
             } else {
@@ -5335,24 +5349,24 @@ private struct ConductorSidebar: View {
                     .transition(.opacity)
             }
         }
-        .padding(.horizontal, model.sidebarVisible ? ConductorTokens.Space.sidebarX : 6)
+        .padding(.horizontal, sidebarVisible ? ConductorTokens.Space.sidebarX : 6)
         .padding(.top, ConductorTokens.Space.sidebarTop)
         .padding(.bottom, ConductorTokens.Space.sidebarBottom)
-        .frame(width: model.sidebarVisible ? ConductorDesign.sidebarWidth(for: model.appearance) : ConductorDesign.sidebarCollapsedWidth)
+        .frame(width: sidebarVisible ? ConductorDesign.sidebarWidth(for: appearance) : ConductorDesign.sidebarCollapsedWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background {
-            SidebarRailSurface(theme: model.theme, clarity: model.appearance.chromeClarity)
+            SidebarRailSurface(theme: theme, clarity: appearance.chromeClarity)
         }
         .overlay {
             SidebarBookSpineChrome(
-                collapsed: !model.sidebarVisible,
-                theme: model.theme,
-                clarity: model.appearance.chromeClarity
+                collapsed: !sidebarVisible,
+                theme: theme,
+                clarity: appearance.chromeClarity
             )
             .allowsHitTesting(false)
         }
         .clipShape(SidebarRailShape())
-        .animation(model.shellAnimation(ConductorMotion.layout), value: model.sidebarVisible)
+        .animation(model.shellAnimation(ConductorMotion.layout), value: sidebarVisible)
         .onAppear {
             setVisualSidebarSelection(snapshot.selectedWorkspaceID, animated: false)
         }
@@ -5364,12 +5378,12 @@ private struct ConductorSidebar: View {
                 setVisualSidebarSelection(snapshot.selectedWorkspaceID, animated: false)
             }
         }
-        .animation(model.shellAnimation(ConductorMotion.standard), value: model.theme)
+        .animation(model.shellAnimation(ConductorMotion.standard), value: theme)
     }
 
     @ViewBuilder
     private var sidebarHeader: some View {
-        if model.sidebarVisible {
+        if sidebarVisible {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     WindowControlButtons()
@@ -5396,7 +5410,7 @@ private struct ConductorSidebar: View {
             finishWorkspaceRenameIfNeeded()
             model.sidebarVisible.toggle()
         } label: {
-            Image(systemName: model.sidebarVisible ? "chevron.left" : "sidebar.left")
+            Image(systemName: sidebarVisible ? "chevron.left" : "sidebar.left")
                 .font(.conductorSystem(size: 11.5, weight: .bold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .frame(width: 26, height: 24)
@@ -5407,14 +5421,14 @@ private struct ConductorSidebar: View {
         .onHover { value in
             sidebarToggleHovering = value
         }
-        .macNativeTooltip(model.sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
+        .macNativeTooltip(sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
     }
 
     private var sidebarToggleFill: Color {
         if sidebarToggleHovering {
-            return model.theme.shellHoverFill.opacity(model.theme.usesDarkChrome ? 0.95 : 0.70)
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.95 : 0.70)
         }
-        return model.theme.shellControlFill.opacity(model.theme.usesDarkChrome ? 0.36 : 0.18)
+        return theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.36 : 0.18)
     }
 
     private var expandedSidebar: some View {
@@ -6344,15 +6358,18 @@ private struct SidebarActionRow: View {
 private struct ConductorToolbar: View {
     let model: ConductorWindowModel
     let workspaceSnapshot: WorkspaceChromeSnapshot
+    let theme: TerminalTheme
+    let appearance: AppearancePreferences
     @State private var editingWorkspaceID: WorkspaceID?
     @State private var workspaceTitleDraft = ""
 
     var body: some View {
-        ConductorTerminalToolbarSurface(theme: model.theme) {
+        ConductorTerminalToolbarSurface(theme: theme) {
             HStack(spacing: ConductorTokens.Space.toolbarGap) {
                 WorkspaceTabStrip(
                     model: model,
                     snapshot: workspaceSnapshot,
+                    appearance: appearance,
                     editingWorkspaceID: $editingWorkspaceID,
                     workspaceTitleDraft: $workspaceTitleDraft,
                     onBeginRename: beginRenameWorkspace,
@@ -6446,10 +6463,10 @@ private struct ConductorToolbar: View {
             .controlSize(.small)
             .padding(.leading, 12)
             .padding(.trailing, 12)
-            .frame(height: ConductorDesign.toolbarHeight(for: model.appearance))
+            .frame(height: ConductorDesign.toolbarHeight(for: appearance))
         }
-        .frame(height: ConductorDesign.toolbarHeight(for: model.appearance))
-        .animation(model.shellAnimation(ConductorMotion.standard), value: model.theme)
+        .frame(height: ConductorDesign.toolbarHeight(for: appearance))
+        .animation(model.shellAnimation(ConductorMotion.standard), value: theme)
     }
 
     private func beginRenameWorkspace(_ row: WorkspaceChromeDisplayModel) {
@@ -6480,6 +6497,7 @@ private struct ConductorToolbar: View {
 private struct WorkspaceTabStrip: View {
     let model: ConductorWindowModel
     let snapshot: WorkspaceChromeSnapshot
+    let appearance: AppearancePreferences
     @Binding var editingWorkspaceID: WorkspaceID?
     @Binding var workspaceTitleDraft: String
     let onBeginRename: (WorkspaceChromeDisplayModel) -> Void
@@ -6502,7 +6520,7 @@ private struct WorkspaceTabStrip: View {
                     ForEach(snapshot.fileTabs) { fileTab in
                         WorkspaceFileTopTab(
                             tab: fileTab.tab,
-                            appearance: model.appearance,
+                            appearance: appearance,
                             selected: fileTab.selected,
                             dirty: fileTab.dirty,
                             onSelect: {
@@ -6540,10 +6558,10 @@ private struct WorkspaceTabStrip: View {
             syncScrollTarget(animated: true)
         }
         .frame(
-            minWidth: WorkspaceTabMetrics.width(for: model.appearance),
+            minWidth: WorkspaceTabMetrics.width(for: appearance),
             maxWidth: .infinity,
-            minHeight: WorkspaceTabMetrics.height(for: model.appearance),
-            maxHeight: WorkspaceTabMetrics.height(for: model.appearance),
+            minHeight: WorkspaceTabMetrics.height(for: appearance),
+            maxHeight: WorkspaceTabMetrics.height(for: appearance),
             alignment: .leading
         )
         .clipped()
@@ -6566,7 +6584,7 @@ private struct WorkspaceTabStrip: View {
     private func workspaceTabView(for row: WorkspaceChromeDisplayModel) -> some View {
         WorkspaceTopTab(
             row: row,
-            appearance: model.appearance,
+            appearance: appearance,
             active: row.selected && snapshot.selectedWorkspaceFileTabID == nil,
             visuallySelected: visualSelectedWorkspaceID == row.id && snapshot.selectedWorkspaceFileTabID == nil,
             selectionNamespace: selectionNamespace,
