@@ -205,16 +205,27 @@ private enum FileManagerSelectionMode {
 }
 
 private struct FilePreviewTextDocument: Equatable, Sendable {
+    struct Row: Equatable, Sendable, Identifiable {
+        let id: Int
+        let number: Int
+        let text: String
+    }
+
     let lines: [String]
+    let rows: [Row]
     let lineCount: Int
     let displayedLineCount: Int
     let formatLabel: String?
 
     init(text: String, formatLabel: String? = nil) {
         let splitLines = text.components(separatedBy: .newlines)
-        self.lines = Array(splitLines.prefix(Self.maxRenderedLines))
+        let lines = Array(splitLines.prefix(Self.maxRenderedLines))
+        self.lines = lines
+        self.rows = lines.enumerated().map { index, line in
+            Row(id: index, number: index + 1, text: line)
+        }
         self.lineCount = max(1, splitLines.count)
-        self.displayedLineCount = self.lines.count
+        self.displayedLineCount = rows.count
         self.formatLabel = formatLabel
     }
 
@@ -226,12 +237,26 @@ private struct FilePreviewTextDocument: Equatable, Sendable {
 }
 
 private struct FilePreviewTableDocument: Equatable, Sendable {
+    struct Row: Equatable, Sendable, Identifiable {
+        let id: Int
+        let index: Int
+        let values: [String]
+    }
+
     let rows: [[String]]
+    let indexedRows: [Row]
     let delimiterName: String
     let sourceLineCount: Int
+    let columnCount: Int
 
-    var columnCount: Int {
-        rows.map(\.count).max() ?? 0
+    init(rows: [[String]], delimiterName: String, sourceLineCount: Int) {
+        self.rows = rows
+        self.indexedRows = rows.enumerated().map { index, values in
+            Row(id: index, index: index, values: values)
+        }
+        self.delimiterName = delimiterName
+        self.sourceLineCount = sourceLineCount
+        self.columnCount = rows.map(\.count).max() ?? 0
     }
 }
 
@@ -3015,10 +3040,10 @@ private struct FileManagerSourcePreview: View {
             } else {
                 ScrollView([.vertical, .horizontal]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(document.lines.enumerated()), id: \.offset) { index, line in
+                        ForEach(document.rows) { row in
                             SourcePreviewLine(
-                                number: index + 1,
-                                text: line,
+                                number: row.number,
+                                text: row.text,
                                 isHighlighted: false,
                                 theme: theme
                             )
@@ -3039,9 +3064,9 @@ private struct FileManagerSourcePreview: View {
 
     private var numberedText: String {
         let width = max(3, String(document.lineCount).count)
-        return document.lines.enumerated()
-            .map { index, line in
-                String(format: "%\(width)d  %@", index + 1, line)
+        return document.rows
+            .map { row in
+                String(format: "%\(width)d  %@", row.number, row.text)
             }
             .joined(separator: "\n")
     }
@@ -3269,9 +3294,9 @@ private struct FileManagerTablePreview: View {
             } else {
                 ScrollView([.vertical, .horizontal]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(document.rows.enumerated()), id: \.offset) { rowIndex, row in
+                        ForEach(document.indexedRows) { row in
                             HStack(spacing: 0) {
-                                Text("\(rowIndex + 1)")
+                                Text("\(row.index + 1)")
                                     .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                                     .foregroundStyle(theme.shellChromeText.opacity(0.34))
                                     .frame(width: 38, height: 26, alignment: .trailing)
@@ -3279,14 +3304,14 @@ private struct FileManagerTablePreview: View {
                                     .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.30 : 0.18))
 
                                 ForEach(0..<document.columnCount, id: \.self) { columnIndex in
-                                    Text(cell(row: row, columnIndex: columnIndex))
-                                        .font(.system(size: 11.5, weight: rowIndex == 0 ? .semibold : .regular, design: .monospaced))
-                                        .foregroundStyle(theme.shellChromeText.opacity(rowIndex == 0 ? 0.82 : 0.74))
+                                    Text(cell(row: row.values, columnIndex: columnIndex))
+                                        .font(.system(size: 11.5, weight: row.index == 0 ? .semibold : .regular, design: .monospaced))
+                                        .foregroundStyle(theme.shellChromeText.opacity(row.index == 0 ? 0.82 : 0.74))
                                         .lineLimit(1)
                                         .truncationMode(.tail)
                                         .padding(.horizontal, 8)
                                         .frame(width: Self.cellWidth, height: Self.rowHeight, alignment: .leading)
-                                        .background(cellBackground(rowIndex: rowIndex, columnIndex: columnIndex))
+                                        .background(cellBackground(rowIndex: row.index, columnIndex: columnIndex))
                                         .overlay(alignment: .trailing) {
                                             Rectangle()
                                                 .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
@@ -3294,10 +3319,10 @@ private struct FileManagerTablePreview: View {
                                         }
                                         .contextMenu {
                                             Button(L("复制单元格", "Copy Cell")) {
-                                                copyText(cell(row: row, columnIndex: columnIndex))
+                                                copyText(cell(row: row.values, columnIndex: columnIndex))
                                             }
                                             Button(L("复制行", "Copy Row")) {
-                                                copyText(row.joined(separator: document.delimiterName == "TSV" ? "\t" : ","))
+                                                copyText(row.values.joined(separator: document.delimiterName == "TSV" ? "\t" : ","))
                                             }
                                         }
                                 }

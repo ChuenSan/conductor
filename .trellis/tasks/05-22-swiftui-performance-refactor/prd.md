@@ -220,6 +220,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Replaced `NotificationPanelRootView`'s broad `@ObservedObject` subscription with a `NotificationPanelStore` that publishes only notification snapshot, theme, and appearance values needed by the detached notification window.
   - Scoped notification panel invalidation to `notifications`, `workspaces`, `theme`, and `appearance`, preserving model command routing for close, jump, clear, open, and test-notification actions.
   - Reduced the remaining UI-wide `@ObservedObject var model` boundaries to the main root and split root.
+- Twenty-third implementation phase:
+  - Added precomputed identifiable row models to `FilePreviewTextDocument` and `FilePreviewTableDocument` so SwiftUI fallback previews do not allocate `Array(enumerated())` inside `body`.
+  - Cached table column count during document construction instead of recomputing it from every render path.
+  - Kept large/truncated text and table previews on their existing AppKit host paths; this only tightens the medium-size SwiftUI fallback path.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

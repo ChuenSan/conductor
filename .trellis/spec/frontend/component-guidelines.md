@@ -198,6 +198,11 @@ workspace overview, and compact status modules.
   cancellable task, generation token, background queue, actor, or AppKit surface, then publish
   a compact loading/ready/error snapshot back to the view. Shared image display must use the
   async image loader/cache path instead of calling `NSImage(contentsOf:)` from `body`.
+- SwiftUI fallback renderers for bounded document previews must use precomputed identifiable
+  row models rather than building `Array(enumerated())`, repeatedly scanning column counts, or
+  deriving row numbers inside `body`. Large text, table, key/value, and structured previews
+  should stay on stable AppKit/WebKit hosts; the SwiftUI path is only for bounded medium-size
+  documents and should still avoid per-render allocations.
 - Workspace document tabs use a stable WebKit/AppKit renderer for formatted documents.
   Markdown, code, JSON, CSV/TSV, spreadsheet files, DOCX, image, PDF, HTML, and future rich
   formats should enter SwiftUI as compact file metadata plus a bounded payload only; do not
