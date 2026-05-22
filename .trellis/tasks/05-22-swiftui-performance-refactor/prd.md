@@ -193,6 +193,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Added `ToolbarChromeSnapshot` so toolbar command enablement and active states are explicit compact inputs rather than direct reads from an unobserved `ConductorWindowModel` reference.
   - Routed split, zoom, file-manager, workspace-overview, and notification toolbar button display state through the snapshot while preserving command execution through `model.performCommand`.
   - Updated frontend specs with the rule that performance-isolated toolbar chrome must snapshot active/disabled display state just like visual appearance state.
+- Seventeenth implementation phase:
+  - Added `WorkspaceOverviewSnapshot` so the Workspace Overview floating panel reads workspace list, selected workspace, notification counts, and chrome clarity from a compact value input.
+  - Removed the panel's direct `@ObservedObject` subscription to `ConductorWindowModel`; the panel keeps the model only as a command reference for close/select actions.
+  - Updated frontend specs to cover Workspace Overview and other heavy floating panels in the compact snapshot rule, preventing unrelated terminal metadata changes from broadly invalidating card grids.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

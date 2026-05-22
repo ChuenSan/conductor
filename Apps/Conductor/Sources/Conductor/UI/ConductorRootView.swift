@@ -69,7 +69,10 @@ struct ConductorRootView: View {
                         .transition(ConductorMotion.settingsPanelTransition)
                 }
                 if model.workspaceOverviewVisible {
-                    WorkspaceOverviewPanel(model: model)
+                    WorkspaceOverviewPanel(
+                        model: model,
+                        snapshot: WorkspaceOverviewSnapshot(model: model)
+                    )
                         .environment(\.conductorTheme, model.theme)
                         .environment(\.conductorFontScale, model.appearance.fontScale)
                         .environment(\.conductorFontFamily, model.appearance.fontFamily)
@@ -4789,8 +4792,28 @@ private struct ThemeSwatch: View {
     }
 }
 
+private struct WorkspaceOverviewSnapshot: Equatable {
+    let chromeClarity: ChromeClarity
+    let workspaces: [WorkspaceState]
+    let selectedWorkspaceID: WorkspaceID
+    let notifications: TerminalNotificationSnapshot
+
+    @MainActor
+    init(model: ConductorWindowModel) {
+        self.chromeClarity = model.appearance.chromeClarity
+        self.workspaces = model.workspaces
+        self.selectedWorkspaceID = model.workspace.id
+        self.notifications = model.notifications.snapshot
+    }
+
+    var workspaceCount: Int {
+        workspaces.count
+    }
+}
+
 private struct WorkspaceOverviewPanel: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
+    let snapshot: WorkspaceOverviewSnapshot
     @State private var query = ""
     @State private var highlightedWorkspaceID: WorkspaceID?
     @FocusState private var searchFocused: Bool
@@ -4803,8 +4826,8 @@ private struct WorkspaceOverviewPanel: View {
 
     private var filteredWorkspaces: [WorkspaceState] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedQuery.isEmpty else { return model.workspaces }
-        return model.workspaces.filter { workspace in
+        guard !normalizedQuery.isEmpty else { return snapshot.workspaces }
+        return snapshot.workspaces.filter { workspace in
             workspaceSearchText(workspace)
                 .lowercased()
                 .contains(normalizedQuery)
@@ -4817,7 +4840,7 @@ private struct WorkspaceOverviewPanel: View {
 
     var body: some View {
         ZStack {
-            ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
+            ConductorGlassSurface(style: .panel, clarity: snapshot.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 11) {
                     header
                     FloatingPanelDivider()
@@ -4831,12 +4854,12 @@ private struct WorkspaceOverviewPanel: View {
                                 ForEach(filteredWorkspaces) { workspace in
                                     WorkspaceOverviewCard(
                                         workspace: workspace,
-                                        theme: model.theme,
-                                        selected: workspace.id == model.workspace.id,
+                                        theme: theme,
+                                        selected: workspace.id == snapshot.selectedWorkspaceID,
                                         highlighted: workspace.id == highlightedWorkspaceID,
-                                        unreadCount: model.notifications.snapshot.unreadCount(for: workspace.id),
+                                        unreadCount: snapshot.notifications.unreadCount(for: workspace.id),
                                         unreadCountForPane: { paneID in
-                                            model.notifications.snapshot.unreadCount(for: paneID)
+                                            snapshot.notifications.unreadCount(for: paneID)
                                         }
                                     ) {
                                         openWorkspace(workspace.id)
@@ -4858,7 +4881,7 @@ private struct WorkspaceOverviewPanel: View {
             }
             .frame(width: 690, height: 486)
             .onAppear {
-                highlightedWorkspaceID = model.workspace.id
+                highlightedWorkspaceID = snapshot.selectedWorkspaceID
                 focusSearchField()
                 ensureHighlight()
             }
@@ -4896,7 +4919,7 @@ private struct WorkspaceOverviewPanel: View {
         FloatingPanelHeader(
             systemImage: WorkspaceChromeGlyph.systemName(selected: false),
             title: L("工作区总览", "Workspace Overview"),
-            subtitle: L("\(model.workspaces.count) 个工作区", "\(model.workspaces.count) workspaces"),
+            subtitle: L("\(snapshot.workspaceCount) 个工作区", "\(snapshot.workspaceCount) workspaces"),
             closeHelp: L("关闭总览", "Close Overview")
         ) {
             model.hideWorkspaceOverview()
@@ -4958,7 +4981,7 @@ private struct WorkspaceOverviewPanel: View {
            filteredWorkspaces.contains(where: { $0.id == highlightedWorkspaceID }) {
             return
         }
-        highlightedWorkspaceID = filteredWorkspaces.first(where: { $0.id == model.workspace.id })?.id ?? filteredWorkspaces.first?.id
+        highlightedWorkspaceID = filteredWorkspaces.first(where: { $0.id == snapshot.selectedWorkspaceID })?.id ?? filteredWorkspaces.first?.id
     }
 
     private func moveHighlight(by offset: Int) {

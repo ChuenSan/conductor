@@ -255,11 +255,12 @@ workspace overview, and compact status modules.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.
-- Heavy floating panels such as Settings must not subscribe every row to
-  `ConductorWindowModel`. The root shell may observe the model, but panel leaf views should
-  receive the model as a plain reference, compact values, or callbacks unless they truly need an
-  independent subscription. This prevents terminal metadata updates from invalidating dozens of
-  settings rows while a panel is open.
+- Heavy floating panels such as Settings, Workspace Overview, Command Center, and Notification
+  Center must not subscribe every row to `ConductorWindowModel`. The root shell may observe the
+  model, but panel leaf views should receive the model as a plain reference, compact snapshots,
+  values, or callbacks unless they truly need an independent subscription. This prevents
+  terminal metadata updates from invalidating dozens of settings rows, overview cards, or
+  notification rows while a panel is open.
 - Heavy floating panels should avoid blur-based insertion/removal transitions and full-content
   `.id(...)` transitions. Use cheap opacity or non-animated content swaps, and reserve matched
   geometry for small selection indicators. Animated row/list insertion in floating panels must
