@@ -181,6 +181,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Replaced the theme card grid with explicit `ThemeOptionRow` selection rows so clicking a theme has a clear command target and current selection indicator.
   - Removed the now-unused `ThemeGalleryCard` implementation.
   - Updated frontend specs with the lesson that Settings controls for global shell preferences are cross-surface commands and must be validated through model mutation, environment propagation, live surface updates, and persistence.
+- Fourteenth implementation phase:
+  - Fixed delayed sidebar/workspace-tab theme propagation after Settings theme changes by keeping the chrome row/tab `Equatable` optimization but adding theme and font-scale identities to the equality inputs.
+  - Preserved the compact snapshot and equatable chrome pattern for normal metadata updates while allowing global appearance environment changes to restyle visible sidebar rows and top tabs immediately.
+  - Updated frontend specs with the rule that Equatable shell leaves reading appearance environment must include the relevant appearance identity or avoid `.equatable()`.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

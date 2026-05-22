@@ -6159,7 +6159,9 @@ private struct WorkspaceSidebarRow: View {
                 selected: selected,
                 visuallySelected: visuallySelected,
                 selectionNamespace: selectionNamespace,
-                hovering: hovering
+                hovering: hovering,
+                themeID: theme.id,
+                fontScaleID: fontScale.id
             )
             .equatable()
         }
@@ -6196,6 +6198,8 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
     let visuallySelected: Bool
     let selectionNamespace: Namespace.ID
     let hovering: Bool
+    let themeID: String
+    let fontScaleID: String
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -6207,7 +6211,9 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         lhs.unreadCount == rhs.unreadCount &&
         lhs.selected == rhs.selected &&
         lhs.visuallySelected == rhs.visuallySelected &&
-        lhs.hovering == rhs.hovering
+        lhs.hovering == rhs.hovering &&
+        lhs.themeID == rhs.themeID &&
+        lhs.fontScaleID == rhs.fontScaleID
     }
 
     var body: some View {
@@ -6858,7 +6864,9 @@ private struct WorkspaceTopTab: View {
                     title: row.title,
                     terminalCount: row.terminalCount,
                     unreadCount: unreadCount,
-                    selected: selected
+                    selected: selected,
+                    themeID: theme.id,
+                    fontScaleID: fontScale.id
                 )
                 .equatable()
                 .contentShape(Rectangle())
@@ -6949,6 +6957,8 @@ private struct WorkspaceTopTabContent: View, Equatable {
     let terminalCount: Int
     let unreadCount: Int
     let selected: Bool
+    let themeID: String
+    let fontScaleID: String
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -6956,7 +6966,9 @@ private struct WorkspaceTopTabContent: View, Equatable {
         lhs.title == rhs.title &&
         lhs.terminalCount == rhs.terminalCount &&
         lhs.unreadCount == rhs.unreadCount &&
-        lhs.selected == rhs.selected
+        lhs.selected == rhs.selected &&
+        lhs.themeID == rhs.themeID &&
+        lhs.fontScaleID == rhs.fontScaleID
     }
 
     private var titleColor: Color {

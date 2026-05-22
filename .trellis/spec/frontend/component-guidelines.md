@@ -153,8 +153,11 @@ workspace overview, and compact status modules.
   terminal surfaces receive bounded appearance updates where applicable, and persistence keeps
   the selected value. Do not wrap a settings panel or leaf subtree in an equality/cache
   optimization that can prevent environment-driven theme or appearance changes from reaching
-  descendants. If a value has both a settings row and another entry point such as a menu item,
-  both routes must continue to call the same model mutation path.
+  descendants. Equatable shell leaves that read `\.conductorTheme`, `\.conductorFontScale`, or
+  related appearance environment values must either avoid `.equatable()` or include the
+  relevant appearance identity in their equality inputs, especially for sidebar rows, workspace
+  tabs, terminal tabs, and settings rows. If a value has both a settings row and another entry
+  point such as a menu item, both routes must continue to call the same model mutation path.
 - Floating shell panels must not use the terminal/workspace `accent` as their default selected,
   hover, icon, unread, or focus color. Use neutral panel tokens such as `floatingEmphasis`,
   `floatingSelectedFill`, `floatingHoverFill`, and `floatingSelectedStroke` so Command Center,

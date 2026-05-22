@@ -135,8 +135,9 @@ Forbidden patterns:
   derived chrome colors.
 - Theme change from Settings -> same result as theme change from the sidebar/menu route:
   `ConductorWindowModel.theme` mutates, root `\.conductorTheme` updates, the open Settings
-  panel restyles immediately, selected theme UI state moves to the new value, live terminal
-  surfaces receive appearance updates, and persistence records the new theme.
+  panel restyles immediately, selected theme UI state moves to the new value, sidebar rows and
+  workspace tabs restyle without requiring a workspace/tab switch, live terminal surfaces
+  receive appearance updates, and persistence records the new theme.
 - Terminal font size change while terminals are streaming output -> Ghostty receives a
   bounded config update per live surface; terminal transcript, scrollback, cursor, and
   measured cell metrics remain owned by Ghostty/AppKit.
@@ -149,6 +150,9 @@ Forbidden patterns:
   terminal chrome, accent, and Ghostty color config as one preset.
 - Good: Theme selection rows in Settings and the sidebar theme menu use the same model
   mutation behavior, so both immediately update the shell and terminal surfaces.
+- Good: Equatable workspace/sidebar/tab content that reads appearance environment includes a
+  theme/font-scale identity in equality, so global appearance changes are not delayed until
+  selection state changes.
 - Good: Reduced motion disables panel and tab-scroll animation through a transaction.
 - Base: A user upgrades from a state file that only contains `theme`; appearance defaults to
   standard density, balanced clarity, and normal motion.
@@ -160,6 +164,9 @@ Forbidden patterns:
   appearance changes.
 - Bad: Wrapping a Settings panel in an equality/cache optimization that skips environment
   updates after `ConductorWindowModel.theme` or `appearance` changes.
+- Bad: A sidebar row or workspace tab reads `\.conductorTheme` inside an `.equatable()` leaf
+  but equality ignores the theme, causing the chrome to update only after switching
+  workspace/tab selection.
 - Bad: Hard-coding fixed white/black opacity fills for selected sidebar/settings rows when a
   `TerminalTheme` shell color exists.
 - Bad: Deleting or replacing the selected workspace, assigning `workspace` to a successor,
