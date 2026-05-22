@@ -228,6 +228,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Added `CommandPaletteFilterResult` and `CommandPaletteFilteredRow` so Command Center search produces rows, section-title markers, enabled-command collections, and animation IDs in one pass.
   - Removed repeated `filteredCommands` access and `Array(filteredCommands.enumerated())` allocation from the command results body.
   - Kept command execution routed through `ConductorShellCommand` and `ConductorWindowModel.performCommand`.
+- Twenty-fifth implementation phase:
+  - Added `CommandShortcutGuideRowModel` and moved shortcut-guide rows into `SettingsPanelSnapshot` so the Settings command guide does not rebuild catalog rows from `body`.
+  - Removed the remaining `Array(enumerated())` usages from `ConductorRootView`, including the theme picker and shortcut guide.
+  - Kept theme selection and command discovery routed through the existing model/catalog paths.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

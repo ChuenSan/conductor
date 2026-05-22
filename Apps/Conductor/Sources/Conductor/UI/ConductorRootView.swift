@@ -972,14 +972,35 @@ private enum ConductorCommandCatalog {
                 )
             }
     }
+
+    @MainActor
+    static func shortcutGuideRows(model: ConductorWindowModel) -> [CommandShortcutGuideRowModel] {
+        var previousSection: String?
+        return shortcutGuideItems(model: model).enumerated().map { index, item in
+            let showsSectionTitle = item.section != previousSection
+            previousSection = item.section
+            return CommandShortcutGuideRowModel(
+                item: item,
+                showsSectionTitle: showsSectionTitle,
+                isFirst: index == 0
+            )
+        }
+    }
 }
 
-private struct CommandShortcutGuideItem: Identifiable {
+private struct CommandShortcutGuideItem: Identifiable, Equatable {
     let id: String
     let section: String
     let title: String
     let shortcut: String
     let systemImage: String
+}
+
+private struct CommandShortcutGuideRowModel: Identifiable, Equatable {
+    var id: String { item.id }
+    let item: CommandShortcutGuideItem
+    let showsSectionTitle: Bool
+    let isFirst: Bool
 }
 
 private struct CommandSectionTitle: View {
@@ -1107,6 +1128,7 @@ private struct SettingsPanelSnapshot: Equatable {
     let agentHookSettingsMessage: String?
     let agentCLIStatuses: [AgentHookProvider: AgentCLIStatus]
     let terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
+    let commandShortcutRows: [CommandShortcutGuideRowModel]
 
     @MainActor
     init(model: ConductorWindowModel) {
@@ -1115,6 +1137,7 @@ private struct SettingsPanelSnapshot: Equatable {
         self.agentHookSettingsMessage = model.agentHookSettingsMessage
         self.agentCLIStatuses = model.agentCLIStatuses
         self.terminalFontDownloadStates = model.terminalFontDownloadStates
+        self.commandShortcutRows = ConductorCommandCatalog.shortcutGuideRows(model: model)
     }
 }
 
@@ -2469,7 +2492,7 @@ private struct AppearanceSettingsPanel: View {
                 subtitle: L("保留密集列表，适合快速扫视", "Dense command list for fast scanning"),
                 systemImage: "keyboard"
             ) {
-                CommandShortcutGuide(model: model, height: 260)
+                CommandShortcutGuide(rows: snapshot.commandShortcutRows, height: 260)
             }
         }
     }
@@ -2491,7 +2514,7 @@ private struct AppearanceSettingsPanel: View {
                 systemImage: "list.bullet"
             ) {
                 SettingsFormSurface {
-                    ForEach(Array(TerminalTheme.allCases.enumerated()), id: \.element.id) { index, theme in
+                    ForEach(TerminalTheme.allCases) { theme in
                         ThemeOptionRow(
                             theme: theme,
                             selected: activeTheme == theme
@@ -2501,7 +2524,7 @@ private struct AppearanceSettingsPanel: View {
                             }
                         }
 
-                        if index != TerminalTheme.allCases.count - 1 {
+                        if theme.id != TerminalTheme.allCases.last?.id {
                             SettingsControlDivider()
                         }
                     }
@@ -4416,27 +4439,23 @@ private struct SettingsSidebarItem: View {
 }
 
 private struct CommandShortcutGuide: View {
-    let model: ConductorWindowModel
+    let rows: [CommandShortcutGuideRowModel]
     var height: CGFloat = 178
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
-    private var items: [CommandShortcutGuideItem] {
-        ConductorCommandCatalog.shortcutGuideItems(model: model)
-    }
-
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 5) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    if index == 0 || items[index - 1].section != item.section {
-                        Text(item.section)
+                ForEach(rows) { row in
+                    if row.showsSectionTitle {
+                        Text(row.item.section)
                             .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
                             .foregroundStyle(ConductorDesign.tertiaryText)
-                            .padding(.top, index == 0 ? 0 : 4)
+                            .padding(.top, row.isFirst ? 0 : 4)
                             .padding(.horizontal, 2)
                     }
-                    CommandShortcutGuideRow(item: item)
+                    CommandShortcutGuideRow(item: row.item)
                 }
             }
             .padding(.vertical, 2)
