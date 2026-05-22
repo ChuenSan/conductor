@@ -145,6 +145,16 @@ workspace overview, and compact status modules.
   and separators). Do not tint these panels directly with `shellPanelBackground` and do not
   create a separate settings-only color language; one app theme must produce one floating-panel
   language.
+- Settings controls for global shell preferences must be treated as cross-surface commands,
+  not local form edits. Theme, density, clarity, language, font scale, terminal font size,
+  renderer preferences, and reduced motion all affect more than the row that edits them.
+  When refactoring these controls, verify the full linkage path: the row action mutates
+  `ConductorWindowModel`, root environment values update, visible floating panels restyle,
+  terminal surfaces receive bounded appearance updates where applicable, and persistence keeps
+  the selected value. Do not wrap a settings panel or leaf subtree in an equality/cache
+  optimization that can prevent environment-driven theme or appearance changes from reaching
+  descendants. If a value has both a settings row and another entry point such as a menu item,
+  both routes must continue to call the same model mutation path.
 - Floating shell panels must not use the terminal/workspace `accent` as their default selected,
   hover, icon, unread, or focus color. Use neutral panel tokens such as `floatingEmphasis`,
   `floatingSelectedFill`, `floatingHoverFill`, and `floatingSelectedStroke` so Command Center,

@@ -133,6 +133,10 @@ Forbidden patterns:
 - Theme change while terminals are streaming output -> Ghostty config/terminal host color
   updates may occur, but SwiftUI observes only the compact `TerminalTheme` value and theme
   derived chrome colors.
+- Theme change from Settings -> same result as theme change from the sidebar/menu route:
+  `ConductorWindowModel.theme` mutates, root `\.conductorTheme` updates, the open Settings
+  panel restyles immediately, selected theme UI state moves to the new value, live terminal
+  surfaces receive appearance updates, and persistence records the new theme.
 - Terminal font size change while terminals are streaming output -> Ghostty receives a
   bounded config update per live surface; terminal transcript, scrollback, cursor, and
   measured cell metrics remain owned by Ghostty/AppKit.
@@ -143,6 +147,8 @@ Forbidden patterns:
   alive.
 - Good: Switching theme changes window backdrop, sidebar/settings chrome, command surfaces,
   terminal chrome, accent, and Ghostty color config as one preset.
+- Good: Theme selection rows in Settings and the sidebar theme menu use the same model
+  mutation behavior, so both immediately update the shell and terminal surfaces.
 - Good: Reduced motion disables panel and tab-scroll animation through a transaction.
 - Base: A user upgrades from a state file that only contains `theme`; appearance defaults to
   standard density, balanced clarity, and normal motion.
@@ -152,6 +158,8 @@ Forbidden patterns:
   scale and terminal font size are separate preferences.
 - Bad: Applying opacity, scale, or identity transitions to `TerminalSurfaceRepresentable` when
   appearance changes.
+- Bad: Wrapping a Settings panel in an equality/cache optimization that skips environment
+  updates after `ConductorWindowModel.theme` or `appearance` changes.
 - Bad: Hard-coding fixed white/black opacity fills for selected sidebar/settings rows when a
   `TerminalTheme` shell color exists.
 - Bad: Deleting or replacing the selected workspace, assigning `workspace` to a successor,
@@ -166,6 +174,9 @@ Forbidden patterns:
 - Full Conductor gate: `./Scripts/check-conductor.sh`
 - Manual smoke: switch density and clarity while multiple panes are visible; terminal surfaces
   should keep focus and content.
+- Manual smoke: switch themes from Settings and from the sidebar/menu route while Settings is
+  open; assert the selected row, panel chrome, main window, terminal chrome/background, and
+  persisted theme all update.
 - Manual smoke: enable reduced motion, open and close Appearance Center / Command Center /
   Workspace Overview; shell transitions should quiet down without blocking controls.
 

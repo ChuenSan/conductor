@@ -62,7 +62,6 @@ struct ConductorRootView: View {
                         model: model,
                         snapshot: SettingsPanelSnapshot(model: model)
                     )
-                    .equatable()
                         .environment(\.conductorTheme, model.theme)
                         .environment(\.conductorFontScale, model.appearance.fontScale)
                         .environment(\.conductorFontFamily, model.appearance.fontFamily)
@@ -1078,7 +1077,7 @@ private struct SettingsPanelSnapshot: Equatable {
     }
 }
 
-private struct AppearanceSettingsPanel: View, Equatable {
+private struct AppearanceSettingsPanel: View {
     let model: ConductorWindowModel
     let snapshot: SettingsPanelSnapshot
     @State private var selectedSection: SettingsPanelSection = .overview
@@ -1086,14 +1085,6 @@ private struct AppearanceSettingsPanel: View, Equatable {
     @Namespace private var settingsSelectionNamespace
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
-
-    private let themeCardColumns = [
-        GridItem(.adaptive(minimum: 242, maximum: 286), spacing: 12)
-    ]
-
-    nonisolated static func == (lhs: AppearanceSettingsPanel, rhs: AppearanceSettingsPanel) -> Bool {
-        lhs.snapshot == rhs.snapshot
-    }
 
     var body: some View {
         ZStack {
@@ -2444,25 +2435,33 @@ private struct AppearanceSettingsPanel: View, Equatable {
 
     private var themeSettings: some View {
         let activeTheme = snapshot.theme
-        return LazyVStack(alignment: .leading, spacing: 14) {
+        return LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
-                title: L("主题工作台", "Theme Workbench"),
-                subtitle: L("先看大效果，再从横向主题条切换", "Inspect the full shell first, then switch from the theme rail"),
+                title: L("当前主题", "Current Theme"),
+                subtitle: L("主题会同时影响窗口、终端和强调色", "Themes affect the window, terminal, and accent colors together"),
                 systemImage: "swatchpalette"
             ) {
-                VStack(alignment: .leading, spacing: 12) {
-                    SelectedThemeShowcase(theme: activeTheme)
+                SelectedThemeShowcase(theme: activeTheme)
+            }
 
-                    LazyVGrid(columns: themeCardColumns, alignment: .leading, spacing: 12) {
-                        ForEach(TerminalTheme.allCases) { theme in
-                            ThemeGalleryCard(
-                                theme: theme,
-                                selected: activeTheme == theme
-                            ) {
-                                model.performShellMotion(ConductorMotion.selection) {
-                                    model.theme = theme
-                                }
+            SettingsPreferenceGroup(
+                title: L("选择主题", "Choose Theme"),
+                subtitle: L("选择后立即应用到当前窗口", "Selection applies immediately to the current window"),
+                systemImage: "list.bullet"
+            ) {
+                SettingsFormSurface {
+                    ForEach(Array(TerminalTheme.allCases.enumerated()), id: \.element.id) { index, theme in
+                        ThemeOptionRow(
+                            theme: theme,
+                            selected: activeTheme == theme
+                        ) {
+                            model.performShellMotion(ConductorMotion.selection) {
+                                model.theme = theme
                             }
+                        }
+
+                        if index != TerminalTheme.allCases.count - 1 {
+                            SettingsControlDivider()
                         }
                     }
                 }
@@ -4505,7 +4504,7 @@ private struct SelectedThemeShowcase: View {
     }
 }
 
-private struct ThemeGalleryCard: View {
+private struct ThemeOptionRow: View {
     let theme: TerminalTheme
     let selected: Bool
     let action: () -> Void
@@ -4515,55 +4514,47 @@ private struct ThemeGalleryCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
-                ThemePreviewArtwork(theme: theme, height: 124)
+            HStack(spacing: 12) {
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(selected ? activeTheme.floatingEmphasis : ConductorDesign.tertiaryText.opacity(0.62))
+                    .frame(width: 18)
 
-                HStack(alignment: .top, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 7) {
-                            Text(theme.title)
-                                .font(.conductorSystem(size: 12.5, weight: .bold, scale: fontScale))
-                                .foregroundStyle(ConductorDesign.primaryText)
-                                .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 7) {
+                        Text(theme.title)
+                            .font(.conductorSystem(size: 12.4, weight: .semibold, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.primaryText)
+                            .lineLimit(1)
 
-                            Text(theme.designLanguage.title)
-                                .font(.conductorSystem(size: 9.2, weight: .bold, scale: fontScale))
-                                .foregroundStyle(theme.floatingEmphasis.opacity(0.94))
-                                .padding(.horizontal, 6)
-                                .frame(height: 18)
-                                .background(activeTheme.floatingControlFill.opacity(0.72))
-                                .clipShape(Capsule())
-                        }
-
-                        Text(theme.themeDescription)
-                            .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.secondaryText)
-                            .lineLimit(2)
+                        Text(theme.designLanguage.title)
+                            .font(.conductorSystem(size: 9.3, weight: .bold, scale: fontScale))
+                            .foregroundStyle(activeTheme.floatingEmphasis.opacity(0.9))
+                            .padding(.horizontal, 6)
+                            .frame(height: 17)
+                            .background(activeTheme.floatingControlFill.opacity(0.58))
+                            .clipShape(Capsule())
                     }
 
-                    Spacer(minLength: 0)
-
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(selected ? activeTheme.floatingEmphasis : ConductorDesign.tertiaryText.opacity(0.65))
+                    Text(theme.themeDescription)
+                        .font(.conductorSystem(size: 10.1, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
                 }
 
-                HStack(spacing: 5) {
-                    ThemeSwatch(color: theme.accent, width: 26)
-                    ThemeSwatch(color: theme.floatingPanelBase, width: 26)
-                    ThemeSwatch(color: theme.terminalChrome, width: 26)
-                    ThemeSwatch(color: theme.terminalBackground, width: 26)
+                Spacer(minLength: 12)
+
+                HStack(spacing: 4) {
+                    ThemeSwatch(color: theme.accent, width: 22)
+                    ThemeSwatch(color: theme.floatingPanelBase, width: 22)
+                    ThemeSwatch(color: theme.terminalChrome, width: 22)
+                    ThemeSwatch(color: theme.terminalBackground, width: 22)
                 }
             }
-            .padding(10)
-            .frame(minHeight: 232, alignment: .top)
-            .background(cardFill)
-            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.card, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: ConductorTokens.Radius.card, style: .continuous)
-                    .stroke(cardStroke, lineWidth: selected ? 1.35 : 1)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.card, style: .continuous))
+            .padding(.horizontal, 12)
+            .frame(minHeight: 52)
+            .background(rowFill)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { value in
@@ -4572,24 +4563,16 @@ private struct ThemeGalleryCard: View {
             }
         }
         .animation(ConductorMotion.hover, value: hovering)
-        .animation(ConductorMotion.selection, value: selected)
     }
 
-    private var cardFill: Color {
+    private var rowFill: Color {
         if selected {
             return activeTheme.floatingSelectedFill
         }
         if hovering {
-            return activeTheme.floatingHoverFill
+            return activeTheme.floatingHoverFill.opacity(0.72)
         }
-        return activeTheme.floatingControlFill.opacity(0.48)
-    }
-
-    private var cardStroke: Color {
-        if selected {
-            return activeTheme.floatingSelectedStroke
-        }
-        return activeTheme.floatingStroke.opacity(hovering ? 0.84 : 0.56)
+        return Color.clear
     }
 }
 

@@ -176,6 +176,11 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Replaced the Settings > Terminal category picker row with a clear local navigation rail so terminal subcategories are visible without another nested form/card.
   - Kept the active terminal category as the only mounted dense settings group while making the category structure easier to scan.
   - `swiftc -parse` passed across `Sources/Conductor` and `Sources/ConductorCore`.
+- Thirteenth implementation phase:
+  - Fixed a Settings theme switching regression by removing the `AppearanceSettingsPanel.equatable()` wrapper so theme/environment changes can flow through the open panel.
+  - Replaced the theme card grid with explicit `ThemeOptionRow` selection rows so clicking a theme has a clear command target and current selection indicator.
+  - Removed the now-unused `ThemeGalleryCard` implementation.
+  - Updated frontend specs with the lesson that Settings controls for global shell preferences are cross-surface commands and must be validated through model mutation, environment propagation, live surface updates, and persistence.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`
