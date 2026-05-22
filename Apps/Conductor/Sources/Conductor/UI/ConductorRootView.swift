@@ -1379,7 +1379,7 @@ private struct AppearanceSettingsPanel: View, Equatable {
 
     private var terminalSettingsDashboard: some View {
         LazyVStack(alignment: .leading, spacing: 16) {
-            terminalSettingsSectionPicker
+            terminalSettingsSectionRail
 
             activeTerminalSettingsSection
         }
@@ -1388,29 +1388,20 @@ private struct AppearanceSettingsPanel: View, Equatable {
         }
     }
 
-    private var terminalSettingsSectionPicker: some View {
-        SettingsPreferenceGroup(
-            title: L("终端设置", "Terminal Settings"),
-            subtitle: L("字体、显示、选择和输入按日常任务分开", "Font, display, selection, and input grouped by task"),
-            systemImage: selectedTerminalSettingsSection.systemImage
-        ) {
-            SettingsFormSurface {
-                SettingsControlRow(
-                    title: L("分类", "Category"),
-                    subtitle: selectedTerminalSettingsSection.subtitle,
-                    systemImage: selectedTerminalSettingsSection.systemImage
-                ) {
-                    SettingsSegmentedPicker(
-                        options: TerminalSettingsSection.allCases,
-                        selection: selectedTerminalSettingsSection,
-                        title: { $0.title }
-                    ) { section in
-                        ConductorMotion.withoutAnimation {
-                            selectedTerminalSettingsSection = section
-                        }
-                    }
+    private var terminalSettingsSectionRail: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TerminalSettingsSectionRail(
+                selection: selectedTerminalSettingsSection
+            ) { section in
+                ConductorMotion.withoutAnimation {
+                    selectedTerminalSettingsSection = section
                 }
             }
+
+            SettingsSectionLabel(
+                title: selectedTerminalSettingsSection.title,
+                subtitle: selectedTerminalSettingsSection.subtitle
+            )
         }
     }
 
@@ -2597,6 +2588,46 @@ private enum TerminalSettingsSection: String, CaseIterable, Identifiable, Hashab
     }
 }
 
+private struct TerminalSettingsSectionRail: View {
+    let selection: TerminalSettingsSection
+    let action: (TerminalSettingsSection) -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(TerminalSettingsSection.allCases) { section in
+                Button {
+                    guard section != selection else { return }
+                    action(section)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: section.systemImage)
+                            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                            .frame(width: 13)
+                        Text(section.title)
+                            .font(.conductorSystem(size: 10.8, weight: section == selection ? .semibold : .medium, scale: fontScale))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(section == selection ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 30)
+                    .background(section == selection ? theme.floatingSelectedFill : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(theme.floatingControlFill.opacity(0.26))
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.42), lineWidth: 0.8)
+        }
+    }
+}
+
 private struct SettingsSidebarSummary: View {
     let theme: TerminalTheme
     let appearance: AppearancePreferences
@@ -2604,36 +2635,26 @@ private struct SettingsSidebarSummary: View {
     @Environment(\.conductorTheme) private var activeTheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            ThemePreviewArtwork(theme: theme, height: 58, showsSidebar: false)
-                .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: "checkmark")
-                        .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
-                        .foregroundStyle(activeTheme.floatingPanelBase)
-                        .frame(width: 16, height: 16)
-                        .background(activeTheme.floatingEmphasis)
-                        .clipShape(Circle())
-                        .padding(6)
-                }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "gearshape")
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(activeTheme.floatingEmphasis)
+                    .frame(width: 16)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(theme.title)
-                    .font(.conductorSystem(size: 12.5, weight: .bold, scale: fontScale))
+                Text(L("设置", "Settings"))
+                    .font(.conductorSystem(size: 12.4, weight: .bold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
                     .lineLimit(1)
-                Text("\(appearance.density.title) · \(appearance.fontScale.title)")
-                    .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .lineLimit(1)
             }
+
+            Text("\(theme.title) · \(appearance.density.title) · \(appearance.fontScale.title)")
+                .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .lineLimit(1)
         }
-        .padding(8)
-        .background(activeTheme.floatingControlFill.opacity(0.62))
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
-                .stroke(activeTheme.floatingStroke.opacity(0.70), lineWidth: 1)
-        }
+        .padding(.horizontal, 7)
+        .padding(.bottom, 2)
     }
 }
 

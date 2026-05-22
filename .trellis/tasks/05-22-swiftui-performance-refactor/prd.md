@@ -171,6 +171,11 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Reworked the overview from a dashboard grid plus explanatory structure card into a compact grouped summary list with plain jump rows.
   - Made sidebar categories more explicit by renaming sections and showing each section subtitle directly in the sidebar row.
   - `swiftc -parse` passed across `Sources/Conductor` and `Sources/ConductorCore`.
+- Twelfth implementation phase:
+  - Removed the large theme preview card from the Settings sidebar summary and replaced it with a compact title/status treatment.
+  - Replaced the Settings > Terminal category picker row with a clear local navigation rail so terminal subcategories are visible without another nested form/card.
+  - Kept the active terminal category as the only mounted dense settings group while making the category structure easier to scan.
+  - `swiftc -parse` passed across `Sources/Conductor` and `Sources/ConductorCore`.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`
