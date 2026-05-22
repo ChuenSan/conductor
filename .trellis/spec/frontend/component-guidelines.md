@@ -193,6 +193,12 @@ workspace overview, and compact status modules.
   bounded preview documents. They must not inspect terminal scrollback or make terminal
   transcript text observable. Formatted document parsing is intentionally not part of the
   current product surface.
+- File tree display snapshots should be built in one bounded pass over the loaded directory
+  model whenever possible. Avoid recursive `flatMap` chains or building complete hidden row
+  arrays just to compute counts; use inout accumulation for visible rows, compute known counts
+  separately when search is empty, and derive displayed file/folder counts while creating the
+  snapshot. Search may flatten known loaded children, but non-search navigation should remain
+  proportional to visible rows plus a cheap loaded-count traversal.
 - AppKit document/preview surfaces that own large text, native previews, or renderer state
   must deduplicate no-op `updateNSView` work. Theme, font, and geometry setters should return
   early when values are unchanged, and resize/selection/search updates should invalidate only

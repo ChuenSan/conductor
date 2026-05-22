@@ -76,68 +76,120 @@ private enum FileManagerDisplaySnapshotBuilder {
         kindFilter: FileManagerKindFilter
     ) -> FileManagerDisplaySnapshot {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        let knownRows = knownRows(for: items, depth: 0, childItemsByDirectoryPath: childItemsByDirectoryPath)
-        let baseRows = query.isEmpty
-            ? visibleRows(
+        if query.isEmpty {
+            var rows: [FileManagerVisibleRow] = []
+            appendVisibleRows(
                 for: items,
                 depth: 0,
                 expandedDirectoryPaths: expandedDirectoryPaths,
-                childItemsByDirectoryPath: childItemsByDirectoryPath
+                childItemsByDirectoryPath: childItemsByDirectoryPath,
+                into: &rows
             )
-            : knownRows
-        let rows = baseRows.filter { row in
-            matchesKindFilter(row.item, kindFilter: kindFilter) &&
-                (query.isEmpty ||
-                    row.item.name.localizedCaseInsensitiveContains(query) ||
-                    row.item.url.path.localizedCaseInsensitiveContains(query))
+            let filteredRows = kindFilter == .all
+                ? rows
+                : rows.filter { row in
+                    matchesKindFilter(row.item, kindFilter: kindFilter)
+                }
+            return snapshot(
+                rows: filteredRows,
+                totalKnownItemCount: knownRowCount(for: items, childItemsByDirectoryPath: childItemsByDirectoryPath)
+            )
         }
 
+        var knownRows: [FileManagerVisibleRow] = []
+        appendKnownRows(
+            for: items,
+            depth: 0,
+            childItemsByDirectoryPath: childItemsByDirectoryPath,
+            into: &knownRows
+        )
+        var rows: [FileManagerVisibleRow] = []
+        rows.reserveCapacity(knownRows.count)
+        for row in knownRows where matchesKindFilter(row.item, kindFilter: kindFilter) &&
+            (row.item.name.localizedCaseInsensitiveContains(query) ||
+                row.item.url.path.localizedCaseInsensitiveContains(query)) {
+            rows.append(row)
+        }
+
+        return snapshot(rows: rows, totalKnownItemCount: knownRows.count)
+    }
+
+    private static func snapshot(
+        rows: [FileManagerVisibleRow],
+        totalKnownItemCount: Int
+    ) -> FileManagerDisplaySnapshot {
+        var displayedFileCount = 0
+        var displayedDirectoryCount = 0
+        for row in rows {
+            if row.item.isDirectory {
+                displayedDirectoryCount += 1
+            } else {
+                displayedFileCount += 1
+            }
+        }
         return FileManagerDisplaySnapshot(
             rows: rows,
-            totalKnownItemCount: knownRows.count,
-            displayedFileCount: rows.filter { !$0.item.isDirectory }.count,
-            displayedDirectoryCount: rows.filter(\.item.isDirectory).count
+            totalKnownItemCount: totalKnownItemCount,
+            displayedFileCount: displayedFileCount,
+            displayedDirectoryCount: displayedDirectoryCount
         )
     }
 
-    private static func visibleRows(
+    private static func appendVisibleRows(
         for items: [FileManagerItem],
         depth: Int,
         expandedDirectoryPaths: Set<String>,
-        childItemsByDirectoryPath: [String: [FileManagerItem]]
-    ) -> [FileManagerVisibleRow] {
-        items.flatMap { item -> [FileManagerVisibleRow] in
-            var rows = [FileManagerVisibleRow(item: item, depth: depth)]
+        childItemsByDirectoryPath: [String: [FileManagerItem]],
+        into rows: inout [FileManagerVisibleRow]
+    ) {
+        rows.reserveCapacity(rows.count + items.count)
+        for item in items {
+            rows.append(FileManagerVisibleRow(item: item, depth: depth))
             if item.isDirectory,
                expandedDirectoryPaths.contains(item.url.path),
                let children = childItemsByDirectoryPath[item.url.path] {
-                rows.append(contentsOf: visibleRows(
+                appendVisibleRows(
                     for: children,
                     depth: depth + 1,
                     expandedDirectoryPaths: expandedDirectoryPaths,
-                    childItemsByDirectoryPath: childItemsByDirectoryPath
-                ))
+                    childItemsByDirectoryPath: childItemsByDirectoryPath,
+                    into: &rows
+                )
             }
-            return rows
         }
     }
 
-    private static func knownRows(
+    private static func appendKnownRows(
         for items: [FileManagerItem],
         depth: Int,
-        childItemsByDirectoryPath: [String: [FileManagerItem]]
-    ) -> [FileManagerVisibleRow] {
-        items.flatMap { item -> [FileManagerVisibleRow] in
-            var rows = [FileManagerVisibleRow(item: item, depth: depth)]
+        childItemsByDirectoryPath: [String: [FileManagerItem]],
+        into rows: inout [FileManagerVisibleRow]
+    ) {
+        rows.reserveCapacity(rows.count + items.count)
+        for item in items {
+            rows.append(FileManagerVisibleRow(item: item, depth: depth))
             if item.isDirectory, let children = childItemsByDirectoryPath[item.url.path] {
-                rows.append(contentsOf: knownRows(
+                appendKnownRows(
                     for: children,
                     depth: depth + 1,
-                    childItemsByDirectoryPath: childItemsByDirectoryPath
-                ))
+                    childItemsByDirectoryPath: childItemsByDirectoryPath,
+                    into: &rows
+                )
             }
-            return rows
         }
+    }
+
+    private static func knownRowCount(
+        for items: [FileManagerItem],
+        childItemsByDirectoryPath: [String: [FileManagerItem]]
+    ) -> Int {
+        var count = items.count
+        for item in items where item.isDirectory {
+            if let children = childItemsByDirectoryPath[item.url.path] {
+                count += knownRowCount(for: children, childItemsByDirectoryPath: childItemsByDirectoryPath)
+            }
+        }
+        return count
     }
 
     private static func matchesKindFilter(_ item: FileManagerItem, kindFilter: FileManagerKindFilter) -> Bool {

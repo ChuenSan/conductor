@@ -232,6 +232,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Added `CommandShortcutGuideRowModel` and moved shortcut-guide rows into `SettingsPanelSnapshot` so the Settings command guide does not rebuild catalog rows from `body`.
   - Removed the remaining `Array(enumerated())` usages from `ConductorRootView`, including the theme picker and shortcut guide.
   - Kept theme selection and command discovery routed through the existing model/catalog paths.
+- Twenty-sixth implementation phase:
+  - Reworked `FileManagerDisplaySnapshotBuilder` to accumulate visible and known rows with inout recursion instead of recursive `flatMap` arrays.
+  - Avoided building the full known-row array when there is no file search query; the empty-search path now computes only the known count plus visible rows.
+  - Counted displayed files and directories in one pass while constructing the snapshot instead of filtering the rendered rows twice.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`
