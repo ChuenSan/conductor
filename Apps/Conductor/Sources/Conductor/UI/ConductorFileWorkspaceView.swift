@@ -1,4 +1,5 @@
 import AppKit
+import ConductorCore
 import SwiftUI
 import UniformTypeIdentifiers
 
