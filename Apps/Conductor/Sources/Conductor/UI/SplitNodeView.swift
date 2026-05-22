@@ -46,7 +46,7 @@ private struct SplitPairView: View {
     let first: SplitNode
     let second: SplitNode
     let path: [SplitPathElement]
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
 
     var body: some View {
         AppKitSplitPairView(
@@ -72,7 +72,7 @@ private struct AppKitSplitPairView: NSViewRepresentable {
     let first: SplitNode
     let second: SplitNode
     let path: [SplitPathElement]
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
     let theme: TerminalTheme
     let dividerThickness: CGFloat
 

@@ -209,6 +209,9 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Preserved `TerminalSurfaceRepresentable` identity and Ghostty/AppKit surface ownership; the selected terminal still resolves through `model.surface(for:)` and no theme/appearance `.id(...)` recreation was introduced.
   - Added theme/font-scale identity to `TerminalTabButtonContent` equality inputs so global appearance changes restyle terminal tab labels immediately while keeping the row-content equality optimization.
   - Updated frontend specs with the terminal pane/tab chrome snapshot convention.
+- Twentieth implementation phase:
+  - Removed the remaining unnecessary `@ObservedObject` subscriptions from `SplitPairView` and `AppKitSplitPairView`; the split pair bridge now keeps the window model as a plain coordinator reference while the recursive `SplitNodeView` roots remain the observation boundary.
+  - Preserved explicit theme input for divider colors and kept the AppKit split hosting/signature path unchanged.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`
