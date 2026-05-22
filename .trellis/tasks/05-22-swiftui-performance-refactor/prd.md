@@ -189,6 +189,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Fixed the actual stale main-chrome path where `ConductorSidebar`, `ConductorToolbar`, and `WorkspaceTabStrip` avoided broad `@ObservedObject` subscriptions but still read `model.theme` / `model.appearance` through the unobserved model reference.
   - Passed `TerminalTheme`, `AppearancePreferences`, and sidebar visibility into those chrome containers as explicit value inputs so Settings theme changes invalidate sidebar and top-tab chrome immediately without reintroducing broad model observation.
   - Updated frontend specs with the rule that performance-isolated chrome containers must receive low-frequency visual state as explicit props instead of reading appearance through an unobserved model reference.
+- Sixteenth implementation phase:
+  - Added `ToolbarChromeSnapshot` so toolbar command enablement and active states are explicit compact inputs rather than direct reads from an unobserved `ConductorWindowModel` reference.
+  - Routed split, zoom, file-manager, workspace-overview, and notification toolbar button display state through the snapshot while preserving command execution through `model.performCommand`.
+  - Updated frontend specs with the rule that performance-isolated toolbar chrome must snapshot active/disabled display state just like visual appearance state.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

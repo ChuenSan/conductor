@@ -91,6 +91,7 @@ struct ConductorRootView: View {
 
     private var shellContent: some View {
         let workspaceSnapshot = WorkspaceChromeSnapshot(model: model)
+        let toolbarSnapshot = ToolbarChromeSnapshot(model: model)
 
         return HStack(alignment: .top, spacing: ConductorDesign.shellGap) {
             ConductorSidebar(
@@ -106,6 +107,7 @@ struct ConductorRootView: View {
                 ConductorToolbar(
                     model: model,
                     workspaceSnapshot: workspaceSnapshot,
+                    toolbarSnapshot: toolbarSnapshot,
                     theme: model.theme,
                     appearance: model.appearance
                 )
@@ -5908,6 +5910,29 @@ private struct WorkspaceChromeDisplayModel: Identifiable, Equatable {
     let selected: Bool
 }
 
+private struct ToolbarChromeSnapshot: Equatable {
+    let canSplitRight: Bool
+    let canSplitDown: Bool
+    let canToggleZoom: Bool
+    let isZoomed: Bool
+    let canToggleFileManager: Bool
+    let fileManagerActive: Bool
+    let workspaceOverviewVisible: Bool
+    let notificationPanelVisible: Bool
+
+    @MainActor
+    init(model: ConductorWindowModel) {
+        self.canSplitRight = model.canPerformCommand(.splitRight)
+        self.canSplitDown = model.canPerformCommand(.splitDown)
+        self.canToggleZoom = model.canPerformCommand(.toggleZoom)
+        self.isZoomed = model.workspace.isZoomed
+        self.canToggleFileManager = model.canPerformCommand(.toggleFileManager)
+        self.fileManagerActive = model.fileManagerPanelRequest != nil
+        self.workspaceOverviewVisible = model.workspaceOverviewVisible
+        self.notificationPanelVisible = model.notificationPanelVisible
+    }
+}
+
 private struct WorkspaceFileTabDisplayModel: Identifiable, Equatable {
     var id: String { tab.id }
     let tab: ConductorWorkspaceFileTab
@@ -6358,6 +6383,7 @@ private struct SidebarActionRow: View {
 private struct ConductorToolbar: View {
     let model: ConductorWindowModel
     let workspaceSnapshot: WorkspaceChromeSnapshot
+    let toolbarSnapshot: ToolbarChromeSnapshot
     let theme: TerminalTheme
     let appearance: AppearancePreferences
     @State private var editingWorkspaceID: WorkspaceID?
@@ -6394,14 +6420,14 @@ private struct ConductorToolbar: View {
                 }
 
                 ConductorPillGroup {
-                    ConductorIconButton(systemImage: "rectangle.split.2x1", help: L("向右分屏 Cmd-D", "Split Right Cmd-D"), title: L("右分屏", "Right"), disabled: !model.canPerformCommand(.splitRight)) {
+                    ConductorIconButton(systemImage: "rectangle.split.2x1", help: L("向右分屏 Cmd-D", "Split Right Cmd-D"), title: L("右分屏", "Right"), disabled: !toolbarSnapshot.canSplitRight) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {
                             model.performCommand(.splitRight)
                         }
                     }
                     ConductorSegmentDivider()
-                    ConductorIconButton(systemImage: "rectangle.split.1x2", help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D"), title: L("下分屏", "Down"), disabled: !model.canPerformCommand(.splitDown)) {
+                    ConductorIconButton(systemImage: "rectangle.split.1x2", help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D"), title: L("下分屏", "Down"), disabled: !toolbarSnapshot.canSplitDown) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {
                             model.performCommand(.splitDown)
@@ -6410,10 +6436,10 @@ private struct ConductorToolbar: View {
                     ConductorSegmentDivider()
                     ConductorIconButton(
                         systemImage: "arrow.up.left.and.arrow.down.right",
-                        help: model.workspace.isZoomed ? L("还原当前分屏 Cmd-Opt-Z", "Restore Current Pane Cmd-Opt-Z") : L("放大当前分屏 Cmd-Opt-Z", "Zoom Current Pane Cmd-Opt-Z"),
-                        title: model.workspace.isZoomed ? L("还原", "Restore") : L("放大", "Zoom"),
-                        disabled: !model.canPerformCommand(.toggleZoom),
-                        active: model.workspace.isZoomed
+                        help: toolbarSnapshot.isZoomed ? L("还原当前分屏 Cmd-Opt-Z", "Restore Current Pane Cmd-Opt-Z") : L("放大当前分屏 Cmd-Opt-Z", "Zoom Current Pane Cmd-Opt-Z"),
+                        title: toolbarSnapshot.isZoomed ? L("还原", "Restore") : L("放大", "Zoom"),
+                        disabled: !toolbarSnapshot.canToggleZoom,
+                        active: toolbarSnapshot.isZoomed
                     ) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {
@@ -6427,8 +6453,8 @@ private struct ConductorToolbar: View {
                         systemImage: "folder",
                         help: L("文件管理器", "File Manager"),
                         title: L("文件", "Files"),
-                        disabled: !model.canPerformCommand(.toggleFileManager),
-                        active: model.fileManagerPanelRequest != nil
+                        disabled: !toolbarSnapshot.canToggleFileManager,
+                        active: toolbarSnapshot.fileManagerActive
                     ) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.toggleFileManager)
@@ -6438,7 +6464,7 @@ private struct ConductorToolbar: View {
                         systemImage: WorkspaceChromeGlyph.systemName(selected: false),
                         help: L("工作区总览 Cmd-O", "Workspace Overview Cmd-O"),
                         title: L("总览", "Overview"),
-                        active: model.workspaceOverviewVisible
+                        active: toolbarSnapshot.workspaceOverviewVisible
                     ) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.toggleWorkspaceOverview)
@@ -6448,7 +6474,7 @@ private struct ConductorToolbar: View {
                         systemImage: workspaceSnapshot.totalUnreadCount > 0 ? "bell.badge" : "bell",
                         help: L("通知中心 Cmd-Opt-N", "Notification Center Cmd-Opt-N"),
                         title: workspaceSnapshot.totalUnreadCount > 0 ? L("通知 \(workspaceSnapshot.totalUnreadCount)", "Alerts \(workspaceSnapshot.totalUnreadCount)") : L("通知", "Alerts"),
-                        active: model.notificationPanelVisible
+                        active: toolbarSnapshot.notificationPanelVisible
                     ) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.toggleNotifications)

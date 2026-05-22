@@ -111,7 +111,8 @@ Forbidden patterns:
 - Shell chrome containers that avoid observing the full window model must receive low-frequency
   visual state such as `TerminalTheme` and `AppearancePreferences` as explicit value inputs.
   They may keep the model reference for commands, but must not rely on an unobserved model
-  reference for current theme/density/clarity values.
+  reference for current theme/density/clarity values, toolbar command enablement, or panel
+  active states.
 - Density can change toolbar, workspace tab, pane tab, and sidebar chrome dimensions.
 - Chrome clarity can change material tint and stroke emphasis.
 - Font scale can change SwiftUI shell text and icon labels in toolbar, sidebar, settings,
@@ -173,6 +174,9 @@ Forbidden patterns:
   workspace/tab selection.
 - Bad: A sidebar or toolbar container is not an `@ObservedObject`, reads `model.theme` for
   drawing, and only refreshes when `WorkspaceChromeSnapshot` changes.
+- Bad: Toolbar buttons read `model.workspace.isZoomed` or panel visibility directly from an
+  unobserved model reference, so active/disabled state changes wait for an unrelated tab or
+  workspace chrome update.
 - Bad: Hard-coding fixed white/black opacity fills for selected sidebar/settings rows when a
   `TerminalTheme` shell color exists.
 - Bad: Deleting or replacing the selected workspace, assigning `workspace` to a successor,

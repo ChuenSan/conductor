@@ -160,10 +160,12 @@ workspace overview, and compact status modules.
   point such as a menu item, both routes must continue to call the same model mutation path.
 - Chrome containers that intentionally avoid `@ObservedObject` for performance must receive
   low-frequency visual inputs such as `TerminalTheme`, `AppearancePreferences`, and visibility
-  flags as explicit value props. Do not let these containers read `model.theme` or
-  `model.appearance` only through an unobserved model reference; otherwise Settings changes can
-  update the root and floating panel while sidebar or tab chrome remains stale until another
-  snapshot change happens.
+  flags as explicit value props. Toolbar command enablement and active states should follow the
+  same rule through a compact chrome snapshot. Do not let these containers read `model.theme`,
+  `model.appearance`, `model.workspace.isZoomed`, or panel visibility only through an unobserved
+  model reference; otherwise Settings changes, zoom toggles, and panel toggles can update the
+  model while sidebar, tab, or toolbar chrome remains stale until another snapshot change
+  happens.
 - Floating shell panels must not use the terminal/workspace `accent` as their default selected,
   hover, icon, unread, or focus color. Use neutral panel tokens such as `floatingEmphasis`,
   `floatingSelectedFill`, `floatingHoverFill`, and `floatingSelectedStroke` so Command Center,
