@@ -159,6 +159,12 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Preserved existing settings behavior and bindings while reducing the amount of observable model state that the open Settings panel depends on during normal body recomputation.
   - `swiftc -parse` passed across `Sources/Conductor` and `Sources/ConductorCore`.
   - Per user preference, skipped the full Conductor gate for this local panel-only refactor and reserved full checks for larger or cross-layer changes.
+- Tenth implementation phase:
+  - Reworked Settings > Terminal in `Apps/Conductor/Sources/Conductor/UI/ConductorRootView.swift` from one long dashboard into a lightweight local category switcher.
+  - Added `TerminalSettingsSection` with typography, display, selection, and input categories so the page mounts only the currently active dense control group.
+  - Removed large-subtree animation from terminal settings category changes by applying a nil-animation transaction and using `ConductorMotion.withoutAnimation` for local category selection.
+  - Preserved all existing terminal setting controls and command callbacks while reducing first-entry and category-switch SwiftUI view construction.
+  - `swiftc -parse` passed across `Sources/Conductor` and `Sources/ConductorCore`.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

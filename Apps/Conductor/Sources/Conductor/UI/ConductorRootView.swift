@@ -1082,6 +1082,7 @@ private struct AppearanceSettingsPanel: View, Equatable {
     let model: ConductorWindowModel
     let snapshot: SettingsPanelSnapshot
     @State private var selectedSection: SettingsPanelSection = .overview
+    @State private var selectedTerminalSettingsSection: TerminalSettingsSection = .typography
     @Namespace private var settingsSelectionNamespace
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
@@ -1403,23 +1404,53 @@ private struct AppearanceSettingsPanel: View, Equatable {
     }
 
     private var terminalSettingsDashboard: some View {
-        LazyVStack(alignment: .leading, spacing: 18) {
+        LazyVStack(alignment: .leading, spacing: 16) {
+            terminalSettingsSectionPicker
+
+            activeTerminalSettingsSection
+        }
+        .transaction { transaction in
+            transaction.animation = nil
+        }
+    }
+
+    private var terminalSettingsSectionPicker: some View {
+        SettingsPreferenceGroup(
+            title: L("终端设置", "Terminal Settings"),
+            subtitle: L("只挂载当前分类，避免终端设置页一次性创建过多控件", "Only the active category is mounted so terminal settings stay responsive"),
+            systemImage: selectedTerminalSettingsSection.systemImage
+        ) {
+            SettingsFormSurface {
+                SettingsControlRow(
+                    title: L("分类", "Category"),
+                    subtitle: selectedTerminalSettingsSection.subtitle,
+                    systemImage: selectedTerminalSettingsSection.systemImage
+                ) {
+                    SettingsSegmentedPicker(
+                        options: TerminalSettingsSection.allCases,
+                        selection: selectedTerminalSettingsSection,
+                        title: { $0.title }
+                    ) { section in
+                        ConductorMotion.withoutAnimation {
+                            selectedTerminalSettingsSection = section
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var activeTerminalSettingsSection: some View {
+        switch selectedTerminalSettingsSection {
+        case .typography:
             terminalTypographySettings
-
-            SettingsSectionLabel(
-                title: L("显示与光标", "Display and Cursor"),
-                subtitle: L("这些是每天打字和阅读终端时最容易感知到的项", "The controls you feel most while reading and typing in the terminal")
-            )
-
+        case .display:
             terminalCursorSettings
             terminalBackgroundSettings
-
-            SettingsSectionLabel(
-                title: L("交互与安全", "Interaction and Safety"),
-                subtitle: L("复制、粘贴、鼠标和键盘输入放在一起，避免散落到不同页面", "Copy, paste, mouse, and keyboard input stay together instead of being scattered")
-            )
-
+        case .selection:
             terminalSelectionMouseSettings
+        case .input:
             terminalClipboardSettings
             terminalKeyboardSettings
         }
@@ -2540,6 +2571,54 @@ private enum SettingsPanelSection: String, CaseIterable, Identifiable {
             "command"
         case .themes:
             "swatchpalette"
+        }
+    }
+}
+
+private enum TerminalSettingsSection: String, CaseIterable, Identifiable, Hashable {
+    case typography
+    case display
+    case selection
+    case input
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .typography:
+            L("字体", "Font")
+        case .display:
+            L("显示", "Display")
+        case .selection:
+            L("选择", "Select")
+        case .input:
+            L("输入", "Input")
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .typography:
+            L("字体族、字号、行高和自定义字体", "Font family, size, line height, and custom fonts")
+        case .display:
+            L("光标、背景、透明度和图像背景", "Cursor, background, opacity, and background images")
+        case .selection:
+            L("选择行为、鼠标、链接和滚动", "Selection behavior, mouse, links, and scrolling")
+        case .input:
+            L("剪贴板、粘贴安全和键盘输入", "Clipboard, paste safety, and keyboard input")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .typography:
+            "textformat"
+        case .display:
+            "display"
+        case .selection:
+            "cursorarrow"
+        case .input:
+            "keyboard"
         }
     }
 }
