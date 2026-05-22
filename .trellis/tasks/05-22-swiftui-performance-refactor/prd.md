@@ -197,6 +197,12 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Added `WorkspaceOverviewSnapshot` so the Workspace Overview floating panel reads workspace list, selected workspace, notification counts, and chrome clarity from a compact value input.
   - Removed the panel's direct `@ObservedObject` subscription to `ConductorWindowModel`; the panel keeps the model only as a command reference for close/select actions.
   - Updated frontend specs to cover Workspace Overview and other heavy floating panels in the compact snapshot rule, preventing unrelated terminal metadata changes from broadly invalidating card grids.
+- Eighteenth implementation phase:
+  - Added `CommandPaletteSnapshot` so Command Center reads subtitle, chrome clarity, and command rows from a compact value input.
+  - Removed `CommandPaletteView`'s direct `@ObservedObject` subscription to `ConductorWindowModel`; the panel keeps the model only as a command coordinator for hide/perform actions.
+  - Converted `CommandPaletteItem` into an `Equatable` value row with a `ConductorShellCommand`, disabled state, shortcut, keywords, and precomputed lowercase search text instead of embedding per-row action closures.
+  - Kept shortcut-guide rows projected from the same command catalog so the command surface and discoverability surface stay synchronized.
+  - Updated frontend specs with the Command Center value-row rule.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

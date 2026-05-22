@@ -50,7 +50,10 @@ struct ConductorRootView: View {
         .overlay {
             ZStack {
                 if model.commandPaletteVisible {
-                    CommandPaletteView(model: model)
+                    CommandPaletteView(
+                        model: model,
+                        snapshot: CommandPaletteSnapshot(model: model)
+                    )
                         .environment(\.conductorTheme, model.theme)
                         .environment(\.conductorFontScale, model.appearance.fontScale)
                         .environment(\.conductorFontFamily, model.appearance.fontFamily)
@@ -469,8 +472,22 @@ private struct FloatingPanelDivider: View {
     }
 }
 
+private struct CommandPaletteSnapshot: Equatable {
+    let subtitle: String
+    let chromeClarity: ChromeClarity
+    let commands: [CommandPaletteItem]
+
+    @MainActor
+    init(model: ConductorWindowModel) {
+        self.subtitle = model.workspace.title
+        self.chromeClarity = model.appearance.chromeClarity
+        self.commands = ConductorCommandCatalog.items(model: model)
+    }
+}
+
 private struct CommandPaletteView: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
+    let snapshot: CommandPaletteSnapshot
     @State private var query = ""
     @State private var selectedCommandID: String?
     @Namespace private var commandSelectionNamespace
@@ -479,16 +496,14 @@ private struct CommandPaletteView: View {
     @Environment(\.conductorFontScale) private var fontScale
 
     private var commands: [CommandPaletteItem] {
-        ConductorCommandCatalog.items(model: model, run: run)
+        snapshot.commands
     }
 
     private var filteredCommands: [CommandPaletteItem] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalizedQuery.isEmpty else { return commands }
         return commands.filter { command in
-            "\(command.title) \(command.shortcut) \(command.section) \(command.keywords)"
-                .lowercased()
-                .contains(normalizedQuery)
+            command.searchText.contains(normalizedQuery)
         }
     }
 
@@ -498,7 +513,7 @@ private struct CommandPaletteView: View {
 
     var body: some View {
         ZStack {
-            ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
+            ConductorGlassSurface(style: .panel, clarity: snapshot.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 10) {
                     commandHeader
                     FloatingPanelDivider()
@@ -539,7 +554,7 @@ private struct CommandPaletteView: View {
         FloatingPanelHeader(
             systemImage: "command",
             title: "Command Center",
-            subtitle: model.workspace.title,
+            subtitle: snapshot.subtitle,
             closeHelp: L("关闭命令中心", "Close Command Center")
         ) {
             model.hideCommandPalette()
@@ -593,7 +608,9 @@ private struct CommandPaletteView: View {
                                 command: command,
                                 selected: command.id == selectedCommandID,
                                 selectionNamespace: commandSelectionNamespace,
-                                action: command.action,
+                                action: {
+                                    execute(command)
+                                },
                                 onHover: {
                                     if !command.disabled {
                                         selectedCommandID = command.id
@@ -610,11 +627,6 @@ private struct CommandPaletteView: View {
             }
         }
         .frame(maxHeight: .infinity)
-    }
-
-    private func run(_ action: () -> Void) {
-        action()
-        model.hideCommandPalette()
     }
 
     private func ensureSelection() {
@@ -641,14 +653,21 @@ private struct CommandPaletteView: View {
         selectedCommandID = enabledCommands[nextIndex].id
     }
 
+    private func execute(_ command: CommandPaletteItem) {
+        guard !command.disabled else {
+            return
+        }
+        _ = model.performCommand(command.command)
+        model.hideCommandPalette()
+    }
+
     private func executeSelected() {
         ensureSelection()
         guard let selectedCommandID,
-              let command = filteredCommands.first(where: { $0.id == selectedCommandID }),
-              !command.disabled else {
+              let command = filteredCommands.first(where: { $0.id == selectedCommandID }) else {
             return
         }
-        command.action()
+        execute(command)
     }
 
     private func focusSearchField() {
@@ -658,15 +677,37 @@ private struct CommandPaletteView: View {
     }
 }
 
-private struct CommandPaletteItem: Identifiable {
+private struct CommandPaletteItem: Identifiable, Equatable {
     let id: String
+    let command: ConductorShellCommand
     let section: String
     let title: String
     let shortcut: String
-    var disabled = false
-    var disabledReason: String? = nil
-    var keywords = ""
-    let action: () -> Void
+    let disabled: Bool
+    let disabledReason: String?
+    let keywords: String
+    let searchText: String
+
+    init(
+        id: String,
+        command: ConductorShellCommand,
+        section: String,
+        title: String,
+        shortcut: String,
+        disabled: Bool = false,
+        disabledReason: String? = nil,
+        keywords: String = ""
+    ) {
+        self.id = id
+        self.command = command
+        self.section = section
+        self.title = title
+        self.shortcut = shortcut
+        self.disabled = disabled
+        self.disabledReason = disabledReason
+        self.keywords = keywords
+        self.searchText = "\(title) \(shortcut) \(section) \(keywords)".lowercased()
+    }
 
     var systemImage: String {
         switch id {
@@ -750,192 +791,111 @@ private struct CommandPaletteItem: Identifiable {
 
 private enum ConductorCommandCatalog {
     @MainActor
-    static func items(
-        model: ConductorWindowModel,
-        run: @escaping (@escaping () -> Void) -> Void
-    ) -> [CommandPaletteItem] {
-        func perform(_ command: ConductorShellCommand) {
-            run {
-                _ = model.performCommand(command)
-            }
-        }
-
+    static func items(model: ConductorWindowModel) -> [CommandPaletteItem] {
         func canPerform(_ command: ConductorShellCommand) -> Bool {
             model.canPerformCommand(command)
         }
 
         return [
-            CommandPaletteItem(id: "new-workspace", section: L("创建", "Create"), title: L("新建工作区", "New Workspace"), shortcut: "Cmd-N", keywords: "workspace new") {
-                perform(.newWorkspace)
-            },
-            CommandPaletteItem(id: "new-terminal", section: L("创建", "Create"), title: L("新开终端", "New Terminal"), shortcut: "Cmd-T", keywords: "terminal pane shell") {
-                perform(.newTerminal)
-            },
+            CommandPaletteItem(id: "new-workspace", command: .newWorkspace, section: L("创建", "Create"), title: L("新建工作区", "New Workspace"), shortcut: "Cmd-N", keywords: "workspace new"),
+            CommandPaletteItem(id: "new-terminal", command: .newTerminal, section: L("创建", "Create"), title: L("新开终端", "New Terminal"), shortcut: "Cmd-T", keywords: "terminal pane shell"),
             CommandPaletteItem(
                 id: "new-terminal-current-directory",
+                command: .newTerminalAtFocusedDirectory,
                 section: L("创建", "Create"),
                 title: L("从当前目录新开终端", "New Terminal at Current Directory"),
                 shortcut: "Current CWD",
                 disabled: !canPerform(.newTerminalAtFocusedDirectory),
                 disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
                 keywords: "terminal cwd current directory folder"
-            ) {
-                perform(.newTerminalAtFocusedDirectory)
-            },
-            CommandPaletteItem(id: "duplicate-tab", section: L("创建", "Create"), title: L("复制当前标签", "Duplicate Current Tab"), shortcut: "Duplicate", keywords: "copy tab duplicate") {
-                perform(.duplicateSelectedTab)
-            },
+            ),
+            CommandPaletteItem(id: "duplicate-tab", command: .duplicateSelectedTab, section: L("创建", "Create"), title: L("复制当前标签", "Duplicate Current Tab"), shortcut: "Duplicate", keywords: "copy tab duplicate"),
             CommandPaletteItem(
                 id: "open-current-directory",
+                command: .openFocusedDirectory,
                 section: L("上下文", "Context"),
                 title: L("打开当前目录", "Open Current Directory"),
                 shortcut: "Finder",
                 disabled: !canPerform(.openFocusedDirectory),
                 disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
                 keywords: "open reveal finder cwd folder directory"
-            ) {
-                perform(.openFocusedDirectory)
-            },
+            ),
             CommandPaletteItem(
                 id: "copy-current-directory",
+                command: .copyFocusedDirectory,
                 section: L("上下文", "Context"),
                 title: L("复制当前目录路径", "Copy Current Directory Path"),
                 shortcut: "Copy",
                 disabled: !canPerform(.copyFocusedDirectory),
                 disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
                 keywords: "copy path cwd folder directory"
-            ) {
-                perform(.copyFocusedDirectory)
-            },
+            ),
             CommandPaletteItem(
                 id: "file-manager",
+                command: .toggleFileManager,
                 section: L("上下文", "Context"),
                 title: L("文件管理器", "File Manager"),
                 shortcut: "Files",
                 disabled: !canPerform(.toggleFileManager),
                 disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
                 keywords: "file files browser manager cwd folder directory preview"
-            ) {
-                perform(.toggleFileManager)
-            },
-            CommandPaletteItem(id: "split-right", section: L("创建", "Create"), title: L("向右分屏", "Split Right"), shortcut: "Cmd-D", disabled: !canPerform(.splitRight), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split right vertical") {
-                perform(.splitRight)
-            },
-            CommandPaletteItem(id: "split-down", section: L("创建", "Create"), title: L("向下分屏", "Split Down"), shortcut: "Cmd-Shift-D", disabled: !canPerform(.splitDown), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split down horizontal") {
-                perform(.splitDown)
-            },
-            CommandPaletteItem(id: "next-tab", section: L("导航", "Navigate"), title: L("下一个标签", "Next Tab"), shortcut: "Cmd-]", keywords: "next tab") {
-                perform(.selectNextTab)
-            },
-            CommandPaletteItem(id: "previous-tab", section: L("导航", "Navigate"), title: L("上一个标签", "Previous Tab"), shortcut: "Cmd-[", keywords: "previous tab") {
-                perform(.selectPreviousTab)
-            },
-            CommandPaletteItem(id: "next-pane", section: L("导航", "Navigate"), title: L("下一个分屏", "Next Pane"), shortcut: "Cmd-Shift-]", keywords: "next pane focus") {
-                perform(.focusNextPane)
-            },
-            CommandPaletteItem(id: "previous-pane", section: L("导航", "Navigate"), title: L("上一个分屏", "Previous Pane"), shortcut: "Cmd-Shift-[", keywords: "previous pane focus") {
-                perform(.focusPreviousPane)
-            },
-            CommandPaletteItem(id: "notifications", section: L("导航", "Navigate"), title: L("通知中心", "Notification Center"), shortcut: "Cmd-Opt-N", keywords: "notification unread agent") {
-                perform(.toggleNotifications)
-            },
+            ),
+            CommandPaletteItem(id: "split-right", command: .splitRight, section: L("创建", "Create"), title: L("向右分屏", "Split Right"), shortcut: "Cmd-D", disabled: !canPerform(.splitRight), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split right vertical"),
+            CommandPaletteItem(id: "split-down", command: .splitDown, section: L("创建", "Create"), title: L("向下分屏", "Split Down"), shortcut: "Cmd-Shift-D", disabled: !canPerform(.splitDown), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split down horizontal"),
+            CommandPaletteItem(id: "next-tab", command: .selectNextTab, section: L("导航", "Navigate"), title: L("下一个标签", "Next Tab"), shortcut: "Cmd-]", keywords: "next tab"),
+            CommandPaletteItem(id: "previous-tab", command: .selectPreviousTab, section: L("导航", "Navigate"), title: L("上一个标签", "Previous Tab"), shortcut: "Cmd-[", keywords: "previous tab"),
+            CommandPaletteItem(id: "next-pane", command: .focusNextPane, section: L("导航", "Navigate"), title: L("下一个分屏", "Next Pane"), shortcut: "Cmd-Shift-]", keywords: "next pane focus"),
+            CommandPaletteItem(id: "previous-pane", command: .focusPreviousPane, section: L("导航", "Navigate"), title: L("上一个分屏", "Previous Pane"), shortcut: "Cmd-Shift-[", keywords: "previous pane focus"),
+            CommandPaletteItem(id: "notifications", command: .toggleNotifications, section: L("导航", "Navigate"), title: L("通知中心", "Notification Center"), shortcut: "Cmd-Opt-N", keywords: "notification unread agent"),
             CommandPaletteItem(
                 id: "jump-unread",
+                command: .jumpToLatestUnread,
                 section: L("导航", "Navigate"),
                 title: L("跳到最新未读", "Jump to Latest Unread"),
                 shortcut: "Cmd-Opt-J",
                 disabled: !canPerform(.jumpToLatestUnread),
                 disabledReason: L("没有未读通知", "No unread notifications"),
                 keywords: "notification unread jump"
-            ) {
-                perform(.jumpToLatestUnread)
-            },
-            CommandPaletteItem(id: "focus-left", section: L("导航", "Navigate"), title: L("聚焦左侧分屏", "Focus Pane Left"), shortcut: "Cmd-Opt-←", keywords: "focus pane left") {
-                perform(.focusPaneLeft)
-            },
-            CommandPaletteItem(id: "focus-right", section: L("导航", "Navigate"), title: L("聚焦右侧分屏", "Focus Pane Right"), shortcut: "Cmd-Opt-→", keywords: "focus pane right") {
-                perform(.focusPaneRight)
-            },
-            CommandPaletteItem(id: "focus-up", section: L("导航", "Navigate"), title: L("聚焦上方分屏", "Focus Pane Up"), shortcut: "Cmd-Opt-↑", keywords: "focus pane up") {
-                perform(.focusPaneUp)
-            },
-            CommandPaletteItem(id: "focus-down", section: L("导航", "Navigate"), title: L("聚焦下方分屏", "Focus Pane Down"), shortcut: "Cmd-Opt-↓", keywords: "focus pane down") {
-                perform(.focusPaneDown)
-            },
-            CommandPaletteItem(id: "close-tab", section: L("整理", "Organize"), title: L("关闭标签", "Close Tab"), shortcut: "Cmd-W", keywords: "close tab") {
-                perform(.closeSelectedTab)
-            },
-            CommandPaletteItem(id: "close-pane", section: L("整理", "Organize"), title: L("关闭分屏", "Close Pane"), shortcut: "Cmd-Shift-W", disabled: !canPerform(.closeFocusedPane), disabledReason: L("至少保留一个分屏", "Keep at least one pane"), keywords: "close pane split") {
-                perform(.closeFocusedPane)
-            },
-            CommandPaletteItem(id: "move-tab-left", section: L("整理", "Organize"), title: L("标签左移", "Move Tab Left"), shortcut: "Cmd-Shift-,", disabled: !canPerform(.moveTabLeft), disabledReason: L("已经在最左侧", "Already on the left"), keywords: "move tab left") {
-                perform(.moveTabLeft)
-            },
-            CommandPaletteItem(id: "move-tab-right", section: L("整理", "Organize"), title: L("标签右移", "Move Tab Right"), shortcut: "Cmd-Shift-.", disabled: !canPerform(.moveTabRight), disabledReason: L("已经在最右侧", "Already on the right"), keywords: "move tab right") {
-                perform(.moveTabRight)
-            },
-            CommandPaletteItem(id: "move-tab-next-pane", section: L("整理", "Organize"), title: L("移到下一个分屏", "Move to Next Pane"), shortcut: "Cmd-Opt-M", disabled: !canPerform(.moveTabToNextPane), disabledReason: L("需要另一个分屏", "Requires another pane"), keywords: "move tab pane") {
-                perform(.moveTabToNextPane)
-            },
-            CommandPaletteItem(id: "move-tab-new-split", section: L("整理", "Organize"), title: L("移到右侧新分屏", "Move to New Right Split"), shortcut: "Cmd-Opt-Shift-M", disabled: !canPerform(.moveTabToNewRightSplit), disabledReason: L("需要可移动标签和可用分屏空间", "Requires a movable tab and split space"), keywords: "move tab new split") {
-                perform(.moveTabToNewRightSplit)
-            },
-            CommandPaletteItem(id: "resize-left", section: L("整理", "Organize"), title: L("向左调整分屏", "Resize Pane Left"), shortcut: "Cmd-Shift-←", disabled: !canPerform(.resizePaneLeft), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split left") {
-                perform(.resizePaneLeft)
-            },
-            CommandPaletteItem(id: "resize-right", section: L("整理", "Organize"), title: L("向右调整分屏", "Resize Pane Right"), shortcut: "Cmd-Shift-→", disabled: !canPerform(.resizePaneRight), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split right") {
-                perform(.resizePaneRight)
-            },
-            CommandPaletteItem(id: "resize-up", section: L("整理", "Organize"), title: L("向上调整分屏", "Resize Pane Up"), shortcut: "Cmd-Shift-↑", disabled: !canPerform(.resizePaneUp), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split up") {
-                perform(.resizePaneUp)
-            },
-            CommandPaletteItem(id: "resize-down", section: L("整理", "Organize"), title: L("向下调整分屏", "Resize Pane Down"), shortcut: "Cmd-Shift-↓", disabled: !canPerform(.resizePaneDown), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split down") {
-                perform(.resizePaneDown)
-            },
+            ),
+            CommandPaletteItem(id: "focus-left", command: .focusPaneLeft, section: L("导航", "Navigate"), title: L("聚焦左侧分屏", "Focus Pane Left"), shortcut: "Cmd-Opt-←", keywords: "focus pane left"),
+            CommandPaletteItem(id: "focus-right", command: .focusPaneRight, section: L("导航", "Navigate"), title: L("聚焦右侧分屏", "Focus Pane Right"), shortcut: "Cmd-Opt-→", keywords: "focus pane right"),
+            CommandPaletteItem(id: "focus-up", command: .focusPaneUp, section: L("导航", "Navigate"), title: L("聚焦上方分屏", "Focus Pane Up"), shortcut: "Cmd-Opt-↑", keywords: "focus pane up"),
+            CommandPaletteItem(id: "focus-down", command: .focusPaneDown, section: L("导航", "Navigate"), title: L("聚焦下方分屏", "Focus Pane Down"), shortcut: "Cmd-Opt-↓", keywords: "focus pane down"),
+            CommandPaletteItem(id: "close-tab", command: .closeSelectedTab, section: L("整理", "Organize"), title: L("关闭标签", "Close Tab"), shortcut: "Cmd-W", keywords: "close tab"),
+            CommandPaletteItem(id: "close-pane", command: .closeFocusedPane, section: L("整理", "Organize"), title: L("关闭分屏", "Close Pane"), shortcut: "Cmd-Shift-W", disabled: !canPerform(.closeFocusedPane), disabledReason: L("至少保留一个分屏", "Keep at least one pane"), keywords: "close pane split"),
+            CommandPaletteItem(id: "move-tab-left", command: .moveTabLeft, section: L("整理", "Organize"), title: L("标签左移", "Move Tab Left"), shortcut: "Cmd-Shift-,", disabled: !canPerform(.moveTabLeft), disabledReason: L("已经在最左侧", "Already on the left"), keywords: "move tab left"),
+            CommandPaletteItem(id: "move-tab-right", command: .moveTabRight, section: L("整理", "Organize"), title: L("标签右移", "Move Tab Right"), shortcut: "Cmd-Shift-.", disabled: !canPerform(.moveTabRight), disabledReason: L("已经在最右侧", "Already on the right"), keywords: "move tab right"),
+            CommandPaletteItem(id: "move-tab-next-pane", command: .moveTabToNextPane, section: L("整理", "Organize"), title: L("移到下一个分屏", "Move to Next Pane"), shortcut: "Cmd-Opt-M", disabled: !canPerform(.moveTabToNextPane), disabledReason: L("需要另一个分屏", "Requires another pane"), keywords: "move tab pane"),
+            CommandPaletteItem(id: "move-tab-new-split", command: .moveTabToNewRightSplit, section: L("整理", "Organize"), title: L("移到右侧新分屏", "Move to New Right Split"), shortcut: "Cmd-Opt-Shift-M", disabled: !canPerform(.moveTabToNewRightSplit), disabledReason: L("需要可移动标签和可用分屏空间", "Requires a movable tab and split space"), keywords: "move tab new split"),
+            CommandPaletteItem(id: "resize-left", command: .resizePaneLeft, section: L("整理", "Organize"), title: L("向左调整分屏", "Resize Pane Left"), shortcut: "Cmd-Shift-←", disabled: !canPerform(.resizePaneLeft), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split left"),
+            CommandPaletteItem(id: "resize-right", command: .resizePaneRight, section: L("整理", "Organize"), title: L("向右调整分屏", "Resize Pane Right"), shortcut: "Cmd-Shift-→", disabled: !canPerform(.resizePaneRight), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split right"),
+            CommandPaletteItem(id: "resize-up", command: .resizePaneUp, section: L("整理", "Organize"), title: L("向上调整分屏", "Resize Pane Up"), shortcut: "Cmd-Shift-↑", disabled: !canPerform(.resizePaneUp), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split up"),
+            CommandPaletteItem(id: "resize-down", command: .resizePaneDown, section: L("整理", "Organize"), title: L("向下调整分屏", "Resize Pane Down"), shortcut: "Cmd-Shift-↓", disabled: !canPerform(.resizePaneDown), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split down"),
             CommandPaletteItem(
                 id: "toggle-zoom",
+                command: .toggleZoom,
                 section: L("视图", "View"),
                 title: model.workspace.isZoomed ? L("还原当前分屏", "Restore Current Pane") : L("放大当前分屏", "Zoom Current Pane"),
                 shortcut: "Cmd-Opt-Z",
                 disabled: !canPerform(.toggleZoom),
                 disabledReason: L("需要多个分屏", "Requires multiple panes"),
                 keywords: "zoom pane"
-            ) {
-                perform(.toggleZoom)
-            },
-            CommandPaletteItem(id: "equalize-splits", section: L("视图", "View"), title: L("均分分屏", "Equalize Splits"), shortcut: "Cmd-Shift-=", disabled: !canPerform(.equalizeSplits), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "equalize split layout") {
-                perform(.equalizeSplits)
-            },
-            CommandPaletteItem(id: "flash-focused-pane", section: L("视图", "View"), title: L("闪烁当前分屏", "Flash Focused Pane"), shortcut: "Cmd-Shift-H", keywords: "flash highlight focused pane") {
-                perform(.flashFocusedPane)
-            },
-            CommandPaletteItem(id: "workspace-overview", section: L("视图", "View"), title: L("工作区总览", "Workspace Overview"), shortcut: "Cmd-O", keywords: "workspace overview mission control") {
-                perform(.toggleWorkspaceOverview)
-            },
-            CommandPaletteItem(id: "toggle-fullscreen", section: L("视图", "View"), title: L("切换全屏", "Toggle Full Screen"), shortcut: "Ctrl-Cmd-F", keywords: "fullscreen window mac") {
-                perform(.toggleFullScreen)
-            },
-            CommandPaletteItem(id: "appearance-settings", section: L("视图", "View"), title: L("外观设置", "Appearance Settings"), shortcut: "Cmd-,", keywords: "appearance theme settings") {
-                perform(.toggleSettings)
-            },
-            CommandPaletteItem(id: "duplicate-workspace", section: L("视图", "View"), title: L("复制工作区", "Duplicate Workspace"), shortcut: "Duplicate", keywords: "workspace duplicate") {
-                perform(.duplicateWorkspace)
-            },
-            CommandPaletteItem(id: "reset-workspace", section: L("视图", "View"), title: L("重置工作区", "Reset Workspace"), shortcut: "Reset", keywords: "workspace reset") {
-                perform(.resetWorkspace)
-            },
-            CommandPaletteItem(id: "clear-notifications", section: L("整理", "Organize"), title: L("清空通知", "Clear Notifications"), shortcut: "Clear", disabled: !canPerform(.clearNotifications), disabledReason: L("通知中心为空", "Notification Center is empty"), keywords: "notification clear") {
-                perform(.clearNotifications)
-            },
-            CommandPaletteItem(id: "debug-notification", section: L("通知", "Notifications"), title: L("发送测试通知", "Send Test Notification"), shortcut: "Test", keywords: "notification test") {
-                perform(.testNotification)
-            }
+            ),
+            CommandPaletteItem(id: "equalize-splits", command: .equalizeSplits, section: L("视图", "View"), title: L("均分分屏", "Equalize Splits"), shortcut: "Cmd-Shift-=", disabled: !canPerform(.equalizeSplits), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "equalize split layout"),
+            CommandPaletteItem(id: "flash-focused-pane", command: .flashFocusedPane, section: L("视图", "View"), title: L("闪烁当前分屏", "Flash Focused Pane"), shortcut: "Cmd-Shift-H", keywords: "flash highlight focused pane"),
+            CommandPaletteItem(id: "workspace-overview", command: .toggleWorkspaceOverview, section: L("视图", "View"), title: L("工作区总览", "Workspace Overview"), shortcut: "Cmd-O", keywords: "workspace overview mission control"),
+            CommandPaletteItem(id: "toggle-fullscreen", command: .toggleFullScreen, section: L("视图", "View"), title: L("切换全屏", "Toggle Full Screen"), shortcut: "Ctrl-Cmd-F", keywords: "fullscreen window mac"),
+            CommandPaletteItem(id: "appearance-settings", command: .toggleSettings, section: L("视图", "View"), title: L("外观设置", "Appearance Settings"), shortcut: "Cmd-,", keywords: "appearance theme settings"),
+            CommandPaletteItem(id: "duplicate-workspace", command: .duplicateWorkspace, section: L("视图", "View"), title: L("复制工作区", "Duplicate Workspace"), shortcut: "Duplicate", keywords: "workspace duplicate"),
+            CommandPaletteItem(id: "reset-workspace", command: .resetWorkspace, section: L("视图", "View"), title: L("重置工作区", "Reset Workspace"), shortcut: "Reset", keywords: "workspace reset"),
+            CommandPaletteItem(id: "clear-notifications", command: .clearNotifications, section: L("整理", "Organize"), title: L("清空通知", "Clear Notifications"), shortcut: "Clear", disabled: !canPerform(.clearNotifications), disabledReason: L("通知中心为空", "Notification Center is empty"), keywords: "notification clear"),
+            CommandPaletteItem(id: "debug-notification", command: .testNotification, section: L("通知", "Notifications"), title: L("发送测试通知", "Send Test Notification"), shortcut: "Test", keywords: "notification test")
         ]
     }
 
     @MainActor
     static func shortcutGuideItems(model: ConductorWindowModel) -> [CommandShortcutGuideItem] {
-        items(model: model) { _ in }
+        items(model: model)
             .filter { $0.section != L("调试", "Debug") }
             .map { command in
                 CommandShortcutGuideItem(

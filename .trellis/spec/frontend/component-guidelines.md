@@ -827,8 +827,11 @@ from Command Center and breaks keyboard-first workflows.
 
 - Keep app-level commands in a single MainActor command catalog near the command UI unless the
   catalog becomes large enough to deserve its own file.
-- Command Center may include executable actions and state-aware disabled reasons; shortcut
-  discovery should project the same command records into lightweight display rows.
+- Command Center rows should be compact value records: command enum, labels, shortcut,
+  precomputed search text, and state-aware disabled reasons. The panel view may keep the
+  window model as a plain command coordinator reference, but it should not independently
+  observe the whole model just to render the command list.
+- Shortcut discovery should project the same command records into lightweight display rows.
 - Exclude debug-only commands from user-facing shortcut discovery.
 - Do not route terminal output, scrollback, cursor state, or per-cell rendering through the
   command catalog. It may read only compact shell/product state from the window model.
