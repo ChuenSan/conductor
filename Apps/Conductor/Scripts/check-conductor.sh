@@ -131,6 +131,21 @@ grep -qx 'overview=true' /tmp/conductor-shell-panel-ok.txt
 
 wait_for_conductor_exit
 
+rm -f /tmp/conductor-notification-ok.txt
+CONDUCTOR_NOTIFICATION_AUTORUN=1 \
+CONDUCTOR_NOTIFICATION_OUTPUT=/tmp/conductor-notification-ok.txt \
+swift run Conductor >/tmp/conductor-notification-run.log 2>&1
+cat /tmp/conductor-notification-ok.txt
+echo
+grep -qx 'status=ok' /tmp/conductor-notification-ok.txt
+grep -qx 'notification=open' /tmp/conductor-notification-ok.txt
+grep -qx 'opened=true' /tmp/conductor-notification-ok.txt
+grep -qx 'panelClosed=true' /tmp/conductor-notification-ok.txt
+grep -qx 'unreadCleared=true' /tmp/conductor-notification-ok.txt
+grep -qx 'targetFocused=true' /tmp/conductor-notification-ok.txt
+
+wait_for_conductor_exit
+
 rm -f /tmp/conductor-stress-ok.txt
 CONDUCTOR_STRESS_AUTORUN=1 \
 CONDUCTOR_STRESS_OUTPUT=/tmp/conductor-stress-ok.txt \

@@ -62,6 +62,7 @@ final class WorkspacePersistence {
             ProcessInfo.processInfo.environment["CONDUCTOR_LAYOUT_AUTORUN"] != "1" &&
             ProcessInfo.processInfo.environment["CONDUCTOR_LIFECYCLE_AUTORUN"] != "1" &&
             ProcessInfo.processInfo.environment["CONDUCTOR_SHELL_PANEL_AUTORUN"] != "1" &&
+            ProcessInfo.processInfo.environment["CONDUCTOR_NOTIFICATION_AUTORUN"] != "1" &&
             ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_AUTORUN"] != "1" &&
             ProcessInfo.processInfo.environment["CONDUCTOR_RESIZE_STRESS_AUTORUN"] != "1" &&
             ProcessInfo.processInfo.environment["CONDUCTOR_WORKSPACE_AUTORUN"] != "1"

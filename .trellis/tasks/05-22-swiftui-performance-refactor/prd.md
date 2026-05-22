@@ -236,6 +236,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Reworked `FileManagerDisplaySnapshotBuilder` to accumulate visible and known rows with inout recursion instead of recursive `flatMap` arrays.
   - Avoided building the full known-row array when there is no file search query; the empty-search path now computes only the known count plus visible rows.
   - Counted displayed files and directories in one pass while constructing the snapshot instead of filtering the rendered rows twice.
+- Twenty-seventh implementation phase:
+  - Fixed the notification navigation regression introduced while scoping `NotificationPanelRootView`: `ConductorWindowModel.openNotification(_:)` now closes the detached notification panel after focusing the target terminal, marking the notification read, and refreshing the target surface.
+  - Captured the behavior contract in frontend specs so notification row actions remain model-level navigation commands rather than partial row-local mutations.
+  - Added `CONDUCTOR_NOTIFICATION_AUTORUN` to `check-conductor.sh` so notification clicks must open, close the detached panel, clear unread state, and keep the target terminal focused before the gate passes.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

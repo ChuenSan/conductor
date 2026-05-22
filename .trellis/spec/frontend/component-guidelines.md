@@ -248,6 +248,11 @@ workspace overview, and compact status modules.
   snapshots plus theme/appearance values to the view tree. The model may remain the command
   target for panel actions, but unrelated workspace, file-manager, search, and terminal chrome
   changes must not repaint an open detached panel.
+- Notification Center row actions are navigation commands, not local row toggles. Opening a
+  notification must focus the target terminal, mark the notification read, refresh the target
+  surface, and close the detached notification panel as one model-level operation. Panel stores
+  may call the model command, but they must not reimplement only the read/focus subset or the
+  terminal badge can disappear while the notification window remains open.
 - Formatted file views should share one document workbench skeleton: a theme-owned header with
   title/path/status badges, bounded metadata metrics, a typed reader body, and an optional
   outline column only when the format can provide useful headings. Markdown, log, TeX, and text

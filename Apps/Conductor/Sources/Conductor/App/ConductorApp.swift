@@ -283,6 +283,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         runLifecycleAutomationIfRequested()
         runWorkspaceAutomationIfRequested()
         runShellPanelAutomationIfRequested()
+        runNotificationAutomationIfRequested()
         runStressAutomationIfRequested()
         runResizeStressAutomationIfRequested()
         ConductorLog.app.info("Conductor window launched")
@@ -1279,6 +1280,52 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             } catch {
                 ConductorLog.app.error("Shell panel automation output write failed: \(error.localizedDescription)")
             }
+            model.workspace = originalWorkspace
+            model.theme = originalTheme
+            model.flushPersistence()
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func runNotificationAutomationIfRequested() {
+        guard ProcessInfo.processInfo.environment["CONDUCTOR_NOTIFICATION_AUTORUN"] == "1" else { return }
+        let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_NOTIFICATION_OUTPUT"] ?? "/tmp/conductor-notification-ok.txt"
+        let originalWorkspace = model.workspace
+        let originalTheme = model.theme
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [model] in
+            model.closeAllSurfaces()
+            model.workspace = WorkspaceState(title: "Notification Automation")
+            model.commandPaletteVisible = false
+            model.settingsPanelVisible = false
+            model.workspaceOverviewVisible = false
+            model.notificationPanelVisible = true
+
+            let focusedBefore = model.workspace.focusedPane?.selectedTabID
+            model.notifyFocusedTerminalForTesting()
+            let notification = model.notifications.snapshot.latestUnread
+            let opened = notification.map { model.openNotification($0.id) } ?? false
+            let focusedAfter = model.workspace.focusedPane?.selectedTabID
+            let unreadCleared = focusedBefore.map { model.notifications.snapshot.unreadCount(for: $0) == 0 } ?? false
+            let panelClosed = !model.notificationPanelVisible
+            let targetFocused = focusedAfter == focusedBefore
+            let status = opened && panelClosed && unreadCleared && targetFocused
+
+            let summary = [
+                "status=\(status ? "ok" : "invalid")",
+                "notification=open",
+                "opened=\(opened)",
+                "panelClosed=\(panelClosed)",
+                "unreadCleared=\(unreadCleared)",
+                "targetFocused=\(targetFocused)"
+            ].joined(separator: "\n")
+
+            do {
+                try summary.write(toFile: outputPath, atomically: true, encoding: .utf8)
+            } catch {
+                ConductorLog.app.error("Notification automation output write failed: \(error.localizedDescription)")
+            }
+            model.closeAllSurfaces()
             model.workspace = originalWorkspace
             model.theme = originalTheme
             model.flushPersistence()

@@ -2051,6 +2051,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         focusTerminal(notification.terminalID)
         markNotificationRead(notificationID)
         refreshSurfaceAfterNavigation(notification.terminalID)
+        hideNotificationPanel()
         return true
     }
 
