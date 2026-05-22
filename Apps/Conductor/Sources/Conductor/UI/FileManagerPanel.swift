@@ -339,11 +339,12 @@ private struct FileManagerService {
         }
 
         let type = values.contentType ?? UTType(filenameExtension: fileURL.pathExtension)
+        if Self.imagePreviewExtensions.contains(fileURL.pathExtension.lowercased()) ||
+            type?.conforms(to: .image) == true {
+            return .image(fileURL)
+        }
         if let descriptor = Self.nativePreviewDescriptor(for: fileURL, type: type) {
             return .nativePreview(fileURL, descriptor)
-        }
-        if type?.conforms(to: .image) == true {
-            return .image(fileURL)
         }
         if Self.documentViewerPreviewExtensions.contains(fileURL.pathExtension.lowercased()) {
             return .document(fileURL)
@@ -382,6 +383,9 @@ private struct FileManagerService {
 
     func openMode(for url: URL) -> FileManagerOpenMode {
         let pathExtension = url.pathExtension.lowercased()
+        if Self.imagePreviewExtensions.contains(pathExtension) {
+            return .workspaceEditor
+        }
         if ConductorNativePreviewClassifier.descriptor(for: UTType(filenameExtension: pathExtension), extension: pathExtension) != nil {
             return .workspaceEditor
         }
@@ -906,6 +910,11 @@ private struct FileManagerService {
         "3g2", "3gp", "avi", "m4v", "mkv", "mov", "mp4", "mpeg", "mpg", "webm", "wmv",
         "aac", "aiff", "flac", "m4a", "mp3", "ogg", "wav",
         "doc", "docx", "key", "numbers", "pages", "pdf", "ppt", "pptx", "xls", "xlsx"
+    ]
+
+    private static let imagePreviewExtensions: Set<String> = [
+        "apng", "avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png",
+        "psd", "svg", "tif", "tiff", "webp"
     ]
 }
 

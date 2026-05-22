@@ -273,6 +273,10 @@ workspace overview, and compact status modules.
   common media, and common office/iWork documents, should route to a stable AppKit native
   preview surface instead of CodeEdit or SwiftUI text rendering. Do not read the full file
   into SwiftUI just to decide how to display it; classify from `UTType` and extension metadata.
+- Image/document routing must prefer explicit extension allowlists before `UTType` conformance
+  checks. Formats such as WebP, AVIF, SVG, and HEIC can report inconsistently across macOS
+  versions or resource lookup paths; a known image extension must enter the image preview path,
+  not the generic WebKit document renderer.
 - Inserting a path into the focused terminal sends shell-escaped text plus a trailing space,
   and does not press Return.
 

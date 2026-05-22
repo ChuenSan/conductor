@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 private func L(_ zh: String, _ en: String) -> String {
     ConductorLocalization.text(zh: zh, en: en)
@@ -376,7 +377,14 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     private var supportsToolbarSearch: Bool {
-        return true
+        return !isImageFile
+    }
+
+    private var isImageFile: Bool {
+        let ext = tab.fileURL.pathExtension.lowercased()
+        if Self.imageFileExtensions.contains(ext) { return true }
+        guard let type = UTType(filenameExtension: ext) else { return false }
+        return type.conforms(to: .image)
     }
 
     private var searchMatches: [NSRange] {
@@ -473,7 +481,7 @@ private struct ConductorWorkspaceFileEditorView: View {
                     .lineLimit(1)
             }
 
-            statusPill(systemImage: "doc.text.magnifyingglass", title: fileKindTitle)
+            statusPill(systemImage: isImageFile ? "photo" : "doc.text.magnifyingglass", title: fileKindTitle)
             statusPill(systemImage: "lock", title: L("只读", "Read Only"))
             if externalChangeDetected {
                 statusPill(systemImage: "arrow.triangle.2.circlepath", title: L("外部已修改", "Changed externally"))
@@ -569,21 +577,25 @@ private struct ConductorWorkspaceFileEditorView: View {
 
     @ViewBuilder
     private var content: some View {
-        ConductorDocumentWorkspaceView(
-            fileURL: tab.fileURL,
-            rootURL: tab.rootURL,
-            title: tab.title,
-            theme: theme,
-            fontSize: model.appearance.terminalFontSize,
-            isActive: isSelected,
-            searchQuery: searchVisible ? searchQuery : "",
-            searchRevision: documentSearchRevision,
-            searchNextToken: documentSearchNextToken,
-            searchPreviousToken: documentSearchPreviousToken,
-            onSearchStatusChange: { status in
-                documentSearchStatus = status
-            }
-        )
+        if isImageFile {
+            imageView(tab.fileURL)
+        } else {
+            ConductorDocumentWorkspaceView(
+                fileURL: tab.fileURL,
+                rootURL: tab.rootURL,
+                title: tab.title,
+                theme: theme,
+                fontSize: model.appearance.terminalFontSize,
+                isActive: isSelected,
+                searchQuery: searchVisible ? searchQuery : "",
+                searchRevision: documentSearchRevision,
+                searchNextToken: documentSearchNextToken,
+                searchPreviousToken: documentSearchPreviousToken,
+                onSearchStatusChange: { status in
+                    documentSearchStatus = status
+                }
+            )
+        }
     }
 
     private var fileSearchField: some View {
@@ -694,6 +706,8 @@ private struct ConductorWorkspaceFileEditorView: View {
 
     private var fileKindTitle: String {
         switch tab.fileURL.pathExtension.lowercased() {
+        case let ext where Self.imageFileExtensions.contains(ext):
+            L("图片预览", "Image Preview")
         case "md", "markdown", "mdown", "mkd":
             L("Markdown 阅读", "Markdown Reader")
         case "log", "out", "stdout", "stderr", "trace":
@@ -762,6 +776,11 @@ private struct ConductorWorkspaceFileEditorView: View {
     private func imageView(_ url: URL) -> some View {
         ConductorImageWorkspaceView(url: url, theme: theme, isActive: isSelected)
     }
+
+    private static let imageFileExtensions: Set<String> = [
+        "apng", "avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png",
+        "psd", "svg", "tif", "tiff", "webp"
+    ]
 
     private func showSearch() {
         searchVisible = true
