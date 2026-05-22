@@ -165,6 +165,12 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Removed large-subtree animation from terminal settings category changes by applying a nil-animation transaction and using `ConductorMotion.withoutAnimation` for local category selection.
   - Preserved all existing terminal setting controls and command callbacks while reducing first-entry and category-switch SwiftUI view construction.
   - `swiftc -parse` passed across `Sources/Conductor` and `Sources/ConductorCore`.
+- Eleventh implementation phase:
+  - Redesigned the Settings visual language in `Apps/Conductor/Sources/Conductor/UI/ConductorRootView.swift` toward a denser macOS inspector style.
+  - Reduced card-heavy treatment by making settings groups read as section headers, lightening form surfaces, tightening row heights, and removing filled icon blocks from common settings rows.
+  - Reworked the overview from a dashboard grid plus explanatory structure card into a compact grouped summary list with plain jump rows.
+  - Made sidebar categories more explicit by renaming sections and showing each section subtitle directly in the sidebar row.
+  - `swiftc -parse` passed across `Sources/Conductor` and `Sources/ConductorCore`.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

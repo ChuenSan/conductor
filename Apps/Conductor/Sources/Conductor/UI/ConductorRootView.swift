@@ -1186,10 +1186,10 @@ private struct AppearanceSettingsPanel: View, Equatable {
 
     private var contentPane: some View {
         ZStack {
-            theme.floatingControlFill.opacity(0.10)
+            theme.floatingControlFill.opacity(0.06)
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
+                LazyVStack(alignment: .leading, spacing: 18) {
                     detailContent
                 }
                 .frame(maxWidth: 660, alignment: .topLeading)
@@ -1237,13 +1237,13 @@ private struct AppearanceSettingsPanel: View, Equatable {
         LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("当前状态", "Current State"),
-                subtitle: L("只展示会影响日常使用的设置摘要，点左侧分类进入调整", "A compact summary of daily-use settings; choose a category on the left to edit"),
+                subtitle: L("主题、终端字体、密度和工作流开关", "Theme, terminal font, density, and workflow toggles"),
                 systemImage: "rectangle.grid.2x2"
             ) {
                 VStack(alignment: .leading, spacing: 12) {
                     SettingsOverviewGrid(snapshot: snapshot)
 
-                    HStack(spacing: 10) {
+                    VStack(spacing: 0) {
                         SettingsQuickJumpButton(
                             title: L("调整终端", "Tune Terminal"),
                             subtitle: snapshot.appearance.terminalRenderer.selectedFontStatusTitle,
@@ -1251,6 +1251,8 @@ private struct AppearanceSettingsPanel: View, Equatable {
                         ) {
                             selectSection(.terminal)
                         }
+
+                        SettingsControlDivider()
 
                         SettingsQuickJumpButton(
                             title: L("换主题", "Change Theme"),
@@ -1260,36 +1262,8 @@ private struct AppearanceSettingsPanel: View, Equatable {
                             selectSection(.themes)
                         }
                     }
-                }
-            }
-
-            SettingsPreferenceGroup(
-                title: L("设置结构", "Settings Structure"),
-                subtitle: L("按真实工作流组织，不按底层配置文件字段组织", "Organized by real workflows, not by low-level config keys"),
-                systemImage: "sidebar.left"
-            ) {
-                SettingsFormSurface {
-                    SettingsInfoRow(
-                        title: L("界面", "Interface"),
-                        subtitle: L("窗口密度、面板清晰度、语言和应用字体", "Density, panel clarity, language, and shell text"),
-                        systemImage: "textformat"
-                    )
-
-                    SettingsControlDivider()
-
-                    SettingsInfoRow(
-                        title: L("终端", "Terminal"),
-                        subtitle: L("字体、光标、背景、选择、粘贴安全和键盘输入", "Font, cursor, background, selection, paste safety, and terminal input"),
-                        systemImage: "terminal"
-                    )
-
-                    SettingsControlDivider()
-
-                    SettingsInfoRow(
-                        title: L("Shell / AI / 命令", "Shell / AI / Commands"),
-                        subtitle: L("启动项、代理环境、Agent 通知和快捷键", "Startup, proxy environment, agent notifications, and shortcuts"),
-                        systemImage: "sparkles"
-                    )
+                    .background(theme.floatingControlFill.opacity(0.24))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
             }
         }
@@ -1417,7 +1391,7 @@ private struct AppearanceSettingsPanel: View, Equatable {
     private var terminalSettingsSectionPicker: some View {
         SettingsPreferenceGroup(
             title: L("终端设置", "Terminal Settings"),
-            subtitle: L("只挂载当前分类，避免终端设置页一次性创建过多控件", "Only the active category is mounted so terminal settings stay responsive"),
+            subtitle: L("字体、显示、选择和输入按日常任务分开", "Font, display, selection, and input grouped by task"),
             systemImage: selectedTerminalSettingsSection.systemImage
         ) {
             SettingsFormSurface {
@@ -2522,15 +2496,15 @@ private enum SettingsPanelSection: String, CaseIterable, Identifiable {
         case .overview:
             L("概览", "Overview")
         case .interface:
-            L("界面", "Interface")
+            L("界面外观", "Interface")
         case .terminal:
-            L("终端", "Terminal")
+            L("终端体验", "Terminal")
         case .shell:
-            L("Shell 与代理", "Shell and Proxy")
+            L("启动/代理", "Startup")
         case .automation:
-            L("AI 代理", "AI Agents")
+            L("AI/通知", "AI")
         case .commands:
-            L("命令", "Commands")
+            L("快捷键", "Shortcuts")
         case .themes:
             L("主题", "Themes")
         }
@@ -2543,11 +2517,11 @@ private enum SettingsPanelSection: String, CaseIterable, Identifiable {
         case .interface:
             L("窗口、语言和壳层文字", "Window, language, and shell text")
         case .terminal:
-            L("阅读、光标、复制粘贴", "Reading, cursor, copy and paste")
+            L("字体、显示、输入", "Font, display, input")
         case .shell:
-            L("启动命令、目录和代理", "Startup command, directory, and proxy")
+            L("命令、目录、网络", "Command, directory, network")
         case .automation:
-            L("Agent hook、通知和铃声", "Agent hooks, notifications, and bell")
+            L("Agent、通知、铃声", "Agents, alerts, bell")
         case .commands:
             L("快捷键与命令入口", "Shortcuts and commands")
         case .themes:
@@ -2669,27 +2643,28 @@ private struct SettingsPaneHeading: View {
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        HStack(alignment: .top, spacing: 11) {
-            Image(systemName: section.systemImage)
-                .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.floatingEmphasis)
-                .frame(width: 28, height: 28)
-                .background(theme.floatingControlStrongFill)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
+        HStack(alignment: .firstTextBaseline, spacing: 9) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(section.title)
-                    .font(.conductorSystem(size: 18, weight: .bold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
+                HStack(spacing: 7) {
+                    Image(systemName: section.systemImage)
+                        .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(theme.floatingEmphasis)
+                        .frame(width: 15)
+
+                    Text(section.title)
+                        .font(.conductorSystem(size: 18, weight: .bold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.primaryText)
+                        .lineLimit(1)
+                }
                 Text(section.subtitle)
                     .font(.conductorSystem(size: 11.2, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .foregroundStyle(ConductorDesign.tertiaryText)
                     .lineLimit(2)
             }
 
             Spacer(minLength: 0)
         }
+        .padding(.bottom, 2)
     }
 }
 
@@ -2723,11 +2698,9 @@ private struct SettingsInfoRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.floatingEmphasis)
-                .frame(width: 26, height: 26)
-                .background(theme.floatingControlStrongFill)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis.opacity(0.88))
+                .frame(width: 18)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -2743,7 +2716,7 @@ private struct SettingsInfoRow: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
-        .frame(minHeight: 62)
+        .frame(minHeight: 52)
     }
 }
 
@@ -2802,14 +2775,6 @@ private struct SettingsOverviewGrid: View {
     let snapshot: SettingsPanelSnapshot
     @Environment(\.conductorFontScale) private var fontScale
 
-    private var columns: [GridItem] {
-        [
-            GridItem(.flexible(minimum: 132), spacing: 10),
-            GridItem(.flexible(minimum: 132), spacing: 10),
-            GridItem(.flexible(minimum: 132), spacing: 10)
-        ]
-    }
-
     private var terminalSizeText: String {
         let rounded = (snapshot.appearance.terminalFontSize * 10).rounded() / 10
         if rounded.rounded() == rounded {
@@ -2819,32 +2784,37 @@ private struct SettingsOverviewGrid: View {
     }
 
     var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+        SettingsFormSurface {
             SettingsOverviewTile(
                 title: L("主题", "Theme"),
                 value: snapshot.theme.title,
                 systemImage: "swatchpalette"
             )
+            SettingsControlDivider()
             SettingsOverviewTile(
                 title: L("终端字体", "Terminal Font"),
                 value: snapshot.appearance.terminalRenderer.effectiveFontFamilyName,
                 systemImage: "textformat"
             )
+            SettingsControlDivider()
             SettingsOverviewTile(
                 title: L("字号", "Size"),
                 value: terminalSizeText,
                 systemImage: "textformat.size"
             )
+            SettingsControlDivider()
             SettingsOverviewTile(
                 title: L("密度", "Density"),
                 value: snapshot.appearance.density.title,
                 systemImage: "rectangle.compress.vertical"
             )
+            SettingsControlDivider()
             SettingsOverviewTile(
                 title: L("代理", "Proxy"),
                 value: snapshot.appearance.terminalRenderer.proxy.enabled ? L("开启", "On") : L("关闭", "Off"),
                 systemImage: "network"
             )
+            SettingsControlDivider()
             SettingsOverviewTile(
                 title: L("AI 通知", "AI Alerts"),
                 value: snapshot.appearance.agentNotifications.codex || snapshot.appearance.agentNotifications.claudeCode ? L("开启", "On") : L("关闭", "Off"),
@@ -2862,30 +2832,26 @@ private struct SettingsOverviewTile: View {
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 7) {
-                Image(systemName: systemImage)
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis)
-                Text(title)
-                    .font(.conductorSystem(size: 10.4, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .lineLimit(1)
-            }
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis.opacity(0.84))
+                .frame(width: 18)
 
-            Text(value)
-                .font(.conductorSystem(size: 13, weight: .bold, scale: fontScale))
+            Text(title)
+                .font(.conductorSystem(size: 12.2, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.primaryText)
                 .lineLimit(1)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .font(.conductorSystem(size: 12.1, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .lineLimit(1)
         }
-        .padding(11)
-        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-        .background(theme.floatingControlFill.opacity(0.54))
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.64), lineWidth: 1)
-        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
     }
 }
 
@@ -2902,11 +2868,9 @@ private struct SettingsQuickJumpButton: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: systemImage)
-                    .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis)
-                    .frame(width: 28, height: 28)
-                    .background(theme.floatingControlStrongFill)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis.opacity(0.86))
+                    .frame(width: 18)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -2926,13 +2890,9 @@ private struct SettingsQuickJumpButton: View {
                     .foregroundStyle(ConductorDesign.tertiaryText)
             }
             .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: 58)
-            .background(hovering ? theme.floatingHoverFill : theme.floatingControlFill.opacity(0.50))
-            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
-                    .stroke(theme.floatingStroke.opacity(0.66), lineWidth: 1)
-            }
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(hovering ? theme.floatingHoverFill.opacity(0.70) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(ConductorPressButtonStyle())
         .onHover { hovering = $0 }
@@ -4075,22 +4035,20 @@ private struct SettingsPreferenceGroup<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .top, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
                 Image(systemName: systemImage)
                     .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis.opacity(0.88))
-                    .frame(width: 22, height: 22)
-                    .background(theme.floatingControlFill)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .foregroundStyle(theme.floatingEmphasis.opacity(0.82))
+                    .frame(width: 14)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.conductorSystem(size: 12, weight: .bold, scale: fontScale))
+                        .font(.conductorSystem(size: 11.5, weight: .bold, scale: fontScale))
                         .foregroundStyle(ConductorDesign.primaryText)
                         .lineLimit(1)
                     Text(subtitle)
-                        .font(.conductorSystem(size: 10.3, weight: .medium, scale: fontScale))
+                        .font(.conductorSystem(size: 10.1, weight: .medium, scale: fontScale))
                         .foregroundStyle(ConductorDesign.tertiaryText)
                         .lineLimit(2)
                 }
@@ -4100,6 +4058,7 @@ private struct SettingsPreferenceGroup<Content: View>: View {
 
             content
         }
+        .padding(.top, 2)
     }
 }
 
@@ -4115,11 +4074,11 @@ private struct SettingsFormSurface<Content: View>: View {
         LazyVStack(spacing: 0) {
             content
         }
-        .background(theme.floatingControlFill.opacity(0.48))
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+        .background(theme.floatingControlFill.opacity(0.28))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.72), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.48), lineWidth: 0.8)
         }
     }
 }
@@ -4147,11 +4106,9 @@ private struct SettingsControlRow<Trailing: View>: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.floatingEmphasis)
-                .frame(width: 26, height: 26)
-                .background(theme.floatingControlStrongFill)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis.opacity(0.84))
+                .frame(width: 18)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -4169,7 +4126,7 @@ private struct SettingsControlRow<Trailing: View>: View {
             trailing
         }
         .padding(.horizontal, 12)
-        .frame(minHeight: 62)
+        .frame(minHeight: 52)
     }
 }
 
@@ -4347,21 +4304,28 @@ private struct SettingsSidebarItem: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
                 Image(systemName: section.systemImage)
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
                     .frame(width: 14)
+                    .padding(.top, 2)
 
-                Text(section.title)
-                    .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(section.title)
+                        .font(.conductorSystem(size: 11.6, weight: selected ? .semibold : .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.primaryText)
+                        .lineLimit(1)
+                    Text(section.subtitle)
+                        .font(.conductorSystem(size: 9.4, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
 
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 7)
-            .frame(height: 32)
+            .frame(height: 44, alignment: .center)
             .background(rowBackground)
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
