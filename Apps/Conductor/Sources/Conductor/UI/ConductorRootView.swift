@@ -210,7 +210,10 @@ struct ConductorRootView: View {
     @ViewBuilder
     private var primaryWorkspaceContent: some View {
         if model.selectedWorkspaceFileTab != nil {
-            ConductorFileWorkspaceView(model: model)
+            ConductorFileWorkspaceView(
+                model: model,
+                snapshot: ConductorFileWorkspaceSnapshot(model: model)
+            )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             terminalStage

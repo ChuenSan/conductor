@@ -211,16 +211,25 @@ private struct WorkspaceFileService {
 }
 
 struct ConductorFileWorkspaceView: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
+    let snapshot: ConductorFileWorkspaceSnapshot
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
-            if let selected = model.selectedWorkspaceFileTab {
-                ConductorWorkspaceFileEditorView(model: model, tab: selected, isSelected: true)
-                    .environment(\.workspaceFileSearchFocusToken, model.workspaceFileSearchFocusGeneration)
-                    .environment(\.workspaceFileSearchNextToken, model.workspaceFileSearchNextGeneration)
-                    .environment(\.workspaceFileSearchPreviousToken, model.workspaceFileSearchPreviousGeneration)
+            if let selected = snapshot.selectedTab {
+                ConductorWorkspaceFileEditorView(
+                    model: model,
+                    tab: selected,
+                    isSelected: true,
+                    saveRequestToken: snapshot.saveRequestToken,
+                    saveAndCloseRequestToken: snapshot.saveAndCloseRequestToken,
+                    terminalFontSize: snapshot.terminalFontSize,
+                    layoutRevision: snapshot.layoutRevision
+                )
+                    .environment(\.workspaceFileSearchFocusToken, snapshot.searchFocusToken)
+                    .environment(\.workspaceFileSearchNextToken, snapshot.searchNextToken)
+                    .environment(\.workspaceFileSearchPreviousToken, snapshot.searchPreviousToken)
                     .id(selected.id)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
@@ -245,39 +254,64 @@ struct ConductorFileWorkspaceView: View {
 
 }
 
+struct ConductorFileWorkspaceSnapshot: Equatable {
+    let selectedTab: ConductorWorkspaceFileTab?
+    let searchFocusToken: Int
+    let searchNextToken: Int
+    let searchPreviousToken: Int
+    let saveRequestToken: Int
+    let saveAndCloseRequestToken: Int
+    let terminalFontSize: CGFloat
+    let layoutRevision: Int
+
+    @MainActor
+    init(model: ConductorWindowModel) {
+        let selectedTab = model.selectedWorkspaceFileTab
+        self.selectedTab = selectedTab
+        self.searchFocusToken = model.workspaceFileSearchFocusGeneration
+        self.searchNextToken = model.workspaceFileSearchNextGeneration
+        self.searchPreviousToken = model.workspaceFileSearchPreviousGeneration
+        self.saveRequestToken = selectedTab.map { model.workspaceFileEditorSaveRequestToken(for: $0.id) } ?? 0
+        self.saveAndCloseRequestToken = selectedTab.map { model.workspaceFileEditorSaveAndCloseRequestToken(for: $0.id) } ?? 0
+        self.terminalFontSize = model.appearance.terminalFontSize
+        self.layoutRevision = model.workspaceFileLayoutRevision
+    }
+}
+
 struct ConductorWorkspaceContentTabBar: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
+    let snapshot: ConductorWorkspaceContentTabBarSnapshot
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ForEach(model.workspaceTerminalContentTabs) { tab in
+                ForEach(snapshot.terminalTabs) { tab in
                     ConductorWorkspaceContentTabPill(
                         systemImage: "terminal",
                         title: tab.title,
                         dirty: false,
-                        isSelected: model.selectedWorkspaceTerminalTabID == tab.id && model.selectedWorkspaceFileTab == nil,
+                        isSelected: tab.selected,
                         close: nil,
                         action: { model.selectWorkspaceTerminalTab(tab.id) }
                     )
                 }
 
-                if !model.workspaceFileTabs.isEmpty && !model.workspaceTerminalContentTabs.isEmpty {
+                if !snapshot.fileTabs.isEmpty && !snapshot.terminalTabs.isEmpty {
                     Rectangle()
                         .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.32))
                         .frame(width: 1, height: 18)
                         .padding(.horizontal, 2)
                 }
 
-                ForEach(model.workspaceFileTabs) { tab in
+                ForEach(snapshot.fileTabs) { tab in
                     ConductorWorkspaceContentTabPill(
                         systemImage: "doc.text",
                         title: tab.title,
-                        dirty: model.isWorkspaceFileTabDirty(tab.id),
-                        externallyChanged: model.isWorkspaceFileTabExternallyChanged(tab.id),
-                        isSelected: model.selectedWorkspaceFileTab?.id == tab.id,
-                        close: { model.closeWorkspaceFileTab(tab) },
+                        dirty: tab.dirty,
+                        externallyChanged: tab.externallyChanged,
+                        isSelected: tab.selected,
+                        close: { model.closeWorkspaceFileTab(tab.tab) },
                         action: { model.selectWorkspaceFileTab(tab.id) }
                     )
                 }
@@ -293,6 +327,48 @@ struct ConductorWorkspaceContentTabBar: View {
                 .frame(height: 1)
         }
     }
+}
+
+struct ConductorWorkspaceContentTabBarSnapshot: Equatable {
+    let terminalTabs: [ConductorWorkspaceTerminalContentTabDisplay]
+    let fileTabs: [ConductorWorkspaceFileContentTabDisplay]
+
+    @MainActor
+    init(model: ConductorWindowModel) {
+        let selectedTerminalTabID = model.selectedWorkspaceTerminalTabID
+        let selectedFileTabID = model.selectedWorkspaceFileTab?.id
+        self.terminalTabs = model.workspaceTerminalContentTabs.map { tab in
+            ConductorWorkspaceTerminalContentTabDisplay(
+                id: tab.id,
+                title: tab.title,
+                selected: selectedTerminalTabID == tab.id && selectedFileTabID == nil
+            )
+        }
+        self.fileTabs = model.workspaceFileTabs.map { tab in
+            ConductorWorkspaceFileContentTabDisplay(
+                tab: tab,
+                dirty: model.isWorkspaceFileTabDirty(tab.id),
+                externallyChanged: model.isWorkspaceFileTabExternallyChanged(tab.id),
+                selected: selectedFileTabID == tab.id
+            )
+        }
+    }
+}
+
+struct ConductorWorkspaceTerminalContentTabDisplay: Identifiable, Equatable {
+    let id: TerminalID
+    let title: String
+    let selected: Bool
+}
+
+struct ConductorWorkspaceFileContentTabDisplay: Identifiable, Equatable {
+    var id: String { tab.id }
+    let tab: ConductorWorkspaceFileTab
+    let dirty: Bool
+    let externallyChanged: Bool
+    let selected: Bool
+
+    var title: String { tab.title }
 }
 
 private struct ConductorWorkspaceContentTabPill: View {
@@ -355,6 +431,10 @@ private struct ConductorWorkspaceFileEditorView: View {
     let model: ConductorWindowModel
     let tab: ConductorWorkspaceFileTab
     let isSelected: Bool
+    let saveRequestToken: Int
+    let saveAndCloseRequestToken: Int
+    let terminalFontSize: CGFloat
+    let layoutRevision: Int
     @State private var document: WorkspaceFileDocument
     @State private var text: String
     @State private var savedText: String
@@ -396,10 +476,22 @@ private struct ConductorWorkspaceFileEditorView: View {
     @State private var markdownPreviewText = ""
     @State private var markdownPreviewUpdateTask: Task<Void, Never>?
 
-    init(model: ConductorWindowModel, tab: ConductorWorkspaceFileTab, isSelected: Bool) {
+    init(
+        model: ConductorWindowModel,
+        tab: ConductorWorkspaceFileTab,
+        isSelected: Bool,
+        saveRequestToken: Int,
+        saveAndCloseRequestToken: Int,
+        terminalFontSize: CGFloat,
+        layoutRevision: Int
+    ) {
         self.model = model
         self.tab = tab
         self.isSelected = isSelected
+        self.saveRequestToken = saveRequestToken
+        self.saveAndCloseRequestToken = saveAndCloseRequestToken
+        self.terminalFontSize = terminalFontSize
+        self.layoutRevision = layoutRevision
         let loaded = WorkspaceFileService().loadingDocument(for: tab)
         _document = State(initialValue: loaded)
         _text = State(initialValue: "")
@@ -503,11 +595,11 @@ private struct ConductorWorkspaceFileEditorView: View {
         .onChange(of: isDirty) { _, newValue in
             model.setWorkspaceFileTabDirty(tab.id, isDirty: newValue)
         }
-        .onChange(of: model.workspaceFileEditorSaveRequestToken(for: tab.id)) { _, newValue in
+        .onChange(of: saveRequestToken) { _, newValue in
             guard newValue > 0 else { return }
             save()
         }
-        .onChange(of: model.workspaceFileEditorSaveAndCloseRequestToken(for: tab.id)) { _, newValue in
+        .onChange(of: saveAndCloseRequestToken) { _, newValue in
             guard newValue > 0 else { return }
             save(closeAfterSave: true)
         }
@@ -706,7 +798,7 @@ private struct ConductorWorkspaceFileEditorView: View {
             selectionRange: sourceSelectionRange,
             selectionToken: sourceSelectionToken,
             snapshotToken: editorSnapshotToken,
-            fontSize: model.appearance.terminalFontSize,
+            fontSize: terminalFontSize,
             backgroundColor: NSColor(theme.terminalBackground),
             textColor: NSColor(theme.shellChromeText),
             mutedTextColor: NSColor(theme.shellChromeTextMuted),
@@ -738,11 +830,11 @@ private struct ConductorWorkspaceFileEditorView: View {
             rootURL: tab.rootURL,
             title: tab.title,
             theme: theme,
-            fontSize: model.appearance.terminalFontSize,
+            fontSize: terminalFontSize,
             isActive: isSelected,
             textOverride: textOverride,
             chromeStyle: .plain,
-            layoutRevision: model.workspaceFileLayoutRevision,
+            layoutRevision: layoutRevision,
             searchQuery: searchVisible ? searchQuery : "",
             searchRevision: documentSearchRevision,
             searchNextToken: documentSearchNextToken,

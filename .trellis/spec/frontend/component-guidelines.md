@@ -218,6 +218,14 @@ workspace overview, and compact status modules.
   For bundled browser workers such as PDF.js, pass worker code as an unescaped blob payload
   (for example base64 decoded in JavaScript), not as HTML-escaped `<script type="text/plain">`
   content, because raw script text does not entity-decode back into valid JavaScript.
+- Workspace file editor shells should follow the same compact-snapshot pattern as terminal
+  chrome and floating panels. Selected file tab, file-search generations, save request
+  generations, terminal font size, and document layout revision are low-frequency product
+  inputs; pass them as value props into the file workspace/editor rather than making the file
+  editor observe the entire `ConductorWindowModel`. The editor may keep the model as a command
+  coordinator for dirty-state, external-change, close-after-save, and file-tab mutations, but
+  document preview layout and text editor font changes must arrive through explicit snapshot
+  values so unrelated window-model updates do not invalidate large document surfaces.
 - Formatted file views should share one document workbench skeleton: a theme-owned header with
   title/path/status badges, bounded metadata metrics, a typed reader body, and an optional
   outline column only when the format can provide useful headings. Markdown, log, TeX, and text

@@ -212,6 +212,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
 - Twentieth implementation phase:
   - Removed the remaining unnecessary `@ObservedObject` subscriptions from `SplitPairView` and `AppKitSplitPairView`; the split pair bridge now keeps the window model as a plain coordinator reference while the recursive `SplitNodeView` roots remain the observation boundary.
   - Preserved explicit theme input for divider colors and kept the AppKit split hosting/signature path unchanged.
+- Twenty-first implementation phase:
+  - Added `ConductorFileWorkspaceSnapshot` so the file workspace receives selected file tab, search generations, save request generations, terminal font size, and document layout revision as compact value inputs.
+  - Removed `ConductorFileWorkspaceView`'s direct `@ObservedObject` subscription and changed `ConductorWorkspaceFileEditorView` to read save tokens, font size, and layout revision from explicit props instead of the broad window model.
+  - Added a matching snapshot for the workspace content tab bar so terminal/file tab display state is value-driven if that surface is reattached later.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`
