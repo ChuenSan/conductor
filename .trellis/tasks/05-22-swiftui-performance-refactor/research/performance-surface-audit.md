@@ -6,6 +6,20 @@ First-pass scan of Conductor's SwiftUI/AppKit/WebKit/Ghostty surfaces using the 
 
 This is an audit, not an implementation patch. It identifies refactor surfaces where better structure and better performance should be addressed together.
 
+## Performance First Contract
+
+Performance is the first product requirement for Conductor. Every visible operation should feel immediate and smooth: opening panels, switching settings sections, scrolling dense lists, toggling controls, typing into fields, switching workspaces, resizing panes, revealing trays, and interacting with terminal-adjacent tools.
+
+Jank in app chrome is not acceptable just because terminal rendering itself is isolated in Ghostty/AppKit. SwiftUI settings rows, command surfaces, file previews, notification feeds, and workspace chrome are product-critical hot paths. They must be designed to avoid large one-shot view construction, broad observable invalidation, expensive transitions, and repeated layout work.
+
+Audit priority should therefore be:
+
+1. User-visible responsiveness and interaction smoothness.
+2. Stable runtime surface ownership and main-thread protection.
+3. Clear structure and maintainability.
+
+If a refactor makes code cleaner but a common operation still stutters, the performance issue remains open.
+
 ## Quantitative Snapshot
 
 - Swift files under `Apps/Conductor/Sources/Conductor`: 33
@@ -75,7 +89,33 @@ Best first patch:
 
 Create a small snapshot for one hot surface, likely workspace/sidebar chrome, and convert the row/list views to `Equatable` value inputs.
 
-### 2. `ConductorRootView.swift` combines too many product surfaces
+### 2. Settings > Terminal page mounts too much SwiftUI work at once
+
+Evidence:
+
+- `AppearanceSettingsPanel` routes `.terminal` to `terminalSettingsDashboard`, which composes typography, cursor, background, selection/mouse, clipboard, and keyboard sections in one scroll surface.
+- These sections include many custom rows, menus, sliders, text fields, toggle bindings, Ghostty override controls, and terminal font download states.
+- The ninth implementation phase added `SettingsPanelSnapshot`, which narrows display reads, but it does not reduce the amount of SwiftUI view construction and layout needed when entering the terminal settings page.
+- User feedback after the snapshot refactor: Settings terminal controls still feel noticeably stuck/janky.
+
+Why it matters:
+
+Settings is not a low-priority admin surface in Conductor. Terminal appearance, keyboard, clipboard, shell, and Ghostty controls are core workflow tools. Switching into a settings section, scrolling it, and operating controls must be smooth. A page that creates a long tree of complex SwiftUI controls at once violates the performance-first contract even if the data model is cleaner.
+
+Recommended structure:
+
+- Split terminal settings into lightweight subsections with a local segmented/category navigator so only the active subsection mounts its controls.
+- Keep a compact summary/dashboard for typography, cursor, background, and interaction state, then lazily mount deeper editors on demand.
+- Move advanced Ghostty compatibility rows behind an explicit advanced subsection/search surface, not inside the everyday terminal settings body.
+- Ensure section switching uses cheap opacity or no transition; do not animate a large settings subtree with blur, scale, or per-row insertions.
+- Preserve snapshot/value inputs and callbacks, but treat them as a prerequisite rather than the complete optimization.
+- Add debug/profile hooks when needed: SwiftUI `_logChanges()` around `AppearanceSettingsPanel` and a focused Instruments trace for opening Settings, selecting Terminal, scrolling, and toggling a control.
+
+Best first patch:
+
+Refactor `.terminal` into a small terminal settings hub plus one mounted subsection at a time. Start with defaulting to typography/display summary, then move selection/clipboard/keyboard into separate local categories. This is higher priority than extracting settings files because it directly targets visible jank.
+
+### 3. `ConductorRootView.swift` combines too many product surfaces
 
 Evidence:
 
@@ -104,7 +144,7 @@ Best first patch:
 
 Extract one self-contained surface, not the whole file. The best candidates are Notification Panel or Workspace Overview because they have clear inputs and limited behavior.
 
-### 3. File manager display snapshot is still main-actor recursive work
+### 4. File manager display snapshot is still main-actor recursive work
 
 Evidence:
 
@@ -134,7 +174,7 @@ Move snapshot building into a standalone pure type and make `FileManagerPanel.bo
 
 ## P1 Findings
 
-### 4. File preview bulk rendering still uses SwiftUI rows/cells
+### 5. File preview bulk rendering still uses SwiftUI rows/cells
 
 Evidence:
 
@@ -160,7 +200,7 @@ Best first patch:
 
 Introduce a preview routing strategy type that classifies preview payloads and centralizes thresholds, before replacing renderers.
 
-### 5. Workspace file editor keeps full text in SwiftUI state
+### 6. Workspace file editor keeps full text in SwiftUI state
 
 Evidence:
 
@@ -188,7 +228,7 @@ Best first patch:
 
 Audit `ConductorWorkspaceSourceTextView` update frequency, then introduce a coordinator-owned text buffer path for the selected file tab.
 
-### 6. Motion policy is too uniform for heavy surfaces
+### 7. Motion policy is too uniform for heavy surfaces
 
 Evidence:
 
@@ -216,7 +256,7 @@ Replace blur-bearing panel transitions with cheap opacity/transform variants for
 
 ## P2 Findings
 
-### 7. `AnyView` exists mostly in bridge-hosting code
+### 8. `AnyView` exists mostly in bridge-hosting code
 
 Evidence:
 
@@ -232,7 +272,7 @@ Recommended structure:
 - Keep for now.
 - Revisit only if profiling shows split root refresh is hot.
 
-### 8. Existing verification is strong and should become the refactor gate
+### 9. Existing verification is strong and should become the refactor gate
 
 Evidence:
 
@@ -254,6 +294,15 @@ Goal: reduce invalidation fan-out while preserving behavior.
 1. Introduce one or two `Equatable` snapshots for workspace/sidebar/toolbar or notification panel.
 2. Convert leaf rows to value inputs + callbacks.
 3. Keep `ConductorWindowModel` as command owner for now.
+
+### Phase A2: Settings terminal page interaction smoothness
+
+Goal: make Settings > Terminal open, switch, scroll, and control interactions feel immediate.
+
+1. Split the terminal settings dashboard into local subsections so only one dense control group mounts at a time.
+2. Keep everyday controls visible first; move advanced Ghostty compatibility controls behind explicit advanced navigation/search.
+3. Remove large-subtree transitions from settings section switches.
+4. Verify manually with the running app and, if subjective jank remains, capture a focused SwiftUI/Instruments trace.
 
 ### Phase B: Extract one feature surface per patch
 
@@ -300,17 +349,22 @@ Goal: keep the app feeling alive without making heavy surfaces expensive.
 3. Use Core Animation transforms for large mounted panels/trays.
 4. Respect reduced motion and add a "high load" internal condition if needed.
 
-## First Patch Recommendation
+## Current Priority Recommendation
 
-Start with **Notification Panel extraction + snapshot boundary**, then move to **Sidebar/workspace chrome snapshot boundary**.
+The original first patches, **Notification Panel extraction + snapshot boundary** and **Sidebar/workspace chrome snapshot boundary**, have already established the snapshot/callback pattern. File manager snapshot and large-preview routing work has also started.
+
+The next priority is now **Settings > Terminal interaction smoothness**.
 
 Why:
 
-- Small enough to review.
-- Directly attacks broad `ConductorWindowModel` fan-out.
-- Establishes the pattern that later refactors can copy.
-- Lower risk than changing file editor text ownership or document renderers first.
-- Notification Panel is especially contained: its current hot issues are direct whole-model observation, repeated title lookup through all workspaces/panes per notification row, list animation keyed by full record IDs, and row transitions. A `NotificationPanelSnapshot` can precompute rows and button enabled state once.
-- Sidebar/workspace chrome is more important but wider: it computes workspace display rows in both sidebar and top tab strip, reads metadata/notification/workspace/model state directly, and animates list changes. It should copy the notification snapshot pattern after the first extraction lands.
+- The user can still feel jank in a core settings workflow after the snapshot pass.
+- The page is product-critical: terminal font, cursor, background, clipboard, keyboard, and Ghostty controls affect everyday terminal work.
+- The remaining issue is not primarily model reads; it is large one-shot SwiftUI control mounting and layout.
+- Fixing this validates the performance-first contract more directly than another structural extraction.
 
-After that, move to File Manager snapshot builder, because it is likely the highest ROI bulk-rendering target.
+Next patch target:
+
+1. Replace the single long `terminalSettingsDashboard` with a compact terminal settings hub.
+2. Mount only one dense subsection at a time: typography/display, cursor/background, selection/mouse, clipboard/keyboard, and advanced Ghostty.
+3. Keep section changes animation-free or opacity-only.
+4. Manually verify Settings open, Terminal section switch, scroll, and control toggles in the running app before considering the patch complete.

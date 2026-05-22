@@ -9,6 +9,7 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
 - The user wants a project refactor because the current code feels disorganized and slow.
 - The user clarified that the refactor scope is not only code organization. It must also cover large/bulk rendering, runtime performance, animation cost, and related interaction smoothness.
 - The user also wants the refactor to improve structure and code aesthetics: elegant, readable, stable code with appropriate design patterns where they reduce complexity.
+- The user clarified that all operations must feel smooth; jank in settings, panels, terminal-adjacent tools, or dense controls is not acceptable. Performance is the first priority, not a polish pass after architecture.
 - The project is a high-performance native macOS multi-terminal manager.
 - SwiftUI owns product-level shell UI; AppKit owns native integration, responder routing, drag/drop, resize-sensitive surfaces, and stable host views.
 - GhosttyKit/libghostty owns terminal rendering, scrollback, cursor movement, transcript text, and high-frequency output.
@@ -28,6 +29,7 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
 
 - The first useful refactor should be incremental and reviewable, not a whole-project rewrite.
 - Performance wins should prioritize user-visible hot paths: root shell invalidation, split/file/document workspace responsiveness, panel toggles, resize, and terminal-adjacent focus/geometry updates.
+- If a change makes the code cleaner but a common interaction still feels stuck, laggy, or heavy, the performance issue remains unsolved.
 - Large-file decomposition is useful only when it preserves behavior and reduces invalidation or ownership confusion.
 - Bulk rendering problems may exist in both SwiftUI lists/rows and AppKit/WebKit-backed document/file surfaces. The audit should classify each surface by owner and fix it with the right rendering technology rather than forcing everything through SwiftUI.
 - Design patterns should be used pragmatically. Patterns are valuable when they clarify ownership, stabilize APIs, isolate side effects, or make performance boundaries explicit; they should not be introduced as decorative architecture.
@@ -41,6 +43,7 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
 - Use SwiftUI Expert guidance for modern SwiftUI state, view composition, performance, macOS scenes/window styling, and AppKit interop.
 - Use SwiftUI Pro guidance for deprecated API checks, data flow, accessibility, maintainability, and performance review.
 - Start with a global performance/structure audit that classifies surfaces by risk and recommends a phased refactor sequence.
+- Treat user-visible interaction smoothness as the top-level requirement: opening panels, switching settings sections, scrolling dense lists, toggling controls, typing into fields, workspace switching, pane resizing, and tray reveal must all feel immediate.
 - Improve architecture and code elegance alongside performance: smaller cohesive files, clear ownership boundaries, readable names, narrow value props, stable display models, focused stores/coordinators, and explicit side-effect boundaries.
 - Apply design patterns where they fit the codebase, such as:
   - Display model / snapshot pattern for high-volume UI rows and shell metadata.
@@ -49,6 +52,7 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Strategy/table-driven patterns for file type routing, document rendering, settings categories, or command handling when branching logic is sprawling.
   - Factory/builder patterns for expensive runtime surfaces or configuration objects where construction must be deduplicated and testable.
 - Include large/bulk rendering paths in the refactor scope, including long file previews, large file-tree snapshots, large workspace/tab lists, notification feeds, settings rows, document previews, and any repeated SwiftUI row or card surface.
+- Explicitly include Settings > Terminal page jank in scope. The terminal settings page must not mount a large tree of complex SwiftUI controls all at once if that causes slow section switching, scrolling, or control interaction.
 - Include animation and transition performance in the refactor scope, especially panel open/close, file tray reveal, workspace switching, tab transitions, split resize, hover effects, and any blur/material/scale/matched-geometry effects that can invalidate large subtrees.
 - Classify each performance issue by ownership: SwiftUI metadata UI, AppKit bridge, WebKit document surface, QuickLook/native preview surface, Ghostty terminal surface, or background model/store work.
 - Preserve the project rule that terminal output and scrollback never enter SwiftUI observable state.
@@ -59,7 +63,9 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
 ## Acceptance Criteria
 
 - [x] A scoped refactor plan identifies the highest-risk/highest-return areas before code changes.
+- [x] The audit states that performance and smooth interaction are the first product requirement.
 - [x] Bulk rendering surfaces are inventoried and ranked by expected user-visible cost.
+- [x] Settings > Terminal page jank is explicitly tracked as a P0 performance surface.
 - [x] Animation/transition hotspots are inventoried and ranked by expected user-visible cost.
 - [x] The first implementation phase touches a bounded set of files and preserves behavior.
 - [x] The selected area has clearer module/file boundaries after refactor, not only faster code.
