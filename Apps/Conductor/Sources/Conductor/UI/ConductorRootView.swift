@@ -493,25 +493,20 @@ private struct CommandPaletteView: View {
     let snapshot: CommandPaletteSnapshot
     @State private var query = ""
     @State private var selectedCommandID: String?
+    @State private var filteredResult: CommandPaletteFilterResult
     @Namespace private var commandSelectionNamespace
     @FocusState private var searchFocused: Bool
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
+    init(model: ConductorWindowModel, snapshot: CommandPaletteSnapshot) {
+        self.model = model
+        self.snapshot = snapshot
+        _filteredResult = State(initialValue: CommandPaletteFilterResult(commands: snapshot.commands, query: ""))
+    }
+
     private var commands: [CommandPaletteItem] {
         snapshot.commands
-    }
-
-    private var filteredCommands: [CommandPaletteItem] {
-        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedQuery.isEmpty else { return commands }
-        return commands.filter { command in
-            command.searchText.contains(normalizedQuery)
-        }
-    }
-
-    private var filteredCommandIDs: [String] {
-        filteredCommands.map(\.id)
     }
 
     var body: some View {
@@ -527,11 +522,15 @@ private struct CommandPaletteView: View {
             }
             .frame(width: 690, height: 486)
             .onAppear {
+                refreshFilteredCommands()
                 focusSearchField()
                 ensureSelection()
             }
             .onChange(of: query) {
-                ensureSelection()
+                refreshFilteredCommands()
+            }
+            .onChange(of: commands) {
+                refreshFilteredCommands()
             }
             .animation(ConductorMotion.feedback, value: selectedCommandID)
             .onMoveCommand { direction in
@@ -589,7 +588,7 @@ private struct CommandPaletteView: View {
 
     private var commandResults: some View {
         Group {
-            if filteredCommands.isEmpty {
+            if filteredResult.rows.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "command")
                         .font(.conductorSystem(size: 22, weight: .medium, scale: fontScale))
@@ -603,28 +602,28 @@ private struct CommandPaletteView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 3) {
-                        ForEach(Array(filteredCommands.enumerated()), id: \.element.id) { index, command in
-                            if index == 0 || filteredCommands[index - 1].section != command.section {
-                                CommandSectionTitle(command.section)
+                        ForEach(filteredResult.rows) { row in
+                            if row.showsSectionTitle {
+                                CommandSectionTitle(row.command.section)
                             }
                             CommandButton(
-                                command: command,
-                                selected: command.id == selectedCommandID,
+                                command: row.command,
+                                selected: row.id == selectedCommandID,
                                 selectionNamespace: commandSelectionNamespace,
                                 action: {
-                                    execute(command)
+                                    execute(row.command)
                                 },
                                 onHover: {
-                                    if !command.disabled {
-                                        selectedCommandID = command.id
+                                    if !row.command.disabled {
+                                        selectedCommandID = row.id
                                     }
                                 }
                             )
-                            .transition(ConductorMotion.rowTransition(itemCount: filteredCommands.count))
+                            .transition(ConductorMotion.rowTransition(itemCount: filteredResult.rows.count))
                         }
                     }
                     .padding(.vertical, 1)
-                    .animation(ConductorMotion.list(itemCount: filteredCommands.count), value: filteredCommandIDs)
+                    .animation(ConductorMotion.list(itemCount: filteredResult.rows.count), value: filteredResult.commandIDs)
                 }
                 .scrollIndicators(.visible)
             }
@@ -633,20 +632,23 @@ private struct CommandPaletteView: View {
     }
 
     private func ensureSelection() {
-        let enabledCommands = filteredCommands.filter { !$0.disabled }
-        guard !enabledCommands.isEmpty else {
+        ensureSelection(in: filteredResult)
+    }
+
+    private func ensureSelection(in result: CommandPaletteFilterResult) {
+        guard !result.enabledCommands.isEmpty else {
             selectedCommandID = nil
             return
         }
         if let selectedCommandID,
-           enabledCommands.contains(where: { $0.id == selectedCommandID }) {
+           result.enabledCommandIDs.contains(selectedCommandID) {
             return
         }
-        selectedCommandID = enabledCommands.first?.id
+        selectedCommandID = result.enabledCommands.first?.id
     }
 
     private func moveSelection(by offset: Int) {
-        let enabledCommands = filteredCommands.filter { !$0.disabled }
+        let enabledCommands = filteredResult.enabledCommands
         guard !enabledCommands.isEmpty else {
             selectedCommandID = nil
             return
@@ -667,7 +669,7 @@ private struct CommandPaletteView: View {
     private func executeSelected() {
         ensureSelection()
         guard let selectedCommandID,
-              let command = filteredCommands.first(where: { $0.id == selectedCommandID }) else {
+              let command = filteredResult.command(for: selectedCommandID) else {
             return
         }
         execute(command)
@@ -678,6 +680,66 @@ private struct CommandPaletteView: View {
             searchFocused = true
         }
     }
+
+    private func refreshFilteredCommands() {
+        let next = CommandPaletteFilterResult(commands: commands, query: query)
+        guard next != filteredResult else { return }
+        filteredResult = next
+        ensureSelection(in: next)
+    }
+}
+
+private struct CommandPaletteFilterResult: Equatable {
+    static let empty = CommandPaletteFilterResult(rows: [], enabledCommands: [], enabledCommandIDs: [], commandIDs: [])
+
+    let rows: [CommandPaletteFilteredRow]
+    let enabledCommands: [CommandPaletteItem]
+    let enabledCommandIDs: Set<String>
+    let commandIDs: [String]
+
+    init(commands: [CommandPaletteItem], query: String) {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filteredCommands: [CommandPaletteItem]
+        if normalizedQuery.isEmpty {
+            filteredCommands = commands
+        } else {
+            filteredCommands = commands.filter { command in
+                command.searchText.contains(normalizedQuery)
+            }
+        }
+
+        var previousSection: String?
+        self.rows = filteredCommands.map { command in
+            let showsSectionTitle = command.section != previousSection
+            previousSection = command.section
+            return CommandPaletteFilteredRow(command: command, showsSectionTitle: showsSectionTitle)
+        }
+        self.enabledCommands = filteredCommands.filter { !$0.disabled }
+        self.enabledCommandIDs = Set(enabledCommands.map(\.id))
+        self.commandIDs = filteredCommands.map(\.id)
+    }
+
+    private init(
+        rows: [CommandPaletteFilteredRow],
+        enabledCommands: [CommandPaletteItem],
+        enabledCommandIDs: Set<String>,
+        commandIDs: [String]
+    ) {
+        self.rows = rows
+        self.enabledCommands = enabledCommands
+        self.enabledCommandIDs = enabledCommandIDs
+        self.commandIDs = commandIDs
+    }
+
+    func command(for id: String) -> CommandPaletteItem? {
+        rows.first { $0.id == id }?.command
+    }
+}
+
+private struct CommandPaletteFilteredRow: Identifiable, Equatable {
+    var id: String { command.id }
+    let command: CommandPaletteItem
+    let showsSectionTitle: Bool
 }
 
 private struct CommandPaletteItem: Identifiable, Equatable {

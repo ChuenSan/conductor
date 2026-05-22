@@ -145,6 +145,11 @@ workspace overview, and compact status modules.
   and separators). Do not tint these panels directly with `shellPanelBackground` and do not
   create a separate settings-only color language; one app theme must produce one floating-panel
   language.
+- Searchable floating panels such as Command Center should precompute filtered row models,
+  section-boundary markers, enabled item collections, and animation identity arrays outside
+  their `body` render path. Typing in a search field must not repeatedly allocate
+  `Array(enumerated())`, re-filter the same source array from multiple computed properties, or
+  derive section headers by indexing back into the filtered array during row rendering.
 - Settings controls for global shell preferences must be treated as cross-surface commands,
   not local form edits. Theme, density, clarity, language, font scale, terminal font size,
   renderer preferences, and reduced motion all affect more than the row that edits them.
