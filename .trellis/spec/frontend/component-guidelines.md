@@ -268,6 +268,17 @@ workspace overview, and compact status modules.
   list, or notification feed crosses the shared animated collection limit, use identity
   transitions and no list animation so filtering does not schedule per-row motion across a
   large collection.
+- Terminal pane and terminal tab chrome must follow the same compact-snapshot rule as sidebar
+  and toolbar chrome. `TerminalPaneView`, terminal tab strips, and terminal tab buttons may keep
+  `ConductorWindowModel` as a plain command coordinator for select, close, rename, drag, and
+  context-menu actions, but their visible state should come from a value snapshot such as
+  `TerminalPaneChromeSnapshot` and `TerminalTabDisplayModel`. Include theme, appearance/density,
+  pane focus, panel focus suspension, drop targets, flash tokens, unread counts, metadata
+  summaries, drag state, split capability, and context-menu disabled flags in that snapshot.
+  Do not let terminal tab rows independently subscribe to the full window model just to render
+  metadata badges or dimensions. Equatable tab content that reads `\.conductorTheme` or
+  `\.conductorFontScale` must include theme/font-scale identity in equality inputs, or avoid
+  `.equatable()`, so global appearance changes update immediately.
 - Bind fluid effects only to low-frequency product state such as selection, command palette
   visibility, notification badges, sidebar visibility, and workspace navigation.
 - Do not bind glass effects, blur changes, or animated mesh/background effects to stdout,

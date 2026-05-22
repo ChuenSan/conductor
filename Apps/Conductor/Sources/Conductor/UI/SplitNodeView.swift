@@ -17,7 +17,11 @@ struct SplitNodeView: View {
         switch node {
         case let .leaf(paneID):
             if let pane = model.workspace.panes[paneID] {
-                TerminalPaneView(pane: pane, model: model)
+                TerminalPaneView(
+                    pane: pane,
+                    model: model,
+                    snapshot: TerminalPaneChromeSnapshot(pane: pane, model: model)
+                )
                     .frame(minWidth: 0, minHeight: 0)
                     .clipped()
                     .transition(.identity)
@@ -782,9 +786,84 @@ private final class SplitDividerTrackingNSView: NSView {
     }
 }
 
+private struct TerminalPaneChromeSnapshot: Equatable {
+    let paneID: PaneID
+    let selectedTabID: TerminalID
+    let paneFocused: Bool
+    let terminalAcceptsInputFocus: Bool
+    let paneDropTarget: TerminalTabDropTarget?
+    let flashToken: UInt64
+    let canClosePane: Bool
+    let theme: TerminalTheme
+    let appearance: AppearancePreferences
+    let tabs: [TerminalTabDisplayModel]
+    let tabIDs: [TerminalID]
+
+    @MainActor
+    init(pane: PaneState, model: ConductorWindowModel) {
+        let workspace = model.workspace
+        let paneFocused = workspace.focusedPaneID == pane.id
+        let hasNextPane = workspace.nextPaneID(after: pane.id) != nil
+        let workspacePaneCount = workspace.panes.count
+        let workspaceCanSplit = workspace.canSplit()
+        let metadataByTerminalID = model.metadataByTerminalID
+        let notificationSnapshot = model.notifications.snapshot
+
+        self.paneID = pane.id
+        self.selectedTabID = pane.selectedTabID
+        self.paneFocused = paneFocused
+        self.terminalAcceptsInputFocus = paneFocused &&
+            !model.commandPaletteVisible &&
+            !model.settingsPanelVisible &&
+            !model.workspaceOverviewVisible &&
+            !model.terminalSearchVisible
+        self.paneDropTarget = model.terminalTabDropTargetByPaneID[pane.id]
+        self.flashToken = model.paneFlashTokens[pane.id] ?? 0
+        self.canClosePane = workspace.canClosePane(pane.id)
+        self.theme = model.theme
+        self.appearance = model.appearance
+        self.tabs = pane.tabs.enumerated().map { index, tab in
+            TerminalTabDisplayModel(
+                tab: tab,
+                metadata: metadataByTerminalID[tab.id],
+                unreadCount: notificationSnapshot.unreadCount(for: tab.id),
+                isDragging: model.isTerminalTabDragging(tab.id),
+                tabIndex: index,
+                tabCount: pane.tabs.count,
+                hasNextPane: hasNextPane,
+                workspacePaneCount: workspacePaneCount,
+                workspaceCanSplit: workspaceCanSplit,
+                canCloseOtherTabs: workspace.canCloseOtherTabs(in: pane.id),
+                canCloseTabsToRight: workspace.canCloseTabsToRight(of: tab.id, in: pane.id)
+            )
+        }
+        self.tabIDs = pane.tabs.map(\.id)
+    }
+
+    var terminalBackground: Color {
+        theme.terminalBackground.opacity(appearance.terminalRenderer.backgroundOpacity)
+    }
+}
+
+private struct TerminalTabDisplayModel: Identifiable, Equatable {
+    var id: TerminalID { tab.id }
+    let tab: TerminalTabState
+    let metadata: TerminalDisplayMetadata?
+    let unreadCount: Int
+    let isDragging: Bool
+    let tabIndex: Int
+    let tabCount: Int
+    let hasNextPane: Bool
+    let workspacePaneCount: Int
+    let workspaceCanSplit: Bool
+    let canCloseOtherTabs: Bool
+    let canCloseTabsToRight: Bool
+}
+
 private struct TerminalPaneView: View {
     let pane: PaneState
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
+    let snapshot: TerminalPaneChromeSnapshot
     @State private var highlightedDropTabID: TerminalID?
     @State private var isFileDropTargeted = false
     @State private var flashVisible = false
@@ -792,23 +871,19 @@ private struct TerminalPaneView: View {
     @Environment(\.conductorFilePanelLayoutActive) private var filePanelLayoutActive
 
     private var isFocused: Bool {
-        model.workspace.focusedPaneID == pane.id
+        snapshot.paneFocused
     }
 
     private var terminalAcceptsInputFocus: Bool {
-        isFocused &&
-            !model.commandPaletteVisible &&
-            !model.settingsPanelVisible &&
-            !model.workspaceOverviewVisible &&
-            !model.terminalSearchVisible
+        snapshot.terminalAcceptsInputFocus
     }
 
     private var paneDropTarget: TerminalTabDropTarget? {
-        model.terminalTabDropTargetByPaneID[pane.id]
+        snapshot.paneDropTarget
     }
 
     private var terminalBackground: Color {
-        model.theme.terminalBackground.opacity(model.appearance.terminalRenderer.backgroundOpacity)
+        snapshot.terminalBackground
     }
 
     var body: some View {
@@ -826,15 +901,15 @@ private struct TerminalPaneView: View {
                 }
 
                 TerminalPaneFlashOverlay(
-                    color: model.theme.accent,
+                    color: snapshot.theme.accent,
                     visible: flashVisible
                 )
                 .allowsHitTesting(false)
             }
         }
         .clipped()
-        .animation(model.shellAnimation(ConductorMotion.dragPreview), value: paneDropTarget)
-        .onChange(of: model.paneFlashTokens[pane.id] ?? 0) { _, token in
+        .animation(shellAnimation(ConductorMotion.dragPreview), value: paneDropTarget)
+        .onChange(of: snapshot.flashToken) { _, token in
             guard token > 0 else { return }
             triggerFocusFlash()
         }
@@ -844,8 +919,8 @@ private struct TerminalPaneView: View {
         HStack(spacing: 4) {
             StableTerminalTabStrip(
                 pane: pane,
+                snapshot: snapshot,
                 model: model,
-                paneFocused: isFocused,
                 highlightedDropTabID: $highlightedDropTabID
             )
             .frame(minWidth: 64, maxWidth: .infinity, alignment: .leading)
@@ -855,7 +930,7 @@ private struct TerminalPaneView: View {
                 systemImage: "xmark",
                 title: L("关闭", "Close"),
                 showsTitle: false,
-                disabled: !model.workspace.canClosePane(pane.id),
+                disabled: !snapshot.canClosePane,
                 help: L("关闭这个分屏 Cmd-Shift-W", "Close this pane Cmd-Shift-W")
             ) {
                 ConductorMotion.perform(ConductorMotion.layout) {
@@ -865,11 +940,11 @@ private struct TerminalPaneView: View {
         }
         .padding(.leading, 12)
         .padding(.trailing, 8)
-        .frame(height: model.appearance.density.paneTabRailHeight)
+        .frame(height: snapshot.appearance.density.paneTabRailHeight)
         .background {
             ZStack(alignment: .bottom) {
                 terminalBackground
-                model.theme.terminalChrome.opacity(isFocused ? 0.13 : 0.085)
+                snapshot.theme.terminalChrome.opacity(isFocused ? 0.13 : 0.085)
                 LinearGradient(
                     colors: [
                         Color.white.opacity(isFocused ? 0.010 : 0.005),
@@ -884,7 +959,7 @@ private struct TerminalPaneView: View {
             LinearGradient(
                 colors: [
                     Color.clear,
-                    model.theme.terminalOuterStroke.opacity(isFocused ? 0.30 : 0.20),
+                    snapshot.theme.terminalOuterStroke.opacity(isFocused ? 0.30 : 0.20),
                     Color.clear
                 ],
                 startPoint: .leading,
@@ -898,12 +973,12 @@ private struct TerminalPaneView: View {
     @ViewBuilder
     private var selectedTerminal: some View {
         if let selected = pane.selectedTab,
-           model.workspace.panes[pane.id]?.selectedTabID == selected.id {
+           snapshot.selectedTabID == selected.id {
             GeometryReader { proxy in
                 ZStack {
                     TerminalSurfaceRepresentable(
                         surface: model.surface(for: selected),
-                        theme: model.theme,
+                        theme: snapshot.theme,
                         isFocused: terminalAcceptsInputFocus,
                         suspendsGeometrySync: filePanelLayoutActive
                     )
@@ -933,13 +1008,17 @@ private struct TerminalPaneView: View {
                 .overlay {
                     if isFileDropTargeted {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(model.theme.accent.opacity(0.72), lineWidth: 2)
+                            .stroke(snapshot.theme.accent.opacity(0.72), lineWidth: 2)
                             .padding(8)
                             .allowsHitTesting(false)
                     }
                 }
             }
         }
+    }
+
+    private func shellAnimation(_ animation: Animation?) -> Animation? {
+        snapshot.appearance.reducedMotion ? nil : animation
     }
 
     private func triggerFocusFlash() {
@@ -1067,8 +1146,8 @@ private struct TerminalPaneFlashOverlay: View {
 
 private struct StableTerminalTabStrip: View {
     let pane: PaneState
-    @ObservedObject var model: ConductorWindowModel
-    let paneFocused: Bool
+    let snapshot: TerminalPaneChromeSnapshot
+    let model: ConductorWindowModel
     @Binding var highlightedDropTabID: TerminalID?
     @Namespace private var selectionNamespace
     @State private var scrollTargetID: TerminalID?
@@ -1078,14 +1157,14 @@ private struct StableTerminalTabStrip: View {
     private let tabEdgePadding: CGFloat = 0
 
     private var tabIDs: [TerminalID] {
-        pane.tabs.map(\.id)
+        snapshot.tabIDs
     }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: tabSpacing) {
-                ForEach(Array(pane.tabs.enumerated()), id: \.element.id) { pair in
-                    tabView(for: pair.element, index: pair.offset)
+                ForEach(snapshot.tabs) { display in
+                    tabView(for: display)
                 }
             }
             .padding(.horizontal, tabEdgePadding)
@@ -1116,7 +1195,7 @@ private struct StableTerminalTabStrip: View {
             }
             syncScrollTarget(animated: true)
         }
-        .frame(height: model.appearance.density.paneTabHeight)
+        .frame(height: snapshot.appearance.density.paneTabHeight)
         .clipped()
         .mask(ConductorHorizontalFadeMask())
     }
@@ -1127,39 +1206,33 @@ private struct StableTerminalTabStrip: View {
             scrollTargetID = pane.selectedTabID
         }
         if animated {
-            model.performShellMotion(ConductorMotion.scroll, update)
+            performShellMotion(ConductorMotion.scroll, update)
         } else {
             ConductorMotion.withoutAnimation(update)
         }
     }
 
-    private func tabView(for tab: TerminalTabState, index: Int) -> some View {
+    private func tabView(for display: TerminalTabDisplayModel) -> some View {
         TerminalTabButton(
-            tab: tab,
-            isSelected: tab.id == pane.selectedTabID,
-            visuallySelected: visualSelectedTabID == tab.id,
-            paneFocused: paneFocused,
-            isDropTarget: highlightedDropTabID == tab.id,
-            metadata: model.metadataByTerminalID[tab.id],
-            unreadCount: model.notifications.snapshot.unreadCount(for: tab.id),
+            display: display,
+            isSelected: display.id == pane.selectedTabID,
+            visuallySelected: visualSelectedTabID == display.id,
+            paneFocused: snapshot.paneFocused,
+            isDropTarget: highlightedDropTabID == display.id,
             selectionNamespace: selectionNamespace,
             model: model,
             paneID: pane.id,
-            tabIndex: index,
-            tabCount: pane.tabs.count,
-            hasNextPane: model.workspace.nextPaneID(after: pane.id) != nil,
-            workspaceCanSplit: model.workspace.canSplit(),
-            isDragging: model.isTerminalTabDragging(tab.id),
+            density: snapshot.appearance.density,
             onVisualSelect: {
-                setVisualSelection(tab.id, animated: true)
+                setVisualSelection(display.id, animated: true)
             }
         )
-        .frame(width: model.appearance.density.paneTabWidth)
-        .id(tab.id)
+        .frame(width: snapshot.appearance.density.paneTabWidth)
+        .id(display.id)
         .onDrop(
             of: terminalTabDropTypes,
             delegate: TerminalTabDropDelegate(
-                targetTabID: tab.id,
+                targetTabID: display.id,
                 paneID: pane.id,
                 highlightedTabID: $highlightedDropTabID,
                 model: model
@@ -1172,10 +1245,20 @@ private struct StableTerminalTabStrip: View {
             visualSelectedTabID = terminalID
         }
         if animated {
-            model.performShellMotion(ConductorMotion.selectionGlide, update)
+            performShellMotion(ConductorMotion.selectionGlide, update)
         } else {
             ConductorMotion.withoutAnimation(update)
         }
+    }
+
+    private func performShellMotion(_ animation: Animation? = ConductorMotion.standard, _ action: () -> Void) {
+        guard !snapshot.appearance.reducedMotion else {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction, action)
+            return
+        }
+        withAnimation(animation, action)
     }
 }
 
@@ -1342,21 +1425,15 @@ private struct PaneBarButton: View {
 }
 
 private struct TerminalTabButton: View {
-    let tab: TerminalTabState
+    let display: TerminalTabDisplayModel
     let isSelected: Bool
     let visuallySelected: Bool
     let paneFocused: Bool
     let isDropTarget: Bool
-    let metadata: TerminalDisplayMetadata?
-    let unreadCount: Int
     let selectionNamespace: Namespace.ID
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
     let paneID: PaneID
-    let tabIndex: Int
-    let tabCount: Int
-    let hasNextPane: Bool
-    let workspaceCanSplit: Bool
-    let isDragging: Bool
+    let density: AppearanceDensity
     let onVisualSelect: () -> Void
     @State private var editingTitle = false
     @State private var titleDraft = ""
@@ -1366,13 +1443,25 @@ private struct TerminalTabButton: View {
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
+    private var tab: TerminalTabState {
+        display.tab
+    }
+
+    private var metadata: TerminalDisplayMetadata? {
+        display.metadata
+    }
+
+    private var unreadCount: Int {
+        display.unreadCount
+    }
+
     private var canMoveTargetTabToNextPane: Bool {
-        guard hasNextPane else { return false }
-        return tabCount > 1 || model.workspace.panes.count > 1
+        guard display.hasNextPane else { return false }
+        return display.tabCount > 1 || display.workspacePaneCount > 1
     }
 
     private var canMoveTargetTabToNewSplit: Bool {
-        tabCount > 1 && workspaceCanSplit
+        display.tabCount > 1 && display.workspaceCanSplit
     }
 
     private var tabFill: Color {
@@ -1450,7 +1539,9 @@ private struct TerminalTabButton: View {
                     selected: isSelected,
                     hasUnread: unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0,
                     showsProgress: metadata?.progressKind != nil,
-                    readonly: metadata?.readonly == true
+                    readonly: metadata?.readonly == true,
+                    themeID: theme.id,
+                    fontScaleID: fontScale.id
                 )
                 .equatable()
                 .contentShape(Rectangle())
@@ -1486,11 +1577,11 @@ private struct TerminalTabButton: View {
         }
         .padding(.leading, 9)
         .padding(.trailing, 5)
-        .frame(height: model.appearance.density.paneTabHeight)
+        .frame(height: density.paneTabHeight)
         .frame(
             minWidth: 72,
-            idealWidth: model.appearance.density.paneTabWidth,
-            maxWidth: model.appearance.density.paneTabWidth
+            idealWidth: density.paneTabWidth,
+            maxWidth: density.paneTabWidth
         )
         .background {
             let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
@@ -1508,19 +1599,19 @@ private struct TerminalTabButton: View {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
                 .stroke(tabStroke, lineWidth: isDropTarget ? 1.25 : 1)
         }
-        .opacity(isDragging ? 0.74 : 1)
-        .scaleEffect(isDragging ? 0.986 : 1)
+        .opacity(display.isDragging ? 0.74 : 1)
+        .scaleEffect(display.isDragging ? 0.986 : 1)
         .shadow(
-            color: theme.usesDarkChrome ? Color.black.opacity(isDragging ? 0.24 : 0) : Color.black.opacity(isDragging ? 0.11 : 0),
-            radius: isDragging ? 9 : 0,
+            color: theme.usesDarkChrome ? Color.black.opacity(display.isDragging ? 0.24 : 0) : Color.black.opacity(display.isDragging ? 0.11 : 0),
+            radius: display.isDragging ? 9 : 0,
             x: 0,
-            y: isDragging ? 4 : 0
+            y: display.isDragging ? 4 : 0
         )
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.micro, value: isDropTarget)
         .animation(ConductorMotion.selection, value: editingTitle)
         .animation(ConductorMotion.attention, value: unreadCount)
-        .animation(ConductorMotion.dragPreview, value: isDragging)
+        .animation(ConductorMotion.dragPreview, value: display.isDragging)
         .onHover { value in
             ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
@@ -1566,14 +1657,14 @@ private struct TerminalTabButton: View {
                     model.performCommand(.closeOtherTabs)
                 }
             }
-            .disabled(!model.workspace.canCloseOtherTabs(in: paneID))
+            .disabled(!display.canCloseOtherTabs)
             Button(L("关闭右侧标签", "Close Tabs to the Right")) {
                 ConductorMotion.withoutAnimation {
                     model.selectTab(tab.id, in: paneID)
                     model.performCommand(.closeTabsToRight)
                 }
             }
-            .disabled(!model.workspace.canCloseTabsToRight(of: tab.id, in: paneID))
+            .disabled(!display.canCloseTabsToRight)
             Divider()
             Button(L("标签左移", "Move Tab Left")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
@@ -1581,14 +1672,14 @@ private struct TerminalTabButton: View {
                     model.performCommand(.moveTabLeft)
                 }
             }
-            .disabled(tabIndex == 0)
+            .disabled(display.tabIndex == 0)
             Button(L("标签右移", "Move Tab Right")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
                     model.performCommand(.moveTabRight)
                 }
             }
-            .disabled(tabIndex == tabCount - 1)
+            .disabled(display.tabIndex == display.tabCount - 1)
             Divider()
             Button(L("移动到下一个分屏", "Move to Next Pane")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
@@ -1642,6 +1733,8 @@ private struct TerminalTabButtonContent: View, Equatable {
     let hasUnread: Bool
     let showsProgress: Bool
     let readonly: Bool
+    let themeID: String
+    let fontScaleID: String
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -1651,7 +1744,9 @@ private struct TerminalTabButtonContent: View, Equatable {
             lhs.selected == rhs.selected &&
             lhs.hasUnread == rhs.hasUnread &&
             lhs.showsProgress == rhs.showsProgress &&
-            lhs.readonly == rhs.readonly
+            lhs.readonly == rhs.readonly &&
+            lhs.themeID == rhs.themeID &&
+            lhs.fontScaleID == rhs.fontScaleID
     }
 
     var body: some View {

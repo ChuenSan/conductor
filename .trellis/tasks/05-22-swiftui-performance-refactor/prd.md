@@ -203,6 +203,12 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Converted `CommandPaletteItem` into an `Equatable` value row with a `ConductorShellCommand`, disabled state, shortcut, keywords, and precomputed lowercase search text instead of embedding per-row action closures.
   - Kept shortcut-guide rows projected from the same command catalog so the command surface and discoverability surface stay synchronized.
   - Updated frontend specs with the Command Center value-row rule.
+- Nineteenth implementation phase:
+  - Added `TerminalPaneChromeSnapshot` and `TerminalTabDisplayModel` in `Apps/Conductor/Sources/Conductor/UI/SplitNodeView.swift` so terminal pane/tab chrome reads compact value inputs for focus, appearance, unread/metadata badges, drop targets, drag state, split capability, context-menu disabled state, and flash tokens.
+  - Removed direct `@ObservedObject` subscriptions from `TerminalPaneView`, `StableTerminalTabStrip`, and `TerminalTabButton`; they keep `ConductorWindowModel` only as a command coordinator for terminal surface lookup, focus, selection, close, rename, drag/drop, and context-menu actions.
+  - Preserved `TerminalSurfaceRepresentable` identity and Ghostty/AppKit surface ownership; the selected terminal still resolves through `model.surface(for:)` and no theme/appearance `.id(...)` recreation was introduced.
+  - Added theme/font-scale identity to `TerminalTabButtonContent` equality inputs so global appearance changes restyle terminal tab labels immediately while keeping the row-content equality optimization.
+  - Updated frontend specs with the terminal pane/tab chrome snapshot convention.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`
