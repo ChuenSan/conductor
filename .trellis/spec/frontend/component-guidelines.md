@@ -204,6 +204,16 @@ workspace overview, and compact status modules.
   manager; route document-like previews through the same stable document renderer when possible.
   Large text files should show an explicit protected reading state and a calm source panel,
   not a broken-looking partial render.
+- Editable source/text surfaces inside workspace file tabs must not use SwiftUI `TextEditor`
+  for loaded file contents. SwiftUI `TextEditor(text: $fullFileText)` re-lays out the document
+  during split and window live-resize, so dragging pane width can become proportional to file
+  length. Use a stable AppKit-backed text surface (`NSScrollView` + `NSTextView` or an adopted
+  source-editor AppKit view), disable soft wrapping for code/log-like content, deduplicate
+  no-op text/theme/font updates in `updateNSView`, and keep logs or protected-size files in a
+  non-saving reader mode even when the file is writable. The AppKit coordinator may own the
+  live edit buffer between keystrokes; SwiftUI should receive coalesced text snapshots for
+  dirty state, search, preview, and autosave, plus an explicit synchronous snapshot request
+  before save/close/unmount so command actions never persist a stale buffered value.
 - The workspace file/document area is a single replaceable file slot, not a many-file tab
   strip. Opening another file from terminal links, the file manager, or drag/drop replaces the
   existing file tab and prunes the previous file's dirty/external/save-token state. Terminal
@@ -213,6 +223,14 @@ workspace overview, and compact status modules.
   window is live-resizing, cover it with a theme-colored layer, and apply one final frame update
   when resizing ends. Split pane drag paths should also suspend terminal geometry sync and avoid
   no-op `needsDisplay` invalidations so resize does not fight Ghostty surface updates.
+- Right-side tool trays such as the file manager must not reveal by animating the width that
+  participates in the terminal split layout or by applying SwiftUI offset/transition to the
+  full panel. Mount the tray as a trailing overlay above the workspace so terminal split sizes
+  do not change, animate the mounted panel through an AppKit/Core Animation host layer transform,
+  and avoid terminal geometry sync entirely unless the terminal's real bounds changed. File-tree
+  views should build one compact display snapshot per SwiftUI body pass and share it with the
+  list, search count, and status bar instead of recursively recomputing visible rows from every
+  subview.
 - When a shell panel is open, suspend terminal input focus so the live terminal host does not
   reclaim first responder from controls inside settings, command palette, or overview. The first
   click inside a panel must activate the clicked control, not only move focus away from terminal.
@@ -223,7 +241,11 @@ workspace overview, and compact status modules.
   settings rows while a panel is open.
 - Heavy floating panels should avoid blur-based insertion/removal transitions and full-content
   `.id(...)` transitions. Use cheap opacity or non-animated content swaps, and reserve matched
-  geometry for small selection indicators.
+  geometry for small selection indicators. Animated row/list insertion in floating panels must
+  be count-gated through shared motion helpers; once a command list, workspace grid, sidebar
+  list, or notification feed crosses the shared animated collection limit, use identity
+  transitions and no list animation so filtering does not schedule per-row motion across a
+  large collection.
 - Bind fluid effects only to low-frequency product state such as selection, command palette
   visibility, notification badges, sidebar visibility, and workspace navigation.
 - Do not bind glass effects, blur changes, or animated mesh/background effects to stdout,

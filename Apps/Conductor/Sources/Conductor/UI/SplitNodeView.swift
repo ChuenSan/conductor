@@ -133,6 +133,7 @@ private struct AppKitSplitPairView: NSViewRepresentable {
         private var pendingDragFraction: Double?
         private let mouseUpMonitorBox = EventMonitorBox()
         private var lastSyncedFraction: Double?
+        private var hostingRootSignature: HostingRootSignature?
 
         fileprivate private(set) var isUserDragging = false
 
@@ -178,6 +179,15 @@ private struct AppKitSplitPairView: NSViewRepresentable {
         }
 
         func refreshHostingRoots() {
+            let signature = HostingRootSignature(
+                model: ObjectIdentifier(model),
+                first: first,
+                second: second,
+                path: path,
+                isUserDragging: isUserDragging
+            )
+            guard signature != hostingRootSignature else { return }
+            hostingRootSignature = signature
             firstHostingView.rootView = AnyView(
                 SplitNodeView(node: first, model: model, path: path + [.first])
                     .environment(\.conductorSplitResizeActive, isUserDragging)
@@ -186,6 +196,14 @@ private struct AppKitSplitPairView: NSViewRepresentable {
                 SplitNodeView(node: second, model: model, path: path + [.second])
                     .environment(\.conductorSplitResizeActive, isUserDragging)
             )
+        }
+
+        private struct HostingRootSignature: Equatable {
+            let model: ObjectIdentifier
+            let first: SplitNode
+            let second: SplitNode
+            let path: [SplitPathElement]
+            let isUserDragging: Bool
         }
 
         func syncDividerPosition(in splitView: NSSplitView) {
@@ -771,6 +789,7 @@ private struct TerminalPaneView: View {
     @State private var isFileDropTargeted = false
     @State private var flashVisible = false
     @Environment(\.conductorSplitResizeActive) private var splitResizeActive
+    @Environment(\.conductorFilePanelLayoutActive) private var filePanelLayoutActive
 
     private var isFocused: Bool {
         model.workspace.focusedPaneID == pane.id
@@ -880,41 +899,44 @@ private struct TerminalPaneView: View {
     private var selectedTerminal: some View {
         if let selected = pane.selectedTab,
            model.workspace.panes[pane.id]?.selectedTabID == selected.id {
-            ZStack {
-                TerminalSurfaceRepresentable(
-                    surface: model.surface(for: selected),
-                    theme: model.theme,
-                    isFocused: terminalAcceptsInputFocus,
-                    suspendsGeometrySync: splitResizeActive
-                )
-                .background(terminalBackground)
-                .transaction { transaction in
-                    transaction.disablesAnimations = true
-                    transaction.animation = nil
-                }
-                .onTapGesture {
-                    ConductorMotion.perform(ConductorMotion.selection) {
-                        model.focusPane(pane.id)
+            GeometryReader { proxy in
+                ZStack {
+                    TerminalSurfaceRepresentable(
+                        surface: model.surface(for: selected),
+                        theme: model.theme,
+                        isFocused: terminalAcceptsInputFocus,
+                        suspendsGeometrySync: filePanelLayoutActive
+                    )
+                    .background(terminalBackground)
+                    .transaction { transaction in
+                        transaction.disablesAnimations = true
+                        transaction.animation = nil
                     }
-                }
+                    .onTapGesture {
+                        ConductorMotion.perform(ConductorMotion.selection) {
+                            model.focusPane(pane.id)
+                        }
+                    }
 
-            }
-            .contentShape(Rectangle())
-            .clipped()
-            .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isFileDropTargeted) { providers in
-                loadTerminalDroppedFileURLs(from: providers) { urls in
-                    for url in urls {
-                        _ = model.insertPathIntoTerminal(url, terminalID: selected.id)
-                    }
                 }
-                return true
-            }
-            .overlay {
-                if isFileDropTargeted {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(model.theme.accent.opacity(0.72), lineWidth: 2)
-                        .padding(8)
-                        .allowsHitTesting(false)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .contentShape(Rectangle())
+                .clipped()
+                .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isFileDropTargeted) { providers in
+                    loadTerminalDroppedFileURLs(from: providers) { urls in
+                        for url in urls {
+                            _ = model.insertPathIntoTerminal(url, terminalID: selected.id)
+                        }
+                    }
+                    return true
+                }
+                .overlay {
+                    if isFileDropTargeted {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(model.theme.accent.opacity(0.72), lineWidth: 2)
+                            .padding(8)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
         }
@@ -1061,10 +1083,9 @@ private struct StableTerminalTabStrip: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: tabSpacing) {
-                ForEach(pane.tabs) { tab in
-                    tabView(for: tab)
-                        .transition(ConductorMotion.tabTransition)
+            LazyHStack(spacing: tabSpacing) {
+                ForEach(Array(pane.tabs.enumerated()), id: \.element.id) { pair in
+                    tabView(for: pair.element, index: pair.offset)
                 }
             }
             .padding(.horizontal, tabEdgePadding)
@@ -1098,7 +1119,6 @@ private struct StableTerminalTabStrip: View {
         .frame(height: model.appearance.density.paneTabHeight)
         .clipped()
         .mask(ConductorHorizontalFadeMask())
-        .animation(model.shellAnimation(ConductorMotion.list), value: tabIDs)
     }
 
     private func syncScrollTarget(animated: Bool) {
@@ -1113,7 +1133,7 @@ private struct StableTerminalTabStrip: View {
         }
     }
 
-    private func tabView(for tab: TerminalTabState) -> some View {
+    private func tabView(for tab: TerminalTabState, index: Int) -> some View {
         TerminalTabButton(
             tab: tab,
             isSelected: tab.id == pane.selectedTabID,
@@ -1125,6 +1145,10 @@ private struct StableTerminalTabStrip: View {
             selectionNamespace: selectionNamespace,
             model: model,
             paneID: pane.id,
+            tabIndex: index,
+            tabCount: pane.tabs.count,
+            hasNextPane: model.workspace.nextPaneID(after: pane.id) != nil,
+            workspaceCanSplit: model.workspace.canSplit(),
             isDragging: model.isTerminalTabDragging(tab.id),
             onVisualSelect: {
                 setVisualSelection(tab.id, animated: true)
@@ -1328,6 +1352,10 @@ private struct TerminalTabButton: View {
     let selectionNamespace: Namespace.ID
     @ObservedObject var model: ConductorWindowModel
     let paneID: PaneID
+    let tabIndex: Int
+    let tabCount: Int
+    let hasNextPane: Bool
+    let workspaceCanSplit: Bool
     let isDragging: Bool
     let onVisualSelect: () -> Void
     @State private var editingTitle = false
@@ -1338,24 +1366,13 @@ private struct TerminalTabButton: View {
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
-    private var tabIndex: Int? {
-        model.workspace.panes[paneID]?.tabs.firstIndex { $0.id == tab.id }
-    }
-
-    private var tabCount: Int {
-        model.workspace.panes[paneID]?.tabs.count ?? 0
-    }
-
     private var canMoveTargetTabToNextPane: Bool {
-        guard tabIndex != nil,
-              model.workspace.nextPaneID(after: paneID) != nil else {
-            return false
-        }
+        guard hasNextPane else { return false }
         return tabCount > 1 || model.workspace.panes.count > 1
     }
 
     private var canMoveTargetTabToNewSplit: Bool {
-        tabIndex != nil && tabCount > 1 && model.workspace.canSplit()
+        tabCount > 1 && workspaceCanSplit
     }
 
     private var tabFill: Color {
@@ -1483,7 +1500,6 @@ private struct TerminalTabButton: View {
                 if visuallySelected {
                     shape
                         .fill(selectedFill)
-                        .matchedGeometryEffect(id: "terminal-tab-selection", in: selectionNamespace)
                 }
             }
         }
@@ -1565,14 +1581,14 @@ private struct TerminalTabButton: View {
                     model.performCommand(.moveTabLeft)
                 }
             }
-            .disabled(tabIndex == nil || tabIndex == 0)
+            .disabled(tabIndex == 0)
             Button(L("标签右移", "Move Tab Right")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.selectTab(tab.id, in: paneID)
                     model.performCommand(.moveTabRight)
                 }
             }
-            .disabled(tabIndex == nil || tabIndex == tabCount - 1)
+            .disabled(tabIndex == tabCount - 1)
             Divider()
             Button(L("移动到下一个分屏", "Move to Next Pane")) {
                 ConductorMotion.perform(ConductorMotion.layout) {

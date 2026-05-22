@@ -196,6 +196,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var workspaceFileSearchFocusGeneration = 0
     @Published private(set) var workspaceFileSearchNextGeneration = 0
     @Published private(set) var workspaceFileSearchPreviousGeneration = 0
+    @Published private(set) var workspaceFileLayoutRevision = 0
+    @Published private(set) var fileManagerKeyboardFocused = false
     @Published private(set) var fileManagerSearchFocusGeneration = 0
     @Published private(set) var fileManagerSearchNextGeneration = 0
     @Published private(set) var fileManagerSearchPreviousGeneration = 0
@@ -233,6 +235,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     var workspaceTerminalContentTabs: [TerminalTabState] {
         workspace.focusedPane?.selectedTab.map { [$0] } ?? []
+    }
+
+    private func markTerminalInteractionFocus() {
+        if fileManagerKeyboardFocused {
+            fileManagerKeyboardFocused = false
+        }
     }
 
     private let persistence = WorkspacePersistence()
@@ -768,6 +776,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let signpost = ConductorSignpost.begin("new-terminal")
         defer { ConductorSignpost.end("new-terminal", signpost) }
         let terminalID = workspace.newTerminal(title: nextTerminalTitle(prefix: "zsh"))
+        markTerminalInteractionFocus()
         selectedWorkspaceContentTabID = .terminal(terminalID)
     }
 
@@ -778,6 +787,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             title: nextTerminalTitle(prefix: "zsh"),
             workingDirectory: focusedWorkingDirectoryURL?.path
         )
+        markTerminalInteractionFocus()
         selectedWorkspaceContentTabID = .terminal(terminalID)
     }
 
@@ -789,6 +799,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             title: nextTerminalTitle(prefix: "zsh"),
             workingDirectory: workingDirectoryURL(for: terminalID)?.path
         )
+        markTerminalInteractionFocus()
         selectedWorkspaceContentTabID = .terminal(newTerminalID)
     }
 
@@ -822,6 +833,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func closeFileManagerPanel() {
         fileManagerPanelRequest = nil
+        fileManagerKeyboardFocused = false
+    }
+
+    func setFileManagerKeyboardFocused(_ focused: Bool) {
+        guard fileManagerKeyboardFocused != focused else { return }
+        fileManagerKeyboardFocused = focused
     }
 
     func openFileInWorkspace(_ fileURL: URL, rootURL: URL? = nil) {
@@ -1036,6 +1053,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func selectTerminalStage() {
         if let tab = workspace.focusedPane?.selectedTab {
+            markTerminalInteractionFocus()
             selectedWorkspaceContentTabID = .terminal(tab.id)
             focusTerminal(tab.id)
         }
@@ -1043,6 +1061,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func selectWorkspaceTerminalTab(_ terminalID: TerminalID) {
         guard workspace.paneID(containing: terminalID) != nil else { return }
+        markTerminalInteractionFocus()
         selectedWorkspaceContentTabID = .terminal(terminalID)
         terminalSearchVisible = false
         workspaceOverviewVisible = false
@@ -1336,9 +1355,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return
         }
         if pane.selectedTabID == terminalID, workspace.focusedPaneID == paneID {
+            markTerminalInteractionFocus()
             markTerminalNotificationsRead(terminalID)
             return
         }
+        markTerminalInteractionFocus()
         workspace.selectTab(terminalID, in: paneID)
         markTerminalNotificationsRead(terminalID)
         reconcileSurfaceFocus()
@@ -1347,9 +1368,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func focusPane(_ paneID: PaneID) {
         guard let pane = workspace.panes[paneID] else { return }
         if workspace.focusedPaneID == paneID {
+            markTerminalInteractionFocus()
             markTerminalNotificationsRead(pane.selectedTabID)
             return
         }
+        markTerminalInteractionFocus()
         workspace.focusPane(paneID)
         markTerminalNotificationsRead(pane.selectedTabID)
         reconcileSurfaceFocus()
@@ -1363,6 +1386,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             selectWorkspace(workspaceID)
         }
         guard let paneID = workspace.paneID(containing: terminalID) else { return }
+        markTerminalInteractionFocus()
         markTerminalNotificationsRead(terminalID)
         if workspace.focusedPaneID == paneID,
            workspace.panes[paneID]?.selectedTabID == terminalID {
@@ -1380,20 +1404,20 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func showTerminalSearch() {
+        if fileManagerPanelRequest != nil, fileManagerKeyboardFocused {
+            commandPaletteVisible = false
+            settingsPanelVisible = false
+            workspaceOverviewVisible = false
+            terminalSearchVisible = false
+            fileManagerSearchFocusGeneration &+= 1
+            return
+        }
         if selectedWorkspaceFileTab != nil {
             commandPaletteVisible = false
             settingsPanelVisible = false
             workspaceOverviewVisible = false
             terminalSearchVisible = false
             workspaceFileSearchFocusGeneration &+= 1
-            return
-        }
-        if fileManagerPanelRequest != nil {
-            commandPaletteVisible = false
-            settingsPanelVisible = false
-            workspaceOverviewVisible = false
-            terminalSearchVisible = false
-            fileManagerSearchFocusGeneration &+= 1
             return
         }
         guard let terminalID = focusedTerminalID else { return }
@@ -1413,7 +1437,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         terminalSearchVisible = true
         terminalSearchFocusGeneration &+= 1
         let surface = surface(for: target.tab)
-        _ = surface.startSearchPrompt()
         if !terminalSearchQuery.isEmpty {
             _ = surface.search(terminalSearchQuery)
         }
@@ -2172,6 +2195,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             surface.syncGeometry(force: true)
             surface.refresh()
             if focused,
+               !terminalSearchVisible,
                let window = surface.hostView.window,
                window.firstResponder !== surface.hostView {
                 window.makeFirstResponder(surface.hostView)
@@ -2197,6 +2221,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             surface.attachIfPossible()
             surface.syncGeometry(force: true)
             surface.refresh()
+            guard self?.terminalSearchVisible != true else { return }
             if surface.hostView.window?.firstResponder !== surface.hostView {
                 surface.hostView.window?.makeFirstResponder(surface.hostView)
             }
@@ -2377,7 +2402,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private func activateTerminalSearchSurface(terminalID: TerminalID, query: String) {
         guard let target = terminalSearchTarget(for: terminalID) else { return }
         let targetSurface = surface(for: target.tab)
-        _ = targetSurface.startSearchPrompt()
         if !query.isEmpty {
             _ = targetSurface.search(query)
         }

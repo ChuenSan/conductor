@@ -401,14 +401,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
-        let findMenuItem = NSMenuItem()
-        let findMenu = NSMenu(title: "Find")
-        findMenu.addItem(menuItem("Context Search", "f", [], #selector(findInTerminalCommand)))
-        findMenu.addItem(menuItem("Find Next", "g", [], #selector(findNextCommand)))
-        findMenu.addItem(menuItem("Find Previous", "g", [.shift], #selector(findPreviousCommand)))
-        findMenuItem.submenu = findMenu
-        mainMenu.addItem(findMenuItem)
-
         NSApp.mainMenu = mainMenu
     }
 
@@ -446,8 +438,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             model.canPerformCommand(.openFocusedDirectory)
         case #selector(copyCurrentDirectoryCommand):
             model.canPerformCommand(.copyFocusedDirectory)
-        case #selector(findNextCommand), #selector(findPreviousCommand):
-            model.canPerformCommand(menuItem.action == #selector(findNextCommand) ? .findNext : .findPrevious)
         default:
             true
         }
@@ -486,17 +476,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             return true
         case ("o", _):
             scheduleCommand(.toggleWorkspaceOverview)
-            return true
-        case ("f", _):
-            scheduleCommand(.showTerminalSearch)
-            return true
-        case ("g", true):
-            guard model.canPerformCommand(.findPrevious) else { return false }
-            scheduleCommand(.findPrevious)
-            return true
-        case ("g", false):
-            guard model.canPerformCommand(.findNext) else { return false }
-            scheduleCommand(.findNext)
             return true
         case ("w", true):
             scheduleCommand(.closeFocusedPane)
@@ -702,18 +681,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         scheduleCommand(.resetWorkspace)
     }
 
-    @objc private func findInTerminalCommand() {
-        scheduleCommand(.showTerminalSearch)
-    }
-
-    @objc private func findNextCommand() {
-        scheduleCommand(.findNext)
-    }
-
-    @objc private func findPreviousCommand() {
-        scheduleCommand(.findPrevious)
-    }
-
     private func setNotificationWindowVisible(_ visible: Bool) {
         if visible {
             showNotificationWindow()
@@ -885,7 +852,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             if let tab = self.model.workspace.focusedPane?.selectedTab {
                 let surface = self.model.surface(for: tab)
                 surface.attachIfPossible()
-                window.makeFirstResponder(surface.hostView)
+                _ = window.makeFirstResponder(surface.hostView)
             }
 
             let shortcuts: [(String, String, NSEvent.ModifierFlags, UInt16)] = [
@@ -1670,7 +1637,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         }
         let surface = model.surface(for: tab)
         surface.attachIfPossible()
-        window.makeFirstResponder(surface.hostView)
+        _ = window.makeFirstResponder(surface.hostView)
         return model.workspace.focusedPaneID == pane.id &&
             model.workspace.focusedPane?.selectedTabID == tab.id &&
             window.firstResponder === surface.hostView

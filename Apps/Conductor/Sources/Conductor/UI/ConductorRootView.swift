@@ -1,5 +1,6 @@
 import ConductorCore
 import AppKit
+import QuartzCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -13,6 +14,12 @@ private func L(_ zh: String, _ en: String) -> String {
 
 struct ConductorRootView: View {
     @ObservedObject var model: ConductorWindowModel
+    @State private var fileManagerPresentationRequest: FileManagerPanelRequest?
+    @State private var fileManagerTrayVisible = false
+    @State private var fileManagerAnimationGeneration = 0
+
+    private let fileManagerTargetWidth: CGFloat = 468
+    private let fileManagerAnimationDuration: TimeInterval = 0.18
 
     var body: some View {
         GeometryReader { _ in
@@ -51,7 +58,11 @@ struct ConductorRootView: View {
                         .transition(ConductorMotion.panelTransition)
                 }
                 if model.settingsPanelVisible {
-                    AppearanceSettingsPanel(model: model)
+                    AppearanceSettingsPanel(
+                        model: model,
+                        snapshot: SettingsPanelSnapshot(model: model)
+                    )
+                    .equatable()
                         .environment(\.conductorTheme, model.theme)
                         .environment(\.conductorFontScale, model.appearance.fontScale)
                         .environment(\.conductorFontFamily, model.appearance.fontFamily)
@@ -71,34 +82,109 @@ struct ConductorRootView: View {
         .animation(model.shellAnimation(ConductorMotion.panel), value: model.commandPaletteVisible)
         .animation(model.shellAnimation(ConductorMotion.panel), value: model.settingsPanelVisible)
         .animation(model.shellAnimation(ConductorMotion.panel), value: model.workspaceOverviewVisible)
+        .onAppear {
+            synchronizeFileManagerPresentation(animated: false)
+        }
+        .onChange(of: model.fileManagerPanelRequest?.id) { _, _ in
+            synchronizeFileManagerPresentation(animated: true)
+        }
     }
 
     private var shellContent: some View {
-        HStack(alignment: .top, spacing: ConductorDesign.shellGap) {
-            ConductorSidebar(model: model)
+        let workspaceSnapshot = WorkspaceChromeSnapshot(model: model)
+
+        return HStack(alignment: .top, spacing: ConductorDesign.shellGap) {
+            ConductorSidebar(model: model, snapshot: workspaceSnapshot)
             ConductorShellJoiner(theme: model.theme)
 
             VStack(spacing: 0) {
-                ConductorToolbar(model: model)
-                HStack(spacing: 0) {
+                ConductorToolbar(model: model, workspaceSnapshot: workspaceSnapshot)
+                ZStack(alignment: .trailing) {
                     primaryWorkspaceContent
-                    if let request = model.fileManagerPanelRequest {
-                        FileManagerPanel(
-                            model: model,
-                            request: request,
-                            searchFocusToken: model.fileManagerSearchFocusGeneration,
-                            searchNextToken: model.fileManagerSearchNextGeneration,
-                            searchPreviousToken: model.fileManagerSearchPreviousGeneration
-                        )
-                            .frame(width: 468)
-                    }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                    fileManagerTray
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .clipped()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(model.theme.terminalBackground)
             .overlay(alignment: .leading) {
                 TerminalSidebarContactWash(theme: model.theme)
                     .allowsHitTesting(false)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var fileManagerTray: some View {
+        if let request = fileManagerPresentationRequest {
+            FileManagerCompositorSlideHost(
+                visible: fileManagerTrayVisible,
+                reducedMotion: model.appearance.reducedMotion,
+                duration: fileManagerAnimationDuration
+            ) {
+                FileManagerPanel(
+                    model: model,
+                    request: request,
+                    searchFocusToken: model.fileManagerSearchFocusGeneration,
+                    searchNextToken: model.fileManagerSearchNextGeneration,
+                    searchPreviousToken: model.fileManagerSearchPreviousGeneration
+                )
+            }
+            .frame(width: fileManagerTargetWidth)
+            .frame(maxHeight: .infinity)
+            .clipped()
+            .shadow(color: Color.black.opacity(model.theme.usesDarkChrome ? 0.22 : 0.14), radius: 18, x: -8, y: 0)
+        }
+    }
+
+    private func synchronizeFileManagerPresentation(animated: Bool) {
+        fileManagerAnimationGeneration &+= 1
+        let generation = fileManagerAnimationGeneration
+        let shouldAnimate = animated && !model.appearance.reducedMotion
+        ConductorMotion.withoutAnimation {
+            if let request = model.fileManagerPanelRequest {
+                fileManagerPresentationRequest = request
+                fileManagerTrayVisible = !shouldAnimate
+            } else {
+                if shouldAnimate, fileManagerPresentationRequest != nil {
+                    fileManagerTrayVisible = false
+                } else {
+                    fileManagerTrayVisible = false
+                    fileManagerPresentationRequest = nil
+                }
+            }
+        }
+        guard shouldAnimate else {
+            return
+        }
+
+        if model.fileManagerPanelRequest != nil {
+            DispatchQueue.main.async {
+                guard fileManagerAnimationGeneration == generation else { return }
+                ConductorMotion.withoutAnimation {
+                    fileManagerTrayVisible = true
+                }
+                finishFileManagerAnimation(generation: generation)
+            }
+        } else {
+            finishFileManagerAnimation(generation: generation)
+        }
+    }
+
+    private func finishFileManagerAnimation(generation: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + fileManagerAnimationDuration + 0.035) {
+            guard fileManagerAnimationGeneration == generation else { return }
+            ConductorMotion.withoutAnimation {
+                if model.fileManagerPanelRequest == nil {
+                    fileManagerTrayVisible = false
+                    fileManagerPresentationRequest = nil
+                } else if let request = model.fileManagerPanelRequest {
+                    fileManagerPresentationRequest = request
+                    fileManagerTrayVisible = true
+                }
             }
         }
     }
@@ -114,177 +200,132 @@ struct ConductorRootView: View {
     }
 
     private var terminalStage: some View {
-        ZStack(alignment: .topTrailing) {
-            SplitNodeView(node: model.workspace.visibleRoot, model: model)
-                .background(model.theme.terminalBackground)
-            if model.terminalSearchVisible {
-                TerminalContextSearchBar(model: model)
-                    .padding(.top, 8)
-                    .padding(.trailing, 12)
-                    .transition(ConductorMotion.searchTransition)
-            }
-        }
+        SplitNodeView(node: model.workspace.visibleRoot, model: model)
+            .background(model.theme.terminalBackground)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(model.shellAnimation(ConductorMotion.search), value: model.terminalSearchVisible)
     }
 
 }
 
-private struct TerminalContextSearchBar: View {
-    @ObservedObject var model: ConductorWindowModel
-    @State private var query = ""
-    @State private var searchHistory = ConductorSearchHistory.load(scope: "terminal")
-    @Environment(\.conductorTheme) private var theme
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorFontFamily) private var fontFamily
+private struct FileManagerCompositorSlideHost<Content: View>: NSViewRepresentable {
+    let visible: Bool
+    let reducedMotion: Bool
+    let duration: TimeInterval
+    let content: Content
 
-    private var metadata: TerminalSearchMetadata {
-        model.focusedTerminalSearchMetadata
+    init(
+        visible: Bool,
+        reducedMotion: Bool,
+        duration: TimeInterval,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.visible = visible
+        self.reducedMotion = reducedMotion
+        self.duration = duration
+        self.content = content()
     }
 
-    private var selectedTarget: TerminalSearchTargetDisplay? {
-        model.terminalSearchTargets.first { $0.id == model.terminalSearchTargetID } ??
-            model.terminalSearchTargets.first { $0.id == model.focusedTerminalID }
+    func makeNSView(context: Context) -> FileManagerCompositorSlideHostView<Content> {
+        FileManagerCompositorSlideHostView(rootView: content)
     }
 
-    private var matchText: String {
-        guard !query.isEmpty else { return L("输入搜索", "Type to search") }
-        guard let total = metadata.total else { return L("搜索中", "Searching") }
-        guard total > 0 else { return L("无结果", "No results") }
-        if let selected = metadata.selected {
-            return "\(selected + 1)/\(total)"
-        }
-        return "0/\(total)"
+    func updateNSView(_ nsView: FileManagerCompositorSlideHostView<Content>, context: Context) {
+        nsView.update(rootView: content, visible: visible, duration: duration, animated: !reducedMotion)
+    }
+}
+
+@MainActor
+private final class FileManagerCompositorSlideHostView<Content: View>: NSView {
+    private let hostingView: NSHostingView<Content>
+    private var currentVisible: Bool?
+    private var lastKnownBoundsSize: CGSize = .zero
+
+    init(rootView: Content) {
+        self.hostingView = NSHostingView(rootView: rootView)
+        super.init(frame: .zero)
+        wantsLayer = true
+        clipsToBounds = true
+        layer?.masksToBounds = true
+        layer?.actions = Self.disabledLayerActions
+        canDrawSubviewsIntoLayer = true
+
+        hostingView.translatesAutoresizingMaskIntoConstraints = true
+        hostingView.autoresizingMask = [.width, .height]
+        hostingView.wantsLayer = true
+        hostingView.layerContentsRedrawPolicy = .onSetNeedsDisplay
+        hostingView.layer?.masksToBounds = true
+        hostingView.layer?.actions = Self.disabledLayerActions
+        addSubview(hostingView)
     }
 
-    private var hasQuery: Bool {
-        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 
-    var body: some View {
-        ConductorContextSearchSurface {
-            Image(systemName: "magnifyingglass")
-                .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.58))
-
-            Menu {
-                ForEach(model.terminalSearchTargets) { target in
-                    Button {
-                        model.selectTerminalSearchTarget(target.id)
-                    } label: {
-                        Label(
-                            "\(target.title) · \(target.subtitle)",
-                            systemImage: target.id == selectedTarget?.id ? "checkmark" : "terminal"
-                        )
-                    }
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: selectedTarget?.isActive == true ? "scope" : "terminal")
-                        .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                    Text(selectedTarget?.title ?? L("当前终端", "Current terminal"))
-                        .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.conductorSystem(size: 8.5, weight: .bold, family: fontFamily, scale: fontScale))
-                        .opacity(0.62)
-                }
-                .foregroundStyle(theme.shellChromeText.opacity(0.72))
-                .padding(.horizontal, 8)
-                .frame(width: 118, height: 22, alignment: .leading)
-                .background(Color.white.opacity(theme.usesDarkChrome ? 0.045 : 0.075))
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-
-            if !searchHistory.isEmpty {
-                Menu {
-                    ForEach(searchHistory, id: \.self) { savedQuery in
-                        Button(savedQuery) {
-                            query = savedQuery
-                            recordSearchQuery()
-                        }
-                    }
-                } label: {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                        .foregroundStyle(theme.shellChromeText.opacity(0.56))
-                        .frame(width: 22, height: 22)
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .macNativeTooltip(L("搜索历史", "Search History"))
-            }
-
-            ConductorContextSearchTextField(
-                text: $query,
-                placeholder: L("搜索选中终端", "Search selected terminal"),
-                focusToken: model.terminalSearchFocusGeneration,
-                theme: theme,
-                fontFamily: fontFamily,
-                fontScale: fontScale,
-                onNavigate: { previous in
-                    guard hasQuery else { return }
-                    recordSearchQuery()
-                    model.performCommand(previous ? .findPrevious : .findNext)
-                },
-                onClose: {
-                    recordSearchQuery()
-                    model.closeTerminalSearch()
-                }
-            )
-            .frame(width: 168, height: 22)
-
-            Text(matchText)
-                .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.52))
-                .monospacedDigit()
-                .frame(minWidth: 48, alignment: .trailing)
-                .contentTransition(.opacity)
-                .animation(ConductorMotion.feedback, value: matchText)
-
-            ConductorContextSearchIconButton(
-                systemImage: "chevron.up",
-                help: L("上一个结果 Shift-Cmd-G", "Previous result Shift-Cmd-G"),
-                disabled: !hasQuery
-            ) {
-                recordSearchQuery()
-                model.performCommand(.findPrevious)
-            }
-
-            ConductorContextSearchIconButton(
-                systemImage: "chevron.down",
-                help: L("下一个结果 Cmd-G", "Next result Cmd-G"),
-                disabled: !hasQuery
-            ) {
-                recordSearchQuery()
-                model.performCommand(.findNext)
-            }
-
-            ConductorContextSearchIconButton(
-                systemImage: "xmark",
-                help: L("关闭搜索 Esc", "Close search Esc")
-            ) {
-                recordSearchQuery()
-                model.closeTerminalSearch()
-            }
+    override func layout() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        super.layout()
+        hostingView.frame = bounds
+        hostingView.bounds = NSRect(origin: .zero, size: bounds.size)
+        let sizeChanged = lastKnownBoundsSize != bounds.size
+        lastKnownBoundsSize = bounds.size
+        if sizeChanged, let currentVisible {
+            applyVisibility(currentVisible, animated: false, duration: 0)
         }
-        .onAppear {
-            query = model.terminalSearchQuery
-        }
-        .onChange(of: query) { _, next in
-            model.setTerminalSearchQuery(next)
-        }
-        .onChange(of: model.terminalSearchQuery) { _, next in
-            guard next != query else { return }
-            query = next
+        CATransaction.commit()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        currentVisible == true ? super.hitTest(point) : nil
+    }
+
+    func update(rootView: Content, visible: Bool, duration: TimeInterval, animated: Bool) {
+        hostingView.rootView = rootView
+        hostingView.frame = bounds
+        hostingView.bounds = NSRect(origin: .zero, size: bounds.size)
+        let didChangeVisibility = currentVisible != visible
+        currentVisible = visible
+        applyVisibility(visible, animated: animated && didChangeVisibility && bounds.width > 1, duration: duration)
+    }
+
+    private func applyVisibility(_ visible: Bool, animated: Bool, duration: TimeInterval) {
+        guard let layer = hostingView.layer else { return }
+        let targetTransform = CATransform3DMakeTranslation(visible ? 0 : max(1, bounds.width), 0, 0)
+        if animated {
+            let fromTransform = layer.presentation()?.transform ?? layer.transform
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.transform = targetTransform
+            CATransaction.commit()
+
+            let animation = CABasicAnimation(keyPath: "transform")
+            animation.fromValue = NSValue(caTransform3D: fromTransform)
+            animation.toValue = NSValue(caTransform3D: targetTransform)
+            animation.duration = duration
+            animation.timingFunction = CAMediaTimingFunction(controlPoints: 0.18, 0.86, 0.18, 1.0)
+            animation.isRemovedOnCompletion = true
+            layer.add(animation, forKey: "conductor.file-manager.compositor-slide")
+        } else {
+            layer.removeAnimation(forKey: "conductor.file-manager.compositor-slide")
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.transform = targetTransform
+            CATransaction.commit()
         }
     }
 
-    private func recordSearchQuery() {
-        ConductorSearchHistory.record(query, scope: "terminal")
-        searchHistory = ConductorSearchHistory.load(scope: "terminal")
+    private static var disabledLayerActions: [String: CAAction] {
+        [
+            "bounds": NSNull(),
+            "position": NSNull(),
+            "frame": NSNull(),
+            "transform": NSNull(),
+            "opacity": NSNull(),
+            "contentsScale": NSNull(),
+            "backgroundColor": NSNull()
+        ]
     }
 }
 
@@ -316,21 +357,7 @@ private struct TerminalSidebarContactWash: View {
     }
 }
 
-struct NotificationPanelRootView: View {
-    @ObservedObject var model: ConductorWindowModel
-
-    var body: some View {
-        NotificationPanelView(model: model)
-            .environment(\.colorScheme, model.theme.chromeColorScheme)
-            .preferredColorScheme(model.theme.chromeColorScheme)
-            .environment(\.conductorTheme, model.theme)
-            .environment(\.conductorFontScale, model.appearance.fontScale)
-            .environment(\.conductorFontFamily, model.appearance.fontFamily)
-            .environment(\.locale, model.appearance.language.locale)
-    }
-}
-
-private struct FloatingPanelHeader<Trailing: View>: View {
+struct FloatingPanelHeader<Trailing: View>: View {
     let systemImage: String
     let title: String
     let subtitle: String
@@ -397,7 +424,7 @@ private struct FloatingPanelHeader<Trailing: View>: View {
     }
 }
 
-private extension FloatingPanelHeader where Trailing == EmptyView {
+extension FloatingPanelHeader where Trailing == EmptyView {
     init(
         systemImage: String,
         title: String,
@@ -558,11 +585,11 @@ private struct CommandPaletteView: View {
                                     }
                                 }
                             )
-                            .transition(ConductorMotion.rowTransition)
+                            .transition(ConductorMotion.rowTransition(itemCount: filteredCommands.count))
                         }
                     }
                     .padding(.vertical, 1)
-                    .animation(ConductorMotion.list, value: filteredCommandIDs)
+                    .animation(ConductorMotion.list(itemCount: filteredCommands.count), value: filteredCommandIDs)
                 }
                 .scrollIndicators(.visible)
             }
@@ -662,8 +689,6 @@ private struct CommandPaletteItem: Identifiable {
             "bell"
         case "jump-unread":
             "bell.badge"
-        case "context-search", "find-next", "find-previous":
-            "magnifyingglass"
         case "close-tab", "close-pane", "clear-notifications":
             "xmark"
         case "move-tab-left":
@@ -809,31 +834,6 @@ private enum ConductorCommandCatalog {
                 keywords: "notification unread jump"
             ) {
                 perform(.jumpToLatestUnread)
-            },
-            CommandPaletteItem(id: "context-search", section: L("导航", "Navigate"), title: L("上下文搜索", "Context Search"), shortcut: "Cmd-F", keywords: "find search terminal context") {
-                perform(.showTerminalSearch)
-            },
-            CommandPaletteItem(
-                id: "find-next",
-                section: L("导航", "Navigate"),
-                title: L("下一个搜索结果", "Find Next"),
-                shortcut: "Cmd-G",
-                disabled: !canPerform(.findNext),
-                disabledReason: L("先打开上下文搜索", "Open Context Search first"),
-                keywords: "find next search result"
-            ) {
-                perform(.findNext)
-            },
-            CommandPaletteItem(
-                id: "find-previous",
-                section: L("导航", "Navigate"),
-                title: L("上一个搜索结果", "Find Previous"),
-                shortcut: "Cmd-Shift-G",
-                disabled: !canPerform(.findPrevious),
-                disabledReason: L("先打开上下文搜索", "Open Context Search first"),
-                keywords: "find previous search result"
-            ) {
-                perform(.findPrevious)
             },
             CommandPaletteItem(id: "focus-left", section: L("导航", "Navigate"), title: L("聚焦左侧分屏", "Focus Pane Left"), shortcut: "Cmd-Opt-←", keywords: "focus pane left") {
                 perform(.focusPaneLeft)
@@ -1061,8 +1061,26 @@ private struct CommandButton: View {
     }
 }
 
-private struct AppearanceSettingsPanel: View {
+private struct SettingsPanelSnapshot: Equatable {
+    let theme: TerminalTheme
+    let appearance: AppearancePreferences
+    let agentHookSettingsMessage: String?
+    let agentCLIStatuses: [AgentHookProvider: AgentCLIStatus]
+    let terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
+
+    @MainActor
+    init(model: ConductorWindowModel) {
+        self.theme = model.theme
+        self.appearance = model.appearance
+        self.agentHookSettingsMessage = model.agentHookSettingsMessage
+        self.agentCLIStatuses = model.agentCLIStatuses
+        self.terminalFontDownloadStates = model.terminalFontDownloadStates
+    }
+}
+
+private struct AppearanceSettingsPanel: View, Equatable {
     let model: ConductorWindowModel
+    let snapshot: SettingsPanelSnapshot
     @State private var selectedSection: SettingsPanelSection = .overview
     @Namespace private var settingsSelectionNamespace
     @Environment(\.conductorTheme) private var theme
@@ -1072,14 +1090,18 @@ private struct AppearanceSettingsPanel: View {
         GridItem(.adaptive(minimum: 242, maximum: 286), spacing: 12)
     ]
 
+    nonisolated static func == (lhs: AppearanceSettingsPanel, rhs: AppearanceSettingsPanel) -> Bool {
+        lhs.snapshot == rhs.snapshot
+    }
+
     var body: some View {
         ZStack {
-            ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
+            ConductorGlassSurface(style: .panel, clarity: snapshot.appearance.chromeClarity, interactive: true) {
                 VStack(spacing: 0) {
                     FloatingPanelHeader(
                         systemImage: "gearshape",
                         title: L("设置", "Settings"),
-                        subtitle: model.theme.title,
+                        subtitle: snapshot.theme.title,
                         closeHelp: L("关闭设置", "Close Settings")
                     ) {
                         model.hideSettingsPanel()
@@ -1117,7 +1139,7 @@ private struct AppearanceSettingsPanel: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SettingsSidebarSummary(theme: model.theme, appearance: model.appearance)
+            SettingsSidebarSummary(theme: snapshot.theme, appearance: snapshot.appearance)
 
             sidebarGroup(
                 title: L("常用", "General"),
@@ -1169,9 +1191,12 @@ private struct AppearanceSettingsPanel: View {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     detailContent
                 }
-                    .frame(maxWidth: 660, alignment: .topLeading)
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 18)
+                .frame(maxWidth: 660, alignment: .topLeading)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 18)
+                .transaction { transaction in
+                    transaction.animation = nil
+                }
             }
             .scrollIndicators(.visible)
         }
@@ -1215,12 +1240,12 @@ private struct AppearanceSettingsPanel: View {
                 systemImage: "rectangle.grid.2x2"
             ) {
                 VStack(alignment: .leading, spacing: 12) {
-                    SettingsOverviewGrid(model: model)
+                    SettingsOverviewGrid(snapshot: snapshot)
 
                     HStack(spacing: 10) {
                         SettingsQuickJumpButton(
                             title: L("调整终端", "Tune Terminal"),
-                            subtitle: model.appearance.terminalRenderer.selectedFontStatusTitle,
+                            subtitle: snapshot.appearance.terminalRenderer.selectedFontStatusTitle,
                             systemImage: "terminal"
                         ) {
                             selectSection(.terminal)
@@ -1228,7 +1253,7 @@ private struct AppearanceSettingsPanel: View {
 
                         SettingsQuickJumpButton(
                             title: L("换主题", "Change Theme"),
-                            subtitle: model.theme.title,
+                            subtitle: snapshot.theme.title,
                             systemImage: "swatchpalette"
                         ) {
                             selectSection(.themes)
@@ -1270,7 +1295,8 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var interfaceSettings: some View {
-        LazyVStack(alignment: .leading, spacing: 16) {
+        let appearance = snapshot.appearance
+        return LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("外观控制", "Appearance Controls"),
                 subtitle: L("像系统偏好设置一样直接调整，不用在卡片海里找选项", "Direct controls, tuned like a native settings inspector"),
@@ -1279,12 +1305,12 @@ private struct AppearanceSettingsPanel: View {
                 SettingsFormSurface {
                     SettingsControlRow(
                         title: L("窗口密度", "Window Density"),
-                        subtitle: model.appearance.density.subtitle,
+                        subtitle: appearance.density.subtitle,
                         systemImage: "rectangle.compress.vertical"
                     ) {
                         SettingsSegmentedPicker(
                             options: AppearanceDensity.allCases,
-                            selection: model.appearance.density,
+                            selection: appearance.density,
                             title: { $0.title }
                         ) { density in
                             model.performShellMotion(ConductorMotion.selection) {
@@ -1297,12 +1323,12 @@ private struct AppearanceSettingsPanel: View {
 
                     SettingsControlRow(
                         title: L("浮层清晰度", "Layer Clarity"),
-                        subtitle: model.appearance.chromeClarity.subtitle,
+                        subtitle: appearance.chromeClarity.subtitle,
                         systemImage: "square.stack.3d.up"
                     ) {
                         SettingsSegmentedPicker(
                             options: ChromeClarity.allCases,
-                            selection: model.appearance.chromeClarity,
+                            selection: appearance.chromeClarity,
                             title: { $0.title }
                         ) { clarity in
                             model.performShellMotion(ConductorMotion.selection) {
@@ -1321,12 +1347,12 @@ private struct AppearanceSettingsPanel: View {
                 SettingsFormSurface {
                     SettingsControlRow(
                         title: L("语言", "Language"),
-                        subtitle: model.appearance.language.subtitle,
+                        subtitle: appearance.language.subtitle,
                         systemImage: "character.bubble"
                     ) {
                         SettingsSegmentedPicker(
                             options: AppearanceLanguage.allCases,
-                            selection: model.appearance.language,
+                            selection: appearance.language,
                             title: { $0.title }
                         ) { language in
                             model.performShellMotion(ConductorMotion.selection) {
@@ -1339,12 +1365,12 @@ private struct AppearanceSettingsPanel: View {
 
                     SettingsControlRow(
                         title: L("字体", "Font"),
-                        subtitle: model.appearance.fontFamily.subtitle,
-                        systemImage: model.appearance.fontFamily.systemImage
+                        subtitle: appearance.fontFamily.subtitle,
+                        systemImage: appearance.fontFamily.systemImage
                     ) {
                         SettingsSegmentedPicker(
                             options: AppearanceFontFamily.allCases,
-                            selection: model.appearance.fontFamily,
+                            selection: appearance.fontFamily,
                             title: { $0.title }
                         ) { family in
                             model.performShellMotion(ConductorMotion.selection) {
@@ -1357,12 +1383,12 @@ private struct AppearanceSettingsPanel: View {
 
                     SettingsControlRow(
                         title: L("字号", "Font Size"),
-                        subtitle: model.appearance.fontScale.subtitle,
+                        subtitle: appearance.fontScale.subtitle,
                         systemImage: "textformat.size"
                     ) {
                         SettingsSegmentedPicker(
                             options: AppearanceFontScale.allCases,
-                            selection: model.appearance.fontScale,
+                            selection: appearance.fontScale,
                             title: { $0.title }
                         ) { scale in
                             model.performShellMotion(ConductorMotion.selection) {
@@ -1427,9 +1453,10 @@ private struct AppearanceSettingsPanel: View {
 
     @ViewBuilder
     private var terminalShellSettings: some View {
-        let commandOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "initial-command")
-        let directoryOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "working-directory")
-        let scrollbackOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "scrollback-limit")
+        let renderer = snapshot.appearance.terminalRenderer
+        let commandOverride = renderer.ghosttyOverride(for: "initial-command")
+        let directoryOverride = renderer.ghosttyOverride(for: "working-directory")
+        let scrollbackOverride = renderer.ghosttyOverride(for: "scrollback-limit")
 
         SettingsPreferenceGroup(
             title: L("Shell 与启动", "Shell and Startup"),
@@ -1491,13 +1518,14 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var terminalBackgroundSettings: some View {
-        let blurOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "background-blur")
-        let imageOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "background-image")
-        let imageOpacityOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "background-image-opacity")
-        let imageFitOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "background-image-fit")
-        let selectionForegroundOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "selection-foreground")
-        let selectionBackgroundOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "selection-background")
-        let searchBackgroundOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "search-background")
+        let renderer = snapshot.appearance.terminalRenderer
+        let blurOverride = renderer.ghosttyOverride(for: "background-blur")
+        let imageOverride = renderer.ghosttyOverride(for: "background-image")
+        let imageOpacityOverride = renderer.ghosttyOverride(for: "background-image-opacity")
+        let imageFitOverride = renderer.ghosttyOverride(for: "background-image-fit")
+        let selectionForegroundOverride = renderer.ghosttyOverride(for: "selection-foreground")
+        let selectionBackgroundOverride = renderer.ghosttyOverride(for: "selection-background")
+        let searchBackgroundOverride = renderer.ghosttyOverride(for: "search-background")
 
         return SettingsPreferenceGroup(
             title: L("背景与颜色", "Background and Colors"),
@@ -1509,10 +1537,10 @@ private struct AppearanceSettingsPanel: View {
                     title: L("背景不透明度", "Background Opacity"),
                     subtitle: L("降低后可以透出窗口材质，100% 最清晰", "Lower values show the window material; 100% is clearest"),
                     systemImage: "circle.lefthalf.filled",
-                    value: model.appearance.terminalRenderer.backgroundOpacity,
+                    value: renderer.backgroundOpacity,
                     range: 0.35...1,
                     step: 0.01,
-                    valueText: percentText(model.appearance.terminalRenderer.backgroundOpacity)
+                    valueText: percentText(renderer.backgroundOpacity)
                 ) { opacity in
                     model.setTerminalBackgroundOpacity(opacity)
                 }
@@ -1633,14 +1661,15 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var terminalSelectionMouseSettings: some View {
-        let clearTypingOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "selection-clear-on-typing")
-        let clearCopyOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "selection-clear-on-copy")
-        let copyOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "copy-on-select")
-        let hideMouseOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "mouse-hide-while-typing")
-        let reportingOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "mouse-reporting")
-        let scrollOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "mouse-scroll-multiplier")
-        let linkOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "link-url")
-        let previewOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "link-previews")
+        let renderer = snapshot.appearance.terminalRenderer
+        let clearTypingOverride = renderer.ghosttyOverride(for: "selection-clear-on-typing")
+        let clearCopyOverride = renderer.ghosttyOverride(for: "selection-clear-on-copy")
+        let copyOverride = renderer.ghosttyOverride(for: "copy-on-select")
+        let hideMouseOverride = renderer.ghosttyOverride(for: "mouse-hide-while-typing")
+        let reportingOverride = renderer.ghosttyOverride(for: "mouse-reporting")
+        let scrollOverride = renderer.ghosttyOverride(for: "mouse-scroll-multiplier")
+        let linkOverride = renderer.ghosttyOverride(for: "link-url")
+        let previewOverride = renderer.ghosttyOverride(for: "link-previews")
 
         return SettingsPreferenceGroup(
             title: L("选择、鼠标与链接", "Selection, Mouse, and Links"),
@@ -1761,11 +1790,12 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var terminalClipboardSettings: some View {
-        let readOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "clipboard-read")
-        let writeOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "clipboard-write")
-        let trimOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "clipboard-trim-trailing-spaces")
-        let protectionOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "clipboard-paste-protection")
-        let bracketedOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "clipboard-paste-bracketed-safe")
+        let renderer = snapshot.appearance.terminalRenderer
+        let readOverride = renderer.ghosttyOverride(for: "clipboard-read")
+        let writeOverride = renderer.ghosttyOverride(for: "clipboard-write")
+        let trimOverride = renderer.ghosttyOverride(for: "clipboard-trim-trailing-spaces")
+        let protectionOverride = renderer.ghosttyOverride(for: "clipboard-paste-protection")
+        let bracketedOverride = renderer.ghosttyOverride(for: "clipboard-paste-bracketed-safe")
 
         return SettingsPreferenceGroup(
             title: L("剪贴板与粘贴安全", "Clipboard and Paste Safety"),
@@ -1840,11 +1870,12 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var terminalNotificationSettings: some View {
-        let finishOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "notify-on-command-finish")
-        let actionOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "notify-on-command-finish-action")
-        let afterOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "notify-on-command-finish-after")
-        let bellPathOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "bell-audio-path")
-        let bellVolumeOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "bell-audio-volume")
+        let renderer = snapshot.appearance.terminalRenderer
+        let finishOverride = renderer.ghosttyOverride(for: "notify-on-command-finish")
+        let actionOverride = renderer.ghosttyOverride(for: "notify-on-command-finish-action")
+        let afterOverride = renderer.ghosttyOverride(for: "notify-on-command-finish-after")
+        let bellPathOverride = renderer.ghosttyOverride(for: "bell-audio-path")
+        let bellVolumeOverride = renderer.ghosttyOverride(for: "bell-audio-volume")
 
         return SettingsPreferenceGroup(
             title: L("通知与铃声", "Notifications and Bell"),
@@ -1940,8 +1971,9 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var terminalKeyboardSettings: some View {
-        let optionOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "macos-option-as-alt")
-        let remapOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "key-remap")
+        let renderer = snapshot.appearance.terminalRenderer
+        let optionOverride = renderer.ghosttyOverride(for: "macos-option-as-alt")
+        let remapOverride = renderer.ghosttyOverride(for: "key-remap")
 
         return SettingsPreferenceGroup(
             title: L("键盘", "Keyboard"),
@@ -1988,8 +2020,11 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var terminalTypographySettings: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            TerminalRendererSummary(appearance: model.appearance)
+        let appearance = snapshot.appearance
+        let renderer = appearance.terminalRenderer
+        let downloadStates = snapshot.terminalFontDownloadStates
+        return VStack(alignment: .leading, spacing: 16) {
+            TerminalRendererSummary(appearance: appearance)
 
             SettingsPreferenceGroup(
                 title: L("字体与字格", "Typography"),
@@ -1999,13 +2034,13 @@ private struct AppearanceSettingsPanel: View {
                 SettingsFormSurface {
                     SettingsControlRow(
                         title: L("终端字体", "Terminal Font"),
-                        subtitle: model.appearance.terminalRenderer.selectedFontStatusTitle,
+                        subtitle: renderer.selectedFontStatusTitle,
                         systemImage: "textformat"
                     ) {
                         HStack(spacing: 8) {
                             TerminalFontPickerMenu(
-                                selection: model.appearance.terminalRenderer.fontPreset,
-                                downloadStates: model.terminalFontDownloadStates,
+                                selection: renderer.fontPreset,
+                                downloadStates: downloadStates,
                                 action: { preset in
                                     model.performShellMotion(ConductorMotion.selection) {
                                         model.setTerminalFontPreset(preset)
@@ -2016,12 +2051,12 @@ private struct AppearanceSettingsPanel: View {
                                 }
                             )
 
-                            let selectedChoice = TerminalFontLibrary.choices.first { $0.preset == model.appearance.terminalRenderer.fontPreset }
+                            let selectedChoice = TerminalFontLibrary.choices.first { $0.preset == renderer.fontPreset }
                             if let selectedChoice, !selectedChoice.isInstalled, selectedChoice.canDownload {
                                 Button {
                                     model.downloadTerminalFont(selectedChoice.preset)
                                 } label: {
-                                    if model.terminalFontDownloadStates[selectedChoice.preset]?.isDownloading == true {
+                                    if downloadStates[selectedChoice.preset]?.isDownloading == true {
                                         ProgressView()
                                             .controlSize(.small)
                                     } else {
@@ -2033,7 +2068,7 @@ private struct AppearanceSettingsPanel: View {
                                     }
                                 }
                                 .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                                .disabled(model.terminalFontDownloadStates[selectedChoice.preset]?.isDownloading == true)
+                                .disabled(downloadStates[selectedChoice.preset]?.isDownloading == true)
                             }
                         }
                     }
@@ -2042,17 +2077,17 @@ private struct AppearanceSettingsPanel: View {
 
                     SettingsControlRow(
                         title: L("自定义字体", "Custom Font"),
-                        subtitle: customTerminalFontSubtitle,
+                        subtitle: customTerminalFontSubtitle(for: appearance),
                         systemImage: "square.and.arrow.down"
                     ) {
                         HStack(spacing: 8) {
                             Toggle("", isOn: Binding(
-                                get: { model.appearance.terminalRenderer.useCustomFont },
+                                get: { renderer.useCustomFont },
                                 set: { model.setTerminalUseCustomFont($0) }
                             ))
                             .toggleStyle(.switch)
                             .labelsHidden()
-                            .disabled(model.appearance.terminalRenderer.customFontFamilyName == nil)
+                            .disabled(renderer.customFontFamilyName == nil)
 
                             Button(L("导入", "Import")) {
                                 model.importTerminalFont()
@@ -2066,10 +2101,10 @@ private struct AppearanceSettingsPanel: View {
                         title: L("终端字号", "Terminal Font Size"),
                         subtitle: L("调大更清晰，调小能显示更多行列", "Larger is easier to read; smaller fits more rows and columns"),
                         systemImage: "textformat.size",
-                        value: model.appearance.terminalFontSize,
+                        value: appearance.terminalFontSize,
                         range: AppearancePreferences.minTerminalFontSize...AppearancePreferences.maxTerminalFontSize,
                         step: 0.5,
-                        valueText: terminalFontSizeText(model.appearance.terminalFontSize)
+                        valueText: terminalFontSizeText(appearance.terminalFontSize)
                     ) { fontSize in
                         model.setTerminalFontSize(fontSize)
                     }
@@ -2080,10 +2115,10 @@ private struct AppearanceSettingsPanel: View {
                         title: L("行高", "Line Height"),
                         subtitle: L("让输出更紧凑或更舒展", "Makes terminal output tighter or more relaxed"),
                         systemImage: "arrow.up.and.down.text.horizontal",
-                        value: model.appearance.terminalRenderer.lineHeight,
+                        value: renderer.lineHeight,
                         range: 0.80...1.50,
                         step: 0.01,
-                        valueText: multiplierText(model.appearance.terminalRenderer.lineHeight)
+                        valueText: multiplierText(renderer.lineHeight)
                     ) { lineHeight in
                         model.setTerminalLineHeight(lineHeight)
                     }
@@ -2093,10 +2128,11 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var terminalCursorSettings: some View {
-        let colorOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "cursor-color")
-        let opacityOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "cursor-opacity")
-        let textOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "cursor-text")
-        let clickOverride = model.appearance.terminalRenderer.ghosttyOverride(for: "cursor-click-to-move")
+        let renderer = snapshot.appearance.terminalRenderer
+        let colorOverride = renderer.ghosttyOverride(for: "cursor-color")
+        let opacityOverride = renderer.ghosttyOverride(for: "cursor-opacity")
+        let textOverride = renderer.ghosttyOverride(for: "cursor-text")
+        let clickOverride = renderer.ghosttyOverride(for: "cursor-click-to-move")
 
         return SettingsPreferenceGroup(
             title: L("光标", "Cursor"),
@@ -2108,13 +2144,13 @@ private struct AppearanceSettingsPanel: View {
                     title: L("光标样式", "Cursor Style"),
                     subtitle: L("选择块、空心块、竖线或下划线光标", "Choose block, hollow block, bar, or underline"),
                     systemImage: "cursorarrow"
-                ) {
-                    SettingsSegmentedPicker(
-                        options: TerminalCursorStyle.allCases,
-                        selection: model.appearance.terminalRenderer.cursorStyle,
-                        title: { $0.title }
-                    ) { style in
-                        model.setTerminalCursorStyle(style)
+                    ) {
+                        SettingsSegmentedPicker(
+                            options: TerminalCursorStyle.allCases,
+                            selection: renderer.cursorStyle,
+                            title: { $0.title }
+                        ) { style in
+                            model.setTerminalCursorStyle(style)
                     }
                 }
 
@@ -2125,7 +2161,7 @@ private struct AppearanceSettingsPanel: View {
                     subtitle: L("关闭后光标保持常亮，适合减少视觉干扰", "Keeps the cursor steady when disabled"),
                     systemImage: "cursorarrow.motionlines",
                     isOn: Binding(
-                        get: { model.appearance.terminalRenderer.cursorBlink },
+                        get: { renderer.cursorBlink },
                         set: { model.setTerminalCursorBlink($0) }
                     )
                 )
@@ -2221,10 +2257,11 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var proxySettings: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let proxy = snapshot.appearance.terminalRenderer.proxy
+        return VStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("终端代理", "Terminal Proxy"),
-                subtitle: model.appearance.terminalRenderer.proxy.statusTitle,
+                subtitle: proxy.statusTitle,
                 systemImage: "network"
             ) {
                 SettingsFormSurface {
@@ -2233,7 +2270,7 @@ private struct AppearanceSettingsPanel: View {
                         subtitle: L("写入新终端进程的 HTTP(S)/ALL_PROXY 环境变量", "Writes HTTP(S)/ALL_PROXY env vars for new terminal processes"),
                         systemImage: "switch.2",
                         isOn: Binding(
-                            get: { model.appearance.terminalRenderer.proxy.enabled },
+                            get: { proxy.enabled },
                             set: { model.setTerminalProxyEnabled($0) }
                         )
                     )
@@ -2245,7 +2282,7 @@ private struct AppearanceSettingsPanel: View {
                         subtitle: "http://127.0.0.1:7890",
                         systemImage: "globe",
                         text: Binding(
-                            get: { model.appearance.terminalRenderer.proxy.httpProxy },
+                            get: { proxy.httpProxy },
                             set: { model.setTerminalProxyHTTP($0) }
                         )
                     )
@@ -2257,7 +2294,7 @@ private struct AppearanceSettingsPanel: View {
                         subtitle: "http://127.0.0.1:7890",
                         systemImage: "lock.globe",
                         text: Binding(
-                            get: { model.appearance.terminalRenderer.proxy.httpsProxy },
+                            get: { proxy.httpsProxy },
                             set: { model.setTerminalProxyHTTPS($0) }
                         )
                     )
@@ -2269,7 +2306,7 @@ private struct AppearanceSettingsPanel: View {
                         subtitle: "socks5://127.0.0.1:7890",
                         systemImage: "point.3.connected.trianglepath.dotted",
                         text: Binding(
-                            get: { model.appearance.terminalRenderer.proxy.allProxy },
+                            get: { proxy.allProxy },
                             set: { model.setTerminalProxyAll($0) }
                         )
                     )
@@ -2281,7 +2318,7 @@ private struct AppearanceSettingsPanel: View {
                         subtitle: "localhost,127.0.0.1,::1",
                         systemImage: "nosign",
                         text: Binding(
-                            get: { model.appearance.terminalRenderer.proxy.noProxy },
+                            get: { proxy.noProxy },
                             set: { model.setTerminalProxyNoProxy($0) }
                         )
                     )
@@ -2291,7 +2328,9 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var aiSettings: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let appearance = snapshot.appearance
+        let agentCLIStatuses = snapshot.agentCLIStatuses
+        return VStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("AI 安装检测", "AI Installation Check"),
                 subtitle: L("检测本机可用的 AI CLI，并给未安装的代理提供官方安装入口", "Detects local AI CLIs and provides official install pages for missing agents"),
@@ -2302,7 +2341,7 @@ private struct AppearanceSettingsPanel: View {
                         ForEach(AgentHookProvider.allCases) { provider in
                             AgentCLIStatusRow(
                                 provider: provider,
-                                status: model.agentCLIStatuses[provider] ?? .unknown(provider: provider),
+                                status: agentCLIStatuses[provider] ?? .unknown(provider: provider),
                                 install: { model.openAgentInstallPage(provider) }
                             )
 
@@ -2338,10 +2377,10 @@ private struct AppearanceSettingsPanel: View {
                     ForEach(AgentHookProvider.allCases) { provider in
                         SettingsToggleRow(
                             title: provider.title,
-                            subtitle: model.appearance.agentNotifications.isEnabled(for: provider) ? L("通知桥接已开启", "Notification bridge enabled") : L("不会安装或触发通知桥接", "Notification bridge disabled"),
+                            subtitle: appearance.agentNotifications.isEnabled(for: provider) ? L("通知桥接已开启", "Notification bridge enabled") : L("不会安装或触发通知桥接", "Notification bridge disabled"),
                             systemImage: provider.systemImage,
                             isOn: Binding(
-                                get: { model.appearance.agentNotifications.isEnabled(for: provider) },
+                                get: { appearance.agentNotifications.isEnabled(for: provider) },
                                 set: { enabled in
                                     model.performShellMotion(ConductorMotion.selection) {
                                         model.setAgentNotificationsEnabled(enabled, for: provider)
@@ -2355,9 +2394,9 @@ private struct AppearanceSettingsPanel: View {
                         }
                     }
                 }
-                if let message = model.agentHookSettingsMessage {
+                if let message = snapshot.agentHookSettingsMessage {
                     Text(message)
-                        .font(.conductorSystem(size: 10.5, weight: .medium, scale: model.appearance.fontScale))
+                        .font(.conductorSystem(size: 10.5, weight: .medium, scale: appearance.fontScale))
                         .foregroundStyle(ConductorDesign.tertiaryText)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2365,15 +2404,15 @@ private struct AppearanceSettingsPanel: View {
             }
         }
         .onAppear {
-            if model.agentCLIStatuses.values.allSatisfy({ $0.state == .unknown }) {
+            if agentCLIStatuses.values.allSatisfy({ $0.state == .unknown }) {
                 model.refreshAgentCLIStatuses()
             }
         }
     }
 
-    private var customTerminalFontSubtitle: String {
-        if let name = model.appearance.terminalRenderer.customFontFamilyName,
-           model.appearance.terminalRenderer.useCustomFont {
+    private func customTerminalFontSubtitle(for appearance: AppearancePreferences) -> String {
+        if let name = appearance.terminalRenderer.customFontFamilyName,
+           appearance.terminalRenderer.useCustomFont {
             return name
         }
         return L("导入 .ttf/.otf/.ttc 并直接用于 Ghostty", "Import .ttf/.otf/.ttc and use it in Ghostty")
@@ -2408,20 +2447,21 @@ private struct AppearanceSettingsPanel: View {
     }
 
     private var themeSettings: some View {
-        LazyVStack(alignment: .leading, spacing: 14) {
+        let activeTheme = snapshot.theme
+        return LazyVStack(alignment: .leading, spacing: 14) {
             SettingsPreferenceGroup(
                 title: L("主题工作台", "Theme Workbench"),
                 subtitle: L("先看大效果，再从横向主题条切换", "Inspect the full shell first, then switch from the theme rail"),
                 systemImage: "swatchpalette"
             ) {
                 VStack(alignment: .leading, spacing: 12) {
-                    SelectedThemeShowcase(theme: model.theme)
+                    SelectedThemeShowcase(theme: activeTheme)
 
                     LazyVGrid(columns: themeCardColumns, alignment: .leading, spacing: 12) {
                         ForEach(TerminalTheme.allCases) { theme in
                             ThemeGalleryCard(
                                 theme: theme,
-                                selected: model.theme == theme
+                                selected: activeTheme == theme
                             ) {
                                 model.performShellMotion(ConductorMotion.selection) {
                                     model.theme = theme
@@ -2680,7 +2720,7 @@ private struct AgentCLIStatusRow: View {
 }
 
 private struct SettingsOverviewGrid: View {
-    let model: ConductorWindowModel
+    let snapshot: SettingsPanelSnapshot
     @Environment(\.conductorFontScale) private var fontScale
 
     private var columns: [GridItem] {
@@ -2692,7 +2732,7 @@ private struct SettingsOverviewGrid: View {
     }
 
     private var terminalSizeText: String {
-        let rounded = (model.appearance.terminalFontSize * 10).rounded() / 10
+        let rounded = (snapshot.appearance.terminalFontSize * 10).rounded() / 10
         if rounded.rounded() == rounded {
             return "\(Int(rounded)) pt"
         }
@@ -2703,12 +2743,12 @@ private struct SettingsOverviewGrid: View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
             SettingsOverviewTile(
                 title: L("主题", "Theme"),
-                value: model.theme.title,
+                value: snapshot.theme.title,
                 systemImage: "swatchpalette"
             )
             SettingsOverviewTile(
                 title: L("终端字体", "Terminal Font"),
-                value: model.appearance.terminalRenderer.effectiveFontFamilyName,
+                value: snapshot.appearance.terminalRenderer.effectiveFontFamilyName,
                 systemImage: "textformat"
             )
             SettingsOverviewTile(
@@ -2718,17 +2758,17 @@ private struct SettingsOverviewGrid: View {
             )
             SettingsOverviewTile(
                 title: L("密度", "Density"),
-                value: model.appearance.density.title,
+                value: snapshot.appearance.density.title,
                 systemImage: "rectangle.compress.vertical"
             )
             SettingsOverviewTile(
                 title: L("代理", "Proxy"),
-                value: model.appearance.terminalRenderer.proxy.enabled ? L("开启", "On") : L("关闭", "Off"),
+                value: snapshot.appearance.terminalRenderer.proxy.enabled ? L("开启", "On") : L("关闭", "Off"),
                 systemImage: "network"
             )
             SettingsOverviewTile(
                 title: L("AI 通知", "AI Alerts"),
-                value: model.appearance.agentNotifications.codex || model.appearance.agentNotifications.claudeCode ? L("开启", "On") : L("关闭", "Off"),
+                value: snapshot.appearance.agentNotifications.codex || snapshot.appearance.agentNotifications.claudeCode ? L("开启", "On") : L("关闭", "Off"),
                 systemImage: "sparkles"
             )
         }
@@ -2880,8 +2920,11 @@ private struct GhosttyConfigReferenceCard: View {
 }
 
 private struct GhosttyFunctionalConfigBrowser: View {
-    let model: ConductorWindowModel
+    let renderer: TerminalRendererPreferences
     @Binding var search: String
+    let resetOverrides: () -> Void
+    let updateOverrideValue: (String, String) -> Void
+    let updateOverrideEnabled: (String, Bool) -> Void
     @State private var selectedGroupID = TerminalGhosttyConfigCatalog.productGroups[0].id
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
@@ -2891,7 +2934,7 @@ private struct GhosttyFunctionalConfigBrowser: View {
     }
 
     private var enabledCount: Int {
-        model.appearance.terminalRenderer.activeGhosttyOverrides.count
+        renderer.activeGhosttyOverrides.count
     }
 
     private var selectedGroup: GhosttyConfigFunctionGroup {
@@ -2915,10 +2958,8 @@ private struct GhosttyFunctionalConfigBrowser: View {
                     systemImage: "checklist.checked"
                 )
 
-                Button(L("清空", "Clear")) {
-                    model.resetGhosttyOverrides()
-                }
-                .disabled(model.appearance.terminalRenderer.ghosttyOverrides.isEmpty)
+                Button(L("清空", "Clear"), action: resetOverrides)
+                    .disabled(renderer.ghosttyOverrides.isEmpty)
             }
 
             HStack(alignment: .top, spacing: 12) {
@@ -2942,18 +2983,22 @@ private struct GhosttyFunctionalConfigBrowser: View {
                         .stroke(theme.floatingStroke.opacity(0.66), lineWidth: 1)
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: 12) {
                     if isSearching {
                         ForEach(filteredGroups) { group in
                             GhosttyConfigFunctionSection(
-                                model: model,
-                                group: group
+                                renderer: renderer,
+                                group: group,
+                                updateOverrideValue: updateOverrideValue,
+                                updateOverrideEnabled: updateOverrideEnabled
                             )
                         }
                     } else {
                         GhosttyConfigFunctionSection(
-                            model: model,
-                            group: selectedGroup
+                            renderer: renderer,
+                            group: selectedGroup,
+                            updateOverrideValue: updateOverrideValue,
+                            updateOverrideEnabled: updateOverrideEnabled
                         )
                     }
                 }
@@ -3013,13 +3058,15 @@ private struct GhosttySettingsCategoryRow: View {
 }
 
 private struct GhosttyConfigFunctionSection: View {
-    let model: ConductorWindowModel
+    let renderer: TerminalRendererPreferences
     let group: GhosttyConfigFunctionGroup
+    let updateOverrideValue: (String, String) -> Void
+    let updateOverrideEnabled: (String, Bool) -> Void
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        LazyVStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: group.systemImage)
                     .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
@@ -3046,7 +3093,12 @@ private struct GhosttyConfigFunctionSection: View {
 
             SettingsFormSurface {
                 ForEach(group.keys, id: \.self) { key in
-                    GhosttyStyledConfigRow(model: model, key: key)
+                    GhosttyStyledConfigRow(
+                        key: key,
+                        override: renderer.ghosttyOverride(for: key),
+                        updateOverrideValue: updateOverrideValue,
+                        updateOverrideEnabled: updateOverrideEnabled
+                    )
 
                     if key != group.keys.last {
                         SettingsControlDivider()
@@ -3058,14 +3110,12 @@ private struct GhosttyConfigFunctionSection: View {
 }
 
 private struct GhosttyStyledConfigRow: View {
-    let model: ConductorWindowModel
     let key: String
+    let override: TerminalGhosttyConfigOverride
+    let updateOverrideValue: (String, String) -> Void
+    let updateOverrideEnabled: (String, Bool) -> Void
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
-
-    private var override: TerminalGhosttyConfigOverride {
-        model.appearance.terminalRenderer.ghosttyOverride(for: key)
-    }
 
     private var isManagedByDefault: Bool {
         TerminalGhosttyConfigCatalog.activeKeys.contains(key)
@@ -3157,11 +3207,11 @@ private struct GhosttyStyledConfigRow: View {
                 enabled: override.enabled,
                 choices: choices,
                 setValue: { value in
-                    model.setGhosttyOverrideValue(key: key, value: value)
-                    model.setGhosttyOverrideEnabled(key: key, enabled: true)
+                    updateOverrideValue(key, value)
+                    updateOverrideEnabled(key, true)
                 },
                 setDefault: {
-                    model.setGhosttyOverrideEnabled(key: key, enabled: false)
+                    updateOverrideEnabled(key, false)
                 }
             )
         case .color:
@@ -3231,12 +3281,12 @@ private struct GhosttyStyledConfigRow: View {
     }
 
     private func setOverrideValue(_ value: String) {
-        model.setGhosttyOverrideValue(key: key, value: value)
-        model.setGhosttyOverrideEnabled(key: key, enabled: !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        updateOverrideValue(key, value)
+        updateOverrideEnabled(key, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private func resetOverride() {
-        model.setGhosttyOverrideEnabled(key: key, enabled: false)
+        updateOverrideEnabled(key, false)
     }
 
     private var booleanState: GhosttyBooleanOverrideState {
@@ -3247,13 +3297,13 @@ private struct GhosttyStyledConfigRow: View {
     private func setBooleanState(_ state: GhosttyBooleanOverrideState) {
         switch state {
         case .defaultValue:
-            model.setGhosttyOverrideEnabled(key: key, enabled: false)
+            updateOverrideEnabled(key, false)
         case .on:
-            model.setGhosttyOverrideValue(key: key, value: "true")
-            model.setGhosttyOverrideEnabled(key: key, enabled: true)
+            updateOverrideValue(key, "true")
+            updateOverrideEnabled(key, true)
         case .off:
-            model.setGhosttyOverrideValue(key: key, value: "false")
-            model.setGhosttyOverrideEnabled(key: key, enabled: true)
+            updateOverrideValue(key, "false")
+            updateOverrideEnabled(key, true)
         }
     }
 }
@@ -3983,7 +4033,7 @@ private struct SettingsFormSurface<Content: View>: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        LazyVStack(spacing: 0) {
             content
         }
         .background(theme.floatingControlFill.opacity(0.48))
@@ -4733,12 +4783,12 @@ private struct WorkspaceOverviewPanel: View {
                                     } onHover: {
                                         highlightedWorkspaceID = workspace.id
                                     }
-                                    .transition(ConductorMotion.rowTransition)
+                                    .transition(ConductorMotion.rowTransition(itemCount: filteredWorkspaces.count))
                                 }
                             }
                             .padding(.horizontal, 2)
                             .padding(.bottom, 2)
-                            .animation(ConductorMotion.list, value: filteredWorkspaceIDs)
+                            .animation(ConductorMotion.list(itemCount: filteredWorkspaces.count), value: filteredWorkspaceIDs)
                         }
                         .scrollIndicators(.visible)
                         .frame(maxHeight: .infinity)
@@ -5171,323 +5221,6 @@ private struct WorkspaceMiniPane: View {
     }
 }
 
-struct NotificationPanelView: View {
-    @ObservedObject var model: ConductorWindowModel
-    @Environment(\.conductorTheme) private var theme
-    @Environment(\.conductorFontScale) private var fontScale
-
-    var body: some View {
-        ConductorGlassSurface(style: .panel, clarity: model.appearance.chromeClarity, interactive: true) {
-            VStack(alignment: .leading, spacing: 0) {
-                notificationHeader
-
-                Rectangle()
-                    .fill(theme.floatingSeparator)
-                    .frame(height: 1)
-
-                if model.notifications.records.isEmpty {
-                    emptyNotifications
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 5) {
-                            ForEach(model.notifications.records) { notification in
-                                NotificationRowView(
-                                    notification: notification,
-                                    terminalTitle: title(for: notification.terminalID),
-                                    unread: !notification.isRead,
-                                    onOpen: {
-                                        _ = model.openNotification(notification.id)
-                                    },
-                                    onClear: {
-                                        model.clearNotification(notification.id)
-                                    }
-                                )
-                                .transition(ConductorMotion.notificationRowTransition)
-                            }
-                        }
-                        .padding(8)
-                    }
-                    .scrollIndicators(.visible)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .transition(.opacity)
-                }
-            }
-        }
-        .frame(
-            minWidth: ConductorTokens.Space.notificationPanelMinWidth,
-            minHeight: ConductorTokens.Space.notificationPanelMinHeight
-        )
-        .animation(ConductorMotion.list, value: model.notifications.records.map(\.id))
-        .animation(ConductorMotion.attention, value: model.notifications.snapshot.unreadCount)
-    }
-
-    private var notificationHeader: some View {
-        FloatingPanelHeader(
-            systemImage: model.notifications.snapshot.unreadCount > 0 ? "bell.badge.fill" : "bell",
-            title: L("通知", "Notifications"),
-            subtitle: model.notifications.records.isEmpty ? L("暂无通知", "No notifications") : L("\(model.notifications.records.count) 条记录", "\(model.notifications.records.count) records"),
-            closeHelp: L("关闭通知", "Close Notifications")
-        ) {
-            model.hideNotificationPanel()
-        } trailing: {
-            Button(L("跳转", "Jump")) {
-                ConductorMotion.perform(ConductorMotion.selection) {
-                    model.performCommand(.jumpToLatestUnread)
-                }
-            }
-            .buttonStyle(ConductorPressButtonStyle())
-            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-            .foregroundStyle(model.notifications.snapshot.latestUnread == nil ? ConductorDesign.tertiaryText : theme.floatingEmphasis)
-            .disabled(!model.canPerformCommand(.jumpToLatestUnread))
-            Button(L("清空", "Clear")) {
-                ConductorMotion.perform(ConductorMotion.list) {
-                    model.performCommand(.clearNotifications)
-                }
-            }
-            .buttonStyle(ConductorPressButtonStyle())
-            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-            .foregroundStyle(model.notifications.records.isEmpty ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
-            .disabled(!model.canPerformCommand(.clearNotifications))
-        }
-        .padding(.top, 12)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-    }
-
-    private var emptyNotifications: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "bell.slash")
-                .font(.conductorSystem(size: 21, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-            Text(L("暂无通知", "No notifications"))
-                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.secondaryText)
-            Text(L("终端通知、响铃和任务完成都会出现在这里", "Terminal notifications, bells, and task completions appear here"))
-                .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-                .multilineTextAlignment(.center)
-            Button {
-                ConductorMotion.perform(ConductorMotion.emphasized) {
-                    model.performCommand(.testNotification)
-                }
-            } label: {
-                Label(L("发送测试通知", "Send Test Notification"), systemImage: "bell.badge")
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .padding(.horizontal, 9)
-                    .frame(height: 23)
-                    .background(theme.floatingControlStrongFill)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(ConductorPressButtonStyle())
-            .padding(.top, 4)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(maxHeight: .infinity)
-        .transition(.opacity.combined(with: .scale(scale: 0.98)))
-    }
-
-    private func title(for terminalID: TerminalID) -> String {
-        for workspace in model.workspaces {
-            for pane in workspace.panes.values {
-                if let tab = pane.tabs.first(where: { $0.id == terminalID }) {
-                    return tab.title
-                }
-            }
-        }
-        return L("终端", "Terminal")
-    }
-}
-
-private struct NotificationRowView: View {
-    let notification: TerminalNotificationRecord
-    let terminalTitle: String
-    let unread: Bool
-    let onOpen: () -> Void
-    let onClear: () -> Void
-    @State private var hovering = false
-    @Environment(\.conductorTheme) private var theme
-    @Environment(\.conductorFontScale) private var fontScale
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 7) {
-            Button {
-                onOpen()
-            } label: {
-                HStack(alignment: .top, spacing: 7) {
-                    Image(systemName: iconName)
-                        .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(iconColor)
-                        .frame(width: 22, height: 22)
-                        .background(
-                            RoundedRectangle(cornerRadius: 7)
-                                .fill(theme.floatingControlFill)
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 7)
-                                .stroke(theme.floatingStroke, lineWidth: 1)
-                        }
-                        .overlay(alignment: .topTrailing) {
-                            if unread {
-                                Circle()
-                                    .fill(theme.floatingEmphasis)
-                                    .frame(width: 5, height: 5)
-                                    .offset(x: 2, y: -2)
-                            }
-                        }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        rowTitle
-                        rowBody
-                        rowMetadata
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(ConductorPressButtonStyle())
-
-            Button {
-                ConductorMotion.perform(ConductorMotion.list, onClear)
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(hovering ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText)
-                    .frame(width: 18, height: 18)
-                    .background(hovering ? theme.floatingControlFill : theme.floatingControlFill.opacity(0.40))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(ConductorPressButtonStyle())
-            .macNativeTooltip(L("清除通知", "Clear Notification"))
-        }
-        .padding(.leading, 9)
-        .padding(.trailing, 6)
-        .padding(.vertical, 7)
-        .background(rowBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 11))
-        .overlay {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .strokeBorder(
-                    unread ? theme.floatingSelectedStroke : theme.floatingStroke,
-                    lineWidth: 1
-                )
-        }
-        .animation(ConductorMotion.hover, value: hovering)
-        .animation(ConductorMotion.attention, value: unread)
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
-    }
-
-    private var rowTitle: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(notification.title)
-                .font(.conductorSystem(size: 11.5, weight: unread ? .semibold : .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.primaryText)
-                .lineLimit(1)
-            Spacer(minLength: 6)
-            Text(notification.createdAt.formatted(date: .omitted, time: .shortened))
-                .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-                .monospacedDigit()
-        }
-    }
-
-    @ViewBuilder
-    private var rowBody: some View {
-        if !notification.body.isEmpty {
-            Text(notification.body)
-                .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.secondaryText)
-                .lineSpacing(1)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var rowMetadata: some View {
-        HStack(spacing: 5) {
-            Label(kindLabel, systemImage: kindChipIcon)
-                .font(.conductorSystem(size: 9, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-                .labelStyle(.titleAndIcon)
-                .padding(.horizontal, 5)
-                .frame(height: 16)
-                .background(theme.floatingControlFill.opacity(0.58))
-                .clipShape(Capsule())
-
-            Label(terminalTitle, systemImage: "terminal")
-                .font(.conductorSystem(size: 9, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-                .labelStyle(.titleAndIcon)
-                .lineLimit(1)
-                .padding(.horizontal, 5)
-                .frame(height: 16)
-                .background(theme.floatingControlFill)
-                .clipShape(Capsule())
-
-            Spacer(minLength: 0)
-        }
-    }
-
-    private var rowBackground: some View {
-        LinearGradient(
-            colors: [
-                hovering ? theme.floatingControlStrongFill : (unread ? theme.floatingSelectedFill : theme.floatingControlFill),
-                unread ? theme.floatingHoverFill : theme.floatingControlFill.opacity(0.35),
-                Color.black.opacity(0.025)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    private var iconName: String {
-        switch notification.kind {
-        case .agent:
-            "terminal"
-        case .bell:
-            "bell"
-        case .notification:
-            "terminal"
-        }
-    }
-
-    private var kindChipIcon: String {
-        switch notification.kind {
-        case .agent:
-            "bolt.horizontal"
-        case .bell:
-            "bell"
-        case .notification:
-            "app.badge"
-        }
-    }
-
-    private var kindLabel: String {
-        switch notification.kind {
-        case .agent:
-            "Agent"
-        case .bell:
-            L("响铃", "Bell")
-        case .notification:
-            L("终端", "Terminal")
-        }
-    }
-
-    private var iconColor: Color {
-        switch notification.kind {
-        case .agent:
-            ConductorDesign.secondaryText
-        case .bell:
-            ConductorDesign.warmAccent
-        case .notification:
-            ConductorDesign.secondaryText
-        }
-    }
-}
-
 private struct WindowControlButtons: View {
     private let controls: [WindowControl] = [
         WindowControl(id: "close", color: Color(red: 1.0, green: 0.33, blue: 0.32), accessibilityLabel: L("关闭窗口", "Close Window")) {
@@ -5530,36 +5263,14 @@ private struct WindowControl: Identifiable {
 }
 
 private struct ConductorSidebar: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
+    let snapshot: WorkspaceChromeSnapshot
     @State private var renamingWorkspaceID: WorkspaceID?
     @State private var workspaceTitleDraft = ""
     @State private var sidebarToggleHovering = false
     @Namespace private var sidebarSelectionNamespace
     @State private var visualSelectedSidebarWorkspaceID: WorkspaceID?
     @Environment(\.conductorFontScale) private var fontScale
-
-    private var terminalCount: Int {
-        model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
-    }
-
-    private var workspaceRows: [WorkspaceChromeDisplayModel] {
-        let selectedWorkspaceID = model.workspace.id
-        let notificationSnapshot = model.notifications.snapshot
-        return model.workspaces.map { workspace in
-            WorkspaceChromeDisplayModel(
-                id: workspace.id,
-                title: workspace.title,
-                splitCount: workspace.panes.count,
-                terminalCount: workspaceTerminalCount(workspace),
-                unreadCount: notificationSnapshot.unreadCount(for: workspace.id),
-                selected: workspace.id == selectedWorkspaceID
-            )
-        }
-    }
-
-    private var workspaceIDs: [WorkspaceID] {
-        workspaceRows.map(\.id)
-    }
 
     private var sidebarHeaderHeight: CGFloat {
         model.sidebarVisible ? 54 : 82
@@ -5596,14 +5307,14 @@ private struct ConductorSidebar: View {
         .clipShape(SidebarRailShape())
         .animation(model.shellAnimation(ConductorMotion.layout), value: model.sidebarVisible)
         .onAppear {
-            setVisualSidebarSelection(model.workspace.id, animated: false)
+            setVisualSidebarSelection(snapshot.selectedWorkspaceID, animated: false)
         }
-        .onChange(of: model.workspace.id) {
-            setVisualSidebarSelection(model.workspace.id, animated: true)
+        .onChange(of: snapshot.selectedWorkspaceID) {
+            setVisualSidebarSelection(snapshot.selectedWorkspaceID, animated: true)
         }
-        .onChange(of: workspaceIDs) {
-            if visualSelectedSidebarWorkspaceID == nil || !workspaceIDs.contains(visualSelectedSidebarWorkspaceID!) {
-                setVisualSidebarSelection(model.workspace.id, animated: false)
+        .onChange(of: snapshot.workspaceIDs) {
+            if visualSelectedSidebarWorkspaceID == nil || !snapshot.workspaceIDs.contains(visualSelectedSidebarWorkspaceID!) {
+                setVisualSidebarSelection(snapshot.selectedWorkspaceID, animated: false)
             }
         }
         .animation(model.shellAnimation(ConductorMotion.standard), value: model.theme)
@@ -5700,9 +5411,9 @@ private struct ConductorSidebar: View {
             HStack {
                 SidebarSectionTitle(L("工作区", "Workspaces"))
                 SidebarWorkspaceHeaderStats(
-                    splitCount: model.workspace.panes.count,
-                    terminalCount: terminalCount,
-                    unreadCount: model.notifications.snapshot.unreadCount
+                    splitCount: snapshot.currentSplitCount,
+                    terminalCount: snapshot.currentTerminalCount,
+                    unreadCount: snapshot.totalUnreadCount
                 )
                 Spacer()
                 Button {
@@ -5724,18 +5435,18 @@ private struct ConductorSidebar: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 3) {
-                    ForEach(workspaceRows) { row in
+                    ForEach(snapshot.rows) { row in
                         workspaceRow(for: row)
                             .id(row.id)
-                            .transition(ConductorMotion.rowTransition)
+                            .transition(ConductorMotion.rowTransition(itemCount: snapshot.rows.count))
                     }
                 }
                 .padding(.vertical, 2)
             }
-            .mask(ConductorVerticalFadeMask())
+            .mask(ConductorVerticalFadeMask(fadesTop: false))
             .frame(minHeight: 72, maxHeight: .infinity)
-            .animation(nil, value: model.workspace.id)
-            .animation(model.shellAnimation(ConductorMotion.list), value: workspaceIDs)
+            .animation(nil, value: snapshot.selectedWorkspaceID)
+            .animation(model.shellAnimation(ConductorMotion.list(itemCount: snapshot.rows.count)), value: snapshot.workspaceIDs)
         }
     }
 
@@ -5743,7 +5454,7 @@ private struct ConductorSidebar: View {
         VStack(spacing: 6) {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 6) {
-                    ForEach(workspaceRows) { row in
+                    ForEach(snapshot.rows) { row in
                         SidebarRailButton(
                             icon: WorkspaceChromeGlyph.systemName(selected: row.selected),
                             selected: row.selected,
@@ -5759,7 +5470,7 @@ private struct ConductorSidebar: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
             }
-            .mask(ConductorVerticalFadeMask())
+            .mask(ConductorVerticalFadeMask(fadesTop: false))
             .frame(maxHeight: .infinity)
 
             SidebarSeparator()
@@ -5813,6 +5524,8 @@ private struct ConductorSidebar: View {
     private func workspaceRow(for row: WorkspaceChromeDisplayModel) -> some View {
         WorkspaceSidebarRow(
             title: row.title,
+            subtitle: row.subtitle,
+            splitCount: row.splitCount,
             terminalCount: row.terminalCount,
             unreadCount: row.unreadCount,
             selected: row.selected,
@@ -5852,14 +5565,14 @@ private struct ConductorSidebar: View {
                     model.closeOtherWorkspaces(keeping: row.id)
                 }
             }
-            .disabled(model.workspaces.count <= 1)
+            .disabled(!snapshot.canCloseWorkspace)
             Button(L("关闭右侧工作区", "Close Workspaces to the Right")) {
                 withoutShellAnimation {
                     finishWorkspaceRenameIfNeeded()
                     model.closeWorkspacesToRight(of: row.id)
                 }
             }
-            .disabled(model.workspaces.count <= 1)
+            .disabled(!snapshot.canCloseWorkspace)
             Divider()
             Button(L("关闭工作区", "Close Workspace")) {
                 withoutShellAnimation {
@@ -5867,12 +5580,8 @@ private struct ConductorSidebar: View {
                     model.closeWorkspace(row.id)
                 }
             }
-            .disabled(model.workspaces.count <= 1)
+            .disabled(!snapshot.canCloseWorkspace)
         }
-    }
-
-    private func workspaceTerminalCount(_ workspace: WorkspaceState) -> Int {
-        workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
     }
 
     private func beginRenameWorkspace(_ row: WorkspaceChromeDisplayModel) {
@@ -6043,13 +5752,106 @@ private struct SidebarBookSpineChrome: View {
     }
 }
 
+private struct WorkspaceChromeSnapshot: Equatable {
+    let selectedWorkspaceID: WorkspaceID
+    let selectedWorkspaceFileTabID: String?
+    let rows: [WorkspaceChromeDisplayModel]
+    let workspaceIDs: [WorkspaceID]
+    let fileTabs: [WorkspaceFileTabDisplayModel]
+    let currentSplitCount: Int
+    let currentTerminalCount: Int
+    let totalUnreadCount: Int
+    let canCloseWorkspace: Bool
+
+    @MainActor
+    init(model: ConductorWindowModel) {
+        let selectedWorkspaceID = model.workspace.id
+        let notificationSnapshot = model.notifications.snapshot
+        let metadataSnapshot = model.metadataByTerminalID
+        let rows = model.workspaces.map { workspace in
+            WorkspaceChromeDisplayModel(
+                id: workspace.id,
+                title: workspace.title,
+                subtitle: Self.workspaceSubtitle(workspace, metadata: metadataSnapshot),
+                splitCount: workspace.panes.count,
+                terminalCount: Self.workspaceTerminalCount(workspace),
+                unreadCount: notificationSnapshot.unreadCount(for: workspace.id),
+                selected: workspace.id == selectedWorkspaceID
+            )
+        }
+        let selectedWorkspaceFileTabID = model.selectedWorkspaceFileTab?.id
+
+        self.selectedWorkspaceID = selectedWorkspaceID
+        self.selectedWorkspaceFileTabID = selectedWorkspaceFileTabID
+        self.rows = rows
+        self.workspaceIDs = rows.map(\.id)
+        self.fileTabs = model.workspaceFileTabs.map { tab in
+            WorkspaceFileTabDisplayModel(
+                tab: tab,
+                selected: tab.id == selectedWorkspaceFileTabID,
+                dirty: model.isWorkspaceFileTabDirty(tab.id)
+            )
+        }
+        self.currentSplitCount = model.workspace.panes.count
+        self.currentTerminalCount = Self.workspaceTerminalCount(model.workspace)
+        self.totalUnreadCount = notificationSnapshot.unreadCount
+        self.canCloseWorkspace = model.workspaces.count > 1
+    }
+
+    private static func workspaceTerminalCount(_ workspace: WorkspaceState) -> Int {
+        workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+    }
+
+    private static func workspaceSubtitle(
+        _ workspace: WorkspaceState,
+        metadata: [TerminalID: TerminalDisplayMetadata]
+    ) -> String {
+        let selectedTab = workspace.focusedPane?.selectedTab
+        if let terminalID = selectedTab?.id,
+           let directory = metadata[terminalID]?.workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !directory.isEmpty {
+            return abbreviatedPath(directory)
+        }
+        if let directory = selectedTab?.workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !directory.isEmpty {
+            return abbreviatedPath(directory)
+        }
+        if let directory = workspace.panes.values.lazy
+            .flatMap({ $0.tabs })
+            .compactMap({ $0.workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .first(where: { !$0.isEmpty }) {
+            return abbreviatedPath(directory)
+        }
+        return selectedTab?.title ?? L("等待终端", "Waiting for terminal")
+    }
+
+    private static func abbreviatedPath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let normalized = path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
+        let components = normalized.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        guard components.count > 2 else { return normalized }
+        if normalized.hasPrefix("~/") {
+            return "~/" + components.suffix(2).joined(separator: "/")
+        }
+        return ".../" + components.suffix(2).joined(separator: "/")
+    }
+}
+
 private struct WorkspaceChromeDisplayModel: Identifiable, Equatable {
     let id: WorkspaceID
     let title: String
+    var subtitle: String = ""
     let splitCount: Int
     let terminalCount: Int
     let unreadCount: Int
     let selected: Bool
+}
+
+private struct WorkspaceFileTabDisplayModel: Identifiable, Equatable {
+    var id: String { tab.id }
+    let tab: ConductorWorkspaceFileTab
+    let selected: Bool
+    let dirty: Bool
 }
 
 private enum WorkspaceChromeGlyph {
@@ -6234,6 +6036,8 @@ private struct SidebarRow: View {
 
 private struct WorkspaceSidebarRow: View {
     let title: String
+    let subtitle: String
+    let splitCount: Int
     let terminalCount: Int
     let unreadCount: Int
     let selected: Bool
@@ -6301,6 +6105,8 @@ private struct WorkspaceSidebarRow: View {
         Button(action: action) {
             WorkspaceSidebarRowContent(
                 title: title,
+                subtitle: subtitle,
+                splitCount: splitCount,
                 terminalCount: terminalCount,
                 unreadCount: unreadCount,
                 selected: selected,
@@ -6335,6 +6141,8 @@ private struct WorkspaceSidebarRow: View {
 
 private struct WorkspaceSidebarRowContent: View, Equatable {
     let title: String
+    let subtitle: String
+    let splitCount: Int
     let terminalCount: Int
     let unreadCount: Int
     let selected: Bool
@@ -6346,6 +6154,8 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
 
     nonisolated static func == (lhs: WorkspaceSidebarRowContent, rhs: WorkspaceSidebarRowContent) -> Bool {
         lhs.title == rhs.title &&
+        lhs.subtitle == rhs.subtitle &&
+        lhs.splitCount == rhs.splitCount &&
         lhs.terminalCount == rhs.terminalCount &&
         lhs.unreadCount == rhs.unreadCount &&
         lhs.selected == rhs.selected &&
@@ -6354,39 +6164,51 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
     }
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(alignment: .center, spacing: 8) {
             Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
-                .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
+                .font(.conductorSystem(size: 11, weight: .bold, scale: fontScale))
                 .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : ConductorDesign.secondaryText)
-                .frame(width: 19, height: 19)
+                .frame(width: 22, height: 22)
                 .background(selected ? theme.shellControlRaisedFill.opacity(0.84) : (hovering ? theme.shellHoverFill.opacity(0.62) : Color.clear))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            Text(title)
-                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(selected ? 0.94 : 0.84))
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: 4)
-            Text("\(terminalCount)")
-                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.shellChromeTextMuted.opacity(0.78))
-                .padding(.horizontal, 5)
-                .frame(minWidth: 17, minHeight: 17)
-                .background(selected ? theme.shellHoverFill.opacity(0.82) : Color.clear)
-                .clipShape(Capsule())
-            if unreadCount > 0 {
-                Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                    .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 4)
-                    .frame(minWidth: 15, minHeight: 14)
-                    .background(theme.floatingEmphasis)
-                    .clipShape(Capsule())
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(selected ? 0.94 : 0.84))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                HStack(spacing: 4) {
+                    Image(systemName: "folder")
+                        .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
+                    Text(subtitle)
+                        .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .foregroundStyle(theme.shellChromeTextMuted.opacity(selected ? 0.72 : 0.58))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack(spacing: 4) {
+                    workspaceMetric(systemImage: "rectangle.split.2x1", value: splitCount)
+                    workspaceMetric(systemImage: "terminal", value: terminalCount)
+                }
+                if unreadCount > 0 {
+                    Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                        .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .frame(minWidth: 16, minHeight: 15)
+                        .background(theme.floatingEmphasis)
+                        .clipShape(Capsule())
+                }
             }
         }
         .padding(.leading, 7)
         .padding(.trailing, 7)
-        .frame(height: 32)
+        .frame(height: 48)
         .background {
             let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
             shape
@@ -6402,6 +6224,21 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         .transaction { transaction in
             transaction.animation = nil
         }
+    }
+
+    private func workspaceMetric(systemImage: String, value: Int) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
+            Text("\(value)")
+                .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
+                .monospacedDigit()
+        }
+        .foregroundStyle(theme.shellChromeTextMuted.opacity(selected ? 0.78 : 0.62))
+        .padding(.horizontal, 5)
+        .frame(height: 16)
+        .background(selected ? theme.shellHoverFill.opacity(0.70) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.22 : 0.14))
+        .clipShape(Capsule())
     }
 }
 
@@ -6452,7 +6289,8 @@ private struct SidebarActionRow: View {
 }
 
 private struct ConductorToolbar: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
+    let workspaceSnapshot: WorkspaceChromeSnapshot
     @State private var editingWorkspaceID: WorkspaceID?
     @State private var workspaceTitleDraft = ""
 
@@ -6461,6 +6299,7 @@ private struct ConductorToolbar: View {
             HStack(spacing: ConductorTokens.Space.toolbarGap) {
                 WorkspaceTabStrip(
                     model: model,
+                    snapshot: workspaceSnapshot,
                     editingWorkspaceID: $editingWorkspaceID,
                     workspaceTitleDraft: $workspaceTitleDraft,
                     onBeginRename: beginRenameWorkspace,
@@ -6515,16 +6354,6 @@ private struct ConductorToolbar: View {
 
                 ConductorPillGroup {
                     ConductorIconButton(
-                        systemImage: "magnifyingglass",
-                        help: L("上下文搜索 Cmd-F", "Context Search Cmd-F"),
-                        title: L("搜索", "Search"),
-                        active: model.terminalSearchVisible
-                    ) {
-                        finishWorkspaceRenameIfNeeded()
-                        model.performCommand(.showTerminalSearch)
-                    }
-                    ConductorSegmentDivider()
-                    ConductorIconButton(
                         systemImage: "folder",
                         help: L("文件管理器", "File Manager"),
                         title: L("文件", "Files"),
@@ -6546,9 +6375,9 @@ private struct ConductorToolbar: View {
                     }
                     ConductorSegmentDivider()
                     ConductorIconButton(
-                        systemImage: model.notifications.snapshot.unreadCount > 0 ? "bell.badge" : "bell",
+                        systemImage: workspaceSnapshot.totalUnreadCount > 0 ? "bell.badge" : "bell",
                         help: L("通知中心 Cmd-Opt-N", "Notification Center Cmd-Opt-N"),
-                        title: model.notifications.snapshot.unreadCount > 0 ? L("通知 \(model.notifications.snapshot.unreadCount)", "Alerts \(model.notifications.snapshot.unreadCount)") : L("通知", "Alerts"),
+                        title: workspaceSnapshot.totalUnreadCount > 0 ? L("通知 \(workspaceSnapshot.totalUnreadCount)", "Alerts \(workspaceSnapshot.totalUnreadCount)") : L("通知", "Alerts"),
                         active: model.notificationPanelVisible
                     ) {
                         finishWorkspaceRenameIfNeeded()
@@ -6596,7 +6425,8 @@ private struct ConductorToolbar: View {
 }
 
 private struct WorkspaceTabStrip: View {
-    @ObservedObject var model: ConductorWindowModel
+    let model: ConductorWindowModel
+    let snapshot: WorkspaceChromeSnapshot
     @Binding var editingWorkspaceID: WorkspaceID?
     @Binding var workspaceTitleDraft: String
     let onBeginRename: (WorkspaceChromeDisplayModel) -> Void
@@ -6606,49 +6436,30 @@ private struct WorkspaceTabStrip: View {
     @State private var scrollTargetID: WorkspaceID?
     @State private var visualSelectedWorkspaceID: WorkspaceID?
 
-    private var workspaceRows: [WorkspaceChromeDisplayModel] {
-        let selectedWorkspaceID = model.workspace.id
-        let notificationSnapshot = model.notifications.snapshot
-        return model.workspaces.map { workspace in
-            WorkspaceChromeDisplayModel(
-                id: workspace.id,
-                title: workspace.title,
-                splitCount: workspace.panes.count,
-                terminalCount: workspaceTerminalCount(workspace),
-                unreadCount: notificationSnapshot.unreadCount(for: workspace.id),
-                selected: workspace.id == selectedWorkspaceID
-            )
-        }
-    }
-
-    private var workspaceIDs: [WorkspaceID] {
-        workspaceRows.map(\.id)
-    }
-
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: WorkspaceTabMetrics.spacing) {
-                ForEach(workspaceRows) { row in
+                ForEach(snapshot.rows) { row in
                     workspaceTabView(for: row)
                         .transition(ConductorMotion.tabTransition)
                 }
 
-                if !model.workspaceFileTabs.isEmpty {
+                if !snapshot.fileTabs.isEmpty {
                     WorkspaceTabSectionDivider()
-                    ForEach(model.workspaceFileTabs) { tab in
+                    ForEach(snapshot.fileTabs) { fileTab in
                         WorkspaceFileTopTab(
-                            tab: tab,
+                            tab: fileTab.tab,
                             appearance: model.appearance,
-                            selected: model.selectedWorkspaceFileTab?.id == tab.id,
-                            dirty: model.isWorkspaceFileTabDirty(tab.id),
+                            selected: fileTab.selected,
+                            dirty: fileTab.dirty,
                             onSelect: {
                                 finishWorkspaceRenameIfNeeded()
-                                model.selectWorkspaceFileTab(tab.id)
+                                model.selectWorkspaceFileTab(fileTab.id)
                             },
                             onClose: {
                                 withoutShellAnimation {
                                     finishWorkspaceRenameIfNeeded()
-                                    model.closeWorkspaceFileTab(tab)
+                                    model.closeWorkspaceFileTab(fileTab.tab)
                                 }
                             }
                         )
@@ -6662,16 +6473,16 @@ private struct WorkspaceTabStrip: View {
         .scrollTargetBehavior(.viewAligned)
         .scrollPosition(id: $scrollTargetID, anchor: .center)
         .onAppear {
-            setVisualSelection(model.workspace.id, animated: false)
+            setVisualSelection(snapshot.selectedWorkspaceID, animated: false)
             syncScrollTarget(animated: false)
         }
-        .onChange(of: model.workspace.id) {
-            setVisualSelection(model.workspace.id, animated: true)
+        .onChange(of: snapshot.selectedWorkspaceID) {
+            setVisualSelection(snapshot.selectedWorkspaceID, animated: true)
             syncScrollTarget(animated: true)
         }
-        .onChange(of: workspaceIDs) {
-            if visualSelectedWorkspaceID == nil || !workspaceIDs.contains(visualSelectedWorkspaceID!) {
-                setVisualSelection(model.workspace.id, animated: false)
+        .onChange(of: snapshot.workspaceIDs) {
+            if visualSelectedWorkspaceID == nil || !snapshot.workspaceIDs.contains(visualSelectedWorkspaceID!) {
+                setVisualSelection(snapshot.selectedWorkspaceID, animated: false)
             }
             syncScrollTarget(animated: true)
         }
@@ -6684,13 +6495,13 @@ private struct WorkspaceTabStrip: View {
         )
         .clipped()
         .mask(ConductorHorizontalFadeMask())
-        .animation(model.shellAnimation(ConductorMotion.list), value: workspaceIDs)
+        .animation(model.shellAnimation(ConductorMotion.list), value: snapshot.workspaceIDs)
     }
 
     private func syncScrollTarget(animated: Bool) {
-        guard workspaceIDs.contains(model.workspace.id) else { return }
+        guard snapshot.workspaceIDs.contains(snapshot.selectedWorkspaceID) else { return }
         let update = {
-            scrollTargetID = model.workspace.id
+            scrollTargetID = snapshot.selectedWorkspaceID
         }
         if animated {
             model.performShellMotion(ConductorMotion.scroll, update)
@@ -6703,10 +6514,10 @@ private struct WorkspaceTabStrip: View {
         WorkspaceTopTab(
             row: row,
             appearance: model.appearance,
-            active: row.selected && model.selectedWorkspaceFileTab == nil,
-            visuallySelected: visualSelectedWorkspaceID == row.id && model.selectedWorkspaceFileTab == nil,
+            active: row.selected && snapshot.selectedWorkspaceFileTabID == nil,
+            visuallySelected: visualSelectedWorkspaceID == row.id && snapshot.selectedWorkspaceFileTabID == nil,
             selectionNamespace: selectionNamespace,
-            canClose: model.workspaces.count > 1,
+            canClose: snapshot.canCloseWorkspace,
             editing: editingWorkspaceID == row.id,
             titleDraft: $workspaceTitleDraft,
             onSelect: {
@@ -6751,10 +6562,6 @@ private struct WorkspaceTabStrip: View {
             }
         )
         .id(row.id)
-    }
-
-    private func workspaceTerminalCount(_ workspace: WorkspaceState) -> Int {
-        workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
     }
 
     private func finishWorkspaceRenameIfNeeded(except workspaceID: WorkspaceID? = nil) {

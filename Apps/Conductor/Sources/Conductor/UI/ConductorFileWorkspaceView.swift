@@ -37,6 +37,31 @@ private extension EnvironmentValues {
 
 private enum WorkspaceFileDocumentState: Equatable {
     case message(String)
+    case editableText(String)
+}
+
+private enum WorkspaceMarkdownMode: String, CaseIterable, Identifiable {
+    case source
+    case preview
+    case split
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .source: L("源码", "Source")
+        case .preview: L("预览", "Preview")
+        case .split: L("分屏", "Split")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .source: "chevron.left.forwardslash.chevron.right"
+        case .preview: "doc.richtext"
+        case .split: "rectangle.split.2x1"
+        }
+    }
 }
 
 private struct WorkspaceFileDocument: Equatable {
@@ -80,6 +105,29 @@ private struct WorkspaceFileService {
                 subtitle: subtitle,
                 isReadOnly: true,
                 state: .message(L("没有读取权限", "No read permission"))
+            )
+        }
+
+        let byteCount = Int64(values.fileSize ?? 0)
+        guard byteCount <= maxEditableBytes else {
+            return WorkspaceFileDocument(
+                title: tab.title,
+                subtitle: subtitle,
+                isReadOnly: true,
+                state: .message(L("文件较大，已停止加载到编辑器以保护性能", "Large file was not loaded into the editor to protect performance"))
+            )
+        }
+
+        if let data = try? Data(contentsOf: fileURL),
+           !data.contains(0) {
+            let loadedText = String(data: data, encoding: .utf8) ??
+                String(data: data, encoding: .utf16) ??
+                String(decoding: data, as: UTF8.self)
+            return WorkspaceFileDocument(
+                title: tab.title,
+                subtitle: subtitle,
+                isReadOnly: values.isWritable == false,
+                state: .editableText(loadedText)
             )
         }
 
@@ -169,20 +217,13 @@ struct ConductorFileWorkspaceView: View {
     var body: some View {
         VStack(spacing: 0) {
             if let selected = model.selectedWorkspaceFileTab {
-                ZStack {
-                    ForEach(model.workspaceFileTabs) { tab in
-                        let isSelected = tab.id == selected.id
-                        ConductorWorkspaceFileEditorView(model: model, tab: tab, isSelected: isSelected)
-                            .environment(\.workspaceFileSearchFocusToken, model.workspaceFileSearchFocusGeneration)
-                            .environment(\.workspaceFileSearchNextToken, model.workspaceFileSearchNextGeneration)
-                            .environment(\.workspaceFileSearchPreviousToken, model.workspaceFileSearchPreviousGeneration)
-                            .id(tab.id)
-                            .opacity(isSelected ? 1 : 0)
-                            .allowsHitTesting(isSelected)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
+                ConductorWorkspaceFileEditorView(model: model, tab: selected, isSelected: true)
+                    .environment(\.workspaceFileSearchFocusToken, model.workspaceFileSearchFocusGeneration)
+                    .environment(\.workspaceFileSearchNextToken, model.workspaceFileSearchNextGeneration)
+                    .environment(\.workspaceFileSearchPreviousToken, model.workspaceFileSearchPreviousGeneration)
+                    .id(selected.id)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
             } else {
                 emptyState
             }
@@ -317,6 +358,7 @@ private struct ConductorWorkspaceFileEditorView: View {
     @State private var document: WorkspaceFileDocument
     @State private var text: String
     @State private var savedText: String
+    @State private var textMetrics: WorkspaceTextMetrics
     @State private var statusMessage: String?
     @State private var editorFocusToken = 1
     @State private var editorSnapshotToken = 0
@@ -350,6 +392,9 @@ private struct ConductorWorkspaceFileEditorView: View {
     @State private var documentSearchRevision = 0
     @State private var documentSearchNextToken = 0
     @State private var documentSearchPreviousToken = 0
+    @State private var markdownMode: WorkspaceMarkdownMode = .split
+    @State private var markdownPreviewText = ""
+    @State private var markdownPreviewUpdateTask: Task<Void, Never>?
 
     init(model: ConductorWindowModel, tab: ConductorWorkspaceFileTab, isSelected: Bool) {
         self.model = model
@@ -359,12 +404,26 @@ private struct ConductorWorkspaceFileEditorView: View {
         _document = State(initialValue: loaded)
         _text = State(initialValue: "")
         _savedText = State(initialValue: "")
+        _textMetrics = State(initialValue: .empty)
         _lastKnownDiskSignature = State(initialValue: nil)
-        _searchHistory = State(initialValue: ConductorSearchHistory.load(scope: "workspace-file"))
+        _searchHistory = State(initialValue: [])
     }
 
     private var isDirty: Bool {
         text != savedText
+    }
+
+    private var canEditText: Bool {
+        if case .editableText = document.state { return true }
+        return false
+    }
+
+    private var canSaveText: Bool {
+        canEditText && !document.isReadOnly
+    }
+
+    private var canEditSourceText: Bool {
+        canSaveText && !usesProtectedTextReader
     }
 
     private var isMarkdown: Bool {
@@ -372,12 +431,31 @@ private struct ConductorWorkspaceFileEditorView: View {
         return ext == "md" || ext == "markdown"
     }
 
-    private var isLargeText: Bool {
-        return false
+    private var isLogLikeFile: Bool {
+        let ext = tab.fileURL.pathExtension.lowercased()
+        return ["log", "out", "stdout", "stderr", "trace"].contains(ext)
     }
 
-    private var supportsToolbarSearch: Bool {
-        return !isImageFile
+    private var isLargeText: Bool {
+        guard canEditText else { return false }
+        return textMetrics.byteCount > Self.protectedTextReaderByteThreshold ||
+            textMetrics.lineCount > Self.protectedTextReaderLineThreshold
+    }
+
+    private var usesProtectedTextReader: Bool {
+        canEditText && (isLogLikeFile || isLargeText)
+    }
+
+    private var usesDocumentSearch: Bool {
+        isMarkdown && canEditText && markdownMode != .source
+    }
+
+    private var isSourceEditorMounted: Bool {
+        canEditText && (!isMarkdown || markdownMode != .preview)
+    }
+
+    private var supportsFileSearch: Bool {
+        canEditText
     }
 
     private var isImageFile: Bool {
@@ -398,6 +476,7 @@ private struct ConductorWorkspaceFileEditorView: View {
                 externalChangeBar
             }
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(theme.terminalBackground)
         .task(id: tab.id) {
@@ -416,8 +495,10 @@ private struct ConductorWorkspaceFileEditorView: View {
             }
         }
         .onChange(of: text) {
+            textMetrics = Self.metrics(for: text)
             scheduleAutosave()
             refreshSearchMatches(resetSelection: false)
+            scheduleMarkdownPreviewRefresh()
         }
         .onChange(of: isDirty) { _, newValue in
             model.setWorkspaceFileTabDirty(tab.id, isDirty: newValue)
@@ -450,9 +531,10 @@ private struct ConductorWorkspaceFileEditorView: View {
             autosaveTask?.cancel()
             externalWatchTask?.cancel()
             searchTask?.cancel()
-            if isDirty, !externalChangeDetected {
+            markdownPreviewUpdateTask?.cancel()
+            if isDirty, canEditSourceText, !externalChangeDetected {
                 saveGeneration += 1
-                saveSnapshot(text, generation: saveGeneration, showStatus: false, closeAfterSave: false)
+                requestSaveSnapshot(generation: saveGeneration, showStatus: false, closeAfterSave: false)
             }
         }
     }
@@ -482,17 +564,40 @@ private struct ConductorWorkspaceFileEditorView: View {
             }
 
             statusPill(systemImage: isImageFile ? "photo" : "doc.text.magnifyingglass", title: fileKindTitle)
-            statusPill(systemImage: "lock", title: L("只读", "Read Only"))
             if externalChangeDetected {
                 statusPill(systemImage: "arrow.triangle.2.circlepath", title: L("外部已修改", "Changed externally"))
             }
 
-            if supportsToolbarSearch && (searchVisible || !searchQuery.isEmpty) {
+            if supportsFileSearch && (searchVisible || !searchQuery.isEmpty) {
                 fileSearchField
             }
 
             editorButton("arrow.clockwise", help: L("重新载入", "Reload")) {
                 reload()
+            }
+
+            if canEditText {
+                if isMarkdown {
+                    Picker("", selection: $markdownMode) {
+                        ForEach(WorkspaceMarkdownMode.allCases) { mode in
+                            Label(mode.title, systemImage: mode.systemImage)
+                                .tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 190)
+                    .onChange(of: markdownMode) { _, newValue in
+                        if newValue == .source || newValue == .split {
+                            editorFocusToken &+= 1
+                        }
+                    }
+                }
+                if canEditSourceText {
+                    editorButton("square.and.arrow.down", help: L("保存", "Save")) {
+                        save()
+                    }
+                }
             }
 
             editorButton("arrow.up.right.square", help: L("系统应用打开", "Open in System App")) {
@@ -579,99 +684,81 @@ private struct ConductorWorkspaceFileEditorView: View {
     private var content: some View {
         if isImageFile {
             imageView(tab.fileURL)
+        } else if isMarkdown, canEditText {
+            markdownContent
+        } else if canEditText {
+            sourceEditor
         } else {
-            ConductorDocumentWorkspaceView(
-                fileURL: tab.fileURL,
-                rootURL: tab.rootURL,
-                title: tab.title,
-                theme: theme,
-                fontSize: model.appearance.terminalFontSize,
-                isActive: isSelected,
-                searchQuery: searchVisible ? searchQuery : "",
-                searchRevision: documentSearchRevision,
-                searchNextToken: documentSearchNextToken,
-                searchPreviousToken: documentSearchPreviousToken,
-                onSearchStatusChange: { status in
-                    documentSearchStatus = status
-                }
+            messageView(
+                systemImage: "doc.text.magnifyingglass",
+                title: fileKindTitle,
+                message: documentMessage
             )
         }
+    }
+
+    private var sourceEditor: some View {
+        ConductorWorkspaceSourceTextView(
+            text: $text,
+            isEditable: canEditSourceText,
+            focusToken: editorFocusToken,
+            allowsFocusRequests: !searchVisible,
+            selectionRange: sourceSelectionRange,
+            selectionToken: sourceSelectionToken,
+            snapshotToken: editorSnapshotToken,
+            fontSize: model.appearance.terminalFontSize,
+            backgroundColor: NSColor(theme.terminalBackground),
+            textColor: NSColor(theme.shellChromeText),
+            mutedTextColor: NSColor(theme.shellChromeTextMuted),
+            onSnapshot: handleEditorSnapshot
+        )
+        .background(theme.terminalBackground)
+    }
+
+    @ViewBuilder
+    private var markdownContent: some View {
+        switch markdownMode {
+        case .source:
+            sourceEditor
+        case .preview:
+            documentPreview(textOverride: markdownPreviewText)
+        case .split:
+            HSplitView {
+                sourceEditor
+                    .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
+                documentPreview(textOverride: markdownPreviewText)
+                    .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    private func documentPreview(textOverride: String?) -> some View {
+        ConductorDocumentWorkspaceView(
+            fileURL: tab.fileURL,
+            rootURL: tab.rootURL,
+            title: tab.title,
+            theme: theme,
+            fontSize: model.appearance.terminalFontSize,
+            isActive: isSelected,
+            textOverride: textOverride,
+            chromeStyle: .plain,
+            layoutRevision: model.workspaceFileLayoutRevision,
+            searchQuery: searchVisible ? searchQuery : "",
+            searchRevision: documentSearchRevision,
+            searchNextToken: documentSearchNextToken,
+            searchPreviousToken: documentSearchPreviousToken,
+            onSearchStatusChange: { status in
+                documentSearchStatus = status
+            }
+        )
     }
 
     private var fileSearchField: some View {
-        ConductorContextSearchSurface {
-            Image(systemName: "magnifyingglass")
-                .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.58))
-
-            ConductorContextSearchScopeChip(systemImage: "doc.text", title: L("当前文件", "Current file"))
-
-            if !searchHistory.isEmpty {
-                Menu {
-                    ForEach(searchHistory, id: \.self) { query in
-                        Button(query) {
-                            searchQuery = query
-                            refreshSearchMatches(resetSelection: true)
-                            recordSearchQuery()
-                        }
-                    }
-                } label: {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                        .foregroundStyle(theme.shellChromeText.opacity(0.56))
-                        .frame(width: 22, height: 22)
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .macNativeTooltip(L("搜索历史", "Search History"))
-            }
-
-            ConductorContextSearchTextField(
-                text: $searchQuery,
-                placeholder: L("搜索当前文件", "Search current file"),
-                focusToken: searchFocusToken,
-                theme: theme,
-                fontFamily: fontFamily,
-                fontScale: fontScale,
-                onNavigate: { previous in
-                    recordSearchQuery()
-                    moveSearchSelection(previous ? -1 : 1)
-                },
-                onClose: closeSearch
-            )
-            .frame(width: 168, height: 22)
-
-            Text(searchStatus)
-                .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.52))
-                .monospacedDigit()
-                .frame(minWidth: 48, alignment: .trailing)
-
-            ConductorContextSearchIconButton(
-                systemImage: "chevron.up",
-                help: L("上一个匹配", "Previous Match"),
-                disabled: searchQuery.isEmpty
-            ) {
-                moveSearchSelection(-1)
-            }
-
-            ConductorContextSearchIconButton(
-                systemImage: "chevron.down",
-                help: L("下一个匹配", "Next Match"),
-                disabled: searchQuery.isEmpty
-            ) {
-                moveSearchSelection(1)
-            }
-
-            ConductorContextSearchIconButton(systemImage: "xmark", help: L("关闭搜索", "Close Search")) {
-                closeSearch()
-            }
-        }
+        EmptyView()
     }
 
     private var searchStatus: String {
-        if supportsToolbarSearch { return documentSearchStatus }
-        if isLargeText { return documentSearchStatus }
+        if usesDocumentSearch { return documentSearchStatus }
         if searchPending { return L("搜索中", "Searching") }
         guard !searchMatches.isEmpty else { return "0/0" }
         return "\(selectedSearchIndex + 1)/\(searchMatches.count)"
@@ -721,6 +808,13 @@ private struct ConductorWorkspaceFileEditorView: View {
         default:
             L("文档阅读", "Document Reader")
         }
+    }
+
+    private var documentMessage: String {
+        if case .message(let message) = document.state {
+            return message
+        }
+        return L("这个文件不能作为文本编辑", "This file cannot be edited as text")
     }
 
     private func largeFileView(_ byteCount: Int64) -> some View {
@@ -798,7 +892,7 @@ private struct ConductorWorkspaceFileEditorView: View {
 
     private func moveSearchSelection(_ delta: Int) {
         searchVisible = true
-        if supportsToolbarSearch {
+        if usesDocumentSearch {
             if delta < 0 {
                 documentSearchPreviousToken &+= 1
             } else {
@@ -814,10 +908,6 @@ private struct ConductorWorkspaceFileEditorView: View {
 
     private func selectCurrentSearchMatch() {
         let matches = searchMatches
-        if isLargeText {
-            sourceSelectionRange = nil
-            return
-        }
         guard !matches.isEmpty, matches.indices.contains(selectedSearchIndex) else {
             sourceSelectionRange = nil
             return
@@ -827,7 +917,7 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     private func refreshSearchMatches(resetSelection: Bool) {
-        guard !supportsToolbarSearch else {
+        guard !usesDocumentSearch else {
             searchTask?.cancel()
             searchPending = false
             cachedSearchMatches = []
@@ -835,7 +925,7 @@ private struct ConductorWorkspaceFileEditorView: View {
             sourceSelectionRange = nil
             return
         }
-        guard !isLargeText, !isMarkdown else {
+        guard canEditText else {
             searchTask?.cancel()
             searchPending = false
             cachedSearchMatches = []
@@ -895,11 +985,16 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     private func recordSearchQuery() {
-        ConductorSearchHistory.record(searchQuery, scope: "workspace-file")
-        searchHistory = ConductorSearchHistory.load(scope: "workspace-file")
+        searchHistory = []
     }
 
     private func save(showStatus: Bool = true, closeAfterSave: Bool = false) {
+        guard canEditSourceText else {
+            statusMessage = usesProtectedTextReader
+                ? L("大文本已使用轻量阅读，未进入编辑器", "Large text is using the lightweight reader, not the editor")
+                : L("当前文件不能保存", "Current file cannot be saved")
+            return
+        }
         guard !document.isReadOnly else {
             statusMessage = L("只读文件无法保存", "Read-only file cannot be saved")
             return
@@ -912,26 +1007,33 @@ private struct ConductorWorkspaceFileEditorView: View {
         }
         autosaveTask?.cancel()
         saveGeneration += 1
-        pendingSaveRequest = WorkspaceFileSaveRequest(
-            generation: saveGeneration,
-            showStatus: showStatus,
-            closeAfterSave: closeAfterSave
-        )
-        editorSnapshotToken &+= 1
+        requestSaveSnapshot(generation: saveGeneration, showStatus: showStatus, closeAfterSave: closeAfterSave)
     }
 
     private func scheduleAutosave() {
         autosaveTask?.cancel()
-        guard isDirty, !document.isReadOnly, !externalChangeDetected else { return }
+        guard isDirty, canEditSourceText, !externalChangeDetected else { return }
 
         let generation = saveGeneration + 1
         saveGeneration = generation
         autosaveTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(600))
             guard !Task.isCancelled else { return }
-            pendingSaveRequest = WorkspaceFileSaveRequest(generation: generation, showStatus: false, closeAfterSave: false)
-            editorSnapshotToken &+= 1
+            saveSnapshot(text, generation: generation, showStatus: false, closeAfterSave: false)
         }
+    }
+
+    private func requestSaveSnapshot(generation: Int, showStatus: Bool, closeAfterSave: Bool) {
+        guard isSourceEditorMounted else {
+            saveSnapshot(text, generation: generation, showStatus: showStatus, closeAfterSave: closeAfterSave)
+            return
+        }
+        pendingSaveRequest = WorkspaceFileSaveRequest(
+            generation: generation,
+            showStatus: showStatus,
+            closeAfterSave: closeAfterSave
+        )
+        editorSnapshotToken &+= 1
     }
 
     private func handleEditorSnapshot(_ snapshot: String) {
@@ -1002,10 +1104,23 @@ private struct ConductorWorkspaceFileEditorView: View {
         externalChangeDetected = false
         externalDiffVisible = false
         externalDiffState = .idle
-        text = ""
-        if resetDirty {
-            savedText = ""
+        switch result.document.state {
+        case .editableText(let loadedText):
+            text = loadedText
+            textMetrics = Self.metrics(for: loadedText)
+            markdownPreviewText = loadedText
+            if resetDirty {
+                savedText = loadedText
+            }
+        case .message:
+            text = ""
+            textMetrics = .empty
+            markdownPreviewText = ""
+            if resetDirty {
+                savedText = ""
+            }
         }
+        markdownMode = isMarkdown && canEditText ? .split : markdownMode
         refreshSearchMatches(resetSelection: true)
         model.setWorkspaceFileTabDirty(tab.id, isDirty: false)
         model.setWorkspaceFileTabExternallyChanged(tab.id, changed: false)
@@ -1106,6 +1221,38 @@ private struct ConductorWorkspaceFileEditorView: View {
             : L("文件已被外部修改，可重新载入", "File changed outside Conductor; reload available")
         autosaveTask?.cancel()
     }
+
+    private func scheduleMarkdownPreviewRefresh() {
+        guard isMarkdown else { return }
+        markdownPreviewUpdateTask?.cancel()
+        let snapshot = text
+        markdownPreviewUpdateTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            markdownPreviewText = snapshot
+        }
+    }
+
+    nonisolated private static let protectedTextReaderByteThreshold = 1_500_000
+    nonisolated private static let protectedTextReaderLineThreshold = 20_000
+
+    nonisolated private static func metrics(for text: String) -> WorkspaceTextMetrics {
+        var count = 1
+        for scalar in text.unicodeScalars where CharacterSet.newlines.contains(scalar) {
+            count += 1
+            if count > protectedTextReaderLineThreshold {
+                return WorkspaceTextMetrics(byteCount: text.utf8.count, lineCount: count)
+            }
+        }
+        return WorkspaceTextMetrics(byteCount: text.utf8.count, lineCount: count)
+    }
+}
+
+private struct WorkspaceTextMetrics: Equatable {
+    let byteCount: Int
+    let lineCount: Int
+
+    static let empty = WorkspaceTextMetrics(byteCount: 0, lineCount: 0)
 }
 
 private struct WorkspaceFileSaveRequest: Equatable {
@@ -1118,4 +1265,253 @@ private enum WorkspaceFileDiffState: Equatable {
     case idle
     case loading
     case ready(String)
+}
+
+private struct ConductorWorkspaceSourceTextView: NSViewRepresentable {
+    @Binding var text: String
+    let isEditable: Bool
+    let focusToken: Int
+    let allowsFocusRequests: Bool
+    let selectionRange: NSRange?
+    let selectionToken: Int
+    let snapshotToken: Int
+    let fontSize: CGFloat
+    let backgroundColor: NSColor
+    let textColor: NSColor
+    let mutedTextColor: NSColor
+    let onSnapshot: (String) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onSnapshot: onSnapshot)
+    }
+
+    func makeNSView(context: Context) -> SourceTextScrollView {
+        let scrollView = SourceTextScrollView()
+        scrollView.drawsBackground = true
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.scrollerStyle = .overlay
+
+        let textView = SourceTextView(frame: scrollView.bounds)
+        textView.delegate = context.coordinator
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.usesFontPanel = false
+        textView.allowsUndo = true
+        textView.isContinuousSpellCheckingEnabled = false
+        textView.isGrammarCheckingEnabled = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.minSize = NSSize(width: 0, height: scrollView.contentSize.height)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainerInset = NSSize(width: 18, height: 14)
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.containerSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        scrollView.documentView = textView
+        context.coordinator.textView = textView
+        context.coordinator.applyText(text, to: textView)
+        context.coordinator.applyConfiguration(
+            to: textView,
+            scrollView: scrollView,
+            isEditable: isEditable,
+            fontSize: fontSize,
+            backgroundColor: backgroundColor,
+            textColor: textColor,
+            insertionPointColor: mutedTextColor
+        )
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: SourceTextScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.onSnapshot = onSnapshot
+        context.coordinator.applyConfiguration(
+            to: textView,
+            scrollView: scrollView,
+            isEditable: isEditable,
+            fontSize: fontSize,
+            backgroundColor: backgroundColor,
+            textColor: textColor,
+            insertionPointColor: mutedTextColor
+        )
+        let isSnapshotRequest = context.coordinator.lastSnapshotToken != snapshotToken
+        if isSnapshotRequest {
+            context.coordinator.lastSnapshotToken = snapshotToken
+            context.coordinator.flushAndReportSnapshot(from: textView)
+        } else if textView.string != text {
+            context.coordinator.applyText(text, to: textView)
+        }
+        if allowsFocusRequests, context.coordinator.lastFocusToken != focusToken {
+            context.coordinator.lastFocusToken = focusToken
+            textView.window?.makeFirstResponder(textView)
+        }
+        if context.coordinator.lastSelectionToken != selectionToken {
+            context.coordinator.lastSelectionToken = selectionToken
+            if let selectionRange, NSMaxRange(selectionRange) <= (textView.string as NSString).length {
+                textView.setSelectedRange(selectionRange)
+                textView.scrollRangeToVisible(selectionRange)
+            }
+        }
+    }
+
+    static func dismantleNSView(_ scrollView: SourceTextScrollView, coordinator: Coordinator) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        coordinator.flushAndReportSnapshot(from: textView)
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        private let text: Binding<String>
+        var onSnapshot: (String) -> Void
+        weak var textView: NSTextView?
+        var lastFocusToken = 0
+        var lastSelectionToken = 0
+        var lastSnapshotToken = 0
+        private var isApplyingProgrammaticChange = false
+        private var lastConfiguration: Configuration?
+        private var pendingTextUpdateTask: Task<Void, Never>?
+        private var pendingText: String?
+
+        init(text: Binding<String>, onSnapshot: @escaping (String) -> Void) {
+            self.text = text
+            self.onSnapshot = onSnapshot
+        }
+
+        @MainActor
+        func textDidChange(_ notification: Notification) {
+            guard !isApplyingProgrammaticChange,
+                  let textView = notification.object as? NSTextView else {
+                return
+            }
+            scheduleTextUpdate(textView.string)
+        }
+
+        @MainActor
+        func applyText(_ newText: String, to textView: NSTextView) {
+            pendingTextUpdateTask?.cancel()
+            pendingText = nil
+            isApplyingProgrammaticChange = true
+            let selectedRange = textView.selectedRange()
+            textView.string = newText
+            let maxLength = (newText as NSString).length
+            if selectedRange.location <= maxLength {
+                textView.setSelectedRange(NSRange(location: selectedRange.location, length: min(selectedRange.length, maxLength - selectedRange.location)))
+            }
+            isApplyingProgrammaticChange = false
+        }
+
+        @MainActor
+        func flushAndReportSnapshot(from textView: NSTextView) {
+            let snapshot = textView.string
+            commitTextUpdate(snapshot)
+            onSnapshot(snapshot)
+        }
+
+        @MainActor
+        func applyConfiguration(
+            to textView: NSTextView,
+            scrollView: NSScrollView,
+            isEditable: Bool,
+            fontSize: CGFloat,
+            backgroundColor: NSColor,
+            textColor: NSColor,
+            insertionPointColor: NSColor
+        ) {
+            let configuration = Configuration(
+                isEditable: isEditable,
+                fontSize: fontSize,
+                backgroundColor: backgroundColor,
+                textColor: textColor,
+                insertionPointColor: insertionPointColor
+            )
+            guard configuration != lastConfiguration else { return }
+            lastConfiguration = configuration
+            scrollView.backgroundColor = backgroundColor
+            textView.backgroundColor = backgroundColor
+            textView.textColor = textColor
+            textView.insertionPointColor = insertionPointColor
+            textView.isEditable = isEditable
+            textView.isSelectable = true
+            (textView as? SourceTextView)?.usesInputCursor = isEditable
+            textView.window?.invalidateCursorRects(for: textView)
+            textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        }
+
+        private struct Configuration: Equatable {
+            let isEditable: Bool
+            let fontSize: CGFloat
+            let backgroundColor: NSColor
+            let textColor: NSColor
+            let insertionPointColor: NSColor
+        }
+
+        @MainActor
+        private func scheduleTextUpdate(_ snapshot: String) {
+            pendingText = snapshot
+            pendingTextUpdateTask?.cancel()
+            pendingTextUpdateTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(90))
+                guard !Task.isCancelled else { return }
+                guard let pendingText else { return }
+                commitTextUpdate(pendingText)
+            }
+        }
+
+        @MainActor
+        private func commitTextUpdate(_ snapshot: String) {
+            pendingTextUpdateTask?.cancel()
+            pendingTextUpdateTask = nil
+            pendingText = nil
+            guard text.wrappedValue != snapshot else { return }
+            text.wrappedValue = snapshot
+        }
+    }
+}
+
+private final class SourceTextView: NSTextView {
+    var usesInputCursor = true {
+        didSet {
+            guard usesInputCursor != oldValue else { return }
+            window?.invalidateCursorRects(for: self)
+            (usesInputCursor ? NSCursor.iBeam : NSCursor.arrow).set()
+        }
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(visibleRect, cursor: usesInputCursor ? .iBeam : .arrow)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        (usesInputCursor ? NSCursor.iBeam : NSCursor.arrow).set()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        NSCursor.arrow.set()
+    }
+}
+
+private final class SourceTextScrollView: NSScrollView {
+    override func viewWillStartLiveResize() {
+        super.viewWillStartLiveResize()
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+        documentView?.layerContentsRedrawPolicy = .onSetNeedsDisplay
+    }
+
+    override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        layerContentsRedrawPolicy = .duringViewResize
+        documentView?.layerContentsRedrawPolicy = .duringViewResize
+        documentView?.needsDisplay = true
+    }
 }

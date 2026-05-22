@@ -186,10 +186,19 @@ final class TerminalSurfaceContainerView: NSView {
               let surface = currentSurface,
               let window,
               surface.hostView.window === window,
-              window.firstResponder !== surface.hostView else {
+              window.firstResponder !== surface.hostView,
+              shouldRestoreTerminalFocus(firstResponder: window.firstResponder, hostView: surface.hostView) else {
             return
         }
         window.makeFirstResponder(surface.hostView)
+    }
+
+    private func shouldRestoreTerminalFocus(firstResponder: NSResponder?, hostView: NSView) -> Bool {
+        guard let firstResponder else { return true }
+        guard let responderView = firstResponder as? NSView else { return false }
+        if responderView === self { return true }
+        if responderView === hostView || responderView.isDescendant(of: hostView) { return true }
+        return false
     }
 
     private func resignFocusIfNeeded(for surface: TerminalSurface) {

@@ -17,6 +17,10 @@ private struct ConductorSplitResizeActiveKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct ConductorFilePanelLayoutActiveKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     var conductorFontScale: AppearanceFontScale {
         get { self[ConductorFontScaleKey.self] }
@@ -36,6 +40,11 @@ extension EnvironmentValues {
     var conductorSplitResizeActive: Bool {
         get { self[ConductorSplitResizeActiveKey.self] }
         set { self[ConductorSplitResizeActiveKey.self] = newValue }
+    }
+
+    var conductorFilePanelLayoutActive: Bool {
+        get { self[ConductorFilePanelLayoutActiveKey.self] }
+        set { self[ConductorFilePanelLayoutActiveKey.self] = newValue }
     }
 }
 
@@ -670,8 +679,8 @@ enum ConductorMotion {
 
     static var panelTransition: AnyTransition {
         reducedMotion ? .identity : .modifier(
-            active: ConductorPanelRevealModifier(opacity: 0, scale: 0.988, y: -4, blur: 2),
-            identity: ConductorPanelRevealModifier(opacity: 1, scale: 1, y: 0, blur: 0)
+            active: ConductorPanelRevealModifier(opacity: 0, y: -4),
+            identity: ConductorPanelRevealModifier(opacity: 1, y: 0)
         )
     }
 
@@ -681,23 +690,23 @@ enum ConductorMotion {
 
     static var searchTransition: AnyTransition {
         reducedMotion ? .identity : .modifier(
-            active: ConductorPanelRevealModifier(opacity: 0, scale: 0.992, y: -4, blur: 1.5),
-            identity: ConductorPanelRevealModifier(opacity: 1, scale: 1, y: 0, blur: 0)
+            active: ConductorPanelRevealModifier(opacity: 0, y: -3),
+            identity: ConductorPanelRevealModifier(opacity: 1, y: 0)
         )
     }
 
     static var tabTransition: AnyTransition {
-        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.988))
+        reducedMotion ? .identity : .opacity
     }
 
     static var rowTransition: AnyTransition {
-        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.996, anchor: .center))
+        reducedMotion ? .identity : .opacity
     }
 
     static var notificationRowTransition: AnyTransition {
         reducedMotion ? .identity : .asymmetric(
             insertion: .opacity.combined(with: .offset(y: -4)),
-            removal: .opacity.combined(with: .scale(scale: 0.992, anchor: .center))
+            removal: .opacity
         )
     }
 
@@ -707,6 +716,21 @@ enum ConductorMotion {
 
     static func setReducedMotion(_ value: Bool) {
         reducedMotion = value
+    }
+
+    static func rowTransition(itemCount: Int) -> AnyTransition {
+        guard itemCount <= animatedCollectionLimit else { return .identity }
+        return rowTransition
+    }
+
+    static func notificationRowTransition(itemCount: Int) -> AnyTransition {
+        guard itemCount <= animatedCollectionLimit else { return .identity }
+        return notificationRowTransition
+    }
+
+    static func list(itemCount: Int) -> Animation? {
+        guard itemCount <= animatedCollectionLimit else { return nil }
+        return list
     }
 
     static func magnetic(duration: Double = 0.18, bounce: Double = 0.045) -> Animation? {
@@ -738,20 +762,18 @@ enum ConductorMotion {
         }
         return transaction
     }
+
+    private static let animatedCollectionLimit = 80
 }
 
 private struct ConductorPanelRevealModifier: ViewModifier {
     let opacity: Double
-    let scale: CGFloat
     let y: CGFloat
-    let blur: CGFloat
 
     func body(content: Content) -> some View {
         content
             .opacity(opacity)
-            .scaleEffect(scale, anchor: .topTrailing)
             .offset(y: y)
-            .blur(radius: blur)
     }
 }
 
@@ -800,8 +822,7 @@ struct ConductorMagneticGlow: View {
 private final class MacNativeTooltipView: NSView {
     var text: String = "" {
         didSet {
-            toolTip = text
-            updateActiveTarget()
+            updateHoverStateFromWindowMouse()
             if isHovering {
                 showTooltip()
             }
@@ -810,10 +831,6 @@ private final class MacNativeTooltipView: NSView {
 
     private var isHovering = false
     private var trackingAreaToken: NSTrackingArea?
-    private weak var activeTarget: NSView?
-    private var previousTargetTooltip: String?
-    private weak var registeredToolTipView: NSView?
-    private var registeredToolTipTag: NSView.ToolTipTag?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -830,8 +847,7 @@ private final class MacNativeTooltipView: NSView {
     override func layout() {
         super.layout()
         rebuildTrackingArea()
-        registerWindowToolTipRect()
-        updateActiveTarget()
+        updateHoverStateFromWindowMouse()
     }
 
     override func updateTrackingAreas() {
@@ -846,26 +862,22 @@ private final class MacNativeTooltipView: NSView {
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
         isHovering = true
-        updateActiveTarget()
         showTooltip()
     }
 
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        updateActiveTarget()
+        updateHoverStateFromWindowMouse()
     }
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         isHovering = false
-        restoreActiveTarget()
         closeTooltip()
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         if newWindow == nil {
-            unregisterWindowToolTipRect()
-            restoreActiveTarget()
             closeTooltip()
         }
         super.viewWillMove(toWindow: newWindow)
@@ -874,16 +886,6 @@ private final class MacNativeTooltipView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         rebuildTrackingArea()
-        registerWindowToolTipRect()
-    }
-
-    @objc func view(
-        _ view: NSView,
-        stringForToolTip tag: NSView.ToolTipTag,
-        point: NSPoint,
-        userData data: UnsafeMutableRawPointer?
-    ) -> String {
-        text
     }
 
     private func rebuildTrackingArea() {
@@ -904,61 +906,21 @@ private final class MacNativeTooltipView: NSView {
         addTrackingArea(trackingArea)
     }
 
-    private func registerWindowToolTipRect() {
-        unregisterWindowToolTipRect()
-        guard !bounds.isEmpty,
-              !text.isEmpty,
-              let contentView = window?.contentView else {
+    private func updateHoverStateFromWindowMouse() {
+        guard !text.isEmpty, let window else {
+            isHovering = false
+            closeTooltip()
             return
         }
-        let rectInContent = contentView.convert(bounds, from: self)
-        guard !rectInContent.isEmpty else { return }
-        registeredToolTipView = contentView
-        registeredToolTipTag = contentView.addToolTip(rectInContent, owner: self, userData: nil)
-    }
-
-    private func unregisterWindowToolTipRect() {
-        guard let registeredToolTipView, let registeredToolTipTag else { return }
-        registeredToolTipView.removeToolTip(registeredToolTipTag)
-        self.registeredToolTipView = nil
-        self.registeredToolTipTag = nil
-    }
-
-    private func updateActiveTarget() {
-        guard !text.isEmpty,
-              let window,
-              let contentView = window.contentView else {
-            restoreActiveTarget()
-            return
+        let localPoint = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        let nowHovering = bounds.contains(localPoint)
+        if nowHovering {
+            isHovering = true
+            showTooltip()
+        } else if isHovering {
+            isHovering = false
+            closeTooltip()
         }
-
-        let windowPoint = window.mouseLocationOutsideOfEventStream
-        let localPoint = convert(windowPoint, from: nil)
-        guard bounds.contains(localPoint) else {
-            restoreActiveTarget()
-            return
-        }
-
-        let contentPoint = contentView.convert(windowPoint, from: nil)
-        guard let target = contentView.hitTest(contentPoint), target !== self else {
-            restoreActiveTarget()
-            return
-        }
-
-        if activeTarget !== target {
-            restoreActiveTarget()
-            activeTarget = target
-            previousTargetTooltip = target.toolTip
-        }
-        target.toolTip = text
-    }
-
-    private func restoreActiveTarget() {
-        if let activeTarget {
-            activeTarget.toolTip = previousTargetTooltip
-        }
-        activeTarget = nil
-        previousTargetTooltip = nil
     }
 
     private func showTooltip() {
@@ -989,7 +951,6 @@ extension View {
     func macNativeTooltip(_ text: String, enabled: Bool = true) -> some View {
         if enabled && !text.isEmpty {
             self
-                .help(text)
                 .overlay {
                     GeometryReader { _ in
                         MacNativeTooltipInstaller(text: text)
@@ -1074,7 +1035,7 @@ struct ConductorNativeIconButton: NSViewRepresentable {
     final class NativeTooltipButton: NSButton {
         var tooltipText = "" {
             didSet {
-                toolTip = tooltipText
+                updateHoverStateFromWindowMouse()
                 if isHovering {
                     showTooltip()
                 }
@@ -1099,7 +1060,7 @@ struct ConductorNativeIconButton: NSViewRepresentable {
             }
             let trackingArea = NSTrackingArea(
                 rect: bounds,
-                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
                 owner: self,
                 userInfo: nil
             )
@@ -1119,6 +1080,11 @@ struct ConductorNativeIconButton: NSViewRepresentable {
             closeTooltip()
         }
 
+        override func mouseMoved(with event: NSEvent) {
+            super.mouseMoved(with: event)
+            updateHoverStateFromWindowMouse()
+        }
+
         override func mouseDown(with event: NSEvent) {
             closeTooltip()
             super.mouseDown(with: event)
@@ -1126,9 +1092,32 @@ struct ConductorNativeIconButton: NSViewRepresentable {
 
         override func viewWillMove(toWindow newWindow: NSWindow?) {
             if newWindow == nil {
+                isHovering = false
                 closeTooltip()
             }
             super.viewWillMove(toWindow: newWindow)
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            updateHoverStateFromWindowMouse()
+        }
+
+        private func updateHoverStateFromWindowMouse() {
+            guard !tooltipText.isEmpty, let window else {
+                isHovering = false
+                closeTooltip()
+                return
+            }
+            let localPoint = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+            let nowHovering = bounds.contains(localPoint)
+            if nowHovering {
+                isHovering = true
+                showTooltip()
+            } else if isHovering {
+                isHovering = false
+                closeTooltip()
+            }
         }
 
         private func showTooltip() {
@@ -1153,6 +1142,7 @@ private final class ConductorTooltipPanelManager {
 
     private weak var sourceView: NSView?
     private var panel: ConductorTooltipPanel?
+    private var eventMonitor: Any?
 
     func show(text: String, relativeTo view: NSView) {
         guard !text.isEmpty,
@@ -1194,6 +1184,7 @@ private final class ConductorTooltipPanelManager {
         panel.contentViewController = viewController
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
         panel.orderFrontRegardless()
+        installEventMonitorIfNeeded()
     }
 
     func hide(for view: NSView) {
@@ -1204,6 +1195,39 @@ private final class ConductorTooltipPanelManager {
     func hide() {
         panel?.orderOut(nil)
         sourceView = nil
+        uninstallEventMonitor()
+    }
+
+    private func installEventMonitorIfNeeded() {
+        guard eventMonitor == nil else { return }
+        eventMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
+        ) { [weak self] event in
+            Task { @MainActor in
+                self?.hideIfMouseLeftSource()
+            }
+            return event
+        }
+    }
+
+    private func uninstallEventMonitor() {
+        guard let eventMonitor else { return }
+        NSEvent.removeMonitor(eventMonitor)
+        self.eventMonitor = nil
+    }
+
+    private func hideIfMouseLeftSource() {
+        guard let sourceView,
+              let sourceWindow = sourceView.window,
+              !sourceView.isHidden,
+              !sourceView.bounds.isEmpty else {
+            hide()
+            return
+        }
+        let localPoint = sourceView.convert(sourceWindow.mouseLocationOutsideOfEventStream, from: nil)
+        if !sourceView.bounds.contains(localPoint) {
+            hide()
+        }
     }
 
     private func makePanel() -> ConductorTooltipPanel {
@@ -1361,6 +1385,8 @@ struct ConductorHorizontalFadeMask: View {
 
 struct ConductorVerticalFadeMask: View {
     var edgeHeight: CGFloat = 16
+    var fadesTop = true
+    var fadesBottom = true
 
     var body: some View {
         GeometryReader { proxy in
@@ -1368,10 +1394,10 @@ struct ConductorVerticalFadeMask: View {
             let stop = min(edgeHeight / height, 0.45)
             LinearGradient(
                 stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: .black, location: stop),
-                    .init(color: .black, location: 1 - stop),
-                    .init(color: .clear, location: 1)
+                    .init(color: fadesTop ? .clear : .black, location: 0),
+                    .init(color: .black, location: fadesTop ? stop : 0),
+                    .init(color: .black, location: fadesBottom ? 1 - stop : 1),
+                    .init(color: fadesBottom ? .clear : .black, location: 1)
                 ],
                 startPoint: .top,
                 endPoint: .bottom

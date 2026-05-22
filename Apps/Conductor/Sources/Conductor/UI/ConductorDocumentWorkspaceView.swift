@@ -7,6 +7,55 @@ private func L(_ zh: String, _ en: String) -> String {
     ConductorLocalization.text(zh: zh, en: en)
 }
 
+enum ConductorDocumentChromeStyle: String {
+    case full
+    case plain
+}
+
+private final class ConductorDocumentVendorCache: @unchecked Sendable {
+    static let shared = ConductorDocumentVendorCache()
+
+    private let scripts = NSCache<NSString, NSString>()
+    private let styles = NSCache<NSString, NSString>()
+    private let base64Scripts = NSCache<NSString, NSString>()
+
+    private init() {
+        scripts.countLimit = 16
+        styles.countLimit = 8
+        base64Scripts.countLimit = 4
+    }
+
+    func script(_ name: String, load: () -> String) -> String {
+        let key = name as NSString
+        if let cached = scripts.object(forKey: key) {
+            return cached as String
+        }
+        let loaded = load()
+        scripts.setObject(loaded as NSString, forKey: key)
+        return loaded
+    }
+
+    func style(_ name: String, load: () -> String) -> String {
+        let key = name as NSString
+        if let cached = styles.object(forKey: key) {
+            return cached as String
+        }
+        let loaded = load()
+        styles.setObject(loaded as NSString, forKey: key)
+        return loaded
+    }
+
+    func scriptBase64(_ name: String, load: () -> String) -> String {
+        let key = name as NSString
+        if let cached = base64Scripts.object(forKey: key) {
+            return cached as String
+        }
+        let loaded = load()
+        base64Scripts.setObject(loaded as NSString, forKey: key)
+        return loaded
+    }
+}
+
 struct ConductorDocumentWorkspaceView: View {
     let fileURL: URL
     let rootURL: URL
@@ -14,6 +63,9 @@ struct ConductorDocumentWorkspaceView: View {
     let theme: TerminalTheme
     let fontSize: CGFloat
     let isActive: Bool
+    let textOverride: String?
+    let chromeStyle: ConductorDocumentChromeStyle
+    let layoutRevision: Int
     let searchQuery: String
     let searchRevision: Int
     let searchNextToken: Int
@@ -22,10 +74,47 @@ struct ConductorDocumentWorkspaceView: View {
 
     @StateObject private var loader = ConductorDocumentViewerLoader()
 
+    init(
+        fileURL: URL,
+        rootURL: URL,
+        title: String,
+        theme: TerminalTheme,
+        fontSize: CGFloat,
+        isActive: Bool,
+        textOverride: String? = nil,
+        chromeStyle: ConductorDocumentChromeStyle = .full,
+        layoutRevision: Int,
+        searchQuery: String,
+        searchRevision: Int,
+        searchNextToken: Int,
+        searchPreviousToken: Int,
+        onSearchStatusChange: @escaping (String) -> Void
+    ) {
+        self.fileURL = fileURL
+        self.rootURL = rootURL
+        self.title = title
+        self.theme = theme
+        self.fontSize = fontSize
+        self.isActive = isActive
+        self.textOverride = textOverride
+        self.chromeStyle = chromeStyle
+        self.layoutRevision = layoutRevision
+        self.searchQuery = searchQuery
+        self.searchRevision = searchRevision
+        self.searchNextToken = searchNextToken
+        self.searchPreviousToken = searchPreviousToken
+        self.onSearchStatusChange = onSearchStatusChange
+    }
+
     var body: some View {
+        let payload = textOverride.map {
+            ConductorDocumentPayload.textOverride(fileURL: fileURL, rootURL: rootURL, title: title, text: $0)
+        } ?? loader.payload
         ConductorDocumentWebView(
-            payload: loader.payload,
+            payload: payload,
             theme: ConductorDocumentWebTheme(theme: theme, fontSize: fontSize),
+            chromeStyle: chromeStyle,
+            layoutRevision: layoutRevision,
             searchQuery: searchQuery,
             searchRevision: searchRevision,
             searchNextToken: searchNextToken,
@@ -35,10 +124,11 @@ struct ConductorDocumentWorkspaceView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.terminalBackground)
         .task(id: fileURL.standardizedFileURL.path) {
+            guard textOverride == nil else { return }
             await loader.load(fileURL: fileURL, rootURL: rootURL, title: title)
         }
         .onChange(of: isActive) { _, active in
-            guard active else { return }
+            guard active, textOverride == nil else { return }
             Task {
                 await loader.reloadIfNeeded(fileURL: fileURL, rootURL: rootURL, title: title)
             }
@@ -120,6 +210,27 @@ private struct ConductorDocumentPayload: Equatable, Sendable {
             byteCount: 0,
             isTruncated: false,
             message: L("正在准备文档查看器", "Preparing document viewer")
+        )
+    }
+
+    nonisolated static func textOverride(fileURL rawFileURL: URL, rootURL rawRootURL: URL, title: String, text: String) -> ConductorDocumentPayload {
+        let fileURL = rawFileURL.standardizedFileURL
+        let rootURL = rawRootURL.standardizedFileURL
+        let fileExtension = fileURL.pathExtension.lowercased()
+        let kind = kind(for: fileURL, contentType: UTType(filenameExtension: fileExtension))
+        return ConductorDocumentPayload(
+            renderID: "text-override-\(fileURL.path)-\(text.hashValue)",
+            title: title,
+            subtitle: relativePath(for: fileURL, rootURL: rootURL),
+            kind: kind,
+            text: text,
+            binaryBase64: nil,
+            fileURLString: fileURL.absoluteString,
+            baseURLString: fileURL.deletingLastPathComponent().absoluteString,
+            fileExtension: fileExtension,
+            byteCount: Int64(text.utf8.count),
+            isTruncated: false,
+            message: nil
         )
     }
 
@@ -358,8 +469,9 @@ private struct ConductorDocumentWebTheme: Equatable {
 private final class ConductorDocumentWebContainerView: NSView {
     let webView: WKWebView
     private let resizeCover = CALayer()
-    private var isFreezingWebViewResize = false
     private var pendingFrameAfterResize = false
+    private var deferredResizeCommit: DispatchWorkItem?
+    private var deferredHTMLReload: DispatchWorkItem?
 
     init(webView: WKWebView) {
         self.webView = webView
@@ -369,7 +481,14 @@ private final class ConductorDocumentWebContainerView: NSView {
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.autoresizingMask = []
         addSubview(webView)
+        NSLayoutConstraint.activate([
+            webView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            webView.topAnchor.constraint(equalTo: topAnchor),
+            webView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
         resizeCover.opacity = 0
+        resizeCover.isHidden = true
         layer?.addSublayer(resizeCover)
     }
 
@@ -380,60 +499,88 @@ private final class ConductorDocumentWebContainerView: NSView {
 
     override func layout() {
         super.layout()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        resizeCover.frame = bounds
-        if isFreezingWebViewResize || inLiveResize {
-            pendingFrameAfterResize = true
-            resizeCover.opacity = 1
-        } else {
-            webView.frame = bounds
-            resizeCover.opacity = 0
-            pendingFrameAfterResize = false
-        }
-        CATransaction.commit()
+        applyPendingResize(force: true)
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        applyPendingResize(force: true)
+    }
+
+    override func setBoundsSize(_ newSize: NSSize) {
+        super.setBoundsSize(newSize)
+        applyPendingResize(force: true)
     }
 
     override func viewWillStartLiveResize() {
         super.viewWillStartLiveResize()
-        isFreezingWebViewResize = true
-        pendingFrameAfterResize = true
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        resizeCover.opacity = 1
-        CATransaction.commit()
+        applyPendingResize(force: true)
     }
 
     override func viewDidEndLiveResize() {
         super.viewDidEndLiveResize()
-        isFreezingWebViewResize = false
-        applyPendingResize()
+        cancelDeferredResizeCommit()
+        applyPendingResize(force: true)
     }
 
     func loadHTMLString(_ html: String, baseURL: URL?, backgroundColor: NSColor) {
+        deferredHTMLReload?.cancel()
+        deferredHTMLReload = nil
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer?.backgroundColor = backgroundColor.cgColor
         resizeCover.backgroundColor = backgroundColor.cgColor
+        resizeCover.opacity = 0
+        resizeCover.isHidden = true
         CATransaction.commit()
         webView.loadHTMLString(html, baseURL: baseURL)
+        applyPendingResize(force: true)
+        scheduleDeferredResizeCommit()
     }
 
-    private func applyPendingResize() {
-        guard pendingFrameAfterResize else { return }
+    func reloadHTMLStringAfterLayout(_ html: String, baseURL: URL?, backgroundColor: NSColor) {
+        deferredHTMLReload?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.loadHTMLString(html, baseURL: baseURL, backgroundColor: backgroundColor)
+        }
+        deferredHTMLReload = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
+    }
+
+    private func scheduleDeferredResizeCommit() {
+        deferredResizeCommit?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.applyPendingResize(force: true)
+        }
+        deferredResizeCommit = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
+    }
+
+    private func cancelDeferredResizeCommit() {
+        deferredResizeCommit?.cancel()
+        deferredResizeCommit = nil
+    }
+
+    private func applyPendingResize(force: Bool = false) {
+        guard force || pendingFrameAfterResize else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         webView.frame = bounds
         resizeCover.frame = bounds
         resizeCover.opacity = 0
+        resizeCover.isHidden = true
         CATransaction.commit()
         pendingFrameAfterResize = false
+        webView.setNeedsDisplay(bounds)
     }
 }
 
 private struct ConductorDocumentWebView: NSViewRepresentable {
     let payload: ConductorDocumentPayload
     let theme: ConductorDocumentWebTheme
+    let chromeStyle: ConductorDocumentChromeStyle
+    let layoutRevision: Int
     let searchQuery: String
     let searchRevision: Int
     let searchNextToken: Int
@@ -462,17 +609,20 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
 
     func updateNSView(_ container: ConductorDocumentWebContainerView, context: Context) {
         context.coordinator.onSearchStatusChange = onSearchStatusChange
-        let signature = "\(payload.renderID)|\(theme.signature)"
+        let signature = "\(payload.renderID)|\(theme.signature)|\(chromeStyle.rawValue)"
         context.coordinator.currentSearchQuery = searchQuery
         if context.coordinator.loadedSignature != signature {
             context.coordinator.loadedSignature = signature
+            context.coordinator.layoutRevision = layoutRevision
             context.coordinator.hasFinishedNavigation = false
             context.coordinator.searchSignature = nil
             context.coordinator.nextToken = searchNextToken
             context.coordinator.previousToken = searchPreviousToken
-            container.loadHTMLString(Self.html(payload: payload, theme: theme), baseURL: payload.baseURL, backgroundColor: theme.backgroundColor)
+            let html = Self.html(payload: payload, theme: theme, chromeStyle: chromeStyle)
+            container.loadHTMLString(html, baseURL: payload.baseURL, backgroundColor: theme.backgroundColor)
             return
         }
+        context.coordinator.layoutRevision = layoutRevision
         context.coordinator.applySearchStateIfNeeded(
             to: container,
             query: searchQuery,
@@ -484,6 +634,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var loadedSignature: String?
+        var layoutRevision = 0
         var searchSignature: String?
         var nextToken = 0
         var previousToken = 0
@@ -549,7 +700,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         }
     }
 
-    private static func html(payload: ConductorDocumentPayload, theme: ConductorDocumentWebTheme) -> String {
+    private static func html(payload: ConductorDocumentPayload, theme: ConductorDocumentWebTheme, chromeStyle: ConductorDocumentChromeStyle) -> String {
         let payloadJSON = jsonLiteral(payload.dictionary).replacingOccurrences(of: "</", with: "<\\/")
         let themeJSON = jsonLiteral(theme.dictionary).replacingOccurrences(of: "</", with: "<\\/")
         return """
@@ -571,7 +722,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         <script>\(vendorScript("mammoth.browser.min"))</script>
         <script>\(vendorScript("xlsx.full.min"))</script>
         </head>
-        <body>
+        <body class="chrome-\(chromeStyle.rawValue)">
         <main id="root"></main>
         <script>
         window.__CONDUCTOR_DOCUMENT__ = \(payloadJSON);
@@ -585,38 +736,44 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
     }
 
     private static func vendorScript(_ name: String) -> String {
-        guard let url = Bundle.module.url(
-            forResource: name,
-            withExtension: "js",
-            subdirectory: "DocumentViewer/vendor"
-        ), let script = try? String(contentsOf: url, encoding: .utf8) else {
-            return ""
+        ConductorDocumentVendorCache.shared.script(name) {
+            guard let url = Bundle.module.url(
+                forResource: name,
+                withExtension: "js",
+                subdirectory: "DocumentViewer/vendor"
+            ), let script = try? String(contentsOf: url, encoding: .utf8) else {
+                return ""
+            }
+            return script
         }
-        return script
     }
 
     private static func vendorStyle(_ name: String) -> String {
-        guard let url = Bundle.module.url(
-            forResource: name,
-            withExtension: "css",
-            subdirectory: "DocumentViewer/vendor"
-        ), let style = try? String(contentsOf: url, encoding: .utf8) else {
-            return ""
-        }
-        var rewritten = style
-        if let fontURLs = Bundle.module.urls(forResourcesWithExtension: "woff2", subdirectory: "DocumentViewer/vendor/fonts") {
-            for fontURL in fontURLs {
-                rewritten = rewritten.replacingOccurrences(
-                    of: "url(fonts/\(fontURL.lastPathComponent))",
-                    with: "url('\(fontURL.absoluteString)')"
-                )
+        ConductorDocumentVendorCache.shared.style(name) {
+            guard let url = Bundle.module.url(
+                forResource: name,
+                withExtension: "css",
+                subdirectory: "DocumentViewer/vendor"
+            ), let style = try? String(contentsOf: url, encoding: .utf8) else {
+                return ""
             }
+            var rewritten = style
+            if let fontURLs = Bundle.module.urls(forResourcesWithExtension: "woff2", subdirectory: "DocumentViewer/vendor/fonts") {
+                for fontURL in fontURLs {
+                    rewritten = rewritten.replacingOccurrences(
+                        of: "url(fonts/\(fontURL.lastPathComponent))",
+                        with: "url('\(fontURL.absoluteString)')"
+                    )
+                }
+            }
+            return rewritten
         }
-        return rewritten
     }
 
     private static func vendorScriptBase64(_ name: String) -> String {
-        Data(vendorScript(name).utf8).base64EncodedString()
+        ConductorDocumentVendorCache.shared.scriptBase64(name) {
+            Data(vendorScript(name).utf8).base64EncodedString()
+        }
     }
 
     private static func jsonStringLiteral(_ value: String) -> String {
@@ -676,6 +833,13 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           padding: 22px 28px 18px;
           border-bottom: 1px solid var(--stroke);
           background: color-mix(in srgb, var(--chrome) 72%, transparent);
+        }
+        .chrome-plain .doc-shell {
+          display: block;
+          background: var(--bg);
+        }
+        .chrome-plain .doc-header {
+          display: none;
         }
         .doc-identity {
           display: grid;
@@ -745,6 +909,9 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           padding: 30px clamp(26px, 4vw, 58px) 48px;
           line-height: 1.66;
         }
+        .chrome-plain .reader {
+          padding: 16px clamp(22px, 3vw, 42px) 48px;
+        }
         .reader.narrow {
           max-width: 1040px;
           margin: 0 auto;
@@ -763,6 +930,11 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           padding: 24px 18px;
           border-left: 1px solid var(--stroke);
           background: color-mix(in srgb, var(--chrome) 58%, transparent);
+        }
+        .chrome-plain .outline {
+          border-left: 0;
+          background: transparent;
+          padding-top: 16px;
         }
         .outline-title {
           display: flex;
@@ -812,10 +984,11 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         .markdown {
           line-height: 1.62;
         }
-        .markdown h1, .markdown h2, .markdown h3 {
+        .markdown h1, .markdown h2, .markdown h3, .markdown h4 {
           line-height: 1.18;
           margin: 1.35em 0 .62em;
           letter-spacing: 0;
+          scroll-margin-top: 14px;
         }
         .markdown h1 {
           font-size: 2.08em;
@@ -827,10 +1000,12 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           padding-bottom: .28em;
           border-bottom: 1px solid color-mix(in srgb, var(--stroke) 72%, transparent);
         }
+        .chrome-plain .markdown h1,
+        .chrome-plain .markdown h2 {
+          padding-bottom: 0;
+          border-bottom: 0;
+        }
         .markdown h3 { font-size: 1.15em; }
-        .markdown h1,
-        .markdown h2,
-        .markdown h3,
         .markdown p,
         .markdown ul,
         .markdown ol,
@@ -911,6 +1086,11 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           overflow: hidden;
           background: var(--code-bg);
         }
+        .chrome-plain .source-panel {
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+        }
         .source-panel-head {
           display: flex;
           align-items: center;
@@ -923,6 +1103,9 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           font-size: 12px;
           font-weight: 720;
         }
+        .chrome-plain .source-panel-head {
+          display: none;
+        }
         .source-panel pre {
           margin: 0;
           min-height: calc(100vh - 214px);
@@ -931,6 +1114,13 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           background: transparent;
           color: var(--text);
           white-space: pre;
+        }
+        .chrome-plain .source-panel pre {
+          min-height: calc(100vh - 64px);
+          padding: 0;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
         }
         .media {
           width: 100%;
@@ -1115,6 +1305,27 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         function highlightAll() {
           if (!window.hljs) return;
           document.querySelectorAll('pre code').forEach(block => window.hljs.highlightElement(block));
+        }
+
+        function shouldHighlightSource(label) {
+          if (!window.hljs || payload.kind !== 'code') return false;
+          const ext = String(payload.fileExtension || '').toLowerCase();
+          if (['log', 'out', 'stdout', 'stderr', 'trace', 'txt', 'text'].includes(ext)) return false;
+          const text = payload.text || '';
+          return text.length <= 500000 && lineCount(text) <= 6000;
+        }
+
+        function sourcePanelHTML(label, lineTotal) {
+          return `<div class="source-panel"><div class="source-panel-head"><span>${escapeHTML(label)} source</span><span>${lineTotal} lines</span></div><pre><code id="source-code"></code></pre></div>`;
+        }
+
+        function setSourceText(text, highlightLabel = '') {
+          const node = document.getElementById('source-code');
+          if (!node) return;
+          node.textContent = text || '';
+          if (highlightLabel && shouldHighlightSource(highlightLabel)) {
+            window.hljs.highlightElement(node);
+          }
         }
 
         function currentSearchStatus() {
@@ -1325,10 +1536,99 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
 
         function outlineHTML(items) {
           if (!items || !items.length) return '';
-          const links = items.map(item => (
-            `<a class="level-${Math.min(6, item.level || 2)}" href="#${escapeHTML(item.id)}" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</a>`
+          const links = items.map((item, index) => (
+            `<a class="level-${Math.min(6, item.level || 2)}" href="#${escapeHTML(item.id)}" data-outline-index="${index}" data-outline-target="${escapeHTML(item.id)}" data-outline-line="${Number(item.line || 0)}" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</a>`
           )).join('');
           return `<aside class="outline"><div class="outline-title"><span>Outline</span><span>${items.length}</span></div><nav class="outline-list">${links}</nav></aside>`;
+        }
+
+        function documentScrollTop() {
+          const scroller = document.scrollingElement || document.documentElement || document.body;
+          return window.pageYOffset || scroller.scrollTop || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        }
+
+        function scrollDocumentTo(top) {
+          const y = Math.max(0, Number(top) || 0);
+          const scroller = document.scrollingElement || document.documentElement || document.body;
+          try {
+            window.scrollTo({ top: y, behavior: 'smooth' });
+          } catch (_) {
+            window.scrollTo(0, y);
+          }
+          requestAnimationFrame(() => {
+            if (Math.abs(documentScrollTop() - y) <= 2) return;
+            if (scroller && typeof scroller.scrollTo === 'function') {
+              try { scroller.scrollTo({ top: y, behavior: 'smooth' }); } catch (_) { scroller.scrollTop = y; }
+            } else if (scroller) {
+              scroller.scrollTop = y;
+            }
+            document.documentElement.scrollTop = y;
+            document.body.scrollTop = y;
+          });
+        }
+
+        function scrollElementIntoView(target) {
+          const top = target.getBoundingClientRect().top + documentScrollTop() - 14;
+          try {
+            target.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'smooth' });
+          } catch (_) {
+            target.scrollIntoView(true);
+          }
+          scrollDocumentTo(top);
+        }
+
+        function outlineTargetByID(id) {
+          if (!id) return null;
+          let target = document.getElementById(id);
+          if (target) return target;
+          if (window.CSS && typeof window.CSS.escape === 'function') {
+            target = document.querySelector(`#${CSS.escape(id)}`);
+            if (target) return target;
+          }
+          return null;
+        }
+
+        function scrollSourceLineIntoView(line) {
+          const code = document.getElementById('source-code');
+          if (!code || !line) return false;
+          const pre = code.closest('pre') || code;
+          const style = window.getComputedStyle(code);
+          const fontSize = Number.parseFloat(style.fontSize) || 13;
+          const lineHeight = Number.parseFloat(style.lineHeight) || fontSize * 1.48;
+          const top = pre.getBoundingClientRect().top + documentScrollTop() + Math.max(0, line - 1) * lineHeight - 14;
+          scrollDocumentTo(top);
+          return true;
+        }
+
+        function outlineHeadings() {
+          return Array.from(document.querySelectorAll('.reader h1, .reader h2, .reader h3, .reader h4'));
+        }
+
+        function installOutlineNavigation() {
+          const outline = document.querySelector('.outline');
+          if (!outline) return;
+          outline.addEventListener('click', event => {
+            const eventTarget = event.target instanceof Element ? event.target : event.target?.parentElement;
+            const link = eventTarget?.closest('a[data-outline-target]');
+            if (!link || !outline.contains(link)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const id = link.getAttribute('data-outline-target') || '';
+            const index = Number(link.getAttribute('data-outline-index') || '0');
+            const line = Number(link.getAttribute('data-outline-line') || '0');
+            const headings = outlineHeadings();
+            const target = outlineTargetByID(id) || headings[index] || headings.find(node => node.id === id);
+            if (target) {
+              scrollElementIntoView(target);
+              if (target.id) {
+                history.replaceState(null, '', `#${encodeURIComponent(target.id)}`);
+              }
+              return;
+            }
+            if (scrollSourceLineIntoView(line)) {
+              history.replaceState(null, '', `#L${line}`);
+            }
+          }, true);
         }
 
         function shell(kind, bodyHTML, options = {}) {
@@ -1355,6 +1655,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
           if (searchState.query.trim()) {
             setTimeout(() => window.ConductorDocumentViewer.setSearch(searchState.query), 0);
           }
+          installOutlineNavigation();
         }
 
         function largeNotice(kind) {
@@ -1365,7 +1666,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
         function installHeadingIDs(outline) {
           if (!outline || !outline.length) return;
           const used = new Set();
-          document.querySelectorAll('.markdown h1, .markdown h2, .markdown h3, .markdown h4').forEach((node, index) => {
+          outlineHeadings().forEach((node, index) => {
             const matching = outline[index];
             let id = matching ? matching.id : slugify(node.textContent, index);
             while (used.has(id)) id = `${id}-${used.size}`;
@@ -1426,9 +1727,8 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
 
         function renderLargeText(kind, outline = []) {
           const text = payload.text || '';
-          const source = `<div class="source-panel"><div class="source-panel-head"><span>${escapeHTML(kind)} source</span><span>${lineCount(text)} lines</span></div><pre><code>${escapeHTML(text)}</code></pre></div>`;
-          shell(kind, largeNotice(kind) + source, { outline, wide: true });
-          highlightAll();
+          shell(kind, largeNotice(kind) + sourcePanelHTML(kind, lineCount(text)), { outline, wide: true });
+          setSourceText(text);
         }
 
         function renderMarkdown() {
@@ -1474,9 +1774,8 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
             return;
           }
           const text = payload.text || '';
-          const source = `<div class="source-panel"><div class="source-panel-head"><span>${escapeHTML(label)} source</span><span>${lineCount(text)} lines</span></div><pre><code>${escapeHTML(text)}</code></pre></div>`;
-          shell(label, source, { wide: true });
-          highlightAll();
+          shell(label, sourcePanelHTML(label, lineCount(text)), { wide: true });
+          setSourceText(text, label);
         }
 
         function renderJSON() {

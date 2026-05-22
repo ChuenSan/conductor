@@ -30,6 +30,9 @@ private struct FileManagerItem: Equatable, Identifiable, Sendable {
     let isReadable: Bool
     let isWritable: Bool
     let contentTypeIdentifier: String?
+    let rowDetail: String
+    let isLargeEditableFile: Bool
+    let isUnsupportedBinaryLikeFile: Bool
 
     var subtitle: String {
         if isDirectory { return L("文件夹", "Folder") }
@@ -48,6 +51,139 @@ private struct FileManagerVisibleRow: Equatable, Identifiable {
     var id: String { item.id }
     let item: FileManagerItem
     let depth: Int
+}
+
+private struct FileManagerDisplaySnapshot: Equatable {
+    let rows: [FileManagerVisibleRow]
+    let totalKnownItemCount: Int
+    let displayedFileCount: Int
+    let displayedDirectoryCount: Int
+
+    static let empty = FileManagerDisplaySnapshot(
+        rows: [],
+        totalKnownItemCount: 0,
+        displayedFileCount: 0,
+        displayedDirectoryCount: 0
+    )
+}
+
+private enum FileManagerDisplaySnapshotBuilder {
+    static func build(
+        items: [FileManagerItem],
+        expandedDirectoryPaths: Set<String>,
+        childItemsByDirectoryPath: [String: [FileManagerItem]],
+        searchQuery: String,
+        kindFilter: FileManagerKindFilter
+    ) -> FileManagerDisplaySnapshot {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let knownRows = knownRows(for: items, depth: 0, childItemsByDirectoryPath: childItemsByDirectoryPath)
+        let baseRows = query.isEmpty
+            ? visibleRows(
+                for: items,
+                depth: 0,
+                expandedDirectoryPaths: expandedDirectoryPaths,
+                childItemsByDirectoryPath: childItemsByDirectoryPath
+            )
+            : knownRows
+        let rows = baseRows.filter { row in
+            matchesKindFilter(row.item, kindFilter: kindFilter) &&
+                (query.isEmpty ||
+                    row.item.name.localizedCaseInsensitiveContains(query) ||
+                    row.item.url.path.localizedCaseInsensitiveContains(query))
+        }
+
+        return FileManagerDisplaySnapshot(
+            rows: rows,
+            totalKnownItemCount: knownRows.count,
+            displayedFileCount: rows.filter { !$0.item.isDirectory }.count,
+            displayedDirectoryCount: rows.filter(\.item.isDirectory).count
+        )
+    }
+
+    private static func visibleRows(
+        for items: [FileManagerItem],
+        depth: Int,
+        expandedDirectoryPaths: Set<String>,
+        childItemsByDirectoryPath: [String: [FileManagerItem]]
+    ) -> [FileManagerVisibleRow] {
+        items.flatMap { item -> [FileManagerVisibleRow] in
+            var rows = [FileManagerVisibleRow(item: item, depth: depth)]
+            if item.isDirectory,
+               expandedDirectoryPaths.contains(item.url.path),
+               let children = childItemsByDirectoryPath[item.url.path] {
+                rows.append(contentsOf: visibleRows(
+                    for: children,
+                    depth: depth + 1,
+                    expandedDirectoryPaths: expandedDirectoryPaths,
+                    childItemsByDirectoryPath: childItemsByDirectoryPath
+                ))
+            }
+            return rows
+        }
+    }
+
+    private static func knownRows(
+        for items: [FileManagerItem],
+        depth: Int,
+        childItemsByDirectoryPath: [String: [FileManagerItem]]
+    ) -> [FileManagerVisibleRow] {
+        items.flatMap { item -> [FileManagerVisibleRow] in
+            var rows = [FileManagerVisibleRow(item: item, depth: depth)]
+            if item.isDirectory, let children = childItemsByDirectoryPath[item.url.path] {
+                rows.append(contentsOf: knownRows(
+                    for: children,
+                    depth: depth + 1,
+                    childItemsByDirectoryPath: childItemsByDirectoryPath
+                ))
+            }
+            return rows
+        }
+    }
+
+    private static func matchesKindFilter(_ item: FileManagerItem, kindFilter: FileManagerKindFilter) -> Bool {
+        switch kindFilter {
+        case .all:
+            return true
+        case .folders:
+            return item.isDirectory
+        case .documents:
+            return !item.isDirectory && documentExtensions.contains(item.url.pathExtension.lowercased())
+        case .code:
+            return !item.isDirectory && codeExtensions.contains(item.url.pathExtension.lowercased())
+        case .data:
+            return !item.isDirectory && dataExtensions.contains(item.url.pathExtension.lowercased())
+        case .images:
+            if item.isDirectory { return false }
+            if imageExtensions.contains(item.url.pathExtension.lowercased()) { return true }
+            guard let identifier = item.contentTypeIdentifier, let type = UTType(identifier) else { return false }
+            return type.conforms(to: .image)
+        case .other:
+            guard !item.isDirectory else { return false }
+            let ext = item.url.pathExtension.lowercased()
+            return !documentExtensions.contains(ext) &&
+                !codeExtensions.contains(ext) &&
+                !dataExtensions.contains(ext) &&
+                !imageExtensions.contains(ext)
+        }
+    }
+
+    private static let documentExtensions: Set<String> = [
+        "adoc", "bib", "cls", "latex", "log", "markdown", "md", "mdown", "mkd",
+        "out", "pdf", "rst", "stderr", "stdout", "sty", "tex", "text", "trace", "txt"
+    ]
+    private static let codeExtensions: Set<String> = [
+        "bash", "c", "cc", "cpp", "css", "go", "h", "hpp", "html", "java", "js",
+        "jsx", "kt", "kts", "m", "mm", "php", "py", "rb", "rs", "scss", "sh",
+        "sql", "swift", "ts", "tsx", "zsh"
+    ]
+    private static let dataExtensions: Set<String> = [
+        "cfg", "conf", "csv", "env", "ini", "json", "jsonl", "plist", "properties",
+        "tab", "toml", "tsv", "xml", "yaml", "yml"
+    ]
+    private static let imageExtensions: Set<String> = [
+        "apng", "avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png",
+        "psd", "svg", "tif", "tiff", "webp"
+    ]
 }
 
 private struct FileManagerRenameResult: Equatable, Sendable {
@@ -279,27 +415,89 @@ private struct FileManagerService {
             includingPropertiesForKeys: Array(keys),
             options: [.skipsSubdirectoryDescendants]
         )
+        let relativeDateFormatter = RelativeDateTimeFormatter()
+        relativeDateFormatter.unitsStyle = .short
 
         return urls.compactMap { childURL in
             guard let values = try? childURL.resourceValues(forKeys: keys) else { return nil }
             let isDirectory = values.isDirectory == true && values.isPackage != true
+            let standardizedURL = childURL.standardizedFileURL
+            let byteCount = values.fileSize.map(Int64.init)
+            let contentType = values.contentType
             return FileManagerItem(
-                url: childURL.standardizedFileURL,
+                url: standardizedURL,
                 name: values.name ?? childURL.lastPathComponent,
                 isDirectory: isDirectory,
                 isSymbolicLink: values.isSymbolicLink == true,
-                byteCount: values.fileSize.map(Int64.init),
+                byteCount: byteCount,
                 modificationDate: values.contentModificationDate,
                 creationDate: values.creationDate,
                 isReadable: values.isReadable ?? true,
                 isWritable: values.isWritable ?? true,
-                contentTypeIdentifier: values.contentType?.identifier
+                contentTypeIdentifier: contentType?.identifier,
+                rowDetail: Self.rowDetail(
+                    for: standardizedURL,
+                    isDirectory: isDirectory,
+                    byteCount: byteCount,
+                    modificationDate: values.contentModificationDate,
+                    relativeDateFormatter: relativeDateFormatter
+                ),
+                isLargeEditableFile: !isDirectory && (byteCount ?? 0) > 20 * 1024 * 1024,
+                isUnsupportedBinaryLikeFile: Self.isUnsupportedBinaryLikeFile(
+                    standardizedURL,
+                    isDirectory: isDirectory,
+                    contentType: contentType
+                )
             )
         }
         .filter { includeHidden || !$0.name.hasPrefix(".") }
         .filter { $0.name != ".DS_Store" }
         .sorted { Self.sort($0, before: $1, mode: sortMode) }
     }
+
+    private static func rowDetail(
+        for url: URL,
+        isDirectory: Bool,
+        byteCount: Int64?,
+        modificationDate: Date?,
+        relativeDateFormatter: RelativeDateTimeFormatter
+    ) -> String {
+        var parts: [String] = []
+        if isDirectory {
+            parts.append(L("文件夹", "Folder"))
+        } else if let byteCount {
+            parts.append(ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file))
+        } else {
+            let ext = url.pathExtension.lowercased()
+            parts.append(ext.isEmpty ? L("文件", "File") : ext.uppercased())
+        }
+        if let modificationDate {
+            parts.append(relativeDateFormatter.localizedString(for: modificationDate, relativeTo: Date()))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func isUnsupportedBinaryLikeFile(_ url: URL, isDirectory: Bool, contentType: UTType?) -> Bool {
+        guard !isDirectory else { return false }
+        if textishExtensions.contains(url.pathExtension.lowercased()) {
+            return false
+        }
+        if let contentType,
+           contentType.conforms(to: .image) ||
+            contentType.conforms(to: .text) ||
+            contentType.conforms(to: .sourceCode) {
+            return false
+        }
+        return true
+    }
+
+    private static let textishExtensions: Set<String> = [
+        "md", "markdown", "txt", "log", "json", "jsonl", "yaml", "yml", "toml", "plist",
+        "csv", "tsv", "xml", "env", "ini", "conf", "cfg", "properties", "swift", "js",
+        "jsx", "ts", "tsx", "py", "rb", "sh", "zsh", "bash", "go", "rs", "java", "kt",
+        "kts", "c", "cc", "cpp", "h", "hpp", "m", "mm", "html", "css", "scss", "sql"
+    ]
+
 
     func createFile(in directoryURL: URL) throws -> URL {
         let directory = directoryURL.standardizedFileURL
@@ -921,9 +1119,15 @@ private struct FileManagerService {
 @MainActor
 private final class FileManagerPanelStore: ObservableObject {
     @Published private(set) var currentURL: URL?
-    @Published private(set) var items: [FileManagerItem] = []
-    @Published private(set) var expandedDirectoryPaths: Set<String> = []
-    @Published private(set) var childItemsByDirectoryPath: [String: [FileManagerItem]] = [:]
+    @Published private(set) var items: [FileManagerItem] = [] {
+        didSet { rebuildDisplaySnapshot() }
+    }
+    @Published private(set) var expandedDirectoryPaths: Set<String> = [] {
+        didSet { rebuildDisplaySnapshot() }
+    }
+    @Published private(set) var childItemsByDirectoryPath: [String: [FileManagerItem]] = [:] {
+        didSet { rebuildDisplaySnapshot() }
+    }
     @Published private(set) var loadingDirectoryPaths: Set<String> = []
     @Published private(set) var directoryErrorsByPath: [String: String] = [:]
     @Published private(set) var selectedItem: FileManagerItem?
@@ -935,11 +1139,15 @@ private final class FileManagerPanelStore: ObservableObject {
     @Published private(set) var pendingDeletePaths: Set<String> = []
     @Published var renamingPath: String?
     @Published var renamingName = ""
-    @Published var searchQuery = ""
+    @Published var searchQuery = "" {
+        didSet { rebuildDisplaySnapshot() }
+    }
     @Published private(set) var searchHistory: [String] = []
     @Published var includeHiddenFiles = false
     @Published var sortMode: FileManagerSortMode = .name
-    @Published var kindFilter: FileManagerKindFilter = .all
+    @Published var kindFilter: FileManagerKindFilter = .all {
+        didSet { rebuildDisplaySnapshot() }
+    }
     @Published private(set) var recentFileURLs: [URL] = []
     @Published private(set) var favoriteDirectoryURLs: [URL] = []
     @Published private(set) var renamingFocusToken = 0
@@ -950,39 +1158,45 @@ private final class FileManagerPanelStore: ObservableObject {
     private var loadGeneration = 0
     private var previewGeneration = 0
     private var selectionAnchorPath: String?
+    private(set) var displaySnapshot = FileManagerDisplaySnapshot.empty
 
     var visibleRows: [FileManagerVisibleRow] {
-        visibleRows(for: items, depth: 0)
+        displaySnapshot.rows
     }
 
     var displayedRows: [FileManagerVisibleRow] {
-        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseRows = query.isEmpty ? visibleRows : knownRows(for: items, depth: 0)
-        return baseRows.filter { row in
-            matchesKindFilter(row.item) &&
-                (query.isEmpty ||
-                    row.item.name.localizedCaseInsensitiveContains(query) ||
-                    row.item.url.path.localizedCaseInsensitiveContains(query))
-        }
+        displaySnapshot.rows
     }
 
     var totalKnownItemCount: Int {
-        knownRows(for: items, depth: 0).count
+        displaySnapshot.totalKnownItemCount
     }
 
     var displayedFileCount: Int {
-        displayedRows.filter { !$0.item.isDirectory }.count
+        displaySnapshot.displayedFileCount
     }
 
     var displayedDirectoryCount: Int {
-        displayedRows.filter(\.item.isDirectory).count
+        displaySnapshot.displayedDirectoryCount
+    }
+
+    private func rebuildDisplaySnapshot() {
+        let snapshot = FileManagerDisplaySnapshotBuilder.build(
+            items: items,
+            expandedDirectoryPaths: expandedDirectoryPaths,
+            childItemsByDirectoryPath: childItemsByDirectoryPath,
+            searchQuery: searchQuery,
+            kindFilter: kindFilter
+        )
+        guard snapshot != displaySnapshot else { return }
+        displaySnapshot = snapshot
     }
 
     func load(_ request: FileManagerPanelRequest) async {
         guard requestID != request.id else { return }
         requestID = request.id
         loadLocalLists()
-        searchHistory = ConductorSearchHistory.load(scope: Self.searchHistoryScope)
+        searchHistory = []
         await openDirectory(request.rootURL, selecting: request.selectedURL)
     }
 
@@ -1161,8 +1375,7 @@ private final class FileManagerPanelStore: ObservableObject {
     }
 
     func recordSearchQuery() {
-        ConductorSearchHistory.record(searchQuery, scope: Self.searchHistoryScope)
-        searchHistory = ConductorSearchHistory.load(scope: Self.searchHistoryScope)
+        searchHistory = []
     }
 
     func reuseSearchQuery(_ query: String) {
@@ -1183,6 +1396,7 @@ private final class FileManagerPanelStore: ObservableObject {
     }
 
     func setKindFilter(_ filter: FileManagerKindFilter) {
+        guard kindFilter != filter else { return }
         kindFilter = filter
         if let selectedItem, !displayedRows.contains(where: { $0.item.url.path == selectedItem.url.path }) {
             selectAdjacentRow(by: 1)
@@ -1393,55 +1607,6 @@ private final class FileManagerPanelStore: ObservableObject {
         }
     }
 
-    private func visibleRows(for items: [FileManagerItem], depth: Int) -> [FileManagerVisibleRow] {
-        items.flatMap { item -> [FileManagerVisibleRow] in
-            var rows = [FileManagerVisibleRow(item: item, depth: depth)]
-            if item.isDirectory,
-               expandedDirectoryPaths.contains(item.url.path),
-               let children = childItemsByDirectoryPath[item.url.path] {
-                rows.append(contentsOf: visibleRows(for: children, depth: depth + 1))
-            }
-            return rows
-        }
-    }
-
-    private func knownRows(for items: [FileManagerItem], depth: Int) -> [FileManagerVisibleRow] {
-        items.flatMap { item -> [FileManagerVisibleRow] in
-            var rows = [FileManagerVisibleRow(item: item, depth: depth)]
-            if item.isDirectory, let children = childItemsByDirectoryPath[item.url.path] {
-                rows.append(contentsOf: knownRows(for: children, depth: depth + 1))
-            }
-            return rows
-        }
-    }
-
-    private func matchesKindFilter(_ item: FileManagerItem) -> Bool {
-        switch kindFilter {
-        case .all:
-            return true
-        case .folders:
-            return item.isDirectory
-        case .documents:
-            return !item.isDirectory && Self.documentExtensions.contains(item.url.pathExtension.lowercased())
-        case .code:
-            return !item.isDirectory && Self.codeExtensions.contains(item.url.pathExtension.lowercased())
-        case .data:
-            return !item.isDirectory && Self.dataExtensions.contains(item.url.pathExtension.lowercased())
-        case .images:
-            if item.isDirectory { return false }
-            if Self.imageExtensions.contains(item.url.pathExtension.lowercased()) { return true }
-            guard let identifier = item.contentTypeIdentifier, let type = UTType(identifier) else { return false }
-            return type.conforms(to: .image)
-        case .other:
-            guard !item.isDirectory else { return false }
-            let ext = item.url.pathExtension.lowercased()
-            return !Self.documentExtensions.contains(ext) &&
-                !Self.codeExtensions.contains(ext) &&
-                !Self.dataExtensions.contains(ext) &&
-                !Self.imageExtensions.contains(ext)
-        }
-    }
-
     private func refresh(selecting selectedURL: URL?) async {
         guard let currentURL else { return }
         await openDirectory(currentURL, selecting: selectedURL, preservingExpanded: expandedDirectoryPaths)
@@ -1629,23 +1794,6 @@ private final class FileManagerPanelStore: ObservableObject {
     private static let recentFilesDefaultsKey = "conductor.fileManager.recentFiles"
     private static let favoriteDirectoriesDefaultsKey = "conductor.fileManager.favoriteDirectories"
     private static let searchHistoryScope = "file-tree"
-    private static let documentExtensions: Set<String> = [
-        "adoc", "bib", "cls", "latex", "log", "markdown", "md", "mdown", "mkd",
-        "out", "pdf", "rst", "stderr", "stdout", "sty", "tex", "text", "trace", "txt"
-    ]
-    private static let codeExtensions: Set<String> = [
-        "bash", "c", "cc", "cpp", "css", "go", "h", "hpp", "html", "java", "js",
-        "jsx", "kt", "kts", "m", "mm", "php", "py", "rb", "rs", "scss", "sh",
-        "sql", "swift", "ts", "tsx", "zsh"
-    ]
-    private static let dataExtensions: Set<String> = [
-        "cfg", "conf", "csv", "env", "ini", "json", "jsonl", "plist", "properties",
-        "tab", "toml", "tsv", "xml", "yaml", "yml"
-    ]
-    private static let imageExtensions: Set<String> = [
-        "apng", "avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png",
-        "psd", "svg", "tif", "tiff", "webp"
-    ]
 }
 
 struct FileManagerPanel: View {
@@ -1663,17 +1811,18 @@ struct FileManagerPanel: View {
     @Environment(\.conductorFontFamily) private var fontFamily
 
     var body: some View {
+        let snapshot = store.displaySnapshot
         VStack(spacing: 0) {
             header
             divider
             if searchVisible || !store.searchQuery.isEmpty {
-                fileTreeSearchBar
+                fileTreeSearchBar(snapshot: snapshot)
                 divider
             }
-            content
+            content(snapshot: snapshot)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             divider
-            statusBar
+            statusBar(snapshot: snapshot)
             if let message = store.operationMessage {
                 divider
                 operationMessageBar(message)
@@ -1704,6 +1853,15 @@ struct FileManagerPanel: View {
         .focusEffectDisabled()
         .onTapGesture {
             keyboardFocused = true
+        }
+        .simultaneousGesture(TapGesture().onEnded {
+            keyboardFocused = true
+        })
+        .onChange(of: keyboardFocused) { _, newValue in
+            model.setFileManagerKeyboardFocused(newValue)
+        }
+        .onDisappear {
+            model.setFileManagerKeyboardFocused(false)
         }
         .onMoveCommand { direction in
             switch direction {
@@ -1746,9 +1904,8 @@ struct FileManagerPanel: View {
             store.selectAdjacentRow(by: -1)
         }
         .onChange(of: model.selectedWorkspaceFileTab?.id) { _, newValue in
-            if newValue != nil {
-                keyboardFocused = false
-            }
+            guard newValue == nil else { return }
+            keyboardFocused = true
         }
         .sheet(item: $infoItem) { item in
             FileManagerInfoSheet(item: item)
@@ -1999,86 +2156,15 @@ struct FileManagerPanel: View {
     }
 
     @ViewBuilder
-    private var content: some View {
-        browser
+    private func content(snapshot: FileManagerDisplaySnapshot) -> some View {
+        browser(snapshot: snapshot)
     }
 
-    private var fileTreeSearchBar: some View {
-        HStack {
-            ConductorContextSearchSurface {
-            Image(systemName: "magnifyingglass")
-                .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.58))
-
-                ConductorContextSearchScopeChip(systemImage: "folder", title: L("文件树", "Files"))
-
-                if !store.searchHistory.isEmpty {
-                    Menu {
-                        ForEach(store.searchHistory, id: \.self) { query in
-                            Button(query) {
-                                store.reuseSearchQuery(query)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "clock.arrow.circlepath")
-                            .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                            .foregroundStyle(theme.shellChromeText.opacity(0.56))
-                            .frame(width: 22, height: 22)
-                    }
-                    .menuStyle(.button)
-                    .buttonStyle(.plain)
-                    .macNativeTooltip(L("搜索历史", "Search History"))
-                }
-
-                ConductorContextSearchTextField(
-                    text: $store.searchQuery,
-                    placeholder: L("过滤文件", "Filter files"),
-                    focusToken: searchFocusToken,
-                    theme: theme,
-                    fontFamily: fontFamily,
-                    fontScale: fontScale,
-                    onNavigate: { previous in
-                        store.recordSearchQuery()
-                        store.selectAdjacentRow(by: previous ? -1 : 1)
-                    },
-                    onClose: closeSearch
-                )
-                .frame(width: 168, height: 22)
-
-                Text("\(store.displayedRows.count)")
-                    .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.52))
-                    .monospacedDigit()
-                    .frame(minWidth: 48, alignment: .trailing)
-
-                ConductorContextSearchIconButton(
-                    systemImage: "chevron.up",
-                    help: L("上一个文件", "Previous File"),
-                    disabled: store.displayedRows.isEmpty
-                ) {
-                    store.selectAdjacentRow(by: -1)
-                }
-
-                ConductorContextSearchIconButton(
-                    systemImage: "chevron.down",
-                    help: L("下一个文件", "Next File"),
-                    disabled: store.displayedRows.isEmpty
-                ) {
-                    store.selectAdjacentRow(by: 1)
-                }
-
-                ConductorContextSearchIconButton(systemImage: "xmark", help: L("关闭搜索", "Close Search")) {
-                    closeSearch()
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.18 : 0.06))
+    private func fileTreeSearchBar(snapshot: FileManagerDisplaySnapshot) -> some View {
+        EmptyView()
     }
 
-    private var browser: some View {
+    private func browser(snapshot: FileManagerDisplaySnapshot) -> some View {
         VStack(spacing: 0) {
             if store.isLoading && store.items.isEmpty {
                 panelMessage(systemImage: "folder", text: L("读取中", "Loading"))
@@ -2089,7 +2175,7 @@ struct FileManagerPanel: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 1) {
-                        ForEach(store.displayedRows) { row in
+                        ForEach(snapshot.rows) { row in
                             FileManagerRowView(
                                 item: row.item,
                                 depth: row.depth,
@@ -2155,22 +2241,23 @@ struct FileManagerPanel: View {
         }
     }
 
-    private var statusBar: some View {
-        HStack(spacing: 8) {
+    private func statusBar(snapshot: FileManagerDisplaySnapshot) -> some View {
+        let selectedItems = selectedItems(in: snapshot)
+        return HStack(spacing: 8) {
             if store.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, store.kindFilter == .all {
-                statusChip(systemImage: "list.bullet", title: L("\(store.totalKnownItemCount) 项", "\(store.totalKnownItemCount) items"))
+                statusChip(systemImage: "list.bullet", title: L("\(snapshot.totalKnownItemCount) 项", "\(snapshot.totalKnownItemCount) items"))
             } else {
-                statusChip(systemImage: "line.3.horizontal.decrease", title: L("\(store.displayedRows.count)/\(store.totalKnownItemCount)", "\(store.displayedRows.count)/\(store.totalKnownItemCount)"))
+                statusChip(systemImage: "line.3.horizontal.decrease", title: L("\(snapshot.rows.count)/\(snapshot.totalKnownItemCount)", "\(snapshot.rows.count)/\(snapshot.totalKnownItemCount)"))
             }
-            statusChip(systemImage: "folder", title: L("\(store.displayedDirectoryCount)", "\(store.displayedDirectoryCount)"))
-            statusChip(systemImage: "doc", title: L("\(store.displayedFileCount)", "\(store.displayedFileCount)"))
+            statusChip(systemImage: "folder", title: L("\(snapshot.displayedDirectoryCount)", "\(snapshot.displayedDirectoryCount)"))
+            statusChip(systemImage: "doc", title: L("\(snapshot.displayedFileCount)", "\(snapshot.displayedFileCount)"))
 
             if store.kindFilter != .all {
                 statusChip(systemImage: store.kindFilter.systemImage, title: store.kindFilter.title)
             }
 
-            if !store.selectedURLs.isEmpty {
-                statusChip(systemImage: "checkmark.circle", title: selectionSummary)
+            if !selectedItems.isEmpty {
+                statusChip(systemImage: "checkmark.circle", title: selectionSummary(for: selectedItems))
             }
 
             Spacer(minLength: 8)
@@ -2187,8 +2274,15 @@ struct FileManagerPanel: View {
         .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.12 : 0.08))
     }
 
-    private var selectionSummary: String {
-        let items = store.selectedItems
+    private func selectedItems(in snapshot: FileManagerDisplaySnapshot) -> [FileManagerItem] {
+        let selected = snapshot.rows.map(\.item).filter { store.selectedPaths.contains($0.url.path) }
+        if selected.isEmpty, let selectedItem = store.selectedItem {
+            return [selectedItem]
+        }
+        return selected
+    }
+
+    private func selectionSummary(for items: [FileManagerItem]) -> String {
         guard !items.isEmpty else { return L("0 项", "0 items") }
         let selectedSize = items.compactMap(\.byteCount).reduce(Int64(0), +)
         let size = selectedSize > 0 ? " · \(ByteCountFormatter.string(fromByteCount: selectedSize, countStyle: .file))" : ""
@@ -2316,14 +2410,9 @@ struct FileManagerPanel: View {
             Task { await store.open(item) }
             return
         }
-        switch FileManagerService().openMode(for: item.url) {
-        case .workspaceEditor:
-            store.recordOpenedFile(item.url)
-            model.openFileInWorkspace(item.url, rootURL: store.currentURL ?? request.rootURL)
-            keyboardFocused = false
-        case .systemApplication:
-            NSWorkspace.shared.open(item.url)
-        }
+        store.recordOpenedFile(item.url)
+        model.openFileInWorkspace(item.url, rootURL: store.currentURL ?? request.rootURL)
+        keyboardFocused = true
     }
 
     private func openURL(_ url: URL) {
@@ -2333,7 +2422,7 @@ struct FileManagerPanel: View {
         }
         store.recordOpenedFile(standardized)
         model.openFileInWorkspace(standardized, rootURL: standardized.deletingLastPathComponent())
-        keyboardFocused = false
+        keyboardFocused = true
     }
 
     private func openSelectedItem() {
@@ -2449,6 +2538,8 @@ struct FileManagerPanel: View {
                 theme: theme,
                 fontSize: model.appearance.terminalFontSize,
                 isActive: false,
+                chromeStyle: .plain,
+                layoutRevision: 0,
                 searchQuery: "",
                 searchRevision: 0,
                 searchNextToken: 0,
@@ -2912,23 +3003,47 @@ private struct FileManagerSourcePreview: View {
     var body: some View {
         VStack(spacing: 0) {
             sourceInfoBar
-            ScrollView([.vertical, .horizontal]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(document.lines.enumerated()), id: \.offset) { index, line in
-                        SourcePreviewLine(
-                            number: index + 1,
-                            text: line,
-                            isHighlighted: false,
-                            theme: theme
-                        )
+            if usesAppKitPreview {
+                FileManagerSourcePreviewTextHost(
+                    text: numberedText,
+                    font: .conductorMonospacedSystemFont(ofSize: 12, scale: fontScale),
+                    backgroundColor: NSColor(theme.terminalBackground),
+                    textColor: NSColor(theme.shellChromeText.opacity(0.82)),
+                    lineNumberColor: NSColor(theme.shellChromeText.opacity(0.28))
+                )
+                .background(theme.terminalBackground)
+            } else {
+                ScrollView([.vertical, .horizontal]) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(document.lines.enumerated()), id: \.offset) { index, line in
+                            SourcePreviewLine(
+                                number: index + 1,
+                                text: line,
+                                isHighlighted: false,
+                                theme: theme
+                            )
+                        }
                     }
+                    .padding(.vertical, 12)
+                    .padding(.trailing, 18)
                 }
-                .padding(.vertical, 12)
-                .padding(.trailing, 18)
+                .scrollIndicators(.visible)
+                .background(theme.terminalBackground)
             }
-            .scrollIndicators(.visible)
-            .background(theme.terminalBackground)
         }
+    }
+
+    private var usesAppKitPreview: Bool {
+        document.displayedLineCount > Self.swiftUIRenderedLineLimit || truncated
+    }
+
+    private var numberedText: String {
+        let width = max(3, String(document.lineCount).count)
+        return document.lines.enumerated()
+            .map { index, line in
+                String(format: "%\(width)d  %@", index + 1, line)
+            }
+            .joined(separator: "\n")
     }
 
     private var sourceInfoBar: some View {
@@ -2974,6 +3089,154 @@ private struct FileManagerSourcePreview: View {
             .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.46 : 0.34))
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
+
+    private static let swiftUIRenderedLineLimit = 180
+}
+
+private struct FileManagerSourcePreviewTextHost: NSViewRepresentable {
+    let text: String
+    let font: NSFont
+    let backgroundColor: NSColor
+    let textColor: NSColor
+    let lineNumberColor: NSColor
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = FileManagerSourcePreviewScrollView()
+        scrollView.drawsBackground = true
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.scrollerStyle = .overlay
+
+        let textView = NSTextView(frame: scrollView.bounds)
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.usesFontPanel = false
+        textView.allowsUndo = false
+        textView.isContinuousSpellCheckingEnabled = false
+        textView.isGrammarCheckingEnabled = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.minSize = NSSize(width: 0, height: scrollView.contentSize.height)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainerInset = NSSize(width: 16, height: 12)
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.containerSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        scrollView.documentView = textView
+        context.coordinator.apply(text: text, to: textView)
+        context.coordinator.applyConfiguration(
+            to: textView,
+            scrollView: scrollView,
+            font: font,
+            backgroundColor: backgroundColor,
+            textColor: textColor,
+            lineNumberColor: lineNumberColor
+        )
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.applyConfiguration(
+            to: textView,
+            scrollView: scrollView,
+            font: font,
+            backgroundColor: backgroundColor,
+            textColor: textColor,
+            lineNumberColor: lineNumberColor
+        )
+        context.coordinator.apply(text: text, to: textView)
+    }
+
+    final class Coordinator {
+        private var appliedText: String?
+        private var appliedConfiguration: Configuration?
+
+        @MainActor
+        func apply(text: String, to textView: NSTextView) {
+            guard text != appliedText else { return }
+            appliedText = text
+            textView.textStorage?.setAttributedString(attributedString(for: text))
+        }
+
+        @MainActor
+        func applyConfiguration(
+            to textView: NSTextView,
+            scrollView: NSScrollView,
+            font: NSFont,
+            backgroundColor: NSColor,
+            textColor: NSColor,
+            lineNumberColor: NSColor
+        ) {
+            let configuration = Configuration(
+                font: font,
+                backgroundColor: backgroundColor,
+                textColor: textColor,
+                lineNumberColor: lineNumberColor
+            )
+            guard configuration != appliedConfiguration else { return }
+            appliedConfiguration = configuration
+            scrollView.backgroundColor = backgroundColor
+            textView.backgroundColor = backgroundColor
+            textView.font = font
+            if let appliedText {
+                textView.textStorage?.setAttributedString(attributedString(for: appliedText))
+            }
+        }
+
+        private func attributedString(for text: String) -> NSAttributedString {
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineBreakMode = .byClipping
+            let attributed = NSMutableAttributedString(
+                string: text,
+                attributes: [
+                    .font: appliedConfiguration?.font ?? .monospacedSystemFont(ofSize: 12, weight: .regular),
+                    .foregroundColor: appliedConfiguration?.textColor ?? NSColor.textColor,
+                    .paragraphStyle: paragraphStyle
+                ]
+            )
+
+            let lineNumberColor = appliedConfiguration?.lineNumberColor ?? NSColor.secondaryLabelColor
+            let fullText = text as NSString
+            var location = 0
+            while location < fullText.length {
+                let lineRange = fullText.lineRange(for: NSRange(location: location, length: 0))
+                let line = fullText.substring(with: lineRange)
+                let prefixLength = line.prefix { $0 == " " || $0.isNumber }.count
+                let numberRange = NSRange(location: lineRange.location, length: min(prefixLength, lineRange.length))
+                attributed.addAttribute(.foregroundColor, value: lineNumberColor, range: numberRange)
+                location = NSMaxRange(lineRange)
+            }
+            return attributed
+        }
+
+        private struct Configuration: Equatable {
+            let font: NSFont
+            let backgroundColor: NSColor
+            let textColor: NSColor
+            let lineNumberColor: NSColor
+        }
+    }
+}
+
+private final class FileManagerSourcePreviewScrollView: NSScrollView {
+    override var isFlipped: Bool { true }
 }
 
 private struct FileManagerTablePreview: View {
@@ -2986,54 +3249,77 @@ private struct FileManagerTablePreview: View {
     var body: some View {
         VStack(spacing: 0) {
             tableInfoBar
-            ScrollView([.vertical, .horizontal]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(document.rows.enumerated()), id: \.offset) { rowIndex, row in
-                        HStack(spacing: 0) {
-                            Text("\(rowIndex + 1)")
-                                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                                .foregroundStyle(theme.shellChromeText.opacity(0.34))
-                                .frame(width: 38, height: 26, alignment: .trailing)
-                                .padding(.trailing, 8)
-                                .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.30 : 0.18))
+            if usesAppKitPreview {
+                FileManagerTablePreviewHost(
+                    document: document,
+                    font: .conductorMonospacedSystemFont(ofSize: 11.5, scale: fontScale),
+                    headerFont: .conductorMonospacedSystemFont(ofSize: 11.5, weight: .semibold, scale: fontScale),
+                    lineNumberFont: .conductorMonospacedSystemFont(ofSize: 10.5, weight: .medium, scale: fontScale),
+                    backgroundColor: NSColor(theme.terminalBackground),
+                    textColor: NSColor(theme.shellChromeText.opacity(0.74)),
+                    headerTextColor: NSColor(theme.shellChromeText.opacity(0.82)),
+                    lineNumberTextColor: NSColor(theme.shellChromeText.opacity(0.34)),
+                    lineNumberBackgroundColor: NSColor(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.30 : 0.18)),
+                    headerBackgroundColor: NSColor(theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.24 : 0.18)),
+                    evenCellBackgroundColor: NSColor(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.08 : 0.12)),
+                    oddCellBackgroundColor: NSColor.clear,
+                    gridColor: NSColor(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
+                )
+                .background(theme.terminalBackground)
+            } else {
+                ScrollView([.vertical, .horizontal]) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(document.rows.enumerated()), id: \.offset) { rowIndex, row in
+                            HStack(spacing: 0) {
+                                Text("\(rowIndex + 1)")
+                                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(theme.shellChromeText.opacity(0.34))
+                                    .frame(width: 38, height: 26, alignment: .trailing)
+                                    .padding(.trailing, 8)
+                                    .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.30 : 0.18))
 
-                            ForEach(0..<document.columnCount, id: \.self) { columnIndex in
-                                Text(cell(row: row, columnIndex: columnIndex))
-                                    .font(.system(size: 11.5, weight: rowIndex == 0 ? .semibold : .regular, design: .monospaced))
-                                    .foregroundStyle(theme.shellChromeText.opacity(rowIndex == 0 ? 0.82 : 0.74))
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                    .padding(.horizontal, 8)
-                                    .frame(width: 156, height: 26, alignment: .leading)
-                                    .background(cellBackground(rowIndex: rowIndex, columnIndex: columnIndex))
-                                    .overlay(alignment: .trailing) {
-                                        Rectangle()
-                                            .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
-                                            .frame(width: 1)
-                                    }
-                                    .contextMenu {
-                                        Button(L("复制单元格", "Copy Cell")) {
-                                            copyText(cell(row: row, columnIndex: columnIndex))
+                                ForEach(0..<document.columnCount, id: \.self) { columnIndex in
+                                    Text(cell(row: row, columnIndex: columnIndex))
+                                        .font(.system(size: 11.5, weight: rowIndex == 0 ? .semibold : .regular, design: .monospaced))
+                                        .foregroundStyle(theme.shellChromeText.opacity(rowIndex == 0 ? 0.82 : 0.74))
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                        .padding(.horizontal, 8)
+                                        .frame(width: Self.cellWidth, height: Self.rowHeight, alignment: .leading)
+                                        .background(cellBackground(rowIndex: rowIndex, columnIndex: columnIndex))
+                                        .overlay(alignment: .trailing) {
+                                            Rectangle()
+                                                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
+                                                .frame(width: 1)
                                         }
-                                        Button(L("复制行", "Copy Row")) {
-                                            copyText(row.joined(separator: document.delimiterName == "TSV" ? "\t" : ","))
+                                        .contextMenu {
+                                            Button(L("复制单元格", "Copy Cell")) {
+                                                copyText(cell(row: row, columnIndex: columnIndex))
+                                            }
+                                            Button(L("复制行", "Copy Row")) {
+                                                copyText(row.joined(separator: document.delimiterName == "TSV" ? "\t" : ","))
+                                            }
                                         }
-                                    }
+                                }
+                            }
+                            .overlay(alignment: .bottom) {
+                                Rectangle()
+                                    .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.14))
+                                    .frame(height: 1)
                             }
                         }
-                        .overlay(alignment: .bottom) {
-                            Rectangle()
-                                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.14))
-                                .frame(height: 1)
-                        }
                     }
+                    .padding(.top, 10)
+                    .padding(.bottom, 18)
+                    .padding(.trailing, 18)
                 }
-                .padding(.top, 10)
-                .padding(.bottom, 18)
-                .padding(.trailing, 18)
+                .background(theme.terminalBackground)
             }
-            .background(theme.terminalBackground)
         }
+    }
+
+    private var usesAppKitPreview: Bool {
+        document.rows.count * max(document.columnCount, 1) > Self.swiftUICellLimit || truncated
     }
 
     private var tableInfoBar: some View {
@@ -3089,6 +3375,802 @@ private struct FileManagerTablePreview: View {
             .background(theme.floatingControlFill.opacity(0.56))
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
+
+    private static let swiftUICellLimit = 600
+    private static let rowHeight: CGFloat = 26
+    private static let cellWidth: CGFloat = 156
+}
+
+private struct FileManagerTablePreviewHost: NSViewRepresentable {
+    let document: FilePreviewTableDocument
+    let font: NSFont
+    let headerFont: NSFont
+    let lineNumberFont: NSFont
+    let backgroundColor: NSColor
+    let textColor: NSColor
+    let headerTextColor: NSColor
+    let lineNumberTextColor: NSColor
+    let lineNumberBackgroundColor: NSColor
+    let headerBackgroundColor: NSColor
+    let evenCellBackgroundColor: NSColor
+    let oddCellBackgroundColor: NSColor
+    let gridColor: NSColor
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = true
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.scrollerStyle = .overlay
+
+        let tableView = NSTableView()
+        tableView.headerView = nil
+        tableView.rowHeight = Self.rowHeight
+        tableView.intercellSpacing = .zero
+        tableView.usesAlternatingRowBackgroundColors = false
+        tableView.selectionHighlightStyle = .none
+        tableView.allowsColumnReordering = false
+        tableView.allowsColumnResizing = true
+        tableView.allowsMultipleSelection = false
+        tableView.gridStyleMask = [.solidHorizontalGridLineMask, .solidVerticalGridLineMask]
+        tableView.dataSource = context.coordinator
+        tableView.delegate = context.coordinator
+
+        let menu = NSMenu()
+        menu.delegate = context.coordinator
+        tableView.menu = menu
+
+        scrollView.documentView = tableView
+        context.coordinator.tableView = tableView
+        context.coordinator.apply(document: document, configuration: configuration, to: tableView, scrollView: scrollView)
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let tableView = scrollView.documentView as? NSTableView else { return }
+        context.coordinator.apply(document: document, configuration: configuration, to: tableView, scrollView: scrollView)
+    }
+
+    private var configuration: Coordinator.Configuration {
+        Coordinator.Configuration(
+            font: font,
+            headerFont: headerFont,
+            lineNumberFont: lineNumberFont,
+            backgroundColor: backgroundColor,
+            textColor: textColor,
+            headerTextColor: headerTextColor,
+            lineNumberTextColor: lineNumberTextColor,
+            lineNumberBackgroundColor: lineNumberBackgroundColor,
+            headerBackgroundColor: headerBackgroundColor,
+            evenCellBackgroundColor: evenCellBackgroundColor,
+            oddCellBackgroundColor: oddCellBackgroundColor,
+            gridColor: gridColor
+        )
+    }
+
+    final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
+        struct Configuration: Equatable {
+            let font: NSFont
+            let headerFont: NSFont
+            let lineNumberFont: NSFont
+            let backgroundColor: NSColor
+            let textColor: NSColor
+            let headerTextColor: NSColor
+            let lineNumberTextColor: NSColor
+            let lineNumberBackgroundColor: NSColor
+            let headerBackgroundColor: NSColor
+            let evenCellBackgroundColor: NSColor
+            let oddCellBackgroundColor: NSColor
+            let gridColor: NSColor
+        }
+
+        weak var tableView: NSTableView?
+        private var document = FilePreviewTableDocument(rows: [], delimiterName: "CSV", sourceLineCount: 0)
+        private var appliedColumnCount = -1
+        private var appliedConfiguration: Configuration?
+        private var contextMenuTarget: (row: Int, column: Int)?
+
+        @MainActor
+        func apply(
+            document: FilePreviewTableDocument,
+            configuration: Configuration,
+            to tableView: NSTableView,
+            scrollView: NSScrollView
+        ) {
+            let columnsChanged = appliedColumnCount != document.columnCount
+            let documentChanged = self.document != document
+            let configurationChanged = appliedConfiguration != configuration
+
+            self.document = document
+            appliedConfiguration = configuration
+            scrollView.backgroundColor = configuration.backgroundColor
+            tableView.backgroundColor = configuration.backgroundColor
+            tableView.gridColor = configuration.gridColor
+
+            if columnsChanged {
+                rebuildColumns(in: tableView, columnCount: document.columnCount)
+                appliedColumnCount = document.columnCount
+            }
+            if columnsChanged || documentChanged || configurationChanged {
+                tableView.reloadData()
+            }
+        }
+
+        func numberOfRows(in tableView: NSTableView) -> Int {
+            document.rows.count
+        }
+
+        func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+            guard row < document.rows.count,
+                  let tableColumn,
+                  let configuration = appliedConfiguration else {
+                return nil
+            }
+            let identifier = tableColumn.identifier
+            let cell = tableView.makeView(withIdentifier: identifier, owner: self) as? FileManagerTableCellView ??
+                FileManagerTableCellView(identifier: identifier)
+            let isLineNumber = identifier.rawValue == Self.lineNumberIdentifier
+            let columnIndex = columnIndex(for: identifier)
+            let text: String
+            if isLineNumber {
+                text = "\(row + 1)"
+            } else if let columnIndex {
+                text = Self.cell(row: document.rows[row], columnIndex: columnIndex)
+            } else {
+                text = ""
+            }
+            cell.configure(
+                text: text,
+                alignment: isLineNumber ? .right : .left,
+                font: isLineNumber ? configuration.lineNumberFont : (row == 0 ? configuration.headerFont : configuration.font),
+                textColor: isLineNumber ? configuration.lineNumberTextColor : (row == 0 ? configuration.headerTextColor : configuration.textColor),
+                backgroundColor: backgroundColor(row: row, columnIndex: columnIndex, isLineNumber: isLineNumber, configuration: configuration)
+            )
+            return cell
+        }
+
+        func menuNeedsUpdate(_ menu: NSMenu) {
+            menu.removeAllItems()
+            guard let tableView else { return }
+            let row = tableView.clickedRow
+            let column = tableView.clickedColumn
+            guard row >= 0, row < document.rows.count, column >= 0 else { return }
+            contextMenuTarget = (row, column)
+            if column > 0 {
+                let copyCell = NSMenuItem(title: L("复制单元格", "Copy Cell"), action: #selector(copyCell), keyEquivalent: "")
+                copyCell.target = self
+                menu.addItem(copyCell)
+            }
+            let copyRow = NSMenuItem(title: L("复制行", "Copy Row"), action: #selector(copyRow), keyEquivalent: "")
+            copyRow.target = self
+            menu.addItem(copyRow)
+        }
+
+        @objc private func copyCell() {
+            guard let contextMenuTarget, contextMenuTarget.column > 0 else { return }
+            copyText(Self.cell(row: document.rows[contextMenuTarget.row], columnIndex: contextMenuTarget.column - 1))
+        }
+
+        @objc private func copyRow() {
+            guard let contextMenuTarget else { return }
+            copyText(document.rows[contextMenuTarget.row].joined(separator: document.delimiterName == "TSV" ? "\t" : ","))
+        }
+
+        @MainActor
+        private func rebuildColumns(in tableView: NSTableView, columnCount: Int) {
+            for column in tableView.tableColumns {
+                tableView.removeTableColumn(column)
+            }
+            let lineColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(Self.lineNumberIdentifier))
+            lineColumn.width = 46
+            lineColumn.minWidth = 40
+            lineColumn.maxWidth = 62
+            tableView.addTableColumn(lineColumn)
+
+            for index in 0..<max(columnCount, 1) {
+                let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("\(Self.columnPrefix)\(index)"))
+                column.width = FileManagerTablePreviewHost.cellWidth
+                column.minWidth = 92
+                column.maxWidth = 420
+                tableView.addTableColumn(column)
+            }
+        }
+
+        private func backgroundColor(
+            row: Int,
+            columnIndex: Int?,
+            isLineNumber: Bool,
+            configuration: Configuration
+        ) -> NSColor {
+            if isLineNumber {
+                return configuration.lineNumberBackgroundColor
+            }
+            if row == 0 {
+                return configuration.headerBackgroundColor
+            }
+            guard let columnIndex else { return configuration.oddCellBackgroundColor }
+            return columnIndex.isMultiple(of: 2) ? configuration.evenCellBackgroundColor : configuration.oddCellBackgroundColor
+        }
+
+        private func columnIndex(for identifier: NSUserInterfaceItemIdentifier) -> Int? {
+            guard identifier.rawValue.hasPrefix(Self.columnPrefix) else { return nil }
+            return Int(identifier.rawValue.dropFirst(Self.columnPrefix.count))
+        }
+
+        private func copyText(_ text: String) {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+
+        private static func cell(row: [String], columnIndex: Int) -> String {
+            guard row.indices.contains(columnIndex) else { return "" }
+            let value = row[columnIndex]
+            guard value.count > 160 else { return value }
+            return String(value.prefix(160)) + " ..."
+        }
+
+        private static let lineNumberIdentifier = "line"
+        private static let columnPrefix = "column-"
+    }
+
+    private static let rowHeight: CGFloat = 26
+    private static let cellWidth: CGFloat = 156
+}
+
+private final class FileManagerTableCellView: NSTableCellView {
+    private let label = NSTextField(labelWithString: "")
+    private var leadingConstraint: NSLayoutConstraint?
+    private var trailingConstraint: NSLayoutConstraint?
+
+    init(identifier: NSUserInterfaceItemIdentifier) {
+        super.init(frame: .zero)
+        self.identifier = identifier
+        wantsLayer = true
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.allowsExpansionToolTips = true
+        addSubview(label)
+        let leadingConstraint = label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8)
+        let trailingConstraint = label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8)
+        self.leadingConstraint = leadingConstraint
+        self.trailingConstraint = trailingConstraint
+        NSLayoutConstraint.activate([
+            leadingConstraint,
+            trailingConstraint,
+            label.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        return nil
+    }
+
+    func configure(
+        text: String,
+        alignment: NSTextAlignment,
+        font: NSFont,
+        textColor: NSColor,
+        backgroundColor: NSColor,
+        leadingInset: CGFloat = 8,
+        trailingInset: CGFloat = 8
+    ) {
+        label.stringValue = text
+        label.alignment = alignment
+        label.font = font
+        label.textColor = textColor
+        leadingConstraint?.constant = leadingInset
+        trailingConstraint?.constant = -trailingInset
+        layer?.backgroundColor = backgroundColor.cgColor
+    }
+}
+
+private struct FileManagerKeyValuePreviewHost: NSViewRepresentable {
+    let document: FilePreviewKeyValueDocument
+    let valueFont: NSFont
+    let keyFont: NSFont
+    let lineNumberFont: NSFont
+    let backgroundColor: NSColor
+    let valueTextColor: NSColor
+    let keyTextColor: NSColor
+    let lineNumberTextColor: NSColor
+    let lineNumberBackgroundColor: NSColor
+    let keyBackgroundColor: NSColor
+    let evenValueBackgroundColor: NSColor
+    let oddValueBackgroundColor: NSColor
+    let gridColor: NSColor
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = true
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.scrollerStyle = .overlay
+
+        let tableView = NSTableView()
+        tableView.headerView = nil
+        tableView.rowHeight = Self.rowHeight
+        tableView.intercellSpacing = .zero
+        tableView.usesAlternatingRowBackgroundColors = false
+        tableView.selectionHighlightStyle = .none
+        tableView.allowsColumnReordering = false
+        tableView.allowsColumnResizing = true
+        tableView.allowsMultipleSelection = false
+        tableView.gridStyleMask = [.solidHorizontalGridLineMask, .solidVerticalGridLineMask]
+        tableView.dataSource = context.coordinator
+        tableView.delegate = context.coordinator
+
+        let menu = NSMenu()
+        menu.delegate = context.coordinator
+        tableView.menu = menu
+
+        scrollView.documentView = tableView
+        context.coordinator.tableView = tableView
+        context.coordinator.apply(document: document, configuration: configuration, to: tableView, scrollView: scrollView)
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let tableView = scrollView.documentView as? NSTableView else { return }
+        context.coordinator.apply(document: document, configuration: configuration, to: tableView, scrollView: scrollView)
+    }
+
+    private var configuration: Coordinator.Configuration {
+        Coordinator.Configuration(
+            valueFont: valueFont,
+            keyFont: keyFont,
+            lineNumberFont: lineNumberFont,
+            backgroundColor: backgroundColor,
+            valueTextColor: valueTextColor,
+            keyTextColor: keyTextColor,
+            lineNumberTextColor: lineNumberTextColor,
+            lineNumberBackgroundColor: lineNumberBackgroundColor,
+            keyBackgroundColor: keyBackgroundColor,
+            evenValueBackgroundColor: evenValueBackgroundColor,
+            oddValueBackgroundColor: oddValueBackgroundColor,
+            gridColor: gridColor
+        )
+    }
+
+    final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
+        struct Configuration: Equatable {
+            let valueFont: NSFont
+            let keyFont: NSFont
+            let lineNumberFont: NSFont
+            let backgroundColor: NSColor
+            let valueTextColor: NSColor
+            let keyTextColor: NSColor
+            let lineNumberTextColor: NSColor
+            let lineNumberBackgroundColor: NSColor
+            let keyBackgroundColor: NSColor
+            let evenValueBackgroundColor: NSColor
+            let oddValueBackgroundColor: NSColor
+            let gridColor: NSColor
+        }
+
+        weak var tableView: NSTableView?
+        private var document = FilePreviewKeyValueDocument(rows: [], formatLabel: "", sourceLineCount: 0)
+        private var didBuildColumns = false
+        private var appliedConfiguration: Configuration?
+        private var contextMenuTargetRow: Int?
+
+        @MainActor
+        func apply(
+            document: FilePreviewKeyValueDocument,
+            configuration: Configuration,
+            to tableView: NSTableView,
+            scrollView: NSScrollView
+        ) {
+            let documentChanged = self.document != document
+            let configurationChanged = appliedConfiguration != configuration
+
+            self.document = document
+            appliedConfiguration = configuration
+            scrollView.backgroundColor = configuration.backgroundColor
+            tableView.backgroundColor = configuration.backgroundColor
+            tableView.gridColor = configuration.gridColor
+
+            if !didBuildColumns {
+                rebuildColumns(in: tableView)
+                didBuildColumns = true
+            }
+            if documentChanged || configurationChanged {
+                tableView.reloadData()
+            }
+        }
+
+        func numberOfRows(in tableView: NSTableView) -> Int {
+            document.rows.count
+        }
+
+        func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+            guard row < document.rows.count,
+                  let tableColumn,
+                  let configuration = appliedConfiguration else {
+                return nil
+            }
+            let identifier = tableColumn.identifier
+            let previewRow = document.rows[row]
+            let cell = tableView.makeView(withIdentifier: identifier, owner: self) as? FileManagerTableCellView ??
+                FileManagerTableCellView(identifier: identifier)
+            let text: String
+            let font: NSFont
+            let textColor: NSColor
+            let backgroundColor: NSColor
+            let alignment: NSTextAlignment
+            switch identifier.rawValue {
+            case Self.lineNumberIdentifier:
+                text = "\(previewRow.index)"
+                font = configuration.lineNumberFont
+                textColor = configuration.lineNumberTextColor
+                backgroundColor = configuration.lineNumberBackgroundColor
+                alignment = .right
+            case Self.keyIdentifier:
+                text = previewRow.key
+                font = configuration.keyFont
+                textColor = configuration.keyTextColor
+                backgroundColor = configuration.keyBackgroundColor
+                alignment = .left
+            default:
+                text = Self.previewText(previewRow.value)
+                font = configuration.valueFont
+                textColor = configuration.valueTextColor
+                backgroundColor = row.isMultiple(of: 2) ? configuration.evenValueBackgroundColor : configuration.oddValueBackgroundColor
+                alignment = .left
+            }
+            cell.configure(
+                text: text,
+                alignment: alignment,
+                font: font,
+                textColor: textColor,
+                backgroundColor: backgroundColor
+            )
+            return cell
+        }
+
+        func menuNeedsUpdate(_ menu: NSMenu) {
+            menu.removeAllItems()
+            guard let tableView else { return }
+            let row = tableView.clickedRow
+            guard row >= 0, row < document.rows.count else { return }
+            contextMenuTargetRow = row
+
+            let copyKey = NSMenuItem(title: L("复制 Key", "Copy Key"), action: #selector(copyKey), keyEquivalent: "")
+            copyKey.target = self
+            menu.addItem(copyKey)
+
+            let copyValue = NSMenuItem(title: L("复制 Value", "Copy Value"), action: #selector(copyValue), keyEquivalent: "")
+            copyValue.target = self
+            menu.addItem(copyValue)
+
+            let copyLine = NSMenuItem(title: L("复制整行", "Copy Line"), action: #selector(copyLine), keyEquivalent: "")
+            copyLine.target = self
+            menu.addItem(copyLine)
+        }
+
+        @objc private func copyKey() {
+            guard let row = contextMenuTargetRow else { return }
+            copyText(document.rows[row].key)
+        }
+
+        @objc private func copyValue() {
+            guard let row = contextMenuTargetRow else { return }
+            copyText(document.rows[row].value)
+        }
+
+        @objc private func copyLine() {
+            guard let row = contextMenuTargetRow else { return }
+            copyText(document.rows[row].raw)
+        }
+
+        @MainActor
+        private func rebuildColumns(in tableView: NSTableView) {
+            for column in tableView.tableColumns {
+                tableView.removeTableColumn(column)
+            }
+
+            let lineColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(Self.lineNumberIdentifier))
+            lineColumn.width = 46
+            lineColumn.minWidth = 40
+            lineColumn.maxWidth = 62
+            tableView.addTableColumn(lineColumn)
+
+            let keyColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(Self.keyIdentifier))
+            keyColumn.width = 210
+            keyColumn.minWidth = 120
+            keyColumn.maxWidth = 360
+            tableView.addTableColumn(keyColumn)
+
+            let valueColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(Self.valueIdentifier))
+            valueColumn.width = 360
+            valueColumn.minWidth = 180
+            valueColumn.maxWidth = 720
+            tableView.addTableColumn(valueColumn)
+        }
+
+        private func copyText(_ text: String) {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+
+        private static func previewText(_ value: String) -> String {
+            guard value.count > 240 else { return value }
+            return String(value.prefix(240)) + " ..."
+        }
+
+        private static let lineNumberIdentifier = "line"
+        private static let keyIdentifier = "key"
+        private static let valueIdentifier = "value"
+    }
+
+    private static let rowHeight: CGFloat = 27
+}
+
+private struct FileManagerStructuredPreviewHost: NSViewRepresentable {
+    let document: FilePreviewStructuredDocument
+    let pathFont: NSFont
+    let kindFont: NSFont
+    let valueFont: NSFont
+    let backgroundColor: NSColor
+    let pathTextColor: NSColor
+    let kindTextColor: NSColor
+    let valueTextColor: NSColor
+    let pathBackgroundColor: NSColor
+    let evenValueBackgroundColor: NSColor
+    let oddValueBackgroundColor: NSColor
+    let gridColor: NSColor
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = true
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.scrollerStyle = .overlay
+
+        let tableView = NSTableView()
+        tableView.headerView = nil
+        tableView.rowHeight = Self.rowHeight
+        tableView.intercellSpacing = .zero
+        tableView.usesAlternatingRowBackgroundColors = false
+        tableView.selectionHighlightStyle = .none
+        tableView.allowsColumnReordering = false
+        tableView.allowsColumnResizing = true
+        tableView.allowsMultipleSelection = false
+        tableView.gridStyleMask = [.solidHorizontalGridLineMask, .solidVerticalGridLineMask]
+        tableView.dataSource = context.coordinator
+        tableView.delegate = context.coordinator
+
+        let menu = NSMenu()
+        menu.delegate = context.coordinator
+        tableView.menu = menu
+
+        scrollView.documentView = tableView
+        context.coordinator.tableView = tableView
+        context.coordinator.apply(document: document, configuration: configuration, to: tableView, scrollView: scrollView)
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let tableView = scrollView.documentView as? NSTableView else { return }
+        context.coordinator.apply(document: document, configuration: configuration, to: tableView, scrollView: scrollView)
+    }
+
+    private var configuration: Coordinator.Configuration {
+        Coordinator.Configuration(
+            pathFont: pathFont,
+            kindFont: kindFont,
+            valueFont: valueFont,
+            backgroundColor: backgroundColor,
+            pathTextColor: pathTextColor,
+            kindTextColor: kindTextColor,
+            valueTextColor: valueTextColor,
+            pathBackgroundColor: pathBackgroundColor,
+            evenValueBackgroundColor: evenValueBackgroundColor,
+            oddValueBackgroundColor: oddValueBackgroundColor,
+            gridColor: gridColor
+        )
+    }
+
+    final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
+        struct Configuration: Equatable {
+            let pathFont: NSFont
+            let kindFont: NSFont
+            let valueFont: NSFont
+            let backgroundColor: NSColor
+            let pathTextColor: NSColor
+            let kindTextColor: NSColor
+            let valueTextColor: NSColor
+            let pathBackgroundColor: NSColor
+            let evenValueBackgroundColor: NSColor
+            let oddValueBackgroundColor: NSColor
+            let gridColor: NSColor
+        }
+
+        weak var tableView: NSTableView?
+        private var document = FilePreviewStructuredDocument(rows: [], formatLabel: "", sourceLineCount: 0)
+        private var didBuildColumns = false
+        private var appliedConfiguration: Configuration?
+        private var contextMenuTargetRow: Int?
+
+        @MainActor
+        func apply(
+            document: FilePreviewStructuredDocument,
+            configuration: Configuration,
+            to tableView: NSTableView,
+            scrollView: NSScrollView
+        ) {
+            let documentChanged = self.document != document
+            let configurationChanged = appliedConfiguration != configuration
+
+            self.document = document
+            appliedConfiguration = configuration
+            scrollView.backgroundColor = configuration.backgroundColor
+            tableView.backgroundColor = configuration.backgroundColor
+            tableView.gridColor = configuration.gridColor
+
+            if !didBuildColumns {
+                rebuildColumns(in: tableView)
+                didBuildColumns = true
+            }
+            if documentChanged || configurationChanged {
+                tableView.reloadData()
+            }
+        }
+
+        func numberOfRows(in tableView: NSTableView) -> Int {
+            document.rows.count
+        }
+
+        func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+            guard row < document.rows.count,
+                  let tableColumn,
+                  let configuration = appliedConfiguration else {
+                return nil
+            }
+            let identifier = tableColumn.identifier
+            let previewRow = document.rows[row]
+            let cell = tableView.makeView(withIdentifier: identifier, owner: self) as? FileManagerTableCellView ??
+                FileManagerTableCellView(identifier: identifier)
+            let text: String
+            let font: NSFont
+            let textColor: NSColor
+            let backgroundColor: NSColor
+            let leadingInset: CGFloat
+            switch identifier.rawValue {
+            case Self.pathIdentifier:
+                text = previewRow.path
+                font = configuration.pathFont
+                textColor = configuration.pathTextColor
+                backgroundColor = configuration.pathBackgroundColor
+                leadingInset = 10 + CGFloat(min(previewRow.depth, 8)) * 16
+            case Self.kindIdentifier:
+                text = previewRow.kind
+                font = configuration.kindFont
+                textColor = configuration.kindTextColor
+                backgroundColor = row.isMultiple(of: 2) ? configuration.evenValueBackgroundColor : configuration.oddValueBackgroundColor
+                leadingInset = 8
+            default:
+                text = Self.previewText(previewRow.value.isEmpty ? " " : previewRow.value)
+                font = configuration.valueFont
+                textColor = configuration.valueTextColor
+                backgroundColor = row.isMultiple(of: 2) ? configuration.evenValueBackgroundColor : configuration.oddValueBackgroundColor
+                leadingInset = 8
+            }
+            cell.configure(
+                text: text,
+                alignment: .left,
+                font: font,
+                textColor: textColor,
+                backgroundColor: backgroundColor,
+                leadingInset: leadingInset
+            )
+            return cell
+        }
+
+        func menuNeedsUpdate(_ menu: NSMenu) {
+            menu.removeAllItems()
+            guard let tableView else { return }
+            let row = tableView.clickedRow
+            guard row >= 0, row < document.rows.count else { return }
+            contextMenuTargetRow = row
+
+            let copyPath = NSMenuItem(title: L("复制路径", "Copy Path"), action: #selector(copyPath), keyEquivalent: "")
+            copyPath.target = self
+            menu.addItem(copyPath)
+
+            let copyKey = NSMenuItem(title: L("复制键", "Copy Key"), action: #selector(copyKey), keyEquivalent: "")
+            copyKey.target = self
+            menu.addItem(copyKey)
+
+            let copyValue = NSMenuItem(title: L("复制值", "Copy Value"), action: #selector(copyValue), keyEquivalent: "")
+            copyValue.target = self
+            menu.addItem(copyValue)
+
+            let copyPathAndValue = NSMenuItem(title: L("复制路径和值", "Copy Path and Value"), action: #selector(copyPathAndValue), keyEquivalent: "")
+            copyPathAndValue.target = self
+            menu.addItem(copyPathAndValue)
+        }
+
+        @objc private func copyPath() {
+            guard let row = contextMenuTargetRow else { return }
+            copyText(document.rows[row].path)
+        }
+
+        @objc private func copyKey() {
+            guard let row = contextMenuTargetRow else { return }
+            copyText(document.rows[row].key)
+        }
+
+        @objc private func copyValue() {
+            guard let row = contextMenuTargetRow else { return }
+            copyText(document.rows[row].value)
+        }
+
+        @objc private func copyPathAndValue() {
+            guard let row = contextMenuTargetRow else { return }
+            let previewRow = document.rows[row]
+            copyText("\(previewRow.path) = \(previewRow.value)")
+        }
+
+        @MainActor
+        private func rebuildColumns(in tableView: NSTableView) {
+            for column in tableView.tableColumns {
+                tableView.removeTableColumn(column)
+            }
+
+            let pathColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(Self.pathIdentifier))
+            pathColumn.width = 300
+            pathColumn.minWidth = 180
+            pathColumn.maxWidth = 560
+            tableView.addTableColumn(pathColumn)
+
+            let kindColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(Self.kindIdentifier))
+            kindColumn.width = 78
+            kindColumn.minWidth = 64
+            kindColumn.maxWidth = 120
+            tableView.addTableColumn(kindColumn)
+
+            let valueColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(Self.valueIdentifier))
+            valueColumn.width = 420
+            valueColumn.minWidth = 180
+            valueColumn.maxWidth = 760
+            tableView.addTableColumn(valueColumn)
+        }
+
+        private func copyText(_ text: String) {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+
+        private static func previewText(_ value: String) -> String {
+            guard value.count > 260 else { return value }
+            return String(value.prefix(260)) + " ..."
+        }
+
+        private static let pathIdentifier = "path"
+        private static let kindIdentifier = "kind"
+        private static let valueIdentifier = "value"
+    }
+
+    private static let rowHeight: CGFloat = 28
 }
 
 private struct FileManagerKeyValuePreview: View {
@@ -3101,58 +4183,81 @@ private struct FileManagerKeyValuePreview: View {
     var body: some View {
         VStack(spacing: 0) {
             infoBar
-            ScrollView([.vertical, .horizontal]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(document.rows) { row in
-                        HStack(spacing: 0) {
-                            Text("\(row.index)")
-                                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                                .foregroundStyle(theme.shellChromeText.opacity(0.34))
-                                .frame(width: 38, height: 27, alignment: .trailing)
-                                .padding(.trailing, 8)
-                                .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.30 : 0.18))
+            if usesAppKitPreview {
+                FileManagerKeyValuePreviewHost(
+                    document: document,
+                    valueFont: .conductorMonospacedSystemFont(ofSize: 11.5, scale: fontScale),
+                    keyFont: .conductorMonospacedSystemFont(ofSize: 11.5, weight: .semibold, scale: fontScale),
+                    lineNumberFont: .conductorMonospacedSystemFont(ofSize: 10.5, weight: .medium, scale: fontScale),
+                    backgroundColor: NSColor(theme.terminalBackground),
+                    valueTextColor: NSColor(theme.shellChromeText.opacity(0.72)),
+                    keyTextColor: NSColor(theme.shellChromeText.opacity(0.82)),
+                    lineNumberTextColor: NSColor(theme.shellChromeText.opacity(0.34)),
+                    lineNumberBackgroundColor: NSColor(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.30 : 0.18)),
+                    keyBackgroundColor: NSColor(theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.18 : 0.12)),
+                    evenValueBackgroundColor: NSColor(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.06 : 0.09)),
+                    oddValueBackgroundColor: NSColor.clear,
+                    gridColor: NSColor(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
+                )
+                .background(theme.terminalBackground)
+            } else {
+                ScrollView([.vertical, .horizontal]) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(document.rows) { row in
+                            HStack(spacing: 0) {
+                                Text("\(row.index)")
+                                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(theme.shellChromeText.opacity(0.34))
+                                    .frame(width: 38, height: 27, alignment: .trailing)
+                                    .padding(.trailing, 8)
+                                    .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.30 : 0.18))
 
-                            Text(row.key)
-                                .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(theme.shellChromeText.opacity(0.82))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .padding(.horizontal, 8)
-                                .frame(width: 210, height: 27, alignment: .leading)
-                                .background(theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.18 : 0.12))
+                                Text(row.key)
+                                    .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(theme.shellChromeText.opacity(0.82))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .padding(.horizontal, 8)
+                                    .frame(width: 210, height: 27, alignment: .leading)
+                                    .background(theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.18 : 0.12))
 
-                            Text(row.value)
-                                .font(.system(size: 11.5, weight: .regular, design: .monospaced))
-                                .foregroundStyle(theme.shellChromeText.opacity(0.72))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .padding(.horizontal, 8)
-                                .frame(width: 360, height: 27, alignment: .leading)
-                        }
-                        .contextMenu {
-                            Button(L("复制 Key", "Copy Key")) {
-                                copyText(row.key)
+                                Text(row.value)
+                                    .font(.system(size: 11.5, weight: .regular, design: .monospaced))
+                                    .foregroundStyle(theme.shellChromeText.opacity(0.72))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .padding(.horizontal, 8)
+                                    .frame(width: 360, height: 27, alignment: .leading)
                             }
-                            Button(L("复制 Value", "Copy Value")) {
-                                copyText(row.value)
+                            .contextMenu {
+                                Button(L("复制 Key", "Copy Key")) {
+                                    copyText(row.key)
+                                }
+                                Button(L("复制 Value", "Copy Value")) {
+                                    copyText(row.value)
+                                }
+                                Button(L("复制整行", "Copy Line")) {
+                                    copyText(row.raw)
+                                }
                             }
-                            Button(L("复制整行", "Copy Line")) {
-                                copyText(row.raw)
+                            .overlay(alignment: .bottom) {
+                                Rectangle()
+                                    .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.14))
+                                    .frame(height: 1)
                             }
-                        }
-                        .overlay(alignment: .bottom) {
-                            Rectangle()
-                                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.14))
-                                .frame(height: 1)
                         }
                     }
+                    .padding(.top, 10)
+                    .padding(.bottom, 18)
+                    .padding(.trailing, 18)
                 }
-                .padding(.top, 10)
-                .padding(.bottom, 18)
-                .padding(.trailing, 18)
+                .background(theme.terminalBackground)
             }
-            .background(theme.terminalBackground)
         }
+    }
+
+    private var usesAppKitPreview: Bool {
+        document.rows.count > Self.swiftUIRowLimit || truncated
     }
 
     private var infoBar: some View {
@@ -3190,6 +4295,8 @@ private struct FileManagerKeyValuePreview: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }
+
+    private static let swiftUIRowLimit = 160
 }
 
 private struct FileManagerStructuredPreview: View {
@@ -3202,61 +4309,83 @@ private struct FileManagerStructuredPreview: View {
     var body: some View {
         VStack(spacing: 0) {
             infoBar
-            ScrollView([.vertical, .horizontal]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(document.rows) { row in
-                        HStack(spacing: 0) {
-                            Text(row.path)
-                                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                                .foregroundStyle(theme.shellChromeText.opacity(0.72))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .padding(.leading, 10 + CGFloat(min(row.depth, 8)) * 16)
-                                .padding(.trailing, 8)
-                                .frame(width: 300, height: 28, alignment: .leading)
-                                .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.26 : 0.16))
+            if usesAppKitPreview {
+                FileManagerStructuredPreviewHost(
+                    document: document,
+                    pathFont: .conductorMonospacedSystemFont(ofSize: 11, weight: .medium, scale: fontScale),
+                    kindFont: .conductorSystemFont(ofSize: 10.5, weight: .bold, scale: fontScale),
+                    valueFont: .conductorMonospacedSystemFont(ofSize: 11.2, scale: fontScale),
+                    backgroundColor: NSColor(theme.terminalBackground),
+                    pathTextColor: NSColor(theme.shellChromeText.opacity(0.72)),
+                    kindTextColor: NSColor(theme.shellChromeText.opacity(0.52)),
+                    valueTextColor: NSColor(theme.shellChromeText.opacity(0.78)),
+                    pathBackgroundColor: NSColor(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.26 : 0.16)),
+                    evenValueBackgroundColor: NSColor(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.06 : 0.09)),
+                    oddValueBackgroundColor: NSColor.clear,
+                    gridColor: NSColor(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
+                )
+                .background(theme.terminalBackground)
+            } else {
+                ScrollView([.vertical, .horizontal]) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(document.rows) { row in
+                            HStack(spacing: 0) {
+                                Text(row.path)
+                                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(theme.shellChromeText.opacity(0.72))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .padding(.leading, 10 + CGFloat(min(row.depth, 8)) * 16)
+                                    .padding(.trailing, 8)
+                                    .frame(width: 300, height: 28, alignment: .leading)
+                                    .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.26 : 0.16))
 
-                            Text(row.kind)
-                                .font(.conductorSystem(size: 10.5, weight: .bold, family: fontFamily, scale: fontScale))
-                                .foregroundStyle(theme.shellChromeText.opacity(0.52))
-                                .lineLimit(1)
-                                .frame(width: 78, height: 28, alignment: .leading)
+                                Text(row.kind)
+                                    .font(.conductorSystem(size: 10.5, weight: .bold, family: fontFamily, scale: fontScale))
+                                    .foregroundStyle(theme.shellChromeText.opacity(0.52))
+                                    .lineLimit(1)
+                                    .frame(width: 78, height: 28, alignment: .leading)
 
-                            Text(row.value.isEmpty ? " " : row.value)
-                                .font(.system(size: 11.2, weight: .regular, design: .monospaced))
-                                .foregroundStyle(theme.shellChromeText.opacity(0.78))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .padding(.horizontal, 8)
-                                .frame(width: 420, height: 28, alignment: .leading)
-                        }
-                        .contextMenu {
-                            Button(L("复制路径", "Copy Path")) {
-                                copyText(row.path)
+                                Text(row.value.isEmpty ? " " : row.value)
+                                    .font(.system(size: 11.2, weight: .regular, design: .monospaced))
+                                    .foregroundStyle(theme.shellChromeText.opacity(0.78))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .padding(.horizontal, 8)
+                                    .frame(width: 420, height: 28, alignment: .leading)
                             }
-                            Button(L("复制键", "Copy Key")) {
-                                copyText(row.key)
+                            .contextMenu {
+                                Button(L("复制路径", "Copy Path")) {
+                                    copyText(row.path)
+                                }
+                                Button(L("复制键", "Copy Key")) {
+                                    copyText(row.key)
+                                }
+                                Button(L("复制值", "Copy Value")) {
+                                    copyText(row.value)
+                                }
+                                Button(L("复制路径和值", "Copy Path and Value")) {
+                                    copyText("\(row.path) = \(row.value)")
+                                }
                             }
-                            Button(L("复制值", "Copy Value")) {
-                                copyText(row.value)
+                            .overlay(alignment: .bottom) {
+                                Rectangle()
+                                    .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.14))
+                                    .frame(height: 1)
                             }
-                            Button(L("复制路径和值", "Copy Path and Value")) {
-                                copyText("\(row.path) = \(row.value)")
-                            }
-                        }
-                        .overlay(alignment: .bottom) {
-                            Rectangle()
-                                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.14))
-                                .frame(height: 1)
                         }
                     }
+                    .padding(.top, 10)
+                    .padding(.bottom, 18)
+                    .padding(.trailing, 18)
                 }
-                .padding(.top, 10)
-                .padding(.bottom, 18)
-                .padding(.trailing, 18)
+                .background(theme.terminalBackground)
             }
-            .background(theme.terminalBackground)
         }
+    }
+
+    private var usesAppKitPreview: Bool {
+        document.rows.count > Self.swiftUIRowLimit || truncated
     }
 
     private var infoBar: some View {
@@ -3294,6 +4423,8 @@ private struct FileManagerStructuredPreview: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }
+
+    private static let swiftUIRowLimit = 160
 }
 
 private struct SourcePreviewLine: View {
@@ -3456,7 +4587,6 @@ private struct FileManagerRowView: View {
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorFontFamily) private var fontFamily
-    @State private var isHovered = false
     @State private var isDropTargeted = false
 
     var body: some View {
@@ -3518,9 +4648,6 @@ private struct FileManagerRowView: View {
                 }
                 return true
             }
-            .onHover { hovering in
-                isHovered = hovering
-            }
     }
 
     private var rowContent: some View {
@@ -3552,19 +4679,12 @@ private struct FileManagerRowView: View {
             }
 
             if !isRenaming {
-                Text(rowDetail)
+                Text(item.rowDetail)
                     .font(.conductorSystem(size: 10.2, weight: .semibold, family: fontFamily, scale: fontScale))
                     .foregroundStyle(theme.shellChromeText.opacity(isSelected ? 0.56 : 0.34))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: 150, alignment: .trailing)
-            }
-
-            if isMissing {
-                statusBadge(
-                    systemImage: "questionmark.diamond",
-                    help: L("项目已不存在，刷新后会移除", "Item no longer exists; refresh will remove it")
-                )
             }
 
             if item.isSymbolicLink {
@@ -3586,12 +4706,12 @@ private struct FileManagerRowView: View {
                 )
             }
 
-            if isLargeEditableFile {
+            if item.isLargeEditableFile {
                 statusBadge(
                     systemImage: "exclamationmark.triangle",
                     help: L("超过 20 MB，将以保护模式打开", "Over 20 MB; opens in protected mode")
                 )
-            } else if isUnsupportedBinaryLikeFile {
+            } else if item.isUnsupportedBinaryLikeFile {
                 statusBadge(
                     systemImage: "nosign",
                     help: L("二进制或暂不支持内联预览", "Binary or unsupported inline preview")
@@ -3647,49 +4767,6 @@ private struct FileManagerRowView: View {
         }
     }
 
-    private var rowDetail: String {
-        var parts: [String] = []
-        if item.isDirectory {
-            parts.append(L("文件夹", "Folder"))
-        } else if let byteCount = item.byteCount {
-            parts.append(ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file))
-        } else {
-            parts.append(item.typeLabel)
-        }
-        if let modificationDate = item.modificationDate {
-            parts.append(Self.relativeDateFormatter.localizedString(for: modificationDate, relativeTo: Date()))
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private var isLargeEditableFile: Bool {
-        guard !item.isDirectory, let byteCount = item.byteCount else { return false }
-        return byteCount > 20 * 1024 * 1024
-    }
-
-    private var isMissing: Bool {
-        !FileManager.default.fileExists(atPath: item.url.path)
-    }
-
-    private var isUnsupportedBinaryLikeFile: Bool {
-        guard !item.isDirectory else { return false }
-        let textishExtensions: Set<String> = [
-            "md", "markdown", "txt", "log", "json", "jsonl", "yaml", "yml", "toml", "plist",
-            "csv", "tsv", "xml", "env", "ini", "conf", "cfg", "properties", "swift", "js",
-            "jsx", "ts", "tsx", "py", "rb", "sh", "zsh", "bash", "go", "rs", "java", "kt",
-            "kts", "c", "cc", "cpp", "h", "hpp", "m", "mm", "html", "css", "scss", "sql"
-        ]
-        if textishExtensions.contains(item.url.pathExtension.lowercased()) {
-            return false
-        }
-        if let typeIdentifier = item.contentTypeIdentifier,
-           let type = UTType(typeIdentifier),
-           type.conforms(to: .image) || type.conforms(to: .text) || type.conforms(to: .sourceCode) {
-            return false
-        }
-        return true
-    }
-
     private func statusBadge(systemImage: String, help: String) -> some View {
         Image(systemName: systemImage)
             .font(.conductorSystem(size: 9.5, weight: .semibold, family: fontFamily, scale: fontScale))
@@ -3723,15 +4800,7 @@ private struct FileManagerRowView: View {
         if isSelected {
             return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.48 : 0.54)
         }
-        if isHovered {
-            return theme.floatingHoverFill.opacity(theme.usesDarkChrome ? 0.24 : 0.32)
-        }
         return Color.clear
     }
 
-    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter
-    }()
 }

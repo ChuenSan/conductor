@@ -64,6 +64,12 @@ Do not put long transcript text in `@State`, `@Published`, `@Observable`, `Obser
 
 Do not trigger whole-window SwiftUI invalidation from stdout chunks, PTY reads, cursor movement, terminal redraws, or scrollback growth.
 
+Treat module isolation and bounded rendering as T0 correctness requirements. Terminal panes,
+file manager panels, document previews, workspace chrome, settings, and tab strips must not
+drive each other's focus, search scope, renderer lifetime, or layout by accident. A feature
+that makes another module re-render broadly, captures shortcuts while another module has
+focus, or scales tab/file operations with the whole window is a release-blocking bug.
+
 Throttle UI metadata updates. Sidebar rows and badges should update from snapshots at a controlled cadence, normally no faster than 10-30 Hz.
 
 Run parsing, polling, git probes, port scans, agent hook processing, and transcript summarization off the main thread. The main thread receives small immutable snapshots.

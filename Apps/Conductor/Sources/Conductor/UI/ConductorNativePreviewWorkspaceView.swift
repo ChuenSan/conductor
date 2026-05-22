@@ -222,6 +222,7 @@ final class ConductorNativePreviewContainerView: NSView {
     private let resizeCover = CALayer()
     private var isFreezingPreviewResize = false
     private var pendingFrameAfterResize = false
+    private var deferredResizeCommit: DispatchWorkItem?
 
     var previewItem: QLPreviewItem? {
         get { previewView.previewItem }
@@ -253,12 +254,15 @@ final class ConductorNativePreviewContainerView: NSView {
         if isFreezingPreviewResize || inLiveResize {
             pendingFrameAfterResize = true
             resizeCover.opacity = 1
+            CATransaction.commit()
+            scheduleDeferredResizeCommit()
         } else {
             previewView.frame = bounds
             resizeCover.opacity = 0
             pendingFrameAfterResize = false
+            CATransaction.commit()
+            cancelDeferredResizeCommit()
         }
-        CATransaction.commit()
     }
 
     override func viewWillStartLiveResize() {
@@ -273,8 +277,9 @@ final class ConductorNativePreviewContainerView: NSView {
 
     override func viewDidEndLiveResize() {
         super.viewDidEndLiveResize()
+        cancelDeferredResizeCommit()
         isFreezingPreviewResize = false
-        applyPendingResize()
+        applyPendingResize(force: true)
     }
 
     func setBackgroundColor(_ color: NSColor) {
@@ -285,8 +290,28 @@ final class ConductorNativePreviewContainerView: NSView {
         CATransaction.commit()
     }
 
-    private func applyPendingResize() {
-        guard pendingFrameAfterResize else { return }
+    private func scheduleDeferredResizeCommit() {
+        deferredResizeCommit?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard !self.inLiveResize else {
+                self.scheduleDeferredResizeCommit()
+                return
+            }
+            self.isFreezingPreviewResize = false
+            self.applyPendingResize(force: true)
+        }
+        deferredResizeCommit = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16, execute: workItem)
+    }
+
+    private func cancelDeferredResizeCommit() {
+        deferredResizeCommit?.cancel()
+        deferredResizeCommit = nil
+    }
+
+    private func applyPendingResize(force: Bool = false) {
+        guard force || pendingFrameAfterResize else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         previewView.frame = bounds

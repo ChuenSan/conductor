@@ -61,17 +61,13 @@ final class GhosttyAppRuntime {
         var runtimeConfig = ghostty_runtime_config_s()
         runtimeConfig.userdata = Unmanaged.passUnretained(self).toOpaque()
         runtimeConfig.supports_selection_clipboard = true
-        runtimeConfig.wakeup_cb = { userdata in
-            guard let userdata else { return }
-            let runtime = Unmanaged<GhosttyAppRuntime>.fromOpaque(userdata).takeUnretainedValue()
+        runtimeConfig.wakeup_cb = { _ in
             Task { @MainActor in
-                runtime.scheduleTick()
+                GhosttyAppRuntime.shared.scheduleTick()
             }
         }
-        runtimeConfig.action_cb = { userdata, target, action in
-            guard let userdata else { return false }
-            let runtime = Unmanaged<GhosttyAppRuntime>.fromOpaque(userdata).takeUnretainedValue()
-            return runtime.handleAction(target: target, action: action)
+        runtimeConfig.action_cb = { _, target, action in
+            GhosttyAppRuntime.shared.handleAction(target: target, action: action)
         }
         runtimeConfig.read_clipboard_cb = { userdata, location, state in
             guard let userdata, let state else { return false }
