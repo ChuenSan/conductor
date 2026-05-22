@@ -226,6 +226,12 @@ workspace overview, and compact status modules.
   coordinator for dirty-state, external-change, close-after-save, and file-tab mutations, but
   document preview layout and text editor font changes must arrive through explicit snapshot
   values so unrelated window-model updates do not invalidate large document surfaces.
+- Detached panel roots such as Notification Center should not observe the full window model
+  directly when they live outside the main SwiftUI root. Use a small panel store or equivalent
+  scoped bridge that subscribes only to the publishers the panel needs, then expose compact
+  snapshots plus theme/appearance values to the view tree. The model may remain the command
+  target for panel actions, but unrelated workspace, file-manager, search, and terminal chrome
+  changes must not repaint an open detached panel.
 - Formatted file views should share one document workbench skeleton: a theme-owned header with
   title/path/status badges, bounded metadata metrics, a typed reader body, and an optional
   outline column only when the format can provide useful headings. Markdown, log, TeX, and text

@@ -1,4 +1,5 @@
 import ConductorCore
+import Combine
 import SwiftUI
 
 private func L(_ zh: String, _ en: String) -> String {
@@ -87,16 +88,105 @@ struct NotificationPanelRowSnapshot: Identifiable, Equatable {
 }
 
 struct NotificationPanelRootView: View {
-    @ObservedObject var model: ConductorWindowModel
+    @StateObject private var store: NotificationPanelStore
+
+    init(model: ConductorWindowModel) {
+        _store = StateObject(wrappedValue: NotificationPanelStore(model: model))
+    }
 
     var body: some View {
-        NotificationPanelView(model: model)
-            .environment(\.colorScheme, model.theme.chromeColorScheme)
-            .preferredColorScheme(model.theme.chromeColorScheme)
-            .environment(\.conductorTheme, model.theme)
-            .environment(\.conductorFontScale, model.appearance.fontScale)
-            .environment(\.conductorFontFamily, model.appearance.fontFamily)
-            .environment(\.locale, model.appearance.language.locale)
+        NotificationPanelView(
+            snapshot: store.snapshot,
+            onClose: store.close,
+            onJumpToLatestUnread: store.jumpToLatestUnread,
+            onClearAll: store.clearAll,
+            onOpen: store.open,
+            onClear: store.clear,
+            onTestNotification: store.testNotification
+        )
+            .environment(\.colorScheme, store.theme.chromeColorScheme)
+            .preferredColorScheme(store.theme.chromeColorScheme)
+            .environment(\.conductorTheme, store.theme)
+            .environment(\.conductorFontScale, store.appearance.fontScale)
+            .environment(\.conductorFontFamily, store.appearance.fontFamily)
+            .environment(\.locale, store.appearance.language.locale)
+    }
+}
+
+@MainActor
+private final class NotificationPanelStore: ObservableObject {
+    let model: ConductorWindowModel
+    @Published private(set) var snapshot: NotificationPanelSnapshot
+    @Published private(set) var theme: TerminalTheme
+    @Published private(set) var appearance: AppearancePreferences
+
+    private var cancellables = Set<AnyCancellable>()
+
+    init(model: ConductorWindowModel) {
+        self.model = model
+        self.snapshot = NotificationPanelSnapshot(model: model)
+        self.theme = model.theme
+        self.appearance = model.appearance
+        bind()
+    }
+
+    func close() {
+        model.hideNotificationPanel()
+    }
+
+    func jumpToLatestUnread() {
+        model.performCommand(.jumpToLatestUnread)
+    }
+
+    func clearAll() {
+        model.performCommand(.clearNotifications)
+    }
+
+    func open(_ id: UUID) {
+        _ = model.openNotification(id)
+    }
+
+    func clear(_ id: UUID) {
+        model.clearNotification(id)
+    }
+
+    func testNotification() {
+        model.performCommand(.testNotification)
+    }
+
+    private func bind() {
+        model.$theme
+            .removeDuplicates()
+            .sink { [weak self] theme in
+                guard let self, self.theme != theme else { return }
+                self.theme = theme
+            }
+            .store(in: &cancellables)
+
+        model.$appearance
+            .removeDuplicates()
+            .sink { [weak self] appearance in
+                guard let self else { return }
+                if self.appearance != appearance {
+                    self.appearance = appearance
+                }
+                self.refreshSnapshot()
+            }
+            .store(in: &cancellables)
+
+        model.$notifications
+            .removeDuplicates()
+            .combineLatest(model.$workspaces.removeDuplicates())
+            .sink { [weak self] _, _ in
+                self?.refreshSnapshot()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func refreshSnapshot() {
+        let next = NotificationPanelSnapshot(model: model)
+        guard next != snapshot else { return }
+        snapshot = next
     }
 }
 

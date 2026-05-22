@@ -216,6 +216,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Added `ConductorFileWorkspaceSnapshot` so the file workspace receives selected file tab, search generations, save request generations, terminal font size, and document layout revision as compact value inputs.
   - Removed `ConductorFileWorkspaceView`'s direct `@ObservedObject` subscription and changed `ConductorWorkspaceFileEditorView` to read save tokens, font size, and layout revision from explicit props instead of the broad window model.
   - Added a matching snapshot for the workspace content tab bar so terminal/file tab display state is value-driven if that surface is reattached later.
+- Twenty-second implementation phase:
+  - Replaced `NotificationPanelRootView`'s broad `@ObservedObject` subscription with a `NotificationPanelStore` that publishes only notification snapshot, theme, and appearance values needed by the detached notification window.
+  - Scoped notification panel invalidation to `notifications`, `workspaces`, `theme`, and `appearance`, preserving model command routing for close, jump, clear, open, and test-notification actions.
+  - Reduced the remaining UI-wide `@ObservedObject var model` boundaries to the main root and split root.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`
