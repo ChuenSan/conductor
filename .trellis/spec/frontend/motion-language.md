@@ -417,7 +417,8 @@ SwiftUI motion belongs to shell chrome, compact metadata, overlays, and interact
 - Row list updates instantly.
 
 **Acceptance**:
-- Jumping to a notification keeps notification panel open unless explicitly closed.
+- Jumping to a notification closes the notification panel without animating terminal content or
+  stealing unrelated focus.
 - Focusing a terminal marks its notifications read.
 - Badge count never jitters layout.
 

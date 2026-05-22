@@ -806,15 +806,15 @@ Color.black.opacity(0.12)
   a notification row.
 - Programmatic surface attachment, geometry refresh, theme refresh, metadata publishing, and
   terminal redraws must not mark notifications read.
-- Notification jumps may update read state and focus the terminal, but must not close the
-  notification panel unless the user explicitly closes it.
+- Notification row jumps update read state, focus the target terminal, refresh the target
+  surface, and close the notification panel as one model-level navigation command.
 
 #### 4. Validation & Error Matrix
 
 - Terminal ID no longer exists -> ignore the acknowledgement without mutating notifications.
 - Terminal already focused -> still mark unread records for that terminal read.
 - No unread records for terminal -> return before copying or publishing notification state.
-- Notification panel visible during jump -> keep the panel visible and update row/badge state.
+- Notification panel visible during row jump -> close the panel and update row/badge state.
 
 #### 5. Good/Base/Bad Cases
 
@@ -823,7 +823,7 @@ Color.black.opacity(0.12)
 - Good: A notification arrives while the terminal is already first responder, the next keypress
   or scroll event clears that terminal's unread state without re-focusing the whole workspace.
 - Base: A notification row is clicked; the terminal is focused, its unread records are marked
-  read, and the notification panel remains open.
+  read, and the notification panel closes.
 - Bad: `focusTerminal(_:)` returns early for the current pane/tab before clearing unread state.
 - Bad: A SwiftUI view refresh, Ghostty geometry sync, or surface reattachment clears unread
   records without direct user terminal activity.
@@ -835,8 +835,9 @@ Color.black.opacity(0.12)
 - Model assertions for `TerminalNotificationState.markTerminalRead(_:)`: unread indexes clear,
   `latestUnread` updates, and repeated reads are idempotent.
 - Manual smoke: create a test notification, click an already-focused terminal, type into it,
-  scroll it, switch to it from a tab, and jump from the notification panel; each path clears the
-  target terminal badge without closing the panel.
+  scroll it, switch to it from a tab, and jump from the notification panel; terminal activation
+  paths clear the target badge without closing unrelated panels, while notification row jumps
+  clear the target badge and close the notification panel.
 
 #### 7. Wrong vs Correct
 

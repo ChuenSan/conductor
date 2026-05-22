@@ -59,6 +59,15 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
 - Keep stable AppKit host identity for Ghostty, WebKit, QuickLook, and other expensive surfaces.
 - Avoid broad rewrites that make existing dirty work impossible to review.
 - Prefer small, sequenced changes with clear verification after each phase.
+- For every audit item that changes product code, rebuild/launch the latest app immediately and
+  drive the affected interaction directly before moving to the next item.
+- The agent owns the verification loop: operate the app, inspect the behavior, and fix any
+  regression found instead of asking the user to recover or confirm basic correctness.
+- After all selected items are complete, run the full Conductor verification gate and document
+  any uncovered manual checks or weak assertions honestly.
+- Small interaction details are in scope for verification, including panel dismissal, selected
+  rows, unread badges, focus restoration, theme propagation, keyboard shortcuts, scroll behavior,
+  hover/animation smoothness, and terminal prompt visibility.
 
 ## Acceptance Criteria
 

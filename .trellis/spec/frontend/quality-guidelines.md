@@ -53,6 +53,11 @@ Tests and verification should scale with risk:
 - Resize stress should include active terminal output, not only static split models. The Conductor gate runs a `resize-while-output` route that creates multiple panes, sends large output through Ghostty surfaces, repeatedly resizes/focuses/equalizes splits, and asserts compact workspace invariants without inspecting transcript text.
 - For one-off high-volume output checks, run the long-output route with `CONDUCTOR_STRESS_CHARACTERS=<count>` to drive an exact stdout character count through one terminal surface while keeping transcript text out of SwiftUI state.
 - For tab/split model changes, include invariant checks that the split tree leaves match the pane dictionary, focused/zoomed panes exist, every pane has a selected tab, and rapid tab switching does not reorder tabs.
+- For each performance-audit item that changes product code, launch the latest app after that item
+  and drive the affected interaction before starting the next item. At the end of the batch, run
+  the full Conductor gate. Treat small details such as panel dismissal, selected rows, badges,
+  focus, theme propagation, terminal prompt visibility, keyboard shortcuts, and animation
+  smoothness as required verification, not optional polish.
 - For performance-sensitive changes, capture Instruments or signpost evidence before release.
 
 ---
