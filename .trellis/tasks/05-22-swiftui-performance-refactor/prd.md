@@ -283,6 +283,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Added `commandPaletteVisible` to `ToolbarChromeSnapshot` and wired it to the Command Center toolbar button's active state.
   - Kept toolbar panel visibility inputs value-driven rather than reading unobserved model flags from the button subtree.
   - Verified this item immediately with `swift build` and shell-panel autorun.
+- Thirty-sixth implementation phase:
+  - Cleaned the terminal tab drag payload registration for Swift 6 by calling `NSItemProvider` data completion from `@MainActor`.
+  - Removed the repeated actor-isolation build warnings from `SplitNodeView.swift` without changing the private terminal-tab payload format or the drag/drop model path.
+  - Verified this item immediately with `swift build`, layout autorun, and focus autorun.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`
