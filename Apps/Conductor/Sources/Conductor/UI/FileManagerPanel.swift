@@ -1406,7 +1406,13 @@ private final class FileManagerPanelStore: ObservableObject {
     }
 
     var selectedItems: [FileManagerItem] {
-        displayedRows.map(\.item).filter { selectedPaths.contains($0.url.path) }
+        guard !selectedPaths.isEmpty else { return [] }
+        var selected: [FileManagerItem] = []
+        selected.reserveCapacity(min(displayedRows.count, selectedPaths.count))
+        for row in displayedRows where selectedPaths.contains(row.item.url.path) {
+            selected.append(row.item)
+        }
+        return selected
     }
 
     var selectedURLs: [URL] {
@@ -2352,7 +2358,13 @@ struct FileManagerPanel: View {
     }
 
     private func selectedItems(in snapshot: FileManagerDisplaySnapshot) -> [FileManagerItem] {
-        let selected = snapshot.rows.map(\.item).filter { store.selectedPaths.contains($0.url.path) }
+        var selected: [FileManagerItem] = []
+        if !store.selectedPaths.isEmpty {
+            selected.reserveCapacity(min(snapshot.rows.count, store.selectedPaths.count))
+            for row in snapshot.rows where store.selectedPaths.contains(row.item.url.path) {
+                selected.append(row.item)
+            }
+        }
         if selected.isEmpty, let selectedItem = store.selectedItem {
             return [selectedItem]
         }
