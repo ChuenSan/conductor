@@ -6301,8 +6301,6 @@ private struct WorkspaceSidebarRow: View {
                 terminalCount: terminalCount,
                 unreadCount: unreadCount,
                 selected: selected,
-                visuallySelected: visuallySelected,
-                selectionNamespace: selectionNamespace,
                 hovering: hovering,
                 themeID: theme.id,
                 fontScaleID: fontScale.id
@@ -6310,6 +6308,11 @@ private struct WorkspaceSidebarRow: View {
             .equatable()
         }
         .buttonStyle(ConductorPressButtonStyle())
+        .background {
+            sidebarRowBackground
+        }
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
+        .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
         .simultaneousGesture(
             TapGesture(count: 2).onEnded {
                 action()
@@ -6339,8 +6342,6 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
     let terminalCount: Int
     let unreadCount: Int
     let selected: Bool
-    let visuallySelected: Bool
-    let selectionNamespace: Namespace.ID
     let hovering: Bool
     let themeID: String
     let fontScaleID: String
@@ -6350,14 +6351,13 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
     nonisolated static func == (lhs: WorkspaceSidebarRowContent, rhs: WorkspaceSidebarRowContent) -> Bool {
         lhs.title == rhs.title &&
         lhs.subtitle == rhs.subtitle &&
-        lhs.splitCount == rhs.splitCount &&
-        lhs.terminalCount == rhs.terminalCount &&
-        lhs.unreadCount == rhs.unreadCount &&
-        lhs.selected == rhs.selected &&
-        lhs.visuallySelected == rhs.visuallySelected &&
-        lhs.hovering == rhs.hovering &&
-        lhs.themeID == rhs.themeID &&
-        lhs.fontScaleID == rhs.fontScaleID
+            lhs.splitCount == rhs.splitCount &&
+            lhs.terminalCount == rhs.terminalCount &&
+            lhs.unreadCount == rhs.unreadCount &&
+            lhs.selected == rhs.selected &&
+            lhs.hovering == rhs.hovering &&
+            lhs.themeID == rhs.themeID &&
+            lhs.fontScaleID == rhs.fontScaleID
     }
 
     var body: some View {
@@ -6406,21 +6406,6 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         .padding(.leading, 7)
         .padding(.trailing, 7)
         .frame(height: 48)
-        .background {
-            let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
-            shape
-                .fill(hovering ? theme.shellHoverFill : Color.clear)
-            if visuallySelected {
-                shape
-                    .fill(theme.shellSelectedFill)
-                    .matchedGeometryEffect(id: "sidebar-workspace-selection", in: selectionNamespace)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
-        .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
-        .transaction { transaction in
-            transaction.animation = nil
-        }
     }
 
     private func workspaceMetric(systemImage: String, value: Int) -> some View {

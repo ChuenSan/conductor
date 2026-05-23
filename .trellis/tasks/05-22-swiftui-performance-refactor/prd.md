@@ -275,6 +275,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Removed the terminal pane focus sweep visual after design review; focused pane feedback now uses only a restrained chrome ring opacity/line-width settle.
   - Renamed the shared helper from `conductorFocusSweep` to `conductorFocusRing` so future motion work does not reintroduce traveling light around terminal panes by accident.
   - Kept the Ghostty/AppKit terminal surface untouched and preserved explicit focused-pane flash behavior.
+- Thirty-fourth implementation phase:
+  - Moved the sidebar workspace selected-row matched background out of `WorkspaceSidebarRowContent.equatable()` and onto the row container so selection glide is not trapped inside an equality/cache boundary.
+  - Removed unused selection namespace/value inputs from the equatable content leaf and dropped the transaction-disabled subtree that was suppressing row selection motion.
+  - Verified this item immediately with `swift build`, workspace autorun, and focus autorun before continuing.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

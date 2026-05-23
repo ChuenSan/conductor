@@ -148,6 +148,8 @@ when a transform can express the same motion.
 - Fast switching from the sidebar does not make old/new workspace titles flash.
 - Double-click rename stays in the same row geometry.
 - Closing workspaces never resurrects the old first item.
+- Matched selected-row backgrounds live on the row container, not inside `.equatable()`
+  content leaves or transaction-disabled subtrees.
 
 ### Workspace Tab Strip
 
