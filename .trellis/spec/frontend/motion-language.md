@@ -494,6 +494,34 @@ when a transform can express the same motion.
 - Toolbar buttons respond instantly.
 - Text-labeled buttons never show custom tooltip bubbles.
 
+### Settings Content Swap
+
+**Trigger**: Settings sidebar section changes or Settings > Terminal local category changes.
+
+**Animate**:
+- Content modules swap directionally according to navigation order.
+- Moving forward enters from trailing and exits toward leading; moving backward enters from
+  leading and exits toward trailing.
+- The motion may use opacity, offset, and tiny scale only.
+
+**Do Not Animate**:
+- The settings window frame.
+- Terminal hosts or terminal preview surfaces behind the panel.
+- Dense form controls during value changes.
+
+**Motion**:
+- Content swap: `contentSwap`, 150-190ms.
+- Selected sidebar/category capsule: `selectionGlide`.
+
+**Reduced Motion**:
+- Content switches instantly.
+
+**Acceptance**:
+- Switching settings sections feels like a module track, not a hard page replace.
+- Terminal settings subcategories keep the active section mounted only, preserving the earlier
+  performance fix.
+- Scrolling and controls remain responsive while switching categories.
+
 ### Theme / Appearance Changes
 
 **Trigger**: theme, density, clarity, language, shell font, terminal font changes.

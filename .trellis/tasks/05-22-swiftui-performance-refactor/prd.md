@@ -259,6 +259,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Added shared signature motion primitives for more interesting chrome animation: bounded `conductorCascade`, `conductorSignalPulse`, `delivery`, `cascade`, `contentSwap`, and `workspaceSpreadTransition`.
   - Applied cascade entry to Command Center result rows and Notification Center rows, added one-shot signal pulse to unread dots/badges, and changed Workspace Overview card insertion/removal to a spatial spread transition.
   - Kept every signature primitive count-gated and transform-only so terminal hosts, WebKit/QuickLook surfaces, and high-volume text previews remain outside decorative motion.
+- Thirtieth implementation phase:
+  - Added directional `contentSwapTransition(edge:)` and applied it to Settings sidebar section changes plus Settings > Terminal local category changes.
+  - Main Settings sections and terminal subcategories now swap like ordered modules: forward navigation enters from the trailing edge, backward navigation enters from the leading edge, with transform-only opacity/offset/tiny-scale motion.
+  - Preserved the Settings performance design by keeping only the active terminal subcategory mounted and avoiding animation on dense form value changes.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

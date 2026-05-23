@@ -1158,6 +1158,8 @@ private struct AppearanceSettingsPanel: View {
     let snapshot: SettingsPanelSnapshot
     @State private var selectedSection: SettingsPanelSection = .overview
     @State private var selectedTerminalSettingsSection: TerminalSettingsSection = .typography
+    @State private var settingsContentEdge: Edge = .trailing
+    @State private var terminalContentEdge: Edge = .trailing
     @Namespace private var settingsSelectionNamespace
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
@@ -1258,13 +1260,13 @@ private struct AppearanceSettingsPanel: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     detailContent
+                        .id(selectedSection)
+                        .transition(ConductorMotion.contentSwapTransition(edge: settingsContentEdge))
                 }
                 .frame(maxWidth: 660, alignment: .topLeading)
                 .padding(.horizontal, 22)
                 .padding(.vertical, 18)
-                .transaction { transaction in
-                    transaction.animation = nil
-                }
+                .animation(ConductorMotion.contentSwap, value: selectedSection)
             }
             .scrollIndicators(.visible)
         }
@@ -1295,7 +1297,12 @@ private struct AppearanceSettingsPanel: View {
 
     private func selectSection(_ section: SettingsPanelSection) {
         guard selectedSection != section else { return }
-        ConductorMotion.withoutAnimation {
+        settingsContentEdge = contentSwapEdge(
+            from: selectedSection,
+            to: section,
+            in: SettingsPanelSection.allCases
+        )
+        ConductorMotion.perform(ConductorMotion.contentSwap) {
             selectedSection = section
         }
     }
@@ -1449,10 +1456,10 @@ private struct AppearanceSettingsPanel: View {
             terminalSettingsSectionRail
 
             activeTerminalSettingsSection
+                .id(selectedTerminalSettingsSection)
+                .transition(ConductorMotion.contentSwapTransition(edge: terminalContentEdge))
         }
-        .transaction { transaction in
-            transaction.animation = nil
-        }
+        .animation(ConductorMotion.contentSwap, value: selectedTerminalSettingsSection)
     }
 
     private var terminalSettingsSectionRail: some View {
@@ -1460,9 +1467,7 @@ private struct AppearanceSettingsPanel: View {
             TerminalSettingsSectionRail(
                 selection: selectedTerminalSettingsSection
             ) { section in
-                ConductorMotion.withoutAnimation {
-                    selectedTerminalSettingsSection = section
-                }
+                selectTerminalSettingsSection(section)
             }
 
             SettingsSectionLabel(
@@ -1486,6 +1491,26 @@ private struct AppearanceSettingsPanel: View {
             terminalClipboardSettings
             terminalKeyboardSettings
         }
+    }
+
+    private func selectTerminalSettingsSection(_ section: TerminalSettingsSection) {
+        guard selectedTerminalSettingsSection != section else { return }
+        terminalContentEdge = contentSwapEdge(
+            from: selectedTerminalSettingsSection,
+            to: section,
+            in: TerminalSettingsSection.allCases
+        )
+        ConductorMotion.perform(ConductorMotion.contentSwap) {
+            selectedTerminalSettingsSection = section
+        }
+    }
+
+    private func contentSwapEdge<T: Equatable>(from current: T, to next: T, in order: [T]) -> Edge {
+        guard let currentIndex = order.firstIndex(of: current),
+              let nextIndex = order.firstIndex(of: next) else {
+            return .trailing
+        }
+        return nextIndex >= currentIndex ? .trailing : .leading
     }
 
     private var shellAndProxySettings: some View {

@@ -705,6 +705,30 @@ enum ConductorMotion {
         floatingPanelTransition(edge: .top, distance: 10, scale: 0.998)
     }
 
+    static func contentSwapTransition(edge: Edge) -> AnyTransition {
+        guard !reducedMotion else { return .identity }
+        return .asymmetric(
+            insertion: .modifier(
+                active: ConductorPanelRevealModifier(
+                    opacity: 0,
+                    x: transitionOffset(edge: edge, distance: 18).x,
+                    y: transitionOffset(edge: edge, distance: 18).y,
+                    scale: 0.992
+                ),
+                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
+            ),
+            removal: .modifier(
+                active: ConductorPanelRevealModifier(
+                    opacity: 0,
+                    x: transitionOffset(edge: opposite(edge), distance: 10).x,
+                    y: transitionOffset(edge: opposite(edge), distance: 10).y,
+                    scale: 0.996
+                ),
+                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
+            )
+        )
+    }
+
     static var tabTransition: AnyTransition {
         reducedMotion ? .identity : .opacity
     }
@@ -841,6 +865,19 @@ enum ConductorMotion {
             return (-distance, 0)
         case .trailing:
             return (distance, 0)
+        }
+    }
+
+    private static func opposite(_ edge: Edge) -> Edge {
+        switch edge {
+        case .top:
+            return .bottom
+        case .bottom:
+            return .top
+        case .leading:
+            return .trailing
+        case .trailing:
+            return .leading
         }
     }
 }
