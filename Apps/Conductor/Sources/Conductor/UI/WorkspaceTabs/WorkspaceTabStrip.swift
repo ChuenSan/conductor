@@ -270,6 +270,7 @@ private struct WorkspaceFileTopTab: View {
             }
             .buttonStyle(ConductorPressButtonStyle())
             .padding(.trailing, 6)
+            .accessibilityLabel(L("关闭文件", "Close File"))
             .macNativeTooltip(L("关闭文件", "Close File"))
         }
         .frame(
@@ -496,6 +497,7 @@ private struct WorkspaceTopTab: View {
             .buttonStyle(ConductorPressButtonStyle())
             .disabled(!canClose)
             .padding(.trailing, 6)
+            .accessibilityLabel(L("关闭工作区", "Close Workspace"))
             .macNativeTooltip(L("关闭工作区", "Close Workspace"))
         }
     }
@@ -561,5 +563,6 @@ private struct WorkspaceTabGlyph: View {
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
             .frame(width: 17, height: 17)
+            .accessibilityHidden(true)
     }
 }

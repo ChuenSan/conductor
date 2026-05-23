@@ -405,6 +405,7 @@ private struct ConductorWorkspaceContentTabPill: View {
                     }
                     .buttonStyle(.plain)
                     .opacity(isHovered || isSelected ? 1 : 0.36)
+                    .accessibilityLabel(L("关闭文件", "Close File"))
                 }
             }
             .foregroundStyle(theme.shellChromeText.opacity(isSelected ? 0.94 : 0.62))

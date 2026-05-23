@@ -135,8 +135,10 @@ struct ConductorSidebar: View {
                 .frame(width: 26, height: 24)
                 .background(sidebarToggleFill)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .accessibilityHidden(true)
         }
         .buttonStyle(ConductorPressButtonStyle())
+        .accessibilityLabel(sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
         .onHover { value in
             sidebarToggleHovering = value
         }
@@ -209,6 +211,7 @@ struct ConductorSidebar: View {
                         .contentShape(RoundedRectangle(cornerRadius: 5))
                 }
                 .buttonStyle(ConductorPressButtonStyle())
+                .accessibilityLabel(L("新建工作区 Cmd-N", "New Workspace Cmd-N"))
                 .macNativeTooltip(L("新建工作区 Cmd-N", "New Workspace Cmd-N"))
             }
             .padding(.trailing, 5)
