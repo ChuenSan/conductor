@@ -96,22 +96,17 @@ private enum FileManagerDisplaySnapshotBuilder {
             )
         }
 
-        var knownRows: [FileManagerVisibleRow] = []
-        appendKnownRows(
+        var rows: [FileManagerVisibleRow] = []
+        let totalKnownItemCount = appendKnownMatchingRows(
             for: items,
             depth: 0,
             childItemsByDirectoryPath: childItemsByDirectoryPath,
-            into: &knownRows
+            query: query,
+            kindFilter: kindFilter,
+            into: &rows
         )
-        var rows: [FileManagerVisibleRow] = []
-        rows.reserveCapacity(knownRows.count)
-        for row in knownRows where matchesKindFilter(row.item, kindFilter: kindFilter) &&
-            (row.item.name.localizedCaseInsensitiveContains(query) ||
-                row.item.url.path.localizedCaseInsensitiveContains(query)) {
-            rows.append(row)
-        }
 
-        return snapshot(rows: rows, totalKnownItemCount: knownRows.count)
+        return snapshot(rows: rows, totalKnownItemCount: totalKnownItemCount)
     }
 
     private static func snapshot(
@@ -159,24 +154,35 @@ private enum FileManagerDisplaySnapshotBuilder {
         }
     }
 
-    private static func appendKnownRows(
+    private static func appendKnownMatchingRows(
         for items: [FileManagerItem],
         depth: Int,
         childItemsByDirectoryPath: [String: [FileManagerItem]],
+        query: String,
+        kindFilter: FileManagerKindFilter,
         into rows: inout [FileManagerVisibleRow]
-    ) {
+    ) -> Int {
         rows.reserveCapacity(rows.count + items.count)
+        var knownCount = 0
         for item in items {
-            rows.append(FileManagerVisibleRow(item: item, depth: depth))
+            knownCount += 1
+            if matchesKindFilter(item, kindFilter: kindFilter) &&
+                (item.name.localizedCaseInsensitiveContains(query) ||
+                    item.url.path.localizedCaseInsensitiveContains(query)) {
+                rows.append(FileManagerVisibleRow(item: item, depth: depth))
+            }
             if item.isDirectory, let children = childItemsByDirectoryPath[item.url.path] {
-                appendKnownRows(
+                knownCount += appendKnownMatchingRows(
                     for: children,
                     depth: depth + 1,
                     childItemsByDirectoryPath: childItemsByDirectoryPath,
+                    query: query,
+                    kindFilter: kindFilter,
                     into: &rows
                 )
             }
         }
+        return knownCount
     }
 
     private static func knownRowCount(
