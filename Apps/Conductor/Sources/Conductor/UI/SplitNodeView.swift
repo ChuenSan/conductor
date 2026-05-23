@@ -997,14 +997,16 @@ private struct TerminalPaneView: View {
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .contentShape(Rectangle())
                 .clipped()
-                .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isFileDropTargeted) { providers in
-                    loadTerminalDroppedFileURLs(from: providers) { urls in
-                        for url in urls {
-                            _ = model.insertPathIntoTerminal(url, terminalID: selected.id)
-                        }
-                    }
-                    return true
-                }
+                .onDrop(
+                    of: terminalPaneDropTypes,
+                    delegate: TerminalPaneDropDelegate(
+                        selectedTerminalID: selected.id,
+                        paneID: pane.id,
+                        paneSize: proxy.size,
+                        isFileDropTargeted: $isFileDropTargeted,
+                        model: model
+                    )
+                )
                 .overlay {
                     if isFileDropTargeted {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -1049,6 +1051,26 @@ private extension TerminalTabDropTarget {
         }
     }
 
+}
+
+private func terminalTabDropTarget(for location: CGPoint, size: CGSize) -> TerminalTabDropTarget {
+    let width = max(1, size.width)
+    let height = max(1, size.height)
+    let horizontalEdge = min(max(36, width * 0.24), width * 0.42)
+    let verticalEdge = min(max(36, height * 0.24), height * 0.42)
+    if location.x < horizontalEdge {
+        return .left
+    }
+    if location.x > width - horizontalEdge {
+        return .right
+    }
+    if location.y < verticalEdge {
+        return .up
+    }
+    if location.y > height - verticalEdge {
+        return .down
+    }
+    return .center
 }
 
 private final class TerminalFileDropURLCollector: @unchecked Sendable {
@@ -1264,28 +1286,25 @@ private struct StableTerminalTabStrip: View {
 
 private let terminalTabDragType = UTType(exportedAs: "app.conductor.terminal-tab")
 private let terminalTabDropTypes: [UTType] = [terminalTabDragType]
+private let terminalPaneDropTypes: [UTType] = [terminalTabDragType, .plainText, .fileURL]
 private let terminalTabDragPrefix = "terminal:"
 
 private func terminalTabDragPayload(for tabID: TerminalID) -> NSItemProvider {
     let payload = "\(terminalTabDragPrefix)\(tabID.description)"
-    let provider = NSItemProvider(object: payload as NSString)
     let data = Data(payload.utf8)
+    let provider = NSItemProvider()
     provider.registerDataRepresentation(
         forTypeIdentifier: terminalTabDragType.identifier,
         visibility: .all
     ) { completion in
-        Task { @MainActor in
-            completion(data, nil)
-        }
+        completion(data, nil)
         return nil
     }
     provider.registerDataRepresentation(
         forTypeIdentifier: UTType.plainText.identifier,
         visibility: .all
     ) { completion in
-        Task { @MainActor in
-            completion(data, nil)
-        }
+        completion(data, nil)
         return nil
     }
     return provider
@@ -1329,7 +1348,98 @@ private func terminalTabDropProvider(in info: DropInfo) -> TerminalTabDropPayloa
     if let provider = info.itemProviders(for: [terminalTabDragType]).first {
         return TerminalTabDropPayloadProvider(provider: provider, typeIdentifier: terminalTabDragType.identifier)
     }
+    if let provider = info.itemProviders(for: [.plainText]).first {
+        return TerminalTabDropPayloadProvider(provider: provider, typeIdentifier: UTType.plainText.identifier)
+    }
     return nil
+}
+
+private struct TerminalPaneDropDelegate: DropDelegate {
+    let selectedTerminalID: TerminalID
+    let paneID: PaneID
+    let paneSize: CGSize
+    @Binding var isFileDropTargeted: Bool
+    let model: ConductorWindowModel
+
+    func validateDrop(info: DropInfo) -> Bool {
+        hasTerminalTabPayload(info: info) || hasFilePayload(info: info)
+    }
+
+    func dropEntered(info: DropInfo) {
+        updateDropTarget(info: info)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        updateDropTarget(info: info)
+        return DropProposal(operation: hasTerminalTabPayload(info: info) ? .move : .copy)
+    }
+
+    func dropExited(info: DropInfo) {
+        clearDropTarget()
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        defer {
+            clearDropTarget()
+        }
+
+        if let payloadProvider = terminalPaneTabPayloadProvider(info: info) {
+            let target = terminalTabDropTarget(for: info.location, size: paneSize)
+            payloadProvider.loadTerminalID { draggedTabID in
+                guard let draggedTabID else { return }
+                Task { @MainActor in
+                    ConductorMotion.perform(ConductorMotion.layout) {
+                        if target == .center {
+                            guard self.model.workspace.paneID(containing: draggedTabID) != self.paneID else { return }
+                            self.model.moveTabToEnd(draggedTabID, in: self.paneID)
+                        } else {
+                            self.model.moveTabToSplit(draggedTabID, targetPaneID: self.paneID, direction: target.direction)
+                        }
+                    }
+                    self.model.endTerminalTabDrag()
+                }
+            }
+            return true
+        }
+
+        let providers = info.itemProviders(for: [.fileURL])
+        guard !providers.isEmpty else { return false }
+        loadTerminalDroppedFileURLs(from: providers) { urls in
+            for url in urls {
+                _ = model.insertPathIntoTerminal(url, terminalID: selectedTerminalID)
+            }
+        }
+        return true
+    }
+
+    private func terminalPaneTabPayloadProvider(info: DropInfo) -> TerminalTabDropPayloadProvider? {
+        guard model.hasActiveTerminalTabDrag() else { return nil }
+        return terminalTabDropProvider(in: info)
+    }
+
+    private func hasTerminalTabPayload(info: DropInfo) -> Bool {
+        terminalPaneTabPayloadProvider(info: info) != nil
+    }
+
+    private func hasFilePayload(info: DropInfo) -> Bool {
+        !info.itemProviders(for: [.fileURL]).isEmpty
+    }
+
+    private func updateDropTarget(info: DropInfo) {
+        if hasTerminalTabPayload(info: info) {
+            isFileDropTargeted = false
+            let target = terminalTabDropTarget(for: info.location, size: paneSize)
+            model.setTerminalTabDropTarget(for: selectedTerminalID, target: target)
+            return
+        }
+        model.setTerminalTabDropTarget(for: selectedTerminalID, target: nil)
+        isFileDropTargeted = hasFilePayload(info: info)
+    }
+
+    private func clearDropTarget() {
+        isFileDropTargeted = false
+        model.setTerminalTabDropTarget(for: selectedTerminalID, target: nil)
+    }
 }
 
 private struct TerminalTabDropDelegate: DropDelegate {

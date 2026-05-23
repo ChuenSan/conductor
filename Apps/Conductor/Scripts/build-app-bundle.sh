@@ -87,6 +87,21 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
   <string>0.1.0</string>
   <key>CFBundleVersion</key>
   <string>1</string>
+  <key>UTExportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.data</string>
+      </array>
+      <key>UTTypeDescription</key>
+      <string>Conductor Terminal Tab</string>
+      <key>UTTypeIdentifier</key>
+      <string>app.conductor.terminal-tab</string>
+      <key>UTTypeTagSpecification</key>
+      <dict/>
+    </dict>
+  </array>
   <key>LSMinimumSystemVersion</key>
   <string>14.0</string>
   <key>NSHighResolutionCapable</key>

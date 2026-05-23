@@ -194,6 +194,13 @@ workspace overview, and compact status modules.
   Sidebar rows and workspace tabs must derive selected visuals from the committed
   `WorkspaceChromeSnapshot`; do not keep a separate optimistic selected-workspace state in
   the view layer.
+- Terminal tab drag payloads must return their pasteboard data synchronously from
+  `NSItemProvider.registerDataRepresentation`. Do not hop to `MainActor` from the data
+  provider completion: AppKit can request the data on the main thread during the live drag
+  session, and waiting for an async main-actor callback will deadlock the drag before the pane
+  drop target sees it. Internal tab drag providers should advertise only the app's terminal-tab
+  type plus plain text, not a broad `NSString` object that macOS may reinterpret as URL or file
+  promise data.
 
 ### Scenario: Workspace Navigation Transaction
 
