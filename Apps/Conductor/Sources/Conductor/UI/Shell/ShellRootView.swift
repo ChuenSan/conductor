@@ -15,6 +15,7 @@ struct ShellRootView: View {
     @State private var fileManagerPresentationRequest: FileManagerPanelRequest?
     @State private var fileManagerTrayVisible = false
     @State private var fileManagerAnimationGeneration = 0
+    @FocusState private var terminalSearchFocused: Bool
 
     private let fileManagerTargetWidth: CGFloat = 468
     private let fileManagerAnimationDuration: TimeInterval = 0.18
@@ -87,8 +88,12 @@ struct ShellRootView: View {
         .animation(model.shellAnimation(ConductorMotion.panel), value: shellSnapshot.commandPaletteVisible)
         .animation(model.shellAnimation(ConductorMotion.panel), value: shellSnapshot.settingsPanelVisible)
         .animation(model.shellAnimation(ConductorMotion.panel), value: shellSnapshot.workspaceOverviewVisible)
+        .animation(model.shellAnimation(ConductorMotion.panel), value: model.terminalSearchVisible)
         .onAppear {
             synchronizeFileManagerPresentation(animated: false)
+        }
+        .onChange(of: model.terminalSearchFocusGeneration) { _, _ in
+            terminalSearchFocused = true
         }
         .onChange(of: model.fileManagerPanelRequest?.id) { _, _ in
             synchronizeFileManagerPresentation(animated: true)
@@ -122,6 +127,13 @@ struct ShellRootView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipped()
                     fileManagerTray
+                    if model.terminalSearchVisible {
+                        TerminalSearchBar(model: model, focus: $terminalSearchFocused)
+                            .padding(.top, 12)
+                            .padding(.trailing, 12)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                            .transition(ConductorMotion.panelTransition)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .clipped()
@@ -232,6 +244,85 @@ struct ShellRootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+}
+
+private struct TerminalSearchBar: View {
+    let model: ConductorWindowModel
+    var focus: FocusState<Bool>.Binding
+
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    private var query: Binding<String> {
+        Binding(
+            get: { model.terminalSearchQuery },
+            set: { model.setTerminalSearchQuery($0) }
+        )
+    }
+
+    private var statusText: String {
+        let metadata = model.focusedTerminalSearchMetadata
+        guard let total = metadata.total, total > 0 else { return "0/0" }
+        let selected = min(max((metadata.selected ?? 0) + 1, 1), total)
+        return "\(selected)/\(total)"
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+            TextField(L("搜索终端输出", "Search terminal output"), text: query)
+                .textFieldStyle(.plain)
+                .font(.conductorSystem(size: 12, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
+                .focused(focus)
+                .frame(width: 220)
+                .onSubmit {
+                    model.navigateTerminalSearch(previous: false)
+                }
+            Text(statusText)
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .monospacedDigit()
+                .frame(minWidth: 38, alignment: .trailing)
+            terminalSearchButton("chevron.up", help: L("上一个搜索结果", "Previous Search Result")) {
+                model.navigateTerminalSearch(previous: true)
+            }
+            terminalSearchButton("chevron.down", help: L("下一个搜索结果", "Next Search Result")) {
+                model.navigateTerminalSearch(previous: false)
+            }
+            terminalSearchButton("xmark", help: L("关闭搜索", "Close Search")) {
+                model.closeTerminalSearch()
+            }
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
+        .frame(height: 34)
+        .background(theme.floatingControlStrongFill)
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
+                .stroke(theme.floatingStroke, lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.18 : 0.10), radius: 14, x: 0, y: 8)
+        .onAppear {
+            focus.wrappedValue = true
+        }
+    }
+
+    private func terminalSearchButton(_ systemImage: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .frame(width: 24, height: 24)
+                .background(theme.floatingControlFill)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .macNativeTooltip(help)
+    }
 }
 
 private struct ConductorShellJoiner: View {
