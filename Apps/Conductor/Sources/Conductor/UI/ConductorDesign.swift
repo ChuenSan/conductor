@@ -1363,7 +1363,9 @@ struct ConductorNativeIconButton: NSViewRepresentable {
         button.isBordered = false
         button.bezelStyle = .regularSquare
         button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyDown
         button.setButtonType(.momentaryChange)
+        (button.cell as? NSButtonCell)?.imageDimsWhenDisabled = false
         button.target = context.coordinator
         button.action = #selector(Coordinator.performAction)
         button.focusRingType = .none
@@ -1383,15 +1385,12 @@ struct ConductorNativeIconButton: NSViewRepresentable {
     }
 
     private func configure(_ button: NSButton) {
-        button.image = NSImage(
-            systemSymbolName: systemImage,
-            accessibilityDescription: help
+        (button as? NativeTooltipButton)?.configureIcon(
+            systemImage: systemImage,
+            accessibilityDescription: help,
+            symbolSize: symbolSize,
+            tintColor: tintColor
         )
-        button.symbolConfiguration = NSImage.SymbolConfiguration(
-            pointSize: symbolSize,
-            weight: .semibold
-        )
-        button.contentTintColor = tintColor
     }
 
     private var tintColor: NSColor {
@@ -1411,6 +1410,8 @@ struct ConductorNativeIconButton: NSViewRepresentable {
     }
 
     final class NativeTooltipButton: NSButton {
+        override var allowsVibrancy: Bool { false }
+
         var tooltipText = "" {
             didSet {
                 updateHoverStateFromWindowMouse()
@@ -1420,8 +1421,43 @@ struct ConductorNativeIconButton: NSViewRepresentable {
             }
         }
 
+        private var configuredSystemImage = ""
+        private var configuredAccessibilityDescription = ""
+        private var configuredSymbolSize: CGFloat = 0
+        private var configuredTintColor: NSColor?
         private var isHovering = false
         private var trackingAreaToken: NSTrackingArea?
+
+        func configureIcon(
+            systemImage: String,
+            accessibilityDescription: String,
+            symbolSize: CGFloat,
+            tintColor: NSColor
+        ) {
+            if configuredSystemImage != systemImage || configuredAccessibilityDescription != accessibilityDescription {
+                let image = NSImage(
+                    systemSymbolName: systemImage,
+                    accessibilityDescription: accessibilityDescription
+                )
+                image?.isTemplate = true
+                self.image = image
+                configuredSystemImage = systemImage
+                configuredAccessibilityDescription = accessibilityDescription
+            }
+
+            if configuredSymbolSize != symbolSize {
+                self.symbolConfiguration = NSImage.SymbolConfiguration(
+                    pointSize: symbolSize,
+                    weight: .semibold
+                )
+                configuredSymbolSize = symbolSize
+            }
+
+            if configuredTintColor?.isEqual(tintColor) != true {
+                contentTintColor = tintColor
+                configuredTintColor = tintColor
+            }
+        }
 
         override init(frame frameRect: NSRect) {
             super.init(frame: frameRect)
