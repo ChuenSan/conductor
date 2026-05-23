@@ -81,6 +81,7 @@ struct GhosttyChoiceOverrideMenu: View {
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .bold))
+                    .accessibilityHidden(true)
             }
             .foregroundStyle(theme.floatingEmphasis)
             .frame(width: 236, alignment: .trailing)
@@ -126,6 +127,7 @@ struct GhosttyPresetOverrideMenu: View {
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .bold))
+                    .accessibilityHidden(true)
             }
             .frame(width: 236, alignment: .trailing)
         }
@@ -183,6 +185,7 @@ struct WorkingDirectorySettingControl: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "folder")
+                        .accessibilityHidden(true)
                     Text(L("选择", "Choose"))
                 }
                 .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
@@ -248,6 +251,7 @@ struct ScrollbackPresetPicker: View {
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .bold))
+                    .accessibilityHidden(true)
             }
             .frame(width: 236, alignment: .trailing)
         }
@@ -292,6 +296,7 @@ struct GhosttyInlineTextOverrideControl: View {
                 .frame(width: 22, height: 22)
                 .background(theme.floatingControlStrongFill)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .accessibilityHidden(true)
 
             TextField(placeholder, text: Binding(
                 get: { value },
@@ -423,6 +428,7 @@ struct GhosttyFileOverrideControl: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "folder")
+                        .accessibilityHidden(true)
                     Text(L("选择", "Choose"))
                 }
                 .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
@@ -481,6 +487,7 @@ struct TerminalRendererSummary: View {
                 .frame(width: 22, height: 22)
                 .background(theme.floatingControlStrongFill)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
@@ -614,6 +621,7 @@ struct TerminalFontPickerMenu: View {
                 }
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .bold))
+                    .accessibilityHidden(true)
             }
             .foregroundStyle(theme.floatingEmphasis)
             .frame(width: 212, alignment: .trailing)
@@ -658,6 +666,7 @@ struct SettingsStatusPill: View {
         HStack(spacing: 6) {
             Image(systemName: systemImage)
                 .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
+                .accessibilityHidden(true)
             Text(title)
                 .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
         }
@@ -700,6 +709,7 @@ struct SettingsPreferenceGroup<Content: View>: View {
                     .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(theme.floatingEmphasis.opacity(0.82))
                     .frame(width: 14)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -768,6 +778,7 @@ struct SettingsControlRow<Trailing: View>: View {
                 .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(theme.floatingEmphasis.opacity(0.84))
                 .frame(width: 18)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -929,6 +940,7 @@ struct SettingsMenuPicker<Option: Hashable>: View {
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .bold))
+                    .accessibilityHidden(true)
             }
             .foregroundStyle(theme.floatingEmphasis)
             .frame(width: 278, alignment: .trailing)
@@ -969,6 +981,7 @@ struct SettingsSidebarItem: View {
                     .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
                     .frame(width: 14)
                     .padding(.top, 2)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(section.title)
@@ -1100,6 +1113,7 @@ struct CommandShortcutGuideRow: View {
                 .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .frame(width: 18)
+                .accessibilityHidden(true)
 
             Text(item.title)
                 .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
@@ -1209,6 +1223,7 @@ struct ThemeOptionRow: View {
                     .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
                     .foregroundStyle(selected ? activeTheme.floatingEmphasis : ConductorDesign.tertiaryText.opacity(0.62))
                     .frame(width: 18)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 7) {

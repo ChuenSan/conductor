@@ -336,8 +336,10 @@ private struct TerminalSearchBar: View {
                 .frame(width: 24, height: 24)
                 .background(theme.floatingControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .accessibilityHidden(true)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(help)
         .macNativeTooltip(help)
     }
 }
@@ -399,6 +401,7 @@ struct FloatingPanelHeader<Trailing: View>: View {
     var body: some View {
         HStack(spacing: 9) {
             Image(systemName: systemImage)
+                .accessibilityHidden(true)
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
                 .frame(width: 24, height: 24)
@@ -432,6 +435,7 @@ struct FloatingPanelHeader<Trailing: View>: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(closeHelp)
             .macNativeTooltip(closeHelp)
         }
     }

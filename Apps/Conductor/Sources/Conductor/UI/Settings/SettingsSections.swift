@@ -1229,6 +1229,7 @@ extension AppearanceSettingsPanel {
                 Image(systemName: "keyboard")
                     .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.secondaryText)
+                    .accessibilityHidden(true)
                 Text(L("命令与快捷键", "Commands and Shortcuts"))
                     .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
@@ -1340,6 +1341,7 @@ struct TerminalSettingsSectionRail: View {
                         Image(systemName: section.systemImage)
                             .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                             .frame(width: 13)
+                            .accessibilityHidden(true)
                         Text(section.title)
                             .font(.conductorSystem(size: 10.8, weight: section == selection ? .semibold : .medium, scale: fontScale))
                             .lineLimit(1)
@@ -1376,6 +1378,7 @@ struct SettingsSidebarSummary: View {
                     .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                     .foregroundStyle(activeTheme.floatingEmphasis)
                     .frame(width: 16)
+                    .accessibilityHidden(true)
 
                 Text(L("设置", "Settings"))
                     .font(.conductorSystem(size: 12.4, weight: .bold, scale: fontScale))
@@ -1406,6 +1409,7 @@ struct SettingsPaneHeading: View {
                         .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                         .foregroundStyle(theme.floatingEmphasis)
                         .frame(width: 15)
+                        .accessibilityHidden(true)
 
                     Text(section.title)
                         .font(.conductorSystem(size: 18, weight: .bold, scale: fontScale))
@@ -1457,6 +1461,7 @@ struct SettingsInfoRow: View {
                 .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(theme.floatingEmphasis.opacity(0.88))
                 .frame(width: 18)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -1593,6 +1598,7 @@ struct SettingsOverviewTile: View {
                 .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(theme.floatingEmphasis.opacity(0.84))
                 .frame(width: 18)
+                .accessibilityHidden(true)
 
             Text(title)
                 .font(.conductorSystem(size: 12.2, weight: .medium, scale: fontScale))
@@ -1627,6 +1633,7 @@ struct SettingsQuickJumpButton: View {
                     .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(theme.floatingEmphasis.opacity(0.86))
                     .frame(width: 18)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -1644,6 +1651,7 @@ struct SettingsQuickJumpButton: View {
                 Image(systemName: "chevron.right")
                     .font(.conductorSystem(size: 10, weight: .bold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.tertiaryText)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: 44)
