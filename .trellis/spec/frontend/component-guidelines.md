@@ -180,6 +180,11 @@ workspace overview, and compact status modules.
   horizontal scrolling, context menus, double-click rename gestures, matched selection
   backgrounds, and padding can make gesture-only tab selection miss single clicks. Keep close
   buttons as separate controls layered beside the main selection button.
+- Sidebar workspace rows must make the row container, row view, and native selection `Button`
+  fill the available list width so the visual row and hit target are identical. Decorative
+  hover/selected backgrounds, including matched-geometry selection fills, must use
+  `.allowsHitTesting(false)` so rapid sidebar workspace switching cannot be intercepted by
+  chrome that only exists for drawing.
 - Workspace selection must be resolved in `ConductorWindowModel`, not patched per entry point.
   Selecting a workspace from the sidebar, top tab strip, workspace overview, shortcut, or menu
   must always route the main content back to that workspace's terminal stage, even when a

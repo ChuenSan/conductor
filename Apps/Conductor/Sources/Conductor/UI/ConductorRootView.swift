@@ -5637,6 +5637,7 @@ private struct ConductorSidebar: View {
                             .transition(ConductorMotion.rowTransition(itemCount: snapshot.rows.count))
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.vertical, 2)
             }
             .mask(ConductorVerticalFadeMask(fadesTop: false))
@@ -5740,6 +5741,7 @@ private struct ConductorSidebar: View {
             finishWorkspaceRenameIfNeeded(except: row.id)
             beginRenameWorkspace(row)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contextMenu {
             Button(L("重命名工作区...", "Rename Workspace...")) {
                 ConductorMotion.perform(ConductorMotion.selection) {
@@ -6264,18 +6266,29 @@ private struct WorkspaceSidebarRow: View {
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
+    private var rowShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+    }
+
     var body: some View {
         Group {
             if editing {
                 editingRow
                     .transition(.identity)
             } else {
-                displayRow
+                displayTab
                     .transition(.identity)
             }
         }
+        .frame(height: editing ? 32 : 48)
+        .background {
+            sidebarRowBackground
+        }
+        .clipShape(rowShape)
+        .contentShape(rowShape)
         .animation(nil, value: editing)
         .animation(ConductorMotion.emphasized, value: unreadCount)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onHover { value in
             ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
@@ -6299,18 +6312,13 @@ private struct WorkspaceSidebarRow: View {
             )
         }
         .padding(.horizontal, 7)
-        .frame(height: 32)
-        .background {
-            sidebarRowBackground
-        }
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
-        .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .onAppear {
             renameCancelled = false
         }
     }
 
-    private var displayRow: some View {
+    private var displayTab: some View {
         Button(action: action) {
             WorkspaceSidebarRowContent(
                 title: title,
@@ -6324,32 +6332,26 @@ private struct WorkspaceSidebarRow: View {
                 fontScaleID: fontScale.id
             )
             .equatable()
+            .padding(.leading, 7)
+            .padding(.trailing, 7)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(rowShape)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .buttonStyle(ConductorPressButtonStyle())
-        .background {
-            sidebarRowBackground
-        }
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
-        .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
-        .simultaneousGesture(
-            TapGesture(count: 2).onEnded {
-                action()
-                onRename()
-            }
-        )
     }
 
     private var sidebarRowBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
         return ZStack {
-            shape
+            rowShape
                 .fill(hovering ? theme.shellHoverFill : Color.clear)
             if visuallySelected {
-                shape
+                rowShape
                     .fill(theme.shellSelectedFill)
                     .matchedGeometryEffect(id: "sidebar-workspace-selection", in: selectionNamespace)
             }
         }
+        .allowsHitTesting(false)
     }
 }
 
@@ -6421,9 +6423,7 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                 }
             }
         }
-        .padding(.leading, 7)
-        .padding(.trailing, 7)
-        .frame(height: 48)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
     private func workspaceMetric(systemImage: String, value: Int) -> some View {
@@ -6810,6 +6810,7 @@ private struct WorkspaceFileTopTab: View {
     @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
+    private let closeButtonSlotWidth: CGFloat = 21
 
     private var tabShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous)
@@ -6849,28 +6850,35 @@ private struct WorkspaceFileTopTab: View {
     }
 
     var body: some View {
-        HStack(spacing: 7) {
-            HStack(spacing: 7) {
-                Image(systemName: fileIcon)
-                    .font(.system(size: 10.8, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
-                    .frame(width: 17, height: 17)
-                Text(tab.title)
-                    .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(titleColor)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Circle()
-                    .fill(theme.floatingEmphasis.opacity(0.92))
-                    .frame(width: 5, height: 5)
-                    .opacity(dirty ? 1 : 0)
+        ZStack(alignment: .trailing) {
+            Button(action: onSelect) {
+                HStack(spacing: 7) {
+                    Image(systemName: fileIcon)
+                        .font(.system(size: 10.8, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
+                        .frame(width: 17, height: 17)
+                    Text(tab.title)
+                        .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(titleColor)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Circle()
+                        .fill(theme.floatingEmphasis.opacity(0.92))
+                        .frame(width: 5, height: 5)
+                        .opacity(dirty ? 1 : 0)
+                }
+                .padding(.leading, 8)
+                .padding(.trailing, closeButtonSlotWidth + 5)
+                .frame(
+                    width: WorkspaceTabMetrics.width(for: appearance),
+                    height: WorkspaceTabMetrics.height(for: appearance),
+                    alignment: .leading
+                )
+                .contentShape(tabShape)
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                onSelect()
-            }
+            .buttonStyle(ConductorPressButtonStyle())
 
             Button {
                 onClose()
@@ -6883,10 +6891,9 @@ private struct WorkspaceFileTopTab: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(ConductorPressButtonStyle())
+            .padding(.trailing, 6)
             .macNativeTooltip(L("关闭文件", "Close File"))
         }
-        .padding(.leading, 8)
-        .padding(.trailing, 6)
         .frame(
             width: WorkspaceTabMetrics.width(for: appearance),
             height: WorkspaceTabMetrics.height(for: appearance)
@@ -6947,6 +6954,7 @@ private struct WorkspaceTopTab: View {
     @FocusState private var titleFieldFocused: Bool
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
+    private let closeButtonSlotWidth: CGFloat = 21
 
     private var selected: Bool {
         active
@@ -6983,63 +6991,13 @@ private struct WorkspaceTopTab: View {
     }
 
     var body: some View {
-        HStack(spacing: 7) {
+        Group {
             if editing {
-                WorkspaceTabGlyph(selected: true)
-                RenameTextField(
-                    text: $titleDraft,
-                    placeholder: L("工作区名称", "Workspace Name"),
-                    font: .conductorSystemFont(ofSize: 11.5, weight: .bold, scale: fontScale),
-                    textColor: NSColor(theme.shellChromeText),
-                    onCommit: onCommitRename,
-                    onCancel: onCancelRename
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .onAppear {
-                    renameCancelled = false
-                }
+                editingTab
             } else {
-                Button {
-                    onSelect()
-                } label: {
-                    WorkspaceTopTabContent(
-                        title: row.title,
-                        terminalCount: row.terminalCount,
-                        unreadCount: unreadCount,
-                        selected: selected,
-                        themeID: theme.id,
-                        fontScaleID: fontScale.id
-                    )
-                    .equatable()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .buttonStyle(ConductorPressButtonStyle())
-                .simultaneousGesture(
-                    TapGesture(count: 2).onEnded {
-                        guard !editing else { return }
-                        onSelect()
-                        onRename()
-                    }
-                )
-                Button {
-                    onClose()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
-                        .foregroundStyle(canClose ? titleColor.opacity(selected || hovering ? 0.74 : 0.52) : Color.clear)
-                        .frame(width: 13, height: 13)
-                        .clipShape(Circle())
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(ConductorPressButtonStyle())
-                .disabled(!canClose)
-                .macNativeTooltip(L("关闭工作区", "Close Workspace"))
+                displayTab
             }
         }
-        .padding(.leading, 8)
-        .padding(.trailing, editing ? 8 : 6)
         .frame(
             width: WorkspaceTabMetrics.width(for: appearance),
             height: WorkspaceTabMetrics.height(for: appearance)
@@ -7091,6 +7049,76 @@ private struct WorkspaceTopTab: View {
                 onClose()
             }
             .disabled(!canClose)
+        }
+    }
+
+    private var editingTab: some View {
+        HStack(spacing: 7) {
+            WorkspaceTabGlyph(selected: true)
+            RenameTextField(
+                text: $titleDraft,
+                placeholder: L("工作区名称", "Workspace Name"),
+                font: .conductorSystemFont(ofSize: 11.5, weight: .bold, scale: fontScale),
+                textColor: NSColor(theme.shellChromeText),
+                onCommit: onCommitRename,
+                onCancel: onCancelRename
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onAppear {
+                renameCancelled = false
+            }
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var displayTab: some View {
+        ZStack(alignment: .trailing) {
+            Button {
+                onSelect()
+            } label: {
+                WorkspaceTopTabContent(
+                    title: row.title,
+                    terminalCount: row.terminalCount,
+                    unreadCount: unreadCount,
+                    selected: selected,
+                    themeID: theme.id,
+                    fontScaleID: fontScale.id
+                )
+                .equatable()
+                .padding(.leading, 8)
+                .padding(.trailing, closeButtonSlotWidth + 5)
+                .frame(
+                    width: WorkspaceTabMetrics.width(for: appearance),
+                    height: WorkspaceTabMetrics.height(for: appearance),
+                    alignment: .leading
+                )
+                .contentShape(tabShape)
+            }
+            .buttonStyle(ConductorPressButtonStyle())
+            .simultaneousGesture(
+                TapGesture(count: 2).onEnded {
+                    guard !editing else { return }
+                    onSelect()
+                    onRename()
+                }
+            )
+
+            Button {
+                onClose()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
+                    .foregroundStyle(canClose ? titleColor.opacity(selected || hovering ? 0.74 : 0.52) : Color.clear)
+                    .frame(width: 13, height: 13)
+                    .clipShape(Circle())
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(ConductorPressButtonStyle())
+            .disabled(!canClose)
+            .padding(.trailing, 6)
+            .macNativeTooltip(L("关闭工作区", "Close Workspace"))
         }
     }
 }
