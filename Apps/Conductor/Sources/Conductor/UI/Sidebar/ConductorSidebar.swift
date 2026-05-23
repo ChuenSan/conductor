@@ -163,7 +163,7 @@ struct ConductorSidebar: View {
     }
 
     private var expandedSidebarDock: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        SidebarDockSurface {
             HStack(spacing: 6) {
                 SidebarDockButton(id: "sidebar-dock.new-terminal", icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
                     finishWorkspaceRenameIfNeeded()
@@ -181,9 +181,9 @@ struct ConductorSidebar: View {
                     }
                 }
             }
+            .padding(.horizontal, 2)
         }
-        .padding(.horizontal, 2)
-        .padding(.bottom, 9)
+        .padding(.bottom, 3)
     }
 
     private var workspaceSection: some View {
@@ -280,7 +280,7 @@ struct ConductorSidebar: View {
     }
 
     private var collapsedSidebarFooter: some View {
-        VStack(spacing: 6) {
+        collapsedSidebarFooterSurface {
             SidebarRailButton(id: "sidebar-rail.settings", icon: "gearshape", help: L("设置", "Settings")) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.panel) {
@@ -288,7 +288,15 @@ struct ConductorSidebar: View {
                 }
             }
         }
-        .padding(.bottom, 10)
+    }
+
+    private func collapsedSidebarFooterSurface<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        SidebarDockSurface(horizontalPadding: 0) {
+            content()
+        }
+        .padding(.bottom, 2)
     }
 
     @ViewBuilder
@@ -396,7 +404,7 @@ struct ConductorSidebar: View {
 
 private struct SidebarRailShape: InsettableShape {
     var bottomLeadingRadius: CGFloat = ConductorDesign.sidebarCornerRadius
-    var bottomTrailingRadius: CGFloat = 14
+    var bottomTrailingRadius: CGFloat = ConductorDesign.sidebarCornerRadius
     var insetAmount: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
@@ -713,6 +721,31 @@ private struct SidebarSeparator: View {
             .frame(height: 1)
             .padding(.horizontal, 20)
             .padding(.vertical, 4)
+    }
+}
+
+private struct SidebarDockSurface<Content: View>: View {
+    var horizontalPadding: CGFloat = 2
+    @ViewBuilder var content: Content
+    @Environment(\.conductorTheme) private var theme
+
+    init(horizontalPadding: CGFloat = 2, @ViewBuilder content: () -> Content) {
+        self.horizontalPadding = horizontalPadding
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Rectangle()
+                .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.32 : 0.22))
+                .frame(height: 1)
+                .padding(.horizontal, horizontalPadding == 0 ? 9 : 4)
+
+            content
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, horizontalPadding)
+        .padding(.top, 2)
     }
 }
 
