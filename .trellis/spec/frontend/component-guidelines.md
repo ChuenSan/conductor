@@ -175,6 +175,11 @@ workspace overview, and compact status modules.
   through `ToolbarChromeSnapshot`, including Command Center, Workspace Overview, Notification
   Center, file tools, and zoom. Do not leave a visible toolbar command without an active state
   while its panel is open.
+- Toggleable shell surfaces must actually toggle. If Notification Center, Command Center,
+  Settings, Workspace Overview, or a similar floating surface is visible, invoking the same
+  toolbar/menu/shortcut command must hide it and restore the appropriate main-window focus.
+  Opening one of these surfaces should close mutually exclusive shell panels and terminal
+  search first, so one click cannot leave stacked panels stealing focus from terminal chrome.
 - Floating shell panels must not use the terminal/workspace `accent` as their default selected,
   hover, icon, unread, or focus color. Use neutral panel tokens such as `floatingEmphasis`,
   `floatingSelectedFill`, `floatingHoverFill`, and `floatingSelectedStroke` so Command Center,
