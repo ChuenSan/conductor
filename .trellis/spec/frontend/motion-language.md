@@ -44,6 +44,7 @@ when a transform can express the same motion.
 | `delivery` | Notification delivery, unread signal, lightweight badge response | 180-230ms | expressive fast-out settle | instant |
 | `cascade` | Small filtered collections entering a panel | 180-220ms with bounded index delay | staged CSS ease | instant |
 | `contentSwap` | Settings/content module replacement | 150-190ms | directional settle | instant |
+| `focusSweep` | Focused terminal pane chrome sweep and stable focus ring | 160-220ms | staged delivery to settle | stable ring only |
 | `dragPreview` | Drag hover preview overlays | 60-90ms in/out | ease out | instant |
 
 ## Signature Motion Primitives
@@ -55,6 +56,9 @@ when a transform can express the same motion.
   like a delivered event stabilizing, not a looping notification.
 - `workspaceSpreadTransition(itemCount:)` gives overview cards a small spatial fan-in/fan-out
   while keeping the terminal host layer untouched.
+- `conductorFocusSweep(color:cornerRadius:active:trigger:)` belongs to terminal pane chrome
+  only. It may animate border opacity and a masked light sweep around the pane outline, but it
+  must not wrap, scale, fade, offset, or re-identify `TerminalSurfaceRepresentable`.
 - Signature motion belongs only to shell chrome and compact metadata. It must never wrap
   `TerminalSurfaceRepresentable`, WebKit/QuickLook content, or long file/document preview text.
 
@@ -317,6 +321,8 @@ when a transform can express the same motion.
 - Focus border strength.
 - Pane tab rail selected intensity.
 - Optional one-shot focus flash.
+- A masked chrome-only focus sweep around the pane outline on focus navigation or explicit
+  flash command.
 
 **Do Not Animate**:
 - Terminal content.
@@ -326,9 +332,10 @@ when a transform can express the same motion.
 **Motion**:
 - Focus ring: `attention`, 150-190ms one-shot then stable.
 - Normal focus style transition: `selection`, 110-140ms.
+- Focus sweep: `focusSweep`, 160-220ms staged border/sweep, triggered by compact focus tokens.
 
 **Reduced Motion**:
-- Direct style change.
+- Direct style change with the stable ring only; no sweep travel.
 
 **Acceptance**:
 - Focus is obvious even with multiple panes.

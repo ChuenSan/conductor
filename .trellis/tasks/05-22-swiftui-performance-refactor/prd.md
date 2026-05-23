@@ -263,6 +263,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Added directional `contentSwapTransition(edge:)` and applied it to Settings sidebar section changes plus Settings > Terminal local category changes.
   - Main Settings sections and terminal subcategories now swap like ordered modules: forward navigation enters from the trailing edge, backward navigation enters from the leading edge, with transform-only opacity/offset/tiny-scale motion.
   - Preserved the Settings performance design by keeping only the active terminal subcategory mounted and avoiding animation on dense form value changes.
+- Thirty-first implementation phase:
+  - Added shared `conductorFocusSweep(color:cornerRadius:active:trigger:)` motion for focused terminal pane chrome, using a staged border/sweep overlay that never wraps or transforms `TerminalSurfaceRepresentable`.
+  - Wired focus navigation and explicit focused-pane flash tokens into `TerminalPaneView` through a compact local trigger so pane focus becomes legible without adding terminal output, cursor, or renderer state to SwiftUI.
+  - Verified this product-code item immediately with `swift build`, the focus autorun route, a fresh app bundle launch, and screenshot inspection before moving on.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

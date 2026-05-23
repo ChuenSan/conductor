@@ -907,6 +907,22 @@ extension View {
     ) -> some View {
         modifier(ConductorSignalPulseModifier(active: active, trigger: trigger))
     }
+
+    func conductorFocusSweep<Value: Equatable>(
+        color: Color,
+        cornerRadius: CGFloat,
+        active: Bool,
+        trigger: Value
+    ) -> some View {
+        modifier(
+            ConductorFocusSweepModifier(
+                color: color,
+                cornerRadius: cornerRadius,
+                active: active,
+                trigger: trigger
+            )
+        )
+    }
 }
 
 private struct ConductorPanelRevealModifier: ViewModifier {
@@ -1051,6 +1067,153 @@ private struct ConductorSignalPulseModifier<Value: Equatable>: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+private enum ConductorFocusSweepPhase: CaseIterable {
+    case rest
+    case flare
+    case travel
+    case settle
+
+    var ringOpacity: Double {
+        switch self {
+        case .rest:
+            return 0.42
+        case .flare:
+            return 0.82
+        case .travel:
+            return 0.58
+        case .settle:
+            return 0.48
+        }
+    }
+
+    var sweepOpacity: Double {
+        switch self {
+        case .rest, .settle:
+            return 0
+        case .flare:
+            return 0.72
+        case .travel:
+            return 0.54
+        }
+    }
+
+    var lineWidth: CGFloat {
+        switch self {
+        case .flare:
+            return 1.8
+        case .rest, .travel, .settle:
+            return 1.25
+        }
+    }
+
+    func sweepOffset(width: CGFloat) -> CGFloat {
+        switch self {
+        case .rest:
+            return -width * 0.68
+        case .flare:
+            return -width * 0.42
+        case .travel:
+            return width * 0.76
+        case .settle:
+            return width * 0.92
+        }
+    }
+}
+
+private struct ConductorFocusSweepModifier<Value: Equatable>: ViewModifier {
+    let color: Color
+    let cornerRadius: CGFloat
+    let active: Bool
+    let trigger: Value
+
+    func body(content: Content) -> some View {
+        if active, ConductorMotion.shouldAnimateDecorative(itemCount: 1) {
+            content
+                .overlay {
+                    ConductorFocusSweepOverlay(
+                        color: color,
+                        cornerRadius: cornerRadius,
+                        active: true,
+                        phase: .rest
+                    )
+                    .phaseAnimator(ConductorFocusSweepPhase.allCases, trigger: trigger) { _, phase in
+                        ConductorFocusSweepOverlay(
+                            color: color,
+                            cornerRadius: cornerRadius,
+                            active: true,
+                            phase: phase
+                        )
+                    } animation: { phase in
+                        switch phase {
+                        case .rest:
+                            return ConductorMotion.micro
+                        case .flare:
+                            return ConductorMotion.delivery
+                        case .travel:
+                            return ConductorMotion.cssEaseOut(duration: 0.16)
+                        case .settle:
+                            return ConductorMotion.attention
+                        }
+                    }
+                }
+        } else {
+            content
+                .overlay {
+                    ConductorFocusSweepOverlay(
+                        color: color,
+                        cornerRadius: cornerRadius,
+                        active: active,
+                        phase: .settle
+                    )
+                }
+        }
+    }
+}
+
+private struct ConductorFocusSweepOverlay: View {
+    let color: Color
+    let cornerRadius: CGFloat
+    let active: Bool
+    let phase: ConductorFocusSweepPhase
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .stroke(color.opacity(active ? phase.ringOpacity : 0), lineWidth: phase.lineWidth)
+            .overlay {
+                if active, phase.sweepOpacity > 0 {
+                    GeometryReader { proxy in
+                        let bandWidth = max(proxy.size.width * 0.22, 44)
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.clear,
+                                        color.opacity(phase.sweepOpacity),
+                                        Color.clear
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: bandWidth, height: proxy.size.height * 1.8)
+                            .rotationEffect(.degrees(17))
+                            .offset(
+                                x: phase.sweepOffset(width: proxy.size.width),
+                                y: -proxy.size.height * 0.34
+                            )
+                            .blendMode(.screen)
+                            .mask {
+                                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                    .stroke(lineWidth: 2.4)
+                            }
+                    }
+                }
+            }
+            .padding(1)
+            .allowsHitTesting(false)
     }
 }
 
