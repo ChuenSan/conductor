@@ -763,7 +763,7 @@ private struct SidebarRailButton: View {
     }
 }
 
-private struct SidebarSectionTitle: View {
+struct SidebarSectionTitle: View {
     let title: String
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme

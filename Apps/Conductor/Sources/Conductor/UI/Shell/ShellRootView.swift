@@ -1,7 +1,6 @@
 import ConductorCore
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 private func withoutShellAnimation(_ action: () -> Void) {
     ConductorMotion.withoutAnimation(action)
@@ -1043,24 +1042,6 @@ private struct SettingsPanelSnapshot: Equatable {
         self.agentCLIStatuses = model.agentCLIStatuses
         self.terminalFontDownloadStates = model.terminalFontDownloadStates
         self.commandShortcutRows = ConductorCommandCatalog.shortcutGuideRows(model: model)
-    }
-}
-
-private struct SidebarSectionTitle: View {
-    let title: String
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    init(_ title: String) {
-        self.title = title
-    }
-
-    var body: some View {
-        Text(title)
-            .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-            .foregroundStyle(theme.shellChromeTextMuted.opacity(0.74))
-            .padding(.horizontal, 8)
-            .padding(.top, 2)
     }
 }
 
