@@ -174,9 +174,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var workspaces: [WorkspaceState]
     @Published var theme: TerminalTheme {
         didSet {
-            surfaces.values.forEach {
-                $0.applyAppearance(theme: theme, terminalFontSize: appearance.terminalFontSize)
-            }
+            surfaceCoordinator.applyAppearance(theme: theme, terminalFontSize: appearance.terminalFontSize)
             persist()
         }
     }
@@ -188,9 +186,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             ConductorMotion.setReducedMotion(appearance.reducedMotion)
             if oldValue.terminalFontSize != appearance.terminalFontSize ||
                 oldValue.terminalRenderer != appearance.terminalRenderer {
-                surfaces.values.forEach {
-                    $0.applyAppearance(theme: theme, terminalFontSize: appearance.terminalFontSize)
-                }
+                surfaceCoordinator.applyAppearance(theme: theme, terminalFontSize: appearance.terminalFontSize)
             }
             persist()
         }
@@ -267,14 +263,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private let persistence = WorkspacePersistence()
-    private var surfaces: [TerminalID: TerminalSurface] = [:]
+    private let surfaceCoordinator = TerminalSurfaceCoordinator()
     private var pendingPersistence: DispatchWorkItem?
     private var pendingMetadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
     private var pendingMetadataPublish: DispatchWorkItem?
     private var activeTerminalContextMenuController: TerminalContextMenuController?
     private var selectedWorkspaceID: WorkspaceID
     private var skipPreviousWorkspaceSyncForNextAssignment = false
-    private var pendingNavigationRefreshTerminalIDs = Set<TerminalID>()
     private var panelCoordinator = PanelCoordinator()
     private var appearanceCoordinator = AppearanceCoordinator(appearance: AppearancePreferences())
     private var fileWorkspaceCoordinator = FileWorkspaceCoordinator()
@@ -875,7 +870,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     var runtimeSurfaceCount: Int {
-        surfaces.count
+        surfaceCoordinator.runtimeSurfaceCount
     }
 
     var runtimeMetadataCount: Int {
@@ -938,20 +933,25 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func runtimeHasSurface(for terminalID: TerminalID) -> Bool {
-        surfaces[terminalID] != nil
+        surfaceCoordinator.hasSurface(for: terminalID)
     }
 
     func surface(for tab: TerminalTabState) -> TerminalSurface {
-        if let surface = surfaces[tab.id] {
+        if let surface = surfaceCoordinator.existingSurface(for: tab.id) {
             return surface
         }
-        ConductorLog.performance.debug("surface create requested terminal=\(tab.id.description, privacy: .public) activeBefore=\(self.surfaces.count, privacy: .public)")
-        let surface = TerminalSurface(
-            id: tab.id,
+        ConductorLog.performance.debug("surface create requested terminal=\(tab.id.description, privacy: .public) activeBefore=\(self.surfaceCoordinator.runtimeSurfaceCount, privacy: .public)")
+        return surfaceCoordinator.surface(
+            for: tab,
             theme: theme,
             terminalFontSize: appearance.terminalFontSize,
-            workingDirectory: tab.workingDirectory
+            handlers: TerminalSurfaceHandlers { [weak self] surface in
+                self?.installTerminalSurfaceHandlers(surface)
+            }
         )
+    }
+
+    private func installTerminalSurfaceHandlers(_ surface: TerminalSurface) {
         surface.onFocusRequest = { [weak self] terminalID in
             self?.focusTerminal(terminalID)
         }
@@ -974,8 +974,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             }
             return self.performTerminalTabDrop(draggedTerminalID, targetPaneID: targetPaneID, target: target)
         }
-        surfaces[tab.id] = surface
-        return surface
     }
 
     func newTerminal() {
@@ -2505,7 +2503,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private func refreshSurfacesAfterSplitPass(_ terminalIDs: [TerminalID]) {
         let focusedTerminalID = workspace.focusedPane?.selectedTabID
         for terminalID in terminalIDs {
-            guard let surface = surfaces[terminalID] else { continue }
+            guard let surface = surfaceCoordinator.existingSurface(for: terminalID) else { continue }
             let focused = terminalID == focusedTerminalID
             surface.attachIfPossible()
             surface.setFocused(focused, force: true)
@@ -2521,8 +2519,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func refreshSurfaceAfterNavigation(_ terminalID: TerminalID) {
-        guard let surface = surfaces[terminalID] else { return }
-        guard pendingNavigationRefreshTerminalIDs.insert(terminalID).inserted else { return }
+        guard let surface = surfaceCoordinator.existingSurface(for: terminalID) else { return }
+        guard surfaceCoordinator.markPendingNavigationRefresh(terminalID) else { return }
         let signpost = ConductorSignpost.begin("navigation-refresh")
         reconcileSurfaceFocus()
         surface.attachIfPossible()
@@ -2531,10 +2529,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         surface.refresh()
         Task { @MainActor [weak self] in
             defer {
-                self?.pendingNavigationRefreshTerminalIDs.remove(terminalID)
+                self?.surfaceCoordinator.clearPendingNavigationRefresh(terminalID)
                 ConductorSignpost.end("navigation-refresh", signpost)
             }
-            guard let surface = self?.surfaces[terminalID] else { return }
+            guard let surface = self?.surfaceCoordinator.existingSurface(for: terminalID) else { return }
             surface.attachIfPossible()
             surface.syncGeometry(force: true)
             surface.refresh()
@@ -2547,14 +2545,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     private func reconcileSurfaceFocus() {
         let focusedTerminalID = workspace.focusedPane?.selectedTabID
-        for (terminalID, surface) in surfaces {
-            surface.setFocused(terminalID == focusedTerminalID)
-        }
+        surfaceCoordinator.setFocusedTerminal(focusedTerminalID)
     }
 
     func closeAllSurfaces() {
-        surfaces.values.forEach { $0.close() }
-        surfaces.removeAll()
+        surfaceCoordinator.closeAllSurfaces()
         metadataByTerminalID.removeAll(keepingCapacity: false)
         pendingMetadataByTerminalID.removeAll(keepingCapacity: false)
     }
@@ -2582,7 +2577,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     private func closeSurfaces(for terminalIDs: [TerminalID]) {
         if !terminalIDs.isEmpty {
-            ConductorLog.performance.debug("surface close requested count=\(terminalIDs.count, privacy: .public) activeBefore=\(self.surfaces.count, privacy: .public)")
+            ConductorLog.performance.debug("surface close requested count=\(terminalIDs.count, privacy: .public) activeBefore=\(self.surfaceCoordinator.runtimeSurfaceCount, privacy: .public)")
         }
         if let targetID = terminalSearchTargetID, terminalIDs.contains(targetID) {
             terminalSearchVisible = false
@@ -2593,8 +2588,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         for terminalID in terminalIDs {
             metadataByTerminalID.removeValue(forKey: terminalID)
             pendingMetadataByTerminalID.removeValue(forKey: terminalID)
-            surfaces.removeValue(forKey: terminalID)?.close()
         }
+        surfaceCoordinator.closeSurfaces(for: terminalIDs)
         if !terminalIDs.isEmpty {
             var next = notifications
             for terminalID in terminalIDs {
