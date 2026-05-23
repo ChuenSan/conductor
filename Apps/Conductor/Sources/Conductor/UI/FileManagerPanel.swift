@@ -65,6 +65,7 @@ private enum FileManagerDisplaySnapshotBuilder {
         searchQuery: String,
         kindFilter: FileManagerKindFilter
     ) -> FileManagerDisplaySnapshot {
+        RenderCounter.increment("file-manager-display-snapshot")
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty {
             var rows: [FileManagerVisibleRow] = []

@@ -5834,6 +5834,7 @@ private struct WorkspaceChromeSnapshot: Equatable {
 
     @MainActor
     init(model: ConductorWindowModel) {
+        RenderCounter.increment("workspace-chrome-snapshot")
         let selectedWorkspaceID = model.workspace.id
         let notificationSnapshot = model.notifications.snapshot
         let metadataSnapshot = model.metadataByTerminalID
@@ -5929,6 +5930,7 @@ private struct ToolbarChromeSnapshot: Equatable {
 
     @MainActor
     init(model: ConductorWindowModel) {
+        RenderCounter.increment("toolbar-chrome-snapshot")
         self.canSplitRight = model.canPerformCommand(.splitRight)
         self.canSplitDown = model.canPerformCommand(.splitDown)
         self.canToggleZoom = model.canPerformCommand(.toggleZoom)

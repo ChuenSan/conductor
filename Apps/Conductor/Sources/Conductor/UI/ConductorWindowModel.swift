@@ -2728,6 +2728,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 next[terminalID] = metadata
             }
             self.pendingMetadataByTerminalID.removeAll(keepingCapacity: true)
+            RenderCounter.increment("metadata-publish")
             self.metadataByTerminalID = next.filter { terminalID, _ in
                 self.containsTerminal(terminalID)
             }

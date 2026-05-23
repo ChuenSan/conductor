@@ -27,6 +27,13 @@ func requireValidWorkspace(_ workspace: WorkspaceState, _ context: String) {
     }
 }
 
+func checkRenderBudgetDefaults() {
+    require(RenderBudget.smallListLimit == 100, "small render budget should be capped")
+    require(RenderBudget.mediumListLimit == 250, "medium render budget should be capped")
+    require(RenderBudget.largeListPreviewLimit == 1_000, "large preview budget should be bounded")
+    require(RenderBudget.visibleRowWindow(defaultVisibleCount: 40, overscan: 12) == 64, "visible row window should include overscan")
+}
+
 extension SplitNode {
     func usesOnly(axis expectedAxis: SplitAxis) -> Bool {
         switch self {
@@ -927,6 +934,7 @@ func checkAgentIntegrationCatalog() {
     require(AgentIntegrationCatalog.definition(named: "unknown-agent") == nil, "unknown agent should not resolve")
 }
 
+checkRenderBudgetDefaults()
 checkNewWorkspace()
 checkNewTerminalTab()
 checkSplitRight()
