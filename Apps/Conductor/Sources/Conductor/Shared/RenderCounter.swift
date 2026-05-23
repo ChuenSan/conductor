@@ -5,17 +5,34 @@ enum RenderCounter {
     nonisolated(unsafe) private static var counts: [String: Int] = [:]
 
     static func increment(_ name: String) {
-        let count = queue.sync {
+        queue.sync {
             counts[name, default: 0] += 1
-            return counts[name, default: 0]
         }
+    }
+
+    static func recordSnapshot(_ name: String) {
         ConductorDiagnostics.record(
             "render-counter",
             fields: [
                 "name": name,
-                "count": count
+                "count": value(name)
             ]
         )
+    }
+
+    static func recordAll() {
+        let snapshot = queue.sync {
+            counts
+        }
+        for name in snapshot.keys.sorted() {
+            ConductorDiagnostics.record(
+                "render-counter",
+                fields: [
+                    "name": name,
+                    "count": snapshot[name, default: 0]
+                ]
+            )
+        }
     }
 
     static func value(_ name: String) -> Int {
