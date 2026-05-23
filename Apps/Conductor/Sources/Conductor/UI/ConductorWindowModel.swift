@@ -347,11 +347,26 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         panelCoordinator.terminalSearchVisible = terminalSearchVisible
     }
 
-    private func publishPanelState() {
-        commandPaletteVisible = panelCoordinator.commandPaletteVisible
-        settingsPanelVisible = panelCoordinator.settingsVisible
-        workspaceOverviewVisible = panelCoordinator.workspaceOverviewVisible
-        terminalSearchVisible = panelCoordinator.terminalSearchVisible
+    @discardableResult
+    private func publishPanelState() -> Bool {
+        var changed = false
+        if commandPaletteVisible != panelCoordinator.commandPaletteVisible {
+            commandPaletteVisible = panelCoordinator.commandPaletteVisible
+            changed = true
+        }
+        if settingsPanelVisible != panelCoordinator.settingsVisible {
+            settingsPanelVisible = panelCoordinator.settingsVisible
+            changed = true
+        }
+        if workspaceOverviewVisible != panelCoordinator.workspaceOverviewVisible {
+            workspaceOverviewVisible = panelCoordinator.workspaceOverviewVisible
+            changed = true
+        }
+        if terminalSearchVisible != panelCoordinator.terminalSearchVisible {
+            terminalSearchVisible = panelCoordinator.terminalSearchVisible
+            changed = true
+        }
+        return changed
     }
 
     private func syncAppearanceCoordinatorFromPublished() {
@@ -371,11 +386,26 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         )
     }
 
-    private func publishFileWorkspaceState() {
-        workspaceFileTabs = fileWorkspaceCoordinator.tabs
-        dirtyWorkspaceFileTabIDs = fileWorkspaceCoordinator.dirtyTabIDs
-        externallyChangedWorkspaceFileTabIDs = fileWorkspaceCoordinator.externallyChangedTabIDs
-        selectedWorkspaceContentTabID = fileWorkspaceCoordinator.selectedContentTabID
+    @discardableResult
+    private func publishFileWorkspaceState() -> Bool {
+        var changed = false
+        if workspaceFileTabs != fileWorkspaceCoordinator.tabs {
+            workspaceFileTabs = fileWorkspaceCoordinator.tabs
+            changed = true
+        }
+        if dirtyWorkspaceFileTabIDs != fileWorkspaceCoordinator.dirtyTabIDs {
+            dirtyWorkspaceFileTabIDs = fileWorkspaceCoordinator.dirtyTabIDs
+            changed = true
+        }
+        if externallyChangedWorkspaceFileTabIDs != fileWorkspaceCoordinator.externallyChangedTabIDs {
+            externallyChangedWorkspaceFileTabIDs = fileWorkspaceCoordinator.externallyChangedTabIDs
+            changed = true
+        }
+        if selectedWorkspaceContentTabID != fileWorkspaceCoordinator.selectedContentTabID {
+            selectedWorkspaceContentTabID = fileWorkspaceCoordinator.selectedContentTabID
+            changed = true
+        }
+        return changed
     }
 
     var canSplit: Bool {
