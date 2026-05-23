@@ -48,7 +48,7 @@ struct FileManagerListView: View {
                                 renamingName: $store.renamingName,
                                 renamingFocusToken: store.renamingFocusToken,
                                 open: { open(row.item) },
-                                toggleExpansion: { Task { await store.toggleDirectory(row.item) } },
+                                toggleExpansion: { Task { await store.toggleDirectory(row.item, selectsItem: false) } },
                                 openInWorkspace: { openInWorkspace(row.item) },
                                 openInSystemApp: { NSWorkspace.shared.open(row.item.url) },
                                 copyPath: { copyPaths(itemsForBatch(default: row.item).map(\.url)) },

@@ -386,9 +386,11 @@ final class FileManagerPanelStore: ObservableObject {
         loadingDirectoryPaths.contains(item.url.path)
     }
 
-    func toggleDirectory(_ item: FileManagerItem) async {
+    func toggleDirectory(_ item: FileManagerItem, selectsItem: Bool = true) async {
         guard item.isDirectory else { return }
-        selectItemForAction(item)
+        if selectsItem {
+            selectItemForAction(item)
+        }
         let path = item.url.path
         if expandedDirectoryPaths.contains(path) {
             expandedDirectoryPaths.remove(path)
