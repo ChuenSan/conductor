@@ -620,6 +620,13 @@ private struct CommandPaletteView: View {
                                 }
                             )
                             .transition(ConductorMotion.rowTransition(itemCount: filteredResult.rows.count))
+                            .conductorCascade(
+                                index: row.presentationIndex,
+                                itemCount: filteredResult.rows.count,
+                                edge: .top,
+                                distance: 8,
+                                scale: 0.99
+                            )
                         }
                     }
                     .padding(.vertical, 1)
@@ -709,10 +716,14 @@ private struct CommandPaletteFilterResult: Equatable {
         }
 
         var previousSection: String?
-        self.rows = filteredCommands.map { command in
+        self.rows = filteredCommands.enumerated().map { index, command in
             let showsSectionTitle = command.section != previousSection
             previousSection = command.section
-            return CommandPaletteFilteredRow(command: command, showsSectionTitle: showsSectionTitle)
+            return CommandPaletteFilteredRow(
+                command: command,
+                showsSectionTitle: showsSectionTitle,
+                presentationIndex: index
+            )
         }
         self.enabledCommands = filteredCommands.filter { !$0.disabled }
         self.enabledCommandIDs = Set(enabledCommands.map(\.id))
@@ -740,6 +751,7 @@ private struct CommandPaletteFilteredRow: Identifiable, Equatable {
     var id: String { command.id }
     let command: CommandPaletteItem
     let showsSectionTitle: Bool
+    let presentationIndex: Int
 }
 
 private struct CommandPaletteItem: Identifiable, Equatable {
@@ -4910,7 +4922,7 @@ private struct WorkspaceOverviewPanel: View {
                                     } onHover: {
                                         highlightedWorkspaceID = workspace.id
                                     }
-                                    .transition(ConductorMotion.rowTransition(itemCount: filteredWorkspaces.count))
+                                    .transition(ConductorMotion.workspaceSpreadTransition(itemCount: filteredWorkspaces.count))
                                 }
                             }
                             .padding(.horizontal, 2)
@@ -5110,6 +5122,7 @@ private struct WorkspaceOverviewCard: View {
                                 .frame(minWidth: 16, minHeight: 15)
                                 .background(theme.floatingEmphasis)
                                 .clipShape(Capsule())
+                                .conductorSignalPulse(active: true, trigger: unreadCount)
                         }
                     }
 

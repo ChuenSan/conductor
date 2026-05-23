@@ -41,7 +41,22 @@ when a transform can express the same motion.
 | `list` | Filtered list row insert/remove | 90-130ms | smooth | opacity or instant |
 | `layout` | Split create/close/equalize, sidebar width | 150-220ms | spatial smooth | instant layout |
 | `attention` | Notification/badge/focus flash | 130-220ms | one-shot emphasized | opacity only |
+| `delivery` | Notification delivery, unread signal, lightweight badge response | 180-230ms | expressive fast-out settle | instant |
+| `cascade` | Small filtered collections entering a panel | 180-220ms with bounded index delay | staged CSS ease | instant |
+| `contentSwap` | Settings/content module replacement | 150-190ms | directional settle | instant |
 | `dragPreview` | Drag hover preview overlays | 60-90ms in/out | ease out | instant |
+
+## Signature Motion Primitives
+
+- `conductorCascade(index:itemCount:edge:)` is for small command, notification, and card
+  collections. It may use opacity, offset, tiny scale, and a subtle 3D settle, but must be
+  disabled above the decorative collection limit.
+- `conductorSignalPulse(active:trigger:)` is for a one-shot unread/badge signal. It should feel
+  like a delivered event stabilizing, not a looping notification.
+- `workspaceSpreadTransition(itemCount:)` gives overview cards a small spatial fan-in/fan-out
+  while keeping the terminal host layer untouched.
+- Signature motion belongs only to shell chrome and compact metadata. It must never wrap
+  `TerminalSurfaceRepresentable`, WebKit/QuickLook content, or long file/document preview text.
 
 ## Interaction Matrix
 

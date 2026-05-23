@@ -36,10 +36,11 @@ struct NotificationPanelSnapshot: Equatable {
         let terminalTitles = Self.terminalTitlesByID(workspaces: model.workspaces)
         self.init(
             chromeClarity: model.appearance.chromeClarity,
-            rows: notificationState.records.map { notification in
+            rows: notificationState.records.enumerated().map { index, notification in
                 NotificationPanelRowSnapshot(
                     notification: notification,
-                    terminalTitle: terminalTitles[notification.terminalID] ?? L("终端", "Terminal")
+                    terminalTitle: terminalTitles[notification.terminalID] ?? L("终端", "Terminal"),
+                    presentationIndex: index
                 )
             },
             unreadCount: notificationState.snapshot.unreadCount,
@@ -77,6 +78,7 @@ struct NotificationPanelSnapshot: Equatable {
 struct NotificationPanelRowSnapshot: Identifiable, Equatable {
     let notification: TerminalNotificationRecord
     let terminalTitle: String
+    let presentationIndex: Int
 
     var id: UUID {
         notification.id
@@ -269,6 +271,13 @@ struct NotificationPanelView: View {
                                     }
                                 )
                                 .transition(ConductorMotion.notificationRowTransition(itemCount: snapshot.rows.count))
+                                .conductorCascade(
+                                    index: row.presentationIndex,
+                                    itemCount: snapshot.rows.count,
+                                    edge: .trailing,
+                                    distance: 10,
+                                    scale: 0.992
+                                )
                             }
                         }
                         .padding(8)
@@ -391,6 +400,7 @@ private struct NotificationRowView: View {
                                     .fill(theme.floatingEmphasis)
                                     .frame(width: 5, height: 5)
                                     .offset(x: 2, y: -2)
+                                    .conductorSignalPulse(active: row.unread, trigger: row.notification.id)
                             }
                         }
 

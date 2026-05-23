@@ -673,6 +673,18 @@ enum ConductorMotion {
         reducedMotion ? nil : .smooth(duration: 0.165, extraBounce: 0.024)
     }
 
+    static var delivery: Animation? {
+        reducedMotion ? nil : .timingCurve(0.18, 1.15, 0.28, 1.0, duration: 0.22)
+    }
+
+    static var cascade: Animation? {
+        reducedMotion ? nil : .timingCurve(0.16, 1.0, 0.26, 1.0, duration: 0.20)
+    }
+
+    static var contentSwap: Animation? {
+        reducedMotion ? nil : .timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.17)
+    }
+
     static var dragPreview: Animation? {
         reducedMotion ? nil : .easeOut(duration: 0.075)
     }
@@ -712,6 +724,20 @@ enum ConductorMotion {
         reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.992, anchor: .center))
     }
 
+    static func workspaceSpreadTransition(itemCount: Int) -> AnyTransition {
+        guard itemCount <= animatedCollectionLimit, !reducedMotion else { return .identity }
+        return .asymmetric(
+            insertion: .modifier(
+                active: ConductorPanelRevealModifier(opacity: 0, x: 0, y: 14, scale: 0.965),
+                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
+            ),
+            removal: .modifier(
+                active: ConductorPanelRevealModifier(opacity: 0, x: 0, y: -6, scale: 0.982),
+                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
+            )
+        )
+    }
+
     static func setReducedMotion(_ value: Bool) {
         reducedMotion = value
     }
@@ -729,6 +755,15 @@ enum ConductorMotion {
     static func list(itemCount: Int) -> Animation? {
         guard itemCount <= animatedCollectionLimit else { return nil }
         return list
+    }
+
+    static func shouldAnimateDecorative(itemCount: Int, limit: Int = signatureCollectionLimit) -> Bool {
+        !reducedMotion && itemCount <= limit
+    }
+
+    static func cascadeDelay(index: Int, itemCount: Int) -> TimeInterval {
+        guard shouldAnimateDecorative(itemCount: itemCount) else { return 0 }
+        return TimeInterval(min(index, 10)) * 0.014
     }
 
     static func magnetic(duration: Double = 0.18, bounce: Double = 0.045) -> Animation? {
@@ -794,6 +829,7 @@ enum ConductorMotion {
     }
 
     private static let animatedCollectionLimit = 80
+    private static let signatureCollectionLimit = 36
 
     private static func transitionOffset(edge: Edge, distance: CGFloat) -> (x: CGFloat, y: CGFloat) {
         switch edge {
@@ -809,6 +845,33 @@ enum ConductorMotion {
     }
 }
 
+extension View {
+    func conductorCascade(
+        index: Int,
+        itemCount: Int,
+        edge: Edge = .top,
+        distance: CGFloat = 10,
+        scale: CGFloat = 0.988
+    ) -> some View {
+        modifier(
+            ConductorCascadeModifier(
+                index: index,
+                itemCount: itemCount,
+                edge: edge,
+                distance: distance,
+                scale: scale
+            )
+        )
+    }
+
+    func conductorSignalPulse<Value: Equatable>(
+        active: Bool,
+        trigger: Value
+    ) -> some View {
+        modifier(ConductorSignalPulseModifier(active: active, trigger: trigger))
+    }
+}
+
 private struct ConductorPanelRevealModifier: ViewModifier {
     let opacity: Double
     let x: CGFloat
@@ -820,6 +883,137 @@ private struct ConductorPanelRevealModifier: ViewModifier {
             .opacity(opacity)
             .scaleEffect(scale, anchor: .center)
             .offset(x: x, y: y)
+    }
+}
+
+private struct ConductorCascadeModifier: ViewModifier {
+    let index: Int
+    let itemCount: Int
+    let edge: Edge
+    let distance: CGFloat
+    let scale: CGFloat
+    @State private var revealed = false
+
+    func body(content: Content) -> some View {
+        let offset = Self.offset(edge: edge, distance: distance)
+        content
+            .opacity(revealed || !ConductorMotion.shouldAnimateDecorative(itemCount: itemCount) ? 1 : 0)
+            .scaleEffect(revealed ? 1 : scale, anchor: .center)
+            .rotation3DEffect(
+                .degrees(revealed ? 0 : Self.rotation(edge: edge)),
+                axis: Self.rotationAxis(edge: edge),
+                perspective: 0.55
+            )
+            .offset(
+                x: revealed ? 0 : offset.x,
+                y: revealed ? 0 : offset.y
+            )
+            .onAppear {
+                guard ConductorMotion.shouldAnimateDecorative(itemCount: itemCount) else {
+                    revealed = true
+                    return
+                }
+                revealed = false
+                let delay = ConductorMotion.cascadeDelay(index: index, itemCount: itemCount)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    ConductorMotion.perform(ConductorMotion.cascade) {
+                        revealed = true
+                    }
+                }
+            }
+            .onDisappear {
+                revealed = false
+            }
+    }
+
+    private static func offset(edge: Edge, distance: CGFloat) -> (x: CGFloat, y: CGFloat) {
+        switch edge {
+        case .top:
+            return (0, -distance)
+        case .bottom:
+            return (0, distance)
+        case .leading:
+            return (-distance, 0)
+        case .trailing:
+            return (distance, 0)
+        }
+    }
+
+    private static func rotation(edge: Edge) -> Double {
+        switch edge {
+        case .leading:
+            return -2.5
+        case .trailing:
+            return 2.5
+        case .top:
+            return 1.4
+        case .bottom:
+            return -1.4
+        }
+    }
+
+    private static func rotationAxis(edge: Edge) -> (x: CGFloat, y: CGFloat, z: CGFloat) {
+        switch edge {
+        case .leading, .trailing:
+            return (0, 1, 0)
+        case .top, .bottom:
+            return (1, 0, 0)
+        }
+    }
+}
+
+private enum ConductorSignalPhase: CaseIterable {
+    case rest
+    case flare
+    case settle
+
+    var scale: CGFloat {
+        switch self {
+        case .rest:
+            return 0.98
+        case .flare:
+            return 1.12
+        case .settle:
+            return 1.0
+        }
+    }
+
+    var verticalOffset: CGFloat {
+        switch self {
+        case .rest:
+            return 1
+        case .flare:
+            return -1
+        case .settle:
+            return 0
+        }
+    }
+}
+
+private struct ConductorSignalPulseModifier<Value: Equatable>: ViewModifier {
+    let active: Bool
+    let trigger: Value
+
+    func body(content: Content) -> some View {
+        if active, ConductorMotion.shouldAnimateDecorative(itemCount: 1) {
+            content
+                .phaseAnimator(ConductorSignalPhase.allCases, trigger: trigger) { content, phase in
+                    content
+                        .scaleEffect(phase.scale)
+                        .offset(y: phase.verticalOffset)
+                } animation: { phase in
+                    switch phase {
+                    case .rest:
+                        return ConductorMotion.micro
+                    case .flare:
+                        return ConductorMotion.delivery
+                    case .settle:
+                        return ConductorMotion.attention
+                    }
+                }
+        } else {
+            content
+        }
     }
 }
 
