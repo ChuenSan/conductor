@@ -1214,7 +1214,9 @@ private final class FileManagerPanelStore: ObservableObject {
     @Published private(set) var loadingDirectoryPaths: Set<String> = []
     @Published private(set) var directoryErrorsByPath: [String: String] = [:]
     @Published private(set) var selectedItem: FileManagerItem?
-    @Published private(set) var selectedPaths: Set<String> = []
+    @Published private(set) var selectedPaths: Set<String> = [] {
+        didSet { rebuildSelectedItemsSnapshot() }
+    }
     @Published private(set) var previewState = FilePreviewState.empty
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
@@ -1242,6 +1244,7 @@ private final class FileManagerPanelStore: ObservableObject {
     private var previewGeneration = 0
     private var selectionAnchorPath: String?
     private(set) var displaySnapshot = FileManagerDisplaySnapshot.empty
+    private var selectedItemsSnapshot: [FileManagerItem] = []
 
     var visibleRows: [FileManagerVisibleRow] {
         displaySnapshot.rows
@@ -1273,6 +1276,24 @@ private final class FileManagerPanelStore: ObservableObject {
         )
         guard snapshot != displaySnapshot else { return }
         displaySnapshot = snapshot
+        rebuildSelectedItemsSnapshot()
+    }
+
+    private func rebuildSelectedItemsSnapshot() {
+        guard !selectedPaths.isEmpty else {
+            if !selectedItemsSnapshot.isEmpty {
+                selectedItemsSnapshot = []
+            }
+            return
+        }
+        var selected: [FileManagerItem] = []
+        selected.reserveCapacity(min(displaySnapshot.rows.count, selectedPaths.count))
+        for row in displaySnapshot.rows where selectedPaths.contains(row.item.url.path) {
+            selected.append(row.item)
+        }
+        if selected != selectedItemsSnapshot {
+            selectedItemsSnapshot = selected
+        }
     }
 
     func load(_ request: FileManagerPanelRequest) async {
@@ -1412,13 +1433,17 @@ private final class FileManagerPanelStore: ObservableObject {
     }
 
     var selectedItems: [FileManagerItem] {
-        guard !selectedPaths.isEmpty else { return [] }
-        var selected: [FileManagerItem] = []
-        selected.reserveCapacity(min(displayedRows.count, selectedPaths.count))
-        for row in displayedRows where selectedPaths.contains(row.item.url.path) {
-            selected.append(row.item)
+        selectedItemsSnapshot
+    }
+
+    var selectedItemsForDisplay: [FileManagerItem] {
+        if !selectedItemsSnapshot.isEmpty {
+            return selectedItemsSnapshot
         }
-        return selected
+        if let selectedItem {
+            return [selectedItem]
+        }
+        return []
     }
 
     var selectedURLs: [URL] {
@@ -2331,7 +2356,7 @@ struct FileManagerPanel: View {
     }
 
     private func statusBar(snapshot: FileManagerDisplaySnapshot) -> some View {
-        let selectedItems = selectedItems(in: snapshot)
+        let selectedItems = store.selectedItemsForDisplay
         return HStack(spacing: 8) {
             if store.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, store.kindFilter == .all {
                 statusChip(systemImage: "list.bullet", title: L("\(snapshot.totalKnownItemCount) 项", "\(snapshot.totalKnownItemCount) items"))
@@ -2361,20 +2386,6 @@ struct FileManagerPanel: View {
         .padding(.horizontal, 12)
         .frame(height: 30)
         .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.12 : 0.08))
-    }
-
-    private func selectedItems(in snapshot: FileManagerDisplaySnapshot) -> [FileManagerItem] {
-        var selected: [FileManagerItem] = []
-        if !store.selectedPaths.isEmpty {
-            selected.reserveCapacity(min(snapshot.rows.count, store.selectedPaths.count))
-            for row in snapshot.rows where store.selectedPaths.contains(row.item.url.path) {
-                selected.append(row.item)
-            }
-        }
-        if selected.isEmpty, let selectedItem = store.selectedItem {
-            return [selectedItem]
-        }
-        return selected
     }
 
     private func selectionSummary(for items: [FileManagerItem]) -> String {

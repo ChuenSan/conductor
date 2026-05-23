@@ -305,6 +305,10 @@ model.activateWorkspace(row.id, source: .tabStrip)
   separately when search is empty, and derive displayed file/folder counts while creating the
   snapshot. Search may flatten known loaded children, but non-search navigation should remain
   proportional to visible rows plus a cheap loaded-count traversal.
+- File manager selection-derived data should live in the store beside the display snapshot.
+  Do not scan every visible file row from SwiftUI `body`, status bars, or row context menus
+  just to recover selected items; rebuild the selected-item snapshot only when selection state
+  or the file-tree display snapshot changes.
 - AppKit document/preview surfaces that own large text, native previews, or renderer state
   must deduplicate no-op `updateNSView` work. Theme, font, and geometry setters should return
   early when values are unchanged, and resize/selection/search updates should invalidate only
