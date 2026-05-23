@@ -280,7 +280,7 @@ struct ConductorSidebar: View {
     }
 
     private var collapsedSidebarFooter: some View {
-        collapsedSidebarFooterSurface {
+        VStack(spacing: 0) {
             SidebarRailButton(id: "sidebar-rail.settings", icon: "gearshape", help: L("设置", "Settings")) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.panel) {
@@ -288,15 +288,8 @@ struct ConductorSidebar: View {
                 }
             }
         }
-    }
-
-    private func collapsedSidebarFooterSurface<Content: View>(
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        SidebarDockSurface(horizontalPadding: 0) {
-            content()
-        }
-        .padding(.bottom, 2)
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 4)
     }
 
     @ViewBuilder
