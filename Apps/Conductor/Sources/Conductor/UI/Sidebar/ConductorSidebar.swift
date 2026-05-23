@@ -686,30 +686,19 @@ private struct SidebarDockButton: View {
     var disabled = false
     let help: String
     let action: () -> Void
-    @State private var hovering = false
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        Button {
-            action()
-        } label: {
-            Image(systemName: icon)
-                .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
-                .foregroundStyle(disabled ? theme.shellChromeTextMuted.opacity(0.50) : theme.shellChromeText.opacity(0.86))
-                .frame(width: 28, height: 27)
-                .background(hovering && !disabled ? theme.shellHoverFill.opacity(0.78) : theme.shellControlFill.opacity(0.34))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(ConductorPressButtonStyle())
-        .disabled(disabled)
-        .opacity(disabled ? 0.42 : 1)
-        .scaleEffect(hovering && !disabled ? 1.035 : 1)
-        .animation(ConductorMotion.hover, value: hovering)
-        .animation(ConductorMotion.micro, value: disabled)
-        .onHover { hovering = $0 }
-        .macNativeTooltip(help)
+        ConductorIconButton(
+            state: ConductorControlState(
+                id: "sidebar-dock-\(icon)-\(help)",
+                systemImage: icon,
+                isEnabled: !disabled,
+                tooltip: help,
+                accessibilityLabel: help
+            ),
+            variant: .sidebarDock,
+            action: action
+        )
     }
 }
 
@@ -731,35 +720,25 @@ private struct SidebarRailButton: View {
     var disabled = false
     let help: String
     let action: () -> Void
-    @State private var hovering = false
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        Button {
-            action()
-        } label: {
-            Image(systemName: icon)
-                .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
-                .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
-                .frame(width: 34, height: 34)
-                .background(selected ? theme.shellSelectedFill : (hovering ? theme.shellHoverFill : Color.clear))
-                .clipShape(RoundedRectangle(cornerRadius: 11))
-                .overlay {
-                    ConductorMagneticGlow(cornerRadius: 11, active: selected, lineWidth: 0.8)
-                        .opacity(selected ? 0.75 : 0)
-                }
-                .contentShape(RoundedRectangle(cornerRadius: 11))
+        ConductorIconButton(
+            state: ConductorControlState(
+                id: "sidebar-rail-\(icon)-\(help)",
+                systemImage: icon,
+                isEnabled: !disabled,
+                isActive: selected,
+                tooltip: help,
+                accessibilityLabel: help
+            ),
+            variant: .sidebarRail,
+            action: action
+        )
+        .overlay {
+            ConductorMagneticGlow(cornerRadius: 11, active: selected, lineWidth: 0.8)
+                .opacity(selected ? 0.75 : 0)
+                .allowsHitTesting(false)
         }
-        .buttonStyle(ConductorPressButtonStyle())
-        .disabled(disabled)
-        .opacity(disabled ? 0.35 : 1)
-        .scaleEffect(hovering && !disabled ? 1.035 : 1)
-        .animation(ConductorMotion.micro, value: disabled)
-        .animation(ConductorMotion.hover, value: hovering)
-        .animation(ConductorMotion.selection, value: selected)
-        .onHover { hovering = $0 }
-        .macNativeTooltip(help)
     }
 }
 

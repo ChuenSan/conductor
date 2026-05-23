@@ -258,19 +258,19 @@ struct ScrollbackPresetPicker: View {
 struct GhosttyResetButton: View {
     let disabled: Bool
     let action: () -> Void
-    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: "arrow.uturn.backward")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(disabled ? ConductorDesign.tertiaryText : theme.floatingEmphasis)
-                .frame(width: 24, height: 24)
-                .background(theme.floatingControlFill)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        }
-        .buttonStyle(ConductorPressButtonStyle())
-        .disabled(disabled)
+        ConductorIconButton(
+            state: ConductorControlState(
+                id: "settings-reset",
+                systemImage: "arrow.uturn.backward",
+                isEnabled: !disabled,
+                tooltip: L("恢复默认值", "Reset to Default"),
+                accessibilityLabel: L("恢复默认值", "Reset to Default")
+            ),
+            variant: .settingsIcon,
+            action: action
+        )
     }
 }
 

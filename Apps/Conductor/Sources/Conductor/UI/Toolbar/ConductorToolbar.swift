@@ -57,41 +57,42 @@ struct ConductorToolbar: View {
                 .layoutPriority(0)
 
                 ConductorPillGroup {
-                    ConductorIconButton(systemImage: "plus", help: L("新建工作区 Cmd-N", "New Workspace Cmd-N"), title: L("工作区", "Workspace")) {
+                    ConductorIconButton(state: toolbarControlState(id: "new-workspace", systemImage: "plus", tooltip: L("新建工作区 Cmd-N", "New Workspace Cmd-N"), title: L("工作区", "Workspace"))) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.newWorkspace)
                     }
                 }
 
                 ConductorPillGroup {
-                    ConductorIconButton(systemImage: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T"), title: L("终端", "Terminal")) {
+                    ConductorIconButton(state: toolbarControlState(id: "new-terminal", systemImage: "plus.rectangle.on.rectangle", tooltip: L("新开终端 Cmd-T", "New Terminal Cmd-T"), title: L("终端", "Terminal"))) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.newTerminal)
                     }
                 }
 
                 ConductorPillGroup {
-                    ConductorIconButton(systemImage: "rectangle.split.2x1", help: L("向右分屏 Cmd-D", "Split Right Cmd-D"), title: L("右分屏", "Right"), disabled: !toolbarSnapshot.canSplitRight) {
+                    ConductorIconButton(state: toolbarControlState(id: "split-right", systemImage: "rectangle.split.2x1", tooltip: L("向右分屏 Cmd-D", "Split Right Cmd-D"), title: L("右分屏", "Right"), isEnabled: toolbarSnapshot.canSplitRight)) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {
                             model.performCommand(.splitRight)
                         }
                     }
                     ConductorSegmentDivider()
-                    ConductorIconButton(systemImage: "rectangle.split.1x2", help: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D"), title: L("下分屏", "Down"), disabled: !toolbarSnapshot.canSplitDown) {
+                    ConductorIconButton(state: toolbarControlState(id: "split-down", systemImage: "rectangle.split.1x2", tooltip: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D"), title: L("下分屏", "Down"), isEnabled: toolbarSnapshot.canSplitDown)) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {
                             model.performCommand(.splitDown)
                         }
                     }
                     ConductorSegmentDivider()
-                    ConductorIconButton(
+                    ConductorIconButton(state: toolbarControlState(
+                        id: "toggle-zoom",
                         systemImage: "arrow.up.left.and.arrow.down.right",
-                        help: toolbarSnapshot.isZoomed ? L("还原当前分屏 Cmd-Opt-Z", "Restore Current Pane Cmd-Opt-Z") : L("放大当前分屏 Cmd-Opt-Z", "Zoom Current Pane Cmd-Opt-Z"),
+                        tooltip: toolbarSnapshot.isZoomed ? L("还原当前分屏 Cmd-Opt-Z", "Restore Current Pane Cmd-Opt-Z") : L("放大当前分屏 Cmd-Opt-Z", "Zoom Current Pane Cmd-Opt-Z"),
                         title: toolbarSnapshot.isZoomed ? L("还原", "Restore") : L("放大", "Zoom"),
-                        disabled: !toolbarSnapshot.canToggleZoom,
-                        active: toolbarSnapshot.isZoomed
-                    ) {
+                        isEnabled: toolbarSnapshot.canToggleZoom,
+                        isActive: toolbarSnapshot.isZoomed
+                    )) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {
                             model.performCommand(.toggleZoom)
@@ -100,43 +101,47 @@ struct ConductorToolbar: View {
                 }
 
                 ConductorPillGroup {
-                    ConductorIconButton(
+                    ConductorIconButton(state: toolbarControlState(
+                        id: "toggle-file-manager",
                         systemImage: "folder",
-                        help: L("文件管理器", "File Manager"),
+                        tooltip: L("文件管理器", "File Manager"),
                         title: L("文件", "Files"),
-                        disabled: !toolbarSnapshot.canToggleFileManager,
-                        active: toolbarSnapshot.fileManagerActive
-                    ) {
+                        isEnabled: toolbarSnapshot.canToggleFileManager,
+                        isActive: toolbarSnapshot.fileManagerActive
+                    )) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.toggleFileManager)
                     }
                     ConductorSegmentDivider()
-                    ConductorIconButton(
+                    ConductorIconButton(state: toolbarControlState(
+                        id: "toggle-workspace-overview",
                         systemImage: WorkspaceChromeGlyph.systemName(selected: false),
-                        help: L("工作区总览 Cmd-O", "Workspace Overview Cmd-O"),
+                        tooltip: L("工作区总览 Cmd-O", "Workspace Overview Cmd-O"),
                         title: L("总览", "Overview"),
-                        active: toolbarSnapshot.workspaceOverviewVisible
-                    ) {
+                        isActive: toolbarSnapshot.workspaceOverviewVisible
+                    )) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.toggleWorkspaceOverview)
                     }
                     ConductorSegmentDivider()
-                    ConductorIconButton(
+                    ConductorIconButton(state: toolbarControlState(
+                        id: "toggle-notifications",
                         systemImage: workspaceSnapshot.totalUnreadCount > 0 ? "bell.badge" : "bell",
-                        help: L("通知中心 Cmd-Opt-N", "Notification Center Cmd-Opt-N"),
+                        tooltip: L("通知中心 Cmd-Opt-N", "Notification Center Cmd-Opt-N"),
                         title: workspaceSnapshot.totalUnreadCount > 0 ? L("通知 \(workspaceSnapshot.totalUnreadCount)", "Alerts \(workspaceSnapshot.totalUnreadCount)") : L("通知", "Alerts"),
-                        active: toolbarSnapshot.notificationPanelVisible
-                    ) {
+                        isActive: toolbarSnapshot.notificationPanelVisible
+                    )) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.toggleNotifications)
                     }
                     ConductorSegmentDivider()
-                    ConductorIconButton(
+                    ConductorIconButton(state: toolbarControlState(
+                        id: "toggle-command-palette",
                         systemImage: "ellipsis",
-                        help: L("命令面板 Cmd-K", "Command Center Cmd-K"),
+                        tooltip: L("命令面板 Cmd-K", "Command Center Cmd-K"),
                         title: L("命令", "Command"),
-                        active: toolbarSnapshot.commandPaletteVisible
-                    ) {
+                        isActive: toolbarSnapshot.commandPaletteVisible
+                    )) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.toggleCommandPalette)
                     }
@@ -172,6 +177,25 @@ struct ConductorToolbar: View {
 
     private func cancelWorkspaceRename() {
         editingWorkspaceID = nil
+    }
+
+    private func toolbarControlState(
+        id: String,
+        systemImage: String,
+        tooltip: String,
+        title: String,
+        isEnabled: Bool = true,
+        isActive: Bool = false
+    ) -> ConductorControlState {
+        ConductorControlState(
+            id: id,
+            title: title,
+            systemImage: systemImage,
+            isEnabled: isEnabled,
+            isActive: isActive,
+            tooltip: tooltip,
+            accessibilityLabel: tooltip
+        )
     }
 
 }

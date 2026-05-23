@@ -111,21 +111,23 @@ struct FileManagerListView: View {
     }
 
     private func windowButton(systemImage: String, title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: systemImage)
-                Text(title)
-                Text("\(store.displaySnapshot.visibleRange.lowerBound + 1)-\(store.displaySnapshot.visibleRange.upperBound)/\(store.displaySnapshot.totalRowCount)")
-                    .foregroundStyle(theme.shellChromeText.opacity(0.38))
-            }
-            .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.62))
-            .frame(maxWidth: .infinity)
-            .frame(height: 28)
-            .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.20 : 0.18))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        ConductorCommandButton(
+            state: ConductorControlState(
+                id: "file-window-\(systemImage)-\(title)",
+                title: title,
+                systemImage: systemImage,
+                tooltip: title,
+                accessibilityLabel: title
+            ),
+            fillsWidth: true,
+            action: action
+        )
+        .overlay(alignment: .trailing) {
+            Text("\(store.displaySnapshot.visibleRange.lowerBound + 1)-\(store.displaySnapshot.visibleRange.upperBound)/\(store.displaySnapshot.totalRowCount)")
+                .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.38))
+                .padding(.trailing, 10)
         }
-        .buttonStyle(.plain)
     }
 
     private func panelMessage(systemImage: String, text: String) -> some View {
@@ -532,37 +534,4 @@ struct FileManagerRowView: View {
         return Color.clear
     }
 
-}
-
-struct FileManagerPanelIconButton: View {
-    let systemImage: String
-    let help: String
-    let size: CGFloat
-    let symbolSize: CGFloat
-    let iconColor: Color
-    let opacity: CGFloat
-    let disabledOpacity: CGFloat
-    let fontScale: AppearanceFontScale
-    let fontFamily: AppearanceFontFamily
-    let disabled: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button {
-            guard !disabled else { return }
-            action()
-        } label: {
-            Image(systemName: systemImage)
-                .renderingMode(.template)
-                .symbolRenderingMode(.monochrome)
-                .font(.conductorSystem(size: symbolSize, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(iconColor.opacity(disabled ? disabledOpacity : opacity))
-                .frame(width: size, height: size)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(ConductorPressButtonStyle())
-        .disabled(disabled)
-        .accessibilityLabel(Text(help))
-        .help(help)
-    }
 }

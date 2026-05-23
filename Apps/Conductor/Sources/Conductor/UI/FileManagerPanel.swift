@@ -523,7 +523,15 @@ struct FileManagerPanel: View {
                 .lineLimit(2)
             Spacer(minLength: 8)
             if store.canUndoTrash {
-                Button {
+                ConductorCommandButton(
+                    state: ConductorControlState(
+                        id: "file-manager-undo-trash",
+                        title: L("撤销", "Undo"),
+                        systemImage: "arrow.uturn.backward",
+                        tooltip: L("撤销", "Undo"),
+                        accessibilityLabel: L("撤销", "Undo")
+                    )
+                ) {
                     Task {
                         let restoredPaths = await store.undoLastTrash()
                         for path in restoredPaths {
@@ -534,15 +542,7 @@ struct FileManagerPanel: View {
                             )
                         }
                     }
-                } label: {
-                    Text(L("撤销", "Undo"))
-                        .font(.conductorSystem(size: 11.2, weight: .bold, family: fontFamily, scale: fontScale))
-                        .padding(.horizontal, 9)
-                        .frame(height: 23)
                 }
-                .buttonStyle(.plain)
-                .background(theme.floatingSelectedFill.opacity(0.42))
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
             panelIconButton("xmark", help: L("关闭提示", "Dismiss Message")) {
                 store.clearOperationMessage()
@@ -730,17 +730,21 @@ struct FileManagerPanel: View {
     }
 
     private func panelIconButton(_ systemImage: String, help: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {
-        FileManagerPanelIconButton(
-            systemImage: systemImage,
-            help: help,
-            size: 28,
-            symbolSize: toolbarIconSymbolSize,
-            iconColor: theme.shellChromeText,
-            opacity: toolbarIconOpacity,
-            disabledOpacity: toolbarDisabledIconOpacity,
-            fontScale: fontScale,
-            fontFamily: fontFamily,
-            disabled: disabled,
+        ConductorIconButton(
+            state: ConductorControlState(
+                id: "file-manager-panel-\(systemImage)-\(help)",
+                systemImage: systemImage,
+                isEnabled: !disabled,
+                tooltip: help,
+                accessibilityLabel: help
+            ),
+            variant: .fileManagerPanel(
+                iconColor: theme.shellChromeText,
+                opacity: toolbarIconOpacity,
+                disabledOpacity: toolbarDisabledIconOpacity,
+                fontScale: fontScale,
+                fontFamily: fontFamily
+            ),
             action: action
         )
         .frame(width: 28, height: 28)
@@ -997,14 +1001,38 @@ private struct FileManagerInfoSheet: View {
             }
 
             HStack(spacing: 8) {
-                Button(L("复制路径", "Copy Path")) {
+                ConductorCommandButton(
+                    state: ConductorControlState(
+                        id: "file-info-copy-path",
+                        title: L("复制路径", "Copy Path"),
+                        systemImage: "doc.on.doc",
+                        tooltip: L("复制路径", "Copy Path"),
+                        accessibilityLabel: L("复制路径", "Copy Path")
+                    )
+                ) {
                     copyInfoText(item.url.path)
                 }
-                Button(L("复制 Shell 路径", "Copy Shell Path")) {
+                ConductorCommandButton(
+                    state: ConductorControlState(
+                        id: "file-info-copy-shell-path",
+                        title: L("复制 Shell 路径", "Copy Shell Path"),
+                        systemImage: "quote.bubble",
+                        tooltip: L("复制 Shell 路径", "Copy Shell Path"),
+                        accessibilityLabel: L("复制 Shell 路径", "Copy Shell Path")
+                    )
+                ) {
                     copyInfoText("'" + item.url.path.replacingOccurrences(of: "'", with: "'\\''") + "'")
                 }
                 Spacer()
-                Button(L("完成", "Done")) {
+                ConductorCommandButton(
+                    state: ConductorControlState(
+                        id: "file-info-done",
+                        title: L("完成", "Done"),
+                        systemImage: "checkmark",
+                        tooltip: L("完成", "Done"),
+                        accessibilityLabel: L("完成", "Done")
+                    )
+                ) {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
