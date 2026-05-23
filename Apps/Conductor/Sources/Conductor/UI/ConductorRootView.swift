@@ -4875,20 +4875,57 @@ private struct ThemeSwatch: View {
 
 private struct WorkspaceOverviewSnapshot: Equatable {
     let chromeClarity: ChromeClarity
-    let workspaces: [WorkspaceState]
+    let items: [WorkspaceOverviewItemSnapshot]
     let selectedWorkspaceID: WorkspaceID
     let notifications: TerminalNotificationSnapshot
 
     @MainActor
     init(model: ConductorWindowModel) {
         self.chromeClarity = model.appearance.chromeClarity
-        self.workspaces = model.workspaces
+        self.items = model.workspaces.map(WorkspaceOverviewItemSnapshot.init(workspace:))
         self.selectedWorkspaceID = model.workspace.id
         self.notifications = model.notifications.snapshot
     }
 
     var workspaceCount: Int {
-        workspaces.count
+        items.count
+    }
+}
+
+private struct WorkspaceOverviewItemSnapshot: Identifiable, Equatable {
+    let workspace: WorkspaceState
+    let searchText: String
+
+    var id: WorkspaceID {
+        workspace.id
+    }
+
+    init(workspace: WorkspaceState) {
+        self.workspace = workspace
+        self.searchText = Self.searchText(for: workspace)
+    }
+
+    private static func searchText(for workspace: WorkspaceState) -> String {
+        var parts = [workspace.title]
+        for pane in workspace.panes.values {
+            for tab in pane.tabs {
+                parts.append(tab.title)
+                if let workingDirectory = tab.workingDirectory {
+                    parts.append(workingDirectory)
+                }
+            }
+        }
+        return parts.joined(separator: " ").lowercased()
+    }
+}
+
+private struct WorkspaceOverviewFilterResult: Equatable {
+    let items: [WorkspaceOverviewItemSnapshot]
+    let ids: [WorkspaceID]
+
+    init(items: [WorkspaceOverviewItemSnapshot]) {
+        self.items = items
+        self.ids = items.map(\.id)
     }
 }
 
@@ -4905,21 +4942,20 @@ private struct WorkspaceOverviewPanel: View {
         GridItem(.adaptive(minimum: 214, maximum: 236), spacing: 10)
     ]
 
-    private var filteredWorkspaces: [WorkspaceState] {
+    private var filteredResult: WorkspaceOverviewFilterResult {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedQuery.isEmpty else { return snapshot.workspaces }
-        return snapshot.workspaces.filter { workspace in
-            workspaceSearchText(workspace)
-                .lowercased()
-                .contains(normalizedQuery)
+        guard !normalizedQuery.isEmpty else {
+            return WorkspaceOverviewFilterResult(items: snapshot.items)
         }
-    }
-
-    private var filteredWorkspaceIDs: [WorkspaceID] {
-        filteredWorkspaces.map(\.id)
+        return WorkspaceOverviewFilterResult(
+            items: snapshot.items.filter { item in
+                item.searchText.contains(normalizedQuery)
+            }
+        )
     }
 
     var body: some View {
+        let result = filteredResult
         ZStack {
             ConductorGlassSurface(style: .panel, clarity: snapshot.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 11) {
@@ -4927,32 +4963,32 @@ private struct WorkspaceOverviewPanel: View {
                     FloatingPanelDivider()
                     searchField
 
-                    if filteredWorkspaces.isEmpty {
+                    if result.items.isEmpty {
                         emptyState
                     } else {
                         ScrollView {
                             LazyVGrid(columns: columns, alignment: .center, spacing: 10) {
-                                ForEach(filteredWorkspaces) { workspace in
+                                ForEach(result.items) { item in
                                     WorkspaceOverviewCard(
-                                        workspace: workspace,
+                                        workspace: item.workspace,
                                         theme: theme,
-                                        selected: workspace.id == snapshot.selectedWorkspaceID,
-                                        highlighted: workspace.id == highlightedWorkspaceID,
-                                        unreadCount: snapshot.notifications.unreadCount(for: workspace.id),
+                                        selected: item.id == snapshot.selectedWorkspaceID,
+                                        highlighted: item.id == highlightedWorkspaceID,
+                                        unreadCount: snapshot.notifications.unreadCount(for: item.id),
                                         unreadCountForPane: { paneID in
                                             snapshot.notifications.unreadCount(for: paneID)
                                         }
                                     ) {
-                                        openWorkspace(workspace.id)
+                                        openWorkspace(item.id)
                                     } onHover: {
-                                        highlightedWorkspaceID = workspace.id
+                                        highlightedWorkspaceID = item.id
                                     }
-                                    .transition(ConductorMotion.workspaceSpreadTransition(itemCount: filteredWorkspaces.count))
+                                    .transition(ConductorMotion.workspaceSpreadTransition(itemCount: result.items.count))
                                 }
                             }
                             .padding(.horizontal, 2)
                             .padding(.bottom, 2)
-                            .animation(ConductorMotion.list(itemCount: filteredWorkspaces.count), value: filteredWorkspaceIDs)
+                            .animation(ConductorMotion.list(itemCount: result.items.count), value: result.ids)
                         }
                         .scrollIndicators(.visible)
                         .frame(maxHeight: .infinity)
@@ -4969,7 +5005,7 @@ private struct WorkspaceOverviewPanel: View {
             .onChange(of: query) {
                 ensureHighlight()
             }
-            .onChange(of: filteredWorkspaceIDs) {
+            .onChange(of: result.ids) {
                 ensureHighlight()
             }
             .onMoveCommand { direction in
@@ -5043,36 +5079,28 @@ private struct WorkspaceOverviewPanel: View {
         .frame(height: 220)
     }
 
-    private func workspaceSearchText(_ workspace: WorkspaceState) -> String {
-        let titles = workspace.panes.values.flatMap { pane in
-            pane.tabs.map(\.title)
-        }
-        let directories = workspace.panes.values.flatMap { pane in
-            pane.tabs.compactMap(\.workingDirectory)
-        }
-        return ([workspace.title] + titles + directories).joined(separator: " ")
-    }
-
     private func ensureHighlight() {
-        guard !filteredWorkspaces.isEmpty else {
+        let result = filteredResult
+        guard !result.items.isEmpty else {
             highlightedWorkspaceID = nil
             return
         }
         if let highlightedWorkspaceID,
-           filteredWorkspaces.contains(where: { $0.id == highlightedWorkspaceID }) {
+           result.ids.contains(highlightedWorkspaceID) {
             return
         }
-        highlightedWorkspaceID = filteredWorkspaces.first(where: { $0.id == snapshot.selectedWorkspaceID })?.id ?? filteredWorkspaces.first?.id
+        highlightedWorkspaceID = result.ids.contains(snapshot.selectedWorkspaceID) ? snapshot.selectedWorkspaceID : result.items.first?.id
     }
 
     private func moveHighlight(by offset: Int) {
-        guard !filteredWorkspaces.isEmpty else {
+        let result = filteredResult
+        guard !result.items.isEmpty else {
             highlightedWorkspaceID = nil
             return
         }
-        let currentIndex = filteredWorkspaces.firstIndex { $0.id == highlightedWorkspaceID } ?? 0
-        let nextIndex = max(0, min(filteredWorkspaces.count - 1, currentIndex + offset))
-        highlightedWorkspaceID = filteredWorkspaces[nextIndex].id
+        let currentIndex = result.ids.firstIndex { $0 == highlightedWorkspaceID } ?? 0
+        let nextIndex = max(0, min(result.items.count - 1, currentIndex + offset))
+        highlightedWorkspaceID = result.items[nextIndex].id
     }
 
     private func openHighlightedWorkspace() {

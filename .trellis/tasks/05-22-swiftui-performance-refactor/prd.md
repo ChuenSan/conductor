@@ -291,6 +291,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Added precomputed `rowIDs` to `NotificationPanelSnapshot` and changed Notification Center row animation to use the snapshot value instead of `snapshot.rows.map(\.id)` from `body`.
   - Kept the detached panel store's compact snapshot boundary intact while removing a per-render row-ID array allocation.
   - Verified this item immediately with `swift build` and notification autorun.
+- Thirty-eighth implementation phase:
+  - Added `WorkspaceOverviewItemSnapshot` and precomputed lowercase workspace search text from workspace title, terminal tab titles, and working directories.
+  - Replaced repeated `filteredWorkspaces`/`filteredWorkspaceIDs` body recomputation with a single `WorkspaceOverviewFilterResult` used by grid rendering, animation identity, and keyboard highlight movement.
+  - Verified this item immediately with `swift build` and shell-panel autorun.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

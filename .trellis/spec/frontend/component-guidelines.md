@@ -255,6 +255,9 @@ workspace overview, and compact status modules.
 - Detached panel snapshots should include precomputed animation identity arrays for repeated
   rows. Do not build `rows.map(\.id)` or equivalent arrays from a panel `body` just to drive
   `.animation(_:value:)`; compute those IDs when the snapshot changes.
+- Searchable overview surfaces should precompute stable searchable text in their snapshot.
+  Do not rebuild search strings from workspace panes, terminal tabs, file metadata, or
+  directories on every `body` evaluation or keyboard highlight move.
 - Notification Center row actions are navigation commands, not local row toggles. Opening a
   notification must focus the target terminal, mark the notification read, refresh the target
   surface, and close the detached notification panel as one model-level operation. Panel stores
