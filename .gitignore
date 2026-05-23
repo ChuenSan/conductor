@@ -2,6 +2,7 @@
 **/.build/
 **/.swiftpm/
 DerivedData/
+.worktrees/
 
 # Heavy binary dependencies prepared locally by scripts
 **/Vendor/GhosttyKit.xcframework/
