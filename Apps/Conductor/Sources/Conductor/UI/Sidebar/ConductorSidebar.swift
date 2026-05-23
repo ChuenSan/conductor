@@ -165,16 +165,16 @@ struct ConductorSidebar: View {
     private var expandedSidebarDock: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                SidebarDockButton(icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
+                SidebarDockButton(id: "sidebar-dock.new-terminal", icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
                     finishWorkspaceRenameIfNeeded()
                     model.performCommand(.newTerminal)
                 }
-                SidebarDockButton(icon: "command", help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
+                SidebarDockButton(id: "sidebar-dock.command-center", icon: "command", help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
                     finishWorkspaceRenameIfNeeded()
                     model.performCommand(.toggleCommandPalette)
                 }
                 Spacer(minLength: 0)
-                SidebarDockButton(icon: "gearshape", help: L("设置", "Settings")) {
+                SidebarDockButton(id: "sidebar-dock.settings", icon: "gearshape", help: L("设置", "Settings")) {
                     finishWorkspaceRenameIfNeeded()
                     ConductorMotion.perform(ConductorMotion.panel) {
                         model.performCommand(.toggleSettings)
@@ -237,6 +237,7 @@ struct ConductorSidebar: View {
                 VStack(spacing: 6) {
                     ForEach(snapshot.rows) { row in
                         SidebarRailButton(
+                            id: "sidebar-rail.workspace.\(row.id)",
                             icon: WorkspaceChromeGlyph.systemName(selected: row.selected),
                             selected: row.selected,
                             help: row.title
@@ -267,11 +268,11 @@ struct ConductorSidebar: View {
 
     private var collapsedSidebarActions: some View {
         VStack(spacing: 6) {
-            SidebarRailButton(icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
+            SidebarRailButton(id: "sidebar-rail.new-terminal", icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.newTerminal)
             }
-            SidebarRailButton(icon: "command", help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
+            SidebarRailButton(id: "sidebar-rail.command-center", icon: "command", help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.toggleCommandPalette)
             }
@@ -280,7 +281,7 @@ struct ConductorSidebar: View {
 
     private var collapsedSidebarFooter: some View {
         VStack(spacing: 6) {
-            SidebarRailButton(icon: "gearshape", help: L("设置", "Settings")) {
+            SidebarRailButton(id: "sidebar-rail.settings", icon: "gearshape", help: L("设置", "Settings")) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.panel) {
                     model.performCommand(.toggleSettings)
@@ -682,6 +683,7 @@ private struct SidebarWorkspaceHeaderStats: View {
 }
 
 private struct SidebarDockButton: View {
+    let id: String
     let icon: String
     var disabled = false
     let help: String
@@ -690,7 +692,7 @@ private struct SidebarDockButton: View {
     var body: some View {
         ConductorIconButton(
             state: ConductorControlState(
-                id: "sidebar-dock-\(icon)-\(help)",
+                id: id,
                 systemImage: icon,
                 isEnabled: !disabled,
                 tooltip: help,
@@ -715,6 +717,7 @@ private struct SidebarSeparator: View {
 }
 
 private struct SidebarRailButton: View {
+    let id: String
     let icon: String
     var selected = false
     var disabled = false
@@ -724,7 +727,7 @@ private struct SidebarRailButton: View {
     var body: some View {
         ConductorIconButton(
             state: ConductorControlState(
-                id: "sidebar-rail-\(icon)-\(help)",
+                id: id,
                 systemImage: icon,
                 isEnabled: !disabled,
                 isActive: selected,

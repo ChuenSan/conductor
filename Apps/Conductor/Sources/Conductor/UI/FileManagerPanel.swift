@@ -177,7 +177,7 @@ struct FileManagerPanel: View {
 
                 Spacer(minLength: 10)
 
-                panelIconButton("xmark", help: L("关闭文件面板", "Close Files")) {
+                panelIconButton("xmark", id: "file-manager.panel.close", help: L("关闭文件面板", "Close Files")) {
                     model.closeFileManagerPanel()
                 }
             }
@@ -196,29 +196,29 @@ struct FileManagerPanel: View {
 
                 toolbarSeparator
 
-                panelIconButton(store.includeHiddenFiles ? "eye" : "eye.slash", help: L("显示/隐藏隐藏文件", "Show/Hide Hidden Files")) {
+                panelIconButton(store.includeHiddenFiles ? "eye" : "eye.slash", id: "file-manager.panel.toggle-hidden", help: L("显示/隐藏隐藏文件", "Show/Hide Hidden Files")) {
                     Task { await store.setIncludeHiddenFiles(!store.includeHiddenFiles) }
                 }
 
-                panelIconButton("doc.badge.plus", help: L("新建文件", "New File")) {
+                panelIconButton("doc.badge.plus", id: "file-manager.panel.new-file", help: L("新建文件", "New File")) {
                     Task { await store.createFile() }
                 }
 
-                panelIconButton("folder.badge.plus", help: L("新建文件夹", "New Folder")) {
+                panelIconButton("folder.badge.plus", id: "file-manager.panel.new-folder", help: L("新建文件夹", "New Folder")) {
                     Task { await store.createFolder() }
                 }
 
                 toolbarSeparator
 
-                panelIconButton("arrow.up", help: L("上级目录", "Parent Directory"), disabled: store.currentURL == nil) {
+                panelIconButton("arrow.up", id: "file-manager.panel.parent-directory", help: L("上级目录", "Parent Directory"), disabled: store.currentURL == nil) {
                     Task { await store.goUp() }
                 }
 
-                panelIconButton("arrow.clockwise", help: L("刷新文件", "Refresh Files")) {
+                panelIconButton("arrow.clockwise", id: "file-manager.panel.refresh", help: L("刷新文件", "Refresh Files")) {
                     Task { await store.refresh() }
                 }
 
-                panelIconButton("folder", help: L("在 Finder 中显示当前目录", "Reveal Current Directory in Finder")) {
+                panelIconButton("folder", id: "file-manager.panel.reveal-current-directory", help: L("在 Finder 中显示当前目录", "Reveal Current Directory in Finder")) {
                     reveal(store.currentURL ?? request.rootURL)
                 }
 
@@ -440,7 +440,7 @@ struct FileManagerPanel: View {
                 .foregroundStyle(theme.shellChromeText.opacity(0.42))
                 .lineLimit(1)
 
-            panelIconButton("xmark", help: L("关闭搜索", "Close Search")) {
+            panelIconButton("xmark", id: "file-manager.search.close", help: L("关闭搜索", "Close Search")) {
                 closeSearch()
             }
         }
@@ -544,7 +544,7 @@ struct FileManagerPanel: View {
                     }
                 }
             }
-            panelIconButton("xmark", help: L("关闭提示", "Dismiss Message")) {
+            panelIconButton("xmark", id: "file-manager.message.dismiss", help: L("关闭提示", "Dismiss Message")) {
                 store.clearOperationMessage()
             }
         }
@@ -667,7 +667,7 @@ struct FileManagerPanel: View {
 
     private func previewToolbar(item: FileManagerItem) -> some View {
         HStack(spacing: 8) {
-            panelIconButton("chevron.left", help: L("返回目录", "Back to Directory")) {
+            panelIconButton("chevron.left", id: "file-manager.preview.back-to-directory", help: L("返回目录", "Back to Directory")) {
                 store.clearSelection()
             }
 
@@ -686,36 +686,36 @@ struct FileManagerPanel: View {
             Spacer(minLength: 8)
 
             if !item.isDirectory {
-                panelIconButton("rectangle.split.2x1", help: L("在工作区打开", "Open in Workspace")) {
+                panelIconButton("rectangle.split.2x1", id: "file-manager.preview.open-in-workspace", help: L("在工作区打开", "Open in Workspace")) {
                     openInWorkspace(item)
                 }
 
-                panelIconButton("arrow.up.forward.app", help: L("系统应用打开", "Open in System App")) {
+                panelIconButton("arrow.up.forward.app", id: "file-manager.preview.open-in-system-app", help: L("系统应用打开", "Open in System App")) {
                     NSWorkspace.shared.open(item.url)
                 }
             }
 
-            panelIconButton("terminal", help: L("插入路径到终端", "Insert Path into Terminal"), disabled: model.focusedTerminalID == nil) {
+            panelIconButton("terminal", id: "file-manager.preview.insert-path", help: L("插入路径到终端", "Insert Path into Terminal"), disabled: model.focusedTerminalID == nil) {
                 _ = model.insertPathIntoFocusedTerminal(item.url)
             }
 
-            panelIconButton("textformat", help: L("复制文件名", "Copy Name")) {
+            panelIconButton("textformat", id: "file-manager.preview.copy-name", help: L("复制文件名", "Copy Name")) {
                 copyText(item.name)
             }
 
-            panelIconButton("doc.on.doc", help: L("复制路径", "Copy Path")) {
+            panelIconButton("doc.on.doc", id: "file-manager.preview.copy-path", help: L("复制路径", "Copy Path")) {
                 copyPath(item.url)
             }
 
-            panelIconButton("quote.bubble", help: L("复制 Shell 路径", "Copy Shell Path")) {
+            panelIconButton("quote.bubble", id: "file-manager.preview.copy-shell-path", help: L("复制 Shell 路径", "Copy Shell Path")) {
                 copyText(shellEscapedPath(item.url.path))
             }
 
-            panelIconButton("info.circle", help: L("显示信息", "Get Info")) {
+            panelIconButton("info.circle", id: "file-manager.preview.info", help: L("显示信息", "Get Info")) {
                 infoItem = item
             }
 
-            panelIconButton("folder", help: L("在 Finder 中显示", "Reveal in Finder")) {
+            panelIconButton("folder", id: "file-manager.preview.reveal-in-finder", help: L("在 Finder 中显示", "Reveal in Finder")) {
                 reveal(item.url)
             }
         }
@@ -729,10 +729,10 @@ struct FileManagerPanel: View {
             .frame(height: 1)
     }
 
-    private func panelIconButton(_ systemImage: String, help: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+    private func panelIconButton(_ systemImage: String, id: String, help: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {
         ConductorIconButton(
             state: ConductorControlState(
-                id: "file-manager-panel-\(systemImage)-\(help)",
+                id: id,
                 systemImage: systemImage,
                 isEnabled: !disabled,
                 tooltip: help,

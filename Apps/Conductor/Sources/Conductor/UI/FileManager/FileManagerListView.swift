@@ -111,23 +111,22 @@ struct FileManagerListView: View {
     }
 
     private func windowButton(systemImage: String, title: String, action: @escaping () -> Void) -> some View {
-        ConductorCommandButton(
+        let directionID = systemImage == "chevron.up" ? "previous" : "next"
+        let visibleRange = store.displaySnapshot.visibleRange
+        let rangeText = "\(visibleRange.lowerBound + 1)-\(visibleRange.upperBound)/\(store.displaySnapshot.totalRowCount)"
+
+        return ConductorCommandButton(
             state: ConductorControlState(
-                id: "file-window-\(systemImage)-\(title)",
+                id: "file-manager.visible-window.\(directionID)",
                 title: title,
                 systemImage: systemImage,
                 tooltip: title,
                 accessibilityLabel: title
             ),
             fillsWidth: true,
+            trailingText: rangeText,
             action: action
         )
-        .overlay(alignment: .trailing) {
-            Text("\(store.displaySnapshot.visibleRange.lowerBound + 1)-\(store.displaySnapshot.visibleRange.upperBound)/\(store.displaySnapshot.totalRowCount)")
-                .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.38))
-                .padding(.trailing, 10)
-        }
     }
 
     private func panelMessage(systemImage: String, text: String) -> some View {
