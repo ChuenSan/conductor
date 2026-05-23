@@ -636,7 +636,7 @@ struct FileManagerPanel: View {
     }
 
     private func openSelectedItem() {
-        guard let item = store.selectedItem ?? store.displayedRows.first?.item else { return }
+        guard let item = store.selectedItem ?? store.displaySnapshot.rows.first?.item else { return }
         open(item)
     }
 

@@ -278,11 +278,26 @@ final class FileManagerPanelStore: ObservableObject {
     func selectAdjacentRow(by offset: Int) {
         let rows = displayedRows
         guard !rows.isEmpty else { return }
-        let currentIndex = selectedItem.flatMap { selected in
+        let currentIndex: Int
+        if let selectedIndex = selectedItem.flatMap({ selected in
             rows.firstIndex { $0.item.id == selected.id }
-        } ?? (offset >= 0 ? -1 : rows.count)
+        }) {
+            currentIndex = selectedIndex
+        } else if let visibleFallbackIndex = visibleFallbackIndex(for: offset) {
+            currentIndex = visibleFallbackIndex
+        } else {
+            return
+        }
         let nextIndex = min(max(currentIndex + offset, 0), rows.count - 1)
         select(rows[nextIndex].item)
+    }
+
+    private func visibleFallbackIndex(for offset: Int) -> Int? {
+        guard !displaySnapshot.rows.isEmpty else { return nil }
+        if offset >= 0 {
+            return max(displaySnapshot.visibleRange.lowerBound - 1, -1)
+        }
+        return min(displaySnapshot.visibleRange.upperBound, displayedRows.count)
     }
 
     func expandSelected() async {
