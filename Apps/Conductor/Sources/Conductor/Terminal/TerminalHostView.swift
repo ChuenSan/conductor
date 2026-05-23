@@ -81,13 +81,11 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
             surface?.attachIfPossible()
         }
         syncGeometryIfWindowAttached(force: true)
-        surface?.refresh()
     }
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         syncGeometryIfWindowAttached(force: true)
-        surface?.refresh()
     }
 
     override func layout() {
@@ -502,18 +500,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     }
 
     private func terminalTabSplitTarget(for location: CGPoint, size: CGSize) -> TerminalTabDropTarget {
-        let width = max(1, size.width)
-        let height = max(1, size.height)
-        let x = min(max(location.x, 0), width)
-        let y = min(max(location.y, 0), height)
-        let topOriginY = height - y
-        let edgeDistances: [(target: TerminalTabDropTarget, distance: CGFloat)] = [
-            (.left, x / width),
-            (.right, (width - x) / width),
-            (.up, topOriginY / height),
-            (.down, y / height)
-        ]
-        return edgeDistances.min { $0.distance < $1.distance }?.target ?? .right
+        TerminalTabDropTarget.splitTarget(for: location, in: size)
     }
 
     private func droppedTerminalText(from pasteboard: NSPasteboard) -> String? {
@@ -619,5 +606,20 @@ enum TerminalTabDropTarget: Equatable {
         case .center, .up, .down:
             return false
         }
+    }
+
+    static func splitTarget(for location: CGPoint, in size: CGSize) -> TerminalTabDropTarget {
+        let width = max(1, size.width)
+        let height = max(1, size.height)
+        let x = min(max(location.x, 0), width)
+        let y = min(max(location.y, 0), height)
+        let topOriginY = height - y
+        let edgeDistances: [(target: TerminalTabDropTarget, distance: CGFloat)] = [
+            (.left, x / width),
+            (.right, (width - x) / width),
+            (.up, topOriginY / height),
+            (.down, y / height)
+        ]
+        return edgeDistances.min { $0.distance < $1.distance }?.target ?? .right
     }
 }

@@ -1,6 +1,5 @@
 import ConductorCore
 import AppKit
-import QuartzCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -138,24 +137,25 @@ struct ConductorRootView: View {
     @ViewBuilder
     private var fileManagerTray: some View {
         if let request = fileManagerPresentationRequest {
-            FileManagerCompositorSlideHost(
-                visible: fileManagerTrayVisible,
-                reducedMotion: model.appearance.reducedMotion,
-                duration: fileManagerAnimationDuration
-            ) {
-                FileManagerPanel(
-                    model: model,
-                    request: request,
-                    searchFocusToken: model.fileManagerSearchFocusGeneration,
-                    searchNextToken: model.fileManagerSearchNextGeneration,
-                    searchPreviousToken: model.fileManagerSearchPreviousGeneration
-                )
-            }
+            FileManagerPanel(
+                model: model,
+                request: request,
+                searchFocusToken: model.fileManagerSearchFocusGeneration,
+                searchNextToken: model.fileManagerSearchNextGeneration,
+                searchPreviousToken: model.fileManagerSearchPreviousGeneration
+            )
             .frame(width: fileManagerTargetWidth)
             .frame(maxHeight: .infinity)
+            .offset(x: fileManagerTrayVisible ? 0 : fileManagerTargetWidth)
             .clipped()
             .shadow(color: Color.black.opacity(model.theme.usesDarkChrome ? 0.22 : 0.14), radius: 18, x: -8, y: 0)
+            .animation(fileManagerTrayAnimation, value: fileManagerTrayVisible)
         }
+    }
+
+    private var fileManagerTrayAnimation: Animation? {
+        guard !model.appearance.reducedMotion else { return nil }
+        return .timingCurve(0.18, 0.86, 0.18, 1.0, duration: fileManagerAnimationDuration)
     }
 
     private func synchronizeFileManagerPresentation(animated: Bool) {
@@ -221,133 +221,16 @@ struct ConductorRootView: View {
     }
 
     private var terminalStage: some View {
-        SplitNodeView(node: model.workspace.visibleRoot, model: model)
+        SplitNodeView(
+            node: model.workspace.visibleRoot,
+            model: model,
+            theme: model.theme,
+            appearance: model.appearance
+        )
             .background(model.theme.terminalBackground)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-}
-
-private struct FileManagerCompositorSlideHost<Content: View>: NSViewRepresentable {
-    let visible: Bool
-    let reducedMotion: Bool
-    let duration: TimeInterval
-    let content: Content
-
-    init(
-        visible: Bool,
-        reducedMotion: Bool,
-        duration: TimeInterval,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.visible = visible
-        self.reducedMotion = reducedMotion
-        self.duration = duration
-        self.content = content()
-    }
-
-    func makeNSView(context: Context) -> FileManagerCompositorSlideHostView<Content> {
-        FileManagerCompositorSlideHostView(rootView: content)
-    }
-
-    func updateNSView(_ nsView: FileManagerCompositorSlideHostView<Content>, context: Context) {
-        nsView.update(rootView: content, visible: visible, duration: duration, animated: !reducedMotion)
-    }
-}
-
-@MainActor
-private final class FileManagerCompositorSlideHostView<Content: View>: NSView {
-    private let hostingView: NSHostingView<Content>
-    private var currentVisible: Bool?
-    private var lastKnownBoundsSize: CGSize = .zero
-
-    init(rootView: Content) {
-        self.hostingView = NSHostingView(rootView: rootView)
-        super.init(frame: .zero)
-        wantsLayer = true
-        clipsToBounds = true
-        layer?.masksToBounds = true
-        layer?.actions = Self.disabledLayerActions
-        canDrawSubviewsIntoLayer = true
-
-        hostingView.translatesAutoresizingMaskIntoConstraints = true
-        hostingView.autoresizingMask = [.width, .height]
-        hostingView.wantsLayer = true
-        hostingView.layerContentsRedrawPolicy = .onSetNeedsDisplay
-        hostingView.layer?.masksToBounds = true
-        hostingView.layer?.actions = Self.disabledLayerActions
-        addSubview(hostingView)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func layout() {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        super.layout()
-        hostingView.frame = bounds
-        hostingView.bounds = NSRect(origin: .zero, size: bounds.size)
-        let sizeChanged = lastKnownBoundsSize != bounds.size
-        lastKnownBoundsSize = bounds.size
-        if sizeChanged, let currentVisible {
-            applyVisibility(currentVisible, animated: false, duration: 0)
-        }
-        CATransaction.commit()
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        currentVisible == true ? super.hitTest(point) : nil
-    }
-
-    func update(rootView: Content, visible: Bool, duration: TimeInterval, animated: Bool) {
-        hostingView.rootView = rootView
-        hostingView.frame = bounds
-        hostingView.bounds = NSRect(origin: .zero, size: bounds.size)
-        let didChangeVisibility = currentVisible != visible
-        currentVisible = visible
-        applyVisibility(visible, animated: animated && didChangeVisibility && bounds.width > 1, duration: duration)
-    }
-
-    private func applyVisibility(_ visible: Bool, animated: Bool, duration: TimeInterval) {
-        guard let layer = hostingView.layer else { return }
-        let targetTransform = CATransform3DMakeTranslation(visible ? 0 : max(1, bounds.width), 0, 0)
-        if animated {
-            let fromTransform = layer.presentation()?.transform ?? layer.transform
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            layer.transform = targetTransform
-            CATransaction.commit()
-
-            let animation = CABasicAnimation(keyPath: "transform")
-            animation.fromValue = NSValue(caTransform3D: fromTransform)
-            animation.toValue = NSValue(caTransform3D: targetTransform)
-            animation.duration = duration
-            animation.timingFunction = CAMediaTimingFunction(controlPoints: 0.18, 0.86, 0.18, 1.0)
-            animation.isRemovedOnCompletion = true
-            layer.add(animation, forKey: "conductor.file-manager.compositor-slide")
-        } else {
-            layer.removeAnimation(forKey: "conductor.file-manager.compositor-slide")
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            layer.transform = targetTransform
-            CATransaction.commit()
-        }
-    }
-
-    private static var disabledLayerActions: [String: CAAction] {
-        [
-            "bounds": NSNull(),
-            "position": NSNull(),
-            "frame": NSNull(),
-            "transform": NSNull(),
-            "opacity": NSNull(),
-            "contentsScale": NSNull(),
-            "backgroundColor": NSNull()
-        ]
-    }
 }
 
 private struct ConductorShellJoiner: View {

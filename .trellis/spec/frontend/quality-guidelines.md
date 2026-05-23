@@ -41,6 +41,9 @@ Always:
 - Avoid doing persistence preparation work twice on the main actor. `workspace.didSet` is the
   boundary that synchronizes the selected workspace snapshot; delayed persistence should
   capture already-synchronized values and perform disk writes later.
+- Keep local visual verification on one launch path. `./Scripts/run-conductor.sh` must build
+  and launch the current `.build/Conductor.app`; do not verify UI changes against a SwiftPM
+  executable while manually opening a different app bundle.
 
 ---
 

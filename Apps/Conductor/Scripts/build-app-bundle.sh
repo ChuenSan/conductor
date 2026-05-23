@@ -8,7 +8,6 @@ if [[ -x /usr/local/opt/swift/bin/swift ]]; then
   export PATH="/usr/local/opt/swift/bin:$PATH"
 fi
 
-./Scripts/prepare-ghosttykit.sh
 CONFIGURATION="${CONDUCTOR_BUILD_CONFIGURATION:-release}"
 case "$CONFIGURATION" in
   debug|release) ;;
@@ -22,18 +21,36 @@ SWIFT_BUILD_ARGS=(-c "$CONFIGURATION")
 if [[ "$CONFIGURATION" == "release" && "${CONDUCTOR_CROSS_MODULE_OPTIMIZATION:-1}" != "0" ]]; then
   SWIFT_BUILD_ARGS+=(-Xswiftc -cross-module-optimization)
 fi
-swift build "${SWIFT_BUILD_ARGS[@]}"
-BIN_PATH="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)"
 
 APP="$ROOT/.build/Conductor.app"
 CONTENTS="$APP/Contents"
 MACOS="$CONTENTS/MacOS"
 RESOURCES="$CONTENTS/Resources"
+EXECUTABLE="$MACOS/Conductor"
+PRODUCT_EXECUTABLE=""
 
-rm -rf "$APP"
-mkdir -p "$MACOS" "$RESOURCES"
-cp "$BIN_PATH/Conductor" "$MACOS/Conductor"
-swift "$ROOT/Scripts/generate-app-icon.swift" "$RESOURCES/AppIcon.icns"
+prepare_dependencies() {
+  ./Scripts/prepare-ghosttykit.sh
+}
+
+build_product() {
+  swift build "${SWIFT_BUILD_ARGS[@]}"
+  local bin_path
+  bin_path="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)"
+  PRODUCT_EXECUTABLE="$bin_path/Conductor"
+
+  if [[ ! -x "$PRODUCT_EXECUTABLE" ]]; then
+    echo "Built Conductor executable not found at $PRODUCT_EXECUTABLE" >&2
+    exit 1
+  fi
+}
+
+create_app_layout() {
+  rm -rf "$APP"
+  mkdir -p "$MACOS" "$RESOURCES"
+  cp "$PRODUCT_EXECUTABLE" "$EXECUTABLE"
+  swift "$ROOT/Scripts/generate-app-icon.swift" "$RESOURCES/AppIcon.icns"
+}
 
 copy_ghostty_resources() {
   local ghostty_root=""
@@ -62,9 +79,8 @@ copy_ghostty_resources() {
   fi
 }
 
-copy_ghostty_resources
-
-cat > "$CONTENTS/Info.plist" <<'PLIST'
+write_info_plist() {
+  cat > "$CONTENTS/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -111,5 +127,22 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+}
 
-echo "$APP"
+sign_app_bundle() {
+  if command -v codesign >/dev/null 2>&1; then
+    codesign --force --deep --sign - "$APP" >/dev/null
+  fi
+}
+
+main() {
+  prepare_dependencies >&2
+  build_product >&2
+  create_app_layout >&2
+  copy_ghostty_resources >&2
+  write_info_plist
+  sign_app_bundle >&2
+  printf '%s\n' "$APP"
+}
+
+main "$@"

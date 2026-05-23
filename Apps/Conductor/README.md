@@ -12,7 +12,6 @@ should not import prototype code.
 ./Scripts/prepare-ghosttykit.sh
 swift build
 swift run ConductorModelCheck
-swift run Conductor
 ```
 
 For manual validation:

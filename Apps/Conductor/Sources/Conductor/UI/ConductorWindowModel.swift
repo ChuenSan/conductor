@@ -233,6 +233,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var terminalTabDropTargetByPaneID: [PaneID: TerminalTabDropTarget] = [:]
     @Published private(set) var activeTerminalTabDragID: TerminalID?
     private var terminalTabDragGeneration: UInt64 = 0
+    private var terminalTabDragLocalMouseUpMonitor: Any?
+    private var terminalTabDragGlobalMouseUpMonitor: Any?
 
     var onNotificationPanelVisibilityChange: ((Bool) -> Void)?
 
@@ -608,20 +610,19 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         if !terminalTabDropTargetByPaneID.isEmpty {
             terminalTabDropTargetByPaneID.removeAll()
         }
+        installTerminalTabDragEndMonitors(generation: generation)
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
             guard let self,
                   self.terminalTabDragGeneration == generation else {
                 return
             }
-            self.activeTerminalTabDragID = nil
-            if !self.terminalTabDropTargetByPaneID.isEmpty {
-                self.terminalTabDropTargetByPaneID.removeAll()
-            }
+            self.finishTerminalTabDragIfCurrent(generation: generation)
         }
     }
 
     func endTerminalTabDrag() {
         terminalTabDragGeneration &+= 1
+        removeTerminalTabDragEndMonitors()
         activeTerminalTabDragID = nil
         if !terminalTabDropTargetByPaneID.isEmpty {
             terminalTabDropTargetByPaneID.removeAll()
@@ -636,15 +637,93 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         activeTerminalTabDragID == terminalID
     }
 
+    private func installTerminalTabDragEndMonitors(generation: UInt64) {
+        removeTerminalTabDragEndMonitors()
+        terminalTabDragLocalMouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] event in
+            self?.scheduleTerminalTabDragEndConfirmation(generation: generation)
+            return event
+        }
+        terminalTabDragGlobalMouseUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.scheduleTerminalTabDragEndConfirmation(generation: generation)
+            }
+        }
+    }
+
+    private func scheduleTerminalTabDragEndConfirmation(generation: UInt64) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            self?.finishTerminalTabDragIfCurrent(generation: generation)
+        }
+    }
+
+    private func finishTerminalTabDragIfCurrent(generation: UInt64) {
+        guard terminalTabDragGeneration == generation else { return }
+        endTerminalTabDrag()
+    }
+
+    private func removeTerminalTabDragEndMonitors() {
+        if let terminalTabDragLocalMouseUpMonitor {
+            NSEvent.removeMonitor(terminalTabDragLocalMouseUpMonitor)
+            self.terminalTabDragLocalMouseUpMonitor = nil
+        }
+        if let terminalTabDragGlobalMouseUpMonitor {
+            NSEvent.removeMonitor(terminalTabDragGlobalMouseUpMonitor)
+            self.terminalTabDragGlobalMouseUpMonitor = nil
+        }
+    }
+
     func setTerminalTabDropTarget(for terminalID: TerminalID, target: TerminalTabDropTarget?) {
         guard let paneID = workspace.paneID(containing: terminalID) else { return }
+        setTerminalTabDropTarget(forPane: paneID, target: target)
+    }
+
+    func setTerminalTabDropTarget(forPane paneID: PaneID, target: TerminalTabDropTarget?) {
         if let target {
+            guard let draggedTerminalID = activeTerminalTabDragID,
+                  canPerformTerminalTabDrop(draggedTerminalID, targetPaneID: paneID, target: target) else {
+                if terminalTabDropTargetByPaneID[paneID] != nil {
+                    terminalTabDropTargetByPaneID.removeValue(forKey: paneID)
+                }
+                return
+            }
             guard terminalTabDropTargetByPaneID[paneID] != target else { return }
             terminalTabDropTargetByPaneID[paneID] = target
         } else {
             guard terminalTabDropTargetByPaneID[paneID] != nil else { return }
             terminalTabDropTargetByPaneID.removeValue(forKey: paneID)
         }
+    }
+
+    @discardableResult
+    func performTerminalTabDrop(_ draggedTerminalID: TerminalID, targetPaneID: PaneID, target: TerminalTabDropTarget) -> Bool {
+        guard canPerformTerminalTabDrop(draggedTerminalID, targetPaneID: targetPaneID, target: target) else {
+            endTerminalTabDrag()
+            return false
+        }
+        terminalTabDropTargetByPaneID.removeValue(forKey: targetPaneID)
+        let sourcePaneID = workspace.paneID(containing: draggedTerminalID)
+        ConductorMotion.perform(ConductorMotion.layout) {
+            if target == .center {
+                guard sourcePaneID != targetPaneID else { return }
+                self.moveTabToEnd(draggedTerminalID, in: targetPaneID)
+            } else {
+                self.moveTabToSplit(draggedTerminalID, targetPaneID: targetPaneID, direction: target.direction)
+            }
+        }
+        endTerminalTabDrag()
+        return true
+    }
+
+    func canPerformTerminalTabDrop(_ draggedTerminalID: TerminalID, targetPaneID: PaneID, target: TerminalTabDropTarget) -> Bool {
+        guard let sourcePaneID = workspace.paneID(containing: draggedTerminalID),
+              let sourcePane = workspace.panes[sourcePaneID],
+              workspace.panes[targetPaneID] != nil else {
+            return false
+        }
+        if target == .center {
+            return sourcePaneID != targetPaneID && (sourcePane.tabs.count > 1 || workspace.panes.count > 1)
+        }
+        return workspace.canMoveTabToSplit(draggedTerminalID, targetPaneID: targetPaneID)
     }
 
     func canPerformCommand(_ command: ConductorShellCommand) -> Bool {
@@ -778,17 +857,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                   let targetPaneID = self.workspace.paneID(containing: targetTerminalID) else {
                 return false
             }
-            self.terminalTabDropTargetByPaneID.removeValue(forKey: targetPaneID)
-            ConductorMotion.perform(ConductorMotion.layout) {
-                if target == .center {
-                    guard self.workspace.paneID(containing: draggedTerminalID) != targetPaneID else { return }
-                    self.moveTabToEnd(draggedTerminalID, in: targetPaneID)
-                } else {
-                    self.moveTabToSplit(draggedTerminalID, targetPaneID: targetPaneID, direction: target.direction)
-                }
-            }
-            self.endTerminalTabDrag()
-            return true
+            return self.performTerminalTabDrop(draggedTerminalID, targetPaneID: targetPaneID, target: target)
         }
         surfaces[tab.id] = surface
         return surface

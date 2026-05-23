@@ -198,10 +198,11 @@ final class TerminalSurface {
         appliedRendererPreferences = rendererPreferences
     }
 
-    func syncGeometry(force: Bool = false) {
+    @discardableResult
+    func syncGeometry(force: Bool = false) -> Bool {
         guard let surface,
               let window = hostView.window else {
-            return
+            return false
         }
 
         let signpost = force ? ConductorSignpost.begin("surface-geometry-force") : nil
@@ -241,6 +242,7 @@ final class TerminalSurface {
         if didUpdateGeometry {
             ghostty_surface_refresh(surface)
         }
+        return didUpdateGeometry
     }
 
     private static func validWorkingDirectory(_ path: String?) -> String? {

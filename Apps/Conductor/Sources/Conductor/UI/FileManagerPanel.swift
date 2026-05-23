@@ -1934,13 +1934,18 @@ struct FileManagerPanel: View {
         let snapshot = store.displaySnapshot
         VStack(spacing: 0) {
             header
+                .zIndex(1)
             divider
+                .zIndex(1)
             if searchVisible || !store.searchQuery.isEmpty {
                 fileTreeSearchBar(snapshot: snapshot)
+                    .zIndex(1)
                 divider
+                    .zIndex(1)
             }
             content(snapshot: snapshot)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .zIndex(0)
             divider
             statusBar(snapshot: snapshot)
             if let message = store.operationMessage {
@@ -2145,8 +2150,10 @@ struct FileManagerPanel: View {
             }
         } label: {
             Image(systemName: "clock")
-                .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.62))
+                .renderingMode(.template)
+                .symbolRenderingMode(.monochrome)
+                .font(toolbarIconFont)
+                .foregroundStyle(toolbarIconColor)
                 .frame(width: 28, height: 28)
         }
         .menuStyle(.button)
@@ -2167,8 +2174,10 @@ struct FileManagerPanel: View {
             }
         } label: {
             Image(systemName: "arrow.up.arrow.down")
-                .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.62))
+                .renderingMode(.template)
+                .symbolRenderingMode(.monochrome)
+                .font(toolbarIconFont)
+                .foregroundStyle(toolbarIconColor)
                 .frame(width: 28, height: 28)
         }
         .menuStyle(.button)
@@ -2189,8 +2198,10 @@ struct FileManagerPanel: View {
             }
         } label: {
             Image(systemName: store.kindFilter.systemImage)
-                .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(store.kindFilter == .all ? theme.shellChromeText.opacity(0.62) : theme.floatingEmphasis.opacity(0.86))
+                .renderingMode(.template)
+                .symbolRenderingMode(.monochrome)
+                .font(toolbarIconFont)
+                .foregroundStyle(toolbarIconColor)
                 .frame(width: 28, height: 28)
         }
         .menuStyle(.button)
@@ -2203,6 +2214,14 @@ struct FileManagerPanel: View {
             .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.26))
             .frame(width: 1, height: 18)
             .padding(.horizontal, 3)
+    }
+
+    private var toolbarIconFont: Font {
+        .conductorSystem(size: toolbarIconSymbolSize, weight: .semibold, family: fontFamily, scale: fontScale)
+    }
+
+    private var toolbarIconColor: Color {
+        theme.shellChromeText.opacity(toolbarIconOpacity)
     }
 
     private var favoriteButton: some View {
@@ -2729,13 +2748,21 @@ struct FileManagerPanel: View {
             systemImage: systemImage,
             help: help,
             size: 28,
-            symbolSize: 11,
-            opacity: 0.72,
+            symbolSize: toolbarIconSymbolSize,
+            iconColor: theme.shellChromeText,
+            opacity: toolbarIconOpacity,
+            disabledOpacity: toolbarDisabledIconOpacity,
+            fontScale: fontScale,
+            fontFamily: fontFamily,
             disabled: disabled,
             action: action
         )
         .frame(width: 28, height: 28)
     }
+
+    private var toolbarIconSymbolSize: CGFloat { 12.5 }
+    private var toolbarIconOpacity: CGFloat { 0.86 }
+    private var toolbarDisabledIconOpacity: CGFloat { theme.usesDarkChrome ? 0.34 : 0.38 }
 
     private func infoPill(_ title: String) -> some View {
         Text(title)
@@ -4921,13 +4948,13 @@ private struct FileManagerPanelIconButton: View {
     let help: String
     let size: CGFloat
     let symbolSize: CGFloat
+    let iconColor: Color
     let opacity: CGFloat
+    let disabledOpacity: CGFloat
+    let fontScale: AppearanceFontScale
+    let fontFamily: AppearanceFontFamily
     let disabled: Bool
     let action: () -> Void
-
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorFontFamily) private var fontFamily
-    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         Button {
@@ -4935,14 +4962,16 @@ private struct FileManagerPanelIconButton: View {
             action()
         } label: {
             Image(systemName: systemImage)
+                .renderingMode(.template)
+                .symbolRenderingMode(.monochrome)
                 .font(.conductorSystem(size: symbolSize, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(disabled ? 0.26 : opacity))
+                .foregroundStyle(iconColor.opacity(disabled ? disabledOpacity : opacity))
                 .frame(width: size, height: size)
                 .contentShape(Rectangle())
-                .accessibilityLabel(Text(help))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ConductorPressButtonStyle())
         .disabled(disabled)
-        .macNativeTooltip(help)
+        .accessibilityLabel(Text(help))
+        .help(help)
     }
 }

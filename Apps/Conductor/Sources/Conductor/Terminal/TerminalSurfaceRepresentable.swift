@@ -156,9 +156,6 @@ final class TerminalSurfaceContainerView: NSView {
             CATransaction.commit()
         }
         currentSurface.syncGeometry(force: force)
-        if force {
-            currentSurface.refresh()
-        }
     }
 
     private func schedulePostLayoutGeometrySync(for surface: TerminalSurface, force: Bool) {
