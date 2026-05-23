@@ -175,6 +175,91 @@ workspace overview, and compact status modules.
   through `ToolbarChromeSnapshot`, including Command Center, Workspace Overview, Notification
   Center, file tools, and zoom. Do not leave a visible toolbar command without an active state
   while its panel is open.
+- Workspace tabs and other primary navigation tabs must use a native `Button` for their
+  main selection target. Do not rely only on `.onTapGesture` inside a nested content view:
+  horizontal scrolling, context menus, double-click rename gestures, matched selection
+  backgrounds, and padding can make gesture-only tab selection miss single clicks. Keep close
+  buttons as separate controls layered beside the main selection button.
+- Workspace selection must be resolved in `ConductorWindowModel`, not patched per entry point.
+  Selecting a workspace from the sidebar, top tab strip, workspace overview, shortcut, or menu
+  must always route the main content back to that workspace's terminal stage, even when a
+  file/document tab was active before the click. UI entry points should call
+  `activateWorkspace(_:source:)` and let the model clear the file-tab content route, reconcile
+  surface focus, and refresh the selected workspace's terminal as one navigation transaction.
+  Sidebar rows and workspace tabs must derive selected visuals from the committed
+  `WorkspaceChromeSnapshot`; do not keep a separate optimistic selected-workspace state in
+  the view layer.
+
+### Scenario: Workspace Navigation Transaction
+
+#### 1. Scope / Trigger
+
+- Trigger: A user or command selects a workspace from the sidebar, top workspace tab strip,
+  workspace overview, notification jump, menu item, shortcut, or programmatic terminal focus.
+
+#### 2. Signatures
+
+- `enum WorkspaceNavigationSource: String`
+- `ConductorWindowModel.activateWorkspace(_:source:) -> Bool`
+- `WorkspaceChromeSnapshot.selectedWorkspaceID`
+- `WorkspaceChromeSnapshot.selectedWorkspaceFileTabID`
+
+#### 3. Contracts
+
+- `activateWorkspace(_:source:)` is the only UI-facing workspace activation command.
+- The transaction resolves the target workspace, updates `selectedWorkspaceID` and `workspace`,
+  clears file/document content by selecting the workspace terminal stage, reconciles Ghostty
+  surface focus, schedules a navigation refresh for the selected terminal, closes workspace
+  transient panels, and records diagnostics with the source and result.
+- Destructive list mutations that remove the previously selected workspace must use the guarded
+  internal activation path so `workspace.didSet` does not sync the deleted workspace back into
+  `workspaces`.
+- Top and left workspace chrome derive selected visuals from the committed snapshot only.
+
+#### 4. Validation & Error Matrix
+
+- Target workspace missing -> return `false`, record `reason=missing-target`, do not mutate UI state.
+- Target workspace has no selected terminal -> clear `selectedWorkspaceContentTabID`, reconcile
+  focus, record `reason=missing-focused-terminal`.
+- Same workspace selected while a file tab is active -> return to terminal stage immediately.
+- Cross-workspace notification target -> activate the owning workspace, focus the target terminal,
+  mark notifications read, and close the notification panel.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: Clicking a sidebar row and clicking the matching top tab produce the same model
+  transition, diagnostics shape, terminal-stage selection, and surface focus behavior.
+- Base: Selecting the already-active workspace while terminal stage is visible refreshes focus
+  without visible content churn.
+- Bad: A view sets an optimistic selected workspace state before the model commits, so the row
+  looks selected while the main content still shows the old workspace or a file tab.
+
+#### 6. Tests Required
+
+- `swift build`
+- `swift run ConductorModelCheck`
+- `CONDUCTOR_WORKSPACE_AUTORUN=1 swift run Conductor`, asserting same-workspace activation,
+  cross-workspace activation, and file-tab-to-terminal restoration.
+- Manual smoke: click sidebar rows and top workspace tabs repeatedly with Settings, Overview,
+  Notification Center, and a workspace file tab visible; selection, content, and focus must
+  update on the first click.
+
+#### 7. Wrong vs Correct
+
+##### Wrong
+
+```swift
+setVisualSelection(row.id, animated: true)
+model.selectWorkspace(row.id)
+model.selectTerminalStage()
+```
+
+##### Correct
+
+```swift
+model.activateWorkspace(row.id, source: .tabStrip)
+```
+
 - Toggleable shell surfaces must actually toggle. If Notification Center, Command Center,
   Settings, Workspace Overview, or a similar floating surface is visible, invoking the same
   toolbar/menu/shortcut command must hide it and restore the appropriate main-window focus.

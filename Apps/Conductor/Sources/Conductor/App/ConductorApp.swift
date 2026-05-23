@@ -1042,6 +1042,27 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let originalTheme = model.theme
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [model] in
+            let startingWorkspaceID = model.workspace.id
+            let regressionFileURL = URL(fileURLWithPath: "/tmp/conductor-workspace-switch-regression.txt")
+            try? "workspace switch regression".write(to: regressionFileURL, atomically: true, encoding: .utf8)
+            model.openFileInWorkspace(regressionFileURL)
+            let fileTabSelectedBeforeWorkspaceSwitch = model.selectedWorkspaceFileTab != nil
+            let sameWorkspaceActivationReturnedTerminalStage = model.activateWorkspace(startingWorkspaceID, source: .tabStrip) &&
+                model.workspace.id == startingWorkspaceID &&
+                model.selectedWorkspaceFileTab == nil &&
+                model.workspace.focusedPane?.selectedTab != nil
+            model.openFileInWorkspace(regressionFileURL)
+            model.newWorkspace()
+            let createdWorkspaceID = model.workspace.id
+            let newWorkspaceOpenedTerminalStage = model.selectedWorkspaceFileTab == nil &&
+                model.workspace.focusedPane?.selectedTab != nil
+            model.openFileInWorkspace(regressionFileURL)
+            let crossWorkspaceActivationSucceeded = model.activateWorkspace(startingWorkspaceID, source: .sidebar)
+            let workspaceSwitchRestoredTerminalStage = model.workspace.id == startingWorkspaceID &&
+                model.selectedWorkspaceFileTab == nil &&
+                model.workspace.focusedPane?.selectedTab != nil
+            model.closeWorkspace(createdWorkspaceID)
+
             model.closeAllSurfaces()
             model.workspace = WorkspaceState(title: "Automation")
             model.commandPaletteVisible = false
@@ -1061,9 +1082,18 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             model.toggleZoom()
             model.toggleZoom()
 
+            let workspaceValid = self.workspaceIsValid(model.workspace)
+            let navigationRestoredTerminalStage = fileTabSelectedBeforeWorkspaceSwitch &&
+                sameWorkspaceActivationReturnedTerminalStage &&
+                crossWorkspaceActivationSucceeded &&
+                newWorkspaceOpenedTerminalStage &&
+                workspaceSwitchRestoredTerminalStage
             let summary = [
-                "status=\(self.workspaceIsValid(model.workspace) ? "ok" : "invalid")",
+                "status=\(workspaceValid && navigationRestoredTerminalStage ? "ok" : "invalid")",
                 "workspace=operations",
+                "workspaceNavigationRestoresTerminal=\(navigationRestoredTerminalStage)",
+                "sameWorkspaceActivationReturnsTerminal=\(sameWorkspaceActivationReturnedTerminalStage)",
+                "crossWorkspaceActivationSucceeded=\(crossWorkspaceActivationSucceeded)",
                 "panes=\(model.workspace.panes.count)",
                 "terminals=\(model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count })",
                 "zoomed=\(model.workspace.isZoomed)"

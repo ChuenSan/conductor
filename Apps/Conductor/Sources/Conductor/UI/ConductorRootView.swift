@@ -5123,7 +5123,7 @@ private struct WorkspaceOverviewPanel: View {
 
     private func openWorkspace(_ workspaceID: WorkspaceID) {
         ConductorMotion.withoutAnimation {
-            model.selectWorkspace(workspaceID)
+            model.activateWorkspace(workspaceID, source: .overview)
         }
         model.performShellMotion(ConductorMotion.panel) {
             model.hideWorkspaceOverview()
@@ -5477,7 +5477,6 @@ private struct ConductorSidebar: View {
     @State private var workspaceTitleDraft = ""
     @State private var sidebarToggleHovering = false
     @Namespace private var sidebarSelectionNamespace
-    @State private var visualSelectedSidebarWorkspaceID: WorkspaceID?
     @Environment(\.conductorFontScale) private var fontScale
 
     private var sidebarHeaderHeight: CGFloat {
@@ -5514,17 +5513,6 @@ private struct ConductorSidebar: View {
         }
         .clipShape(SidebarRailShape())
         .animation(model.shellAnimation(ConductorMotion.layout), value: sidebarVisible)
-        .onAppear {
-            setVisualSidebarSelection(snapshot.selectedWorkspaceID, animated: false)
-        }
-        .onChange(of: snapshot.selectedWorkspaceID) {
-            setVisualSidebarSelection(snapshot.selectedWorkspaceID, animated: true)
-        }
-        .onChange(of: snapshot.workspaceIDs) {
-            if visualSelectedSidebarWorkspaceID == nil || !snapshot.workspaceIDs.contains(visualSelectedSidebarWorkspaceID!) {
-                setVisualSidebarSelection(snapshot.selectedWorkspaceID, animated: false)
-            }
-        }
         .animation(model.shellAnimation(ConductorMotion.standard), value: theme)
     }
 
@@ -5669,7 +5657,7 @@ private struct ConductorSidebar: View {
                             help: row.title
                         ) {
                             withoutShellAnimation {
-                                model.selectWorkspace(row.id)
+                                model.activateWorkspace(row.id, source: .sidebar)
                             }
                         }
                         .id(row.id)
@@ -5737,17 +5725,16 @@ private struct ConductorSidebar: View {
             terminalCount: row.terminalCount,
             unreadCount: row.unreadCount,
             selected: row.selected,
-            visuallySelected: visualSelectedSidebarWorkspaceID == row.id,
+            visuallySelected: row.selected,
             selectionNamespace: sidebarSelectionNamespace,
             editing: renamingWorkspaceID == row.id,
             titleDraft: $workspaceTitleDraft,
             onCommitRename: commitWorkspaceRename,
             onCancelRename: cancelWorkspaceRename
         ) {
-            setVisualSidebarSelection(row.id, animated: true)
             finishWorkspaceRenameIfNeeded(except: row.id)
             withoutShellAnimation {
-                model.selectWorkspace(row.id)
+                model.activateWorkspace(row.id, source: .sidebar)
             }
         } onRename: {
             finishWorkspaceRenameIfNeeded(except: row.id)
@@ -5816,17 +5803,6 @@ private struct ConductorSidebar: View {
 
     private func cancelWorkspaceRename() {
         renamingWorkspaceID = nil
-    }
-
-    private func setVisualSidebarSelection(_ workspaceID: WorkspaceID, animated: Bool) {
-        let update = {
-            visualSelectedSidebarWorkspaceID = workspaceID
-        }
-        if animated {
-            model.performShellMotion(ConductorMotion.selectionGlide, update)
-        } else {
-            ConductorMotion.withoutAnimation(update)
-        }
     }
 
 }
@@ -6668,7 +6644,6 @@ private struct WorkspaceTabStrip: View {
     let onCancelRename: () -> Void
     @Namespace private var selectionNamespace
     @State private var scrollTargetID: WorkspaceID?
-    @State private var visualSelectedWorkspaceID: WorkspaceID?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -6707,17 +6682,12 @@ private struct WorkspaceTabStrip: View {
         .scrollTargetBehavior(.viewAligned)
         .scrollPosition(id: $scrollTargetID, anchor: .center)
         .onAppear {
-            setVisualSelection(snapshot.selectedWorkspaceID, animated: false)
             syncScrollTarget(animated: false)
         }
         .onChange(of: snapshot.selectedWorkspaceID) {
-            setVisualSelection(snapshot.selectedWorkspaceID, animated: true)
             syncScrollTarget(animated: true)
         }
         .onChange(of: snapshot.workspaceIDs) {
-            if visualSelectedWorkspaceID == nil || !snapshot.workspaceIDs.contains(visualSelectedWorkspaceID!) {
-                setVisualSelection(snapshot.selectedWorkspaceID, animated: false)
-            }
             syncScrollTarget(animated: true)
         }
         .frame(
@@ -6749,17 +6719,15 @@ private struct WorkspaceTabStrip: View {
             row: row,
             appearance: appearance,
             active: row.selected && snapshot.selectedWorkspaceFileTabID == nil,
-            visuallySelected: visualSelectedWorkspaceID == row.id && snapshot.selectedWorkspaceFileTabID == nil,
+            visuallySelected: row.selected && snapshot.selectedWorkspaceFileTabID == nil,
             selectionNamespace: selectionNamespace,
             canClose: snapshot.canCloseWorkspace,
             editing: editingWorkspaceID == row.id,
             titleDraft: $workspaceTitleDraft,
             onSelect: {
-                setVisualSelection(row.id, animated: true)
                 finishWorkspaceRenameIfNeeded(except: row.id)
                 ConductorMotion.withoutAnimation {
-                    model.selectWorkspace(row.id)
-                    model.selectTerminalStage()
+                    model.activateWorkspace(row.id, source: .tabStrip)
                 }
             },
             onRename: {
@@ -6806,16 +6774,6 @@ private struct WorkspaceTabStrip: View {
         onCommitRename()
     }
 
-    private func setVisualSelection(_ workspaceID: WorkspaceID, animated: Bool) {
-        let update = {
-            visualSelectedWorkspaceID = workspaceID
-        }
-        if animated {
-            model.performShellMotion(ConductorMotion.selectionGlide, update)
-        } else {
-            ConductorMotion.withoutAnimation(update)
-        }
-    }
 }
 
 private struct WorkspaceTabSectionDivider: View {
@@ -7041,19 +6999,23 @@ private struct WorkspaceTopTab: View {
                     renameCancelled = false
                 }
             } else {
-                WorkspaceTopTabContent(
-                    title: row.title,
-                    terminalCount: row.terminalCount,
-                    unreadCount: unreadCount,
-                    selected: selected,
-                    themeID: theme.id,
-                    fontScaleID: fontScale.id
-                )
-                .equatable()
-                .contentShape(Rectangle())
-                .onTapGesture {
+                Button {
                     onSelect()
+                } label: {
+                    WorkspaceTopTabContent(
+                        title: row.title,
+                        terminalCount: row.terminalCount,
+                        unreadCount: unreadCount,
+                        selected: selected,
+                        themeID: theme.id,
+                        fontScaleID: fontScale.id
+                    )
+                    .equatable()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .buttonStyle(ConductorPressButtonStyle())
                 .simultaneousGesture(
                     TapGesture(count: 2).onEnded {
                         guard !editing else { return }

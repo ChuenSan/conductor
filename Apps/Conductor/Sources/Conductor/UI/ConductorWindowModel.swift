@@ -130,6 +130,27 @@ struct ConductorWorkspaceFileTab: Identifiable, Equatable, Hashable, Sendable {
 enum ConductorWorkspaceContentTabID: Equatable, Hashable {
     case terminal(TerminalID)
     case file(String)
+
+    var diagnosticName: String {
+        switch self {
+        case .terminal:
+            "terminal"
+        case .file:
+            "file"
+        }
+    }
+}
+
+enum WorkspaceNavigationSource: String {
+    case sidebar
+    case tabStrip
+    case overview
+    case notification
+    case terminalFocus
+    case newWorkspace
+    case duplicateWorkspace
+    case listMutation
+    case programmatic
 }
 
 @MainActor
@@ -1052,11 +1073,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func selectTerminalStage() {
-        if let tab = workspace.focusedPane?.selectedTab {
-            markTerminalInteractionFocus()
-            selectedWorkspaceContentTabID = .terminal(tab.id)
-            focusTerminal(tab.id)
-        }
+        activateTerminalStageForCurrentWorkspace(source: .programmatic)
     }
 
     func selectWorkspaceTerminalTab(_ terminalID: TerminalID) {
@@ -1383,13 +1400,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         defer { ConductorSignpost.end("focus-terminal", signpost) }
         if workspace.paneID(containing: terminalID) == nil,
            let workspaceID = workspaces.first(where: { $0.paneID(containing: terminalID) != nil })?.id {
-            selectWorkspace(workspaceID)
+            activateWorkspace(workspaceID, source: .terminalFocus)
         }
         guard let paneID = workspace.paneID(containing: terminalID) else { return }
         markTerminalInteractionFocus()
         markTerminalNotificationsRead(terminalID)
+        selectedWorkspaceContentTabID = .terminal(terminalID)
         if workspace.focusedPaneID == paneID,
            workspace.panes[paneID]?.selectedTabID == terminalID {
+            reconcileSurfaceFocus()
+            refreshSurfaceAfterNavigation(terminalID)
             return
         }
         workspace.focusPane(paneID)
@@ -1693,43 +1713,131 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func newWorkspace() {
         let signpost = ConductorSignpost.begin("new-workspace")
         defer { ConductorSignpost.end("new-workspace", signpost) }
-        closeTerminalSearch()
         let next = WorkspaceState(title: nextWorkspaceTitle())
         workspaces.append(next)
-        selectedWorkspaceID = next.id
-        workspace = next
-        commandPaletteVisible = false
-        workspaceOverviewVisible = false
+        activateWorkspace(next.id, source: .newWorkspace)
     }
 
     func duplicateWorkspace(_ workspaceID: WorkspaceID) {
         let signpost = ConductorSignpost.begin("duplicate-workspace")
         defer { ConductorSignpost.end("duplicate-workspace", signpost) }
-        closeTerminalSearch()
         guard let index = workspaces.firstIndex(where: { $0.id == workspaceID }) else { return }
         let source = workspace.id == workspaceID ? workspace : workspaces[index]
         let duplicate = source.duplicated(title: nextCopyTitle(for: source.title))
         workspaces.insert(duplicate, at: index + 1)
-        selectedWorkspaceID = duplicate.id
-        workspace = duplicate
-        commandPaletteVisible = false
-        workspaceOverviewVisible = false
+        activateWorkspace(duplicate.id, source: .duplicateWorkspace)
     }
 
     func selectWorkspace(_ workspaceID: WorkspaceID) {
-        let signpost = ConductorSignpost.begin("select-workspace")
-        defer { ConductorSignpost.end("select-workspace", signpost) }
-        guard workspaceID != workspace.id else {
-            closeWorkspaceTransientPanels()
-            return
+        activateWorkspace(workspaceID, source: .programmatic)
+    }
+
+    @discardableResult
+    func activateWorkspace(_ workspaceID: WorkspaceID, source: WorkspaceNavigationSource) -> Bool {
+        let target: WorkspaceState?
+        if workspaceID == workspace.id {
+            target = workspace
+        } else {
+            target = workspaces.first { $0.id == workspaceID }
         }
-        guard let target = workspaces.first(where: { $0.id == workspaceID }) else {
-            return
+        guard let target else {
+            recordWorkspaceNavigation(
+                source: source,
+                from: workspace.id,
+                to: workspaceID,
+                previousContent: selectedWorkspaceContentTabID,
+                terminalID: nil,
+                committed: false,
+                reason: "missing-target"
+            )
+            return false
         }
+        return activateWorkspace(target, source: source, syncPreviousWorkspace: true)
+    }
+
+    @discardableResult
+    private func activateWorkspace(
+        _ target: WorkspaceState,
+        source: WorkspaceNavigationSource,
+        syncPreviousWorkspace: Bool
+    ) -> Bool {
+        let signpost = ConductorSignpost.begin("workspace-navigation")
+        defer { ConductorSignpost.end("workspace-navigation", signpost) }
+
+        let previousWorkspaceID = workspace.id
+        let previousContent = selectedWorkspaceContentTabID
+
         closeTerminalSearch()
-        selectedWorkspaceID = workspaceID
-        workspace = target
+        if target.id != workspace.id {
+            selectedWorkspaceID = target.id
+            skipPreviousWorkspaceSyncForNextAssignment = !syncPreviousWorkspace
+            workspace = target
+        } else {
+            selectedWorkspaceID = workspace.id
+        }
+
+        let terminalID = activateTerminalStageForCurrentWorkspace(source: source)
         closeWorkspaceTransientPanels()
+        recordWorkspaceNavigation(
+            source: source,
+            from: previousWorkspaceID,
+            to: workspace.id,
+            previousContent: previousContent,
+            terminalID: terminalID,
+            committed: true,
+            reason: target.id == previousWorkspaceID ? "same-workspace" : "workspace-changed"
+        )
+        return true
+    }
+
+    @discardableResult
+    private func activateTerminalStageForCurrentWorkspace(source: WorkspaceNavigationSource) -> TerminalID? {
+        guard let terminalID = workspace.focusedPane?.selectedTabID else {
+            let previousContent = selectedWorkspaceContentTabID
+            selectedWorkspaceContentTabID = nil
+            reconcileSurfaceFocus()
+            recordWorkspaceNavigation(
+                source: source,
+                from: workspace.id,
+                to: workspace.id,
+                previousContent: previousContent,
+                terminalID: nil,
+                committed: false,
+                reason: "missing-focused-terminal"
+            )
+            return nil
+        }
+
+        markTerminalInteractionFocus()
+        markTerminalNotificationsRead(terminalID)
+        selectedWorkspaceContentTabID = .terminal(terminalID)
+        reconcileSurfaceFocus()
+        refreshSurfaceAfterNavigation(terminalID)
+        return terminalID
+    }
+
+    private func recordWorkspaceNavigation(
+        source: WorkspaceNavigationSource,
+        from previousWorkspaceID: WorkspaceID,
+        to nextWorkspaceID: WorkspaceID,
+        previousContent: ConductorWorkspaceContentTabID?,
+        terminalID: TerminalID?,
+        committed: Bool,
+        reason: String
+    ) {
+        ConductorDiagnostics.record(
+            "workspace-navigation",
+            fields: [
+                "source": source.rawValue,
+                "from": previousWorkspaceID.description,
+                "to": nextWorkspaceID.description,
+                "previousContent": previousContent?.diagnosticName ?? "none",
+                "nextContent": selectedWorkspaceContentTabID?.diagnosticName ?? "none",
+                "terminal": terminalID?.description ?? "none",
+                "committed": committed,
+                "reason": reason
+            ]
+        )
     }
 
     func renameWorkspace(_ workspaceID: WorkspaceID, title: String) {
@@ -1761,9 +1869,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func closeOtherWorkspaces(keeping workspaceID: WorkspaceID) {
         guard workspaces.count > 1,
-              let keptWorkspace = workspaces.first(where: { $0.id == workspaceID }) else {
+              let keptWorkspaceSnapshot = workspaces.first(where: { $0.id == workspaceID }) else {
             return
         }
+        let keptWorkspace = workspace.id == workspaceID ? workspace : keptWorkspaceSnapshot
         for closingWorkspace in workspaces where closingWorkspace.id != workspaceID {
             closeSurfaces(for: terminalIDs(in: closingWorkspace))
         }
@@ -2052,6 +2161,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return false
         }
         ConductorLog.performance.debug("open notification id=\(notificationID.uuidString, privacy: .public) terminal=\(notification.terminalID.description, privacy: .public)")
+        if workspace.paneID(containing: notification.terminalID) == nil,
+           let workspaceID = workspaces.first(where: { $0.paneID(containing: notification.terminalID) != nil })?.id {
+            activateWorkspace(workspaceID, source: .notification)
+        }
         focusTerminal(notification.terminalID)
         markNotificationRead(notificationID)
         refreshSurfaceAfterNavigation(notification.terminalID)
@@ -2382,7 +2495,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private func activateTerminalContextTarget(_ terminalID: TerminalID) -> TerminalContextMenuTarget? {
         guard let target = terminalContextMenuTarget(for: terminalID) else { return nil }
         if workspace.id != target.workspaceID {
-            selectWorkspace(target.workspaceID)
+            activateWorkspace(target.workspaceID, source: .terminalFocus)
         }
         guard let currentTarget = terminalContextMenuTarget(for: terminalID) else { return nil }
         selectTab(terminalID, in: currentTarget.paneID)
@@ -2643,9 +2756,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func selectWorkspaceAfterListMutation(_ nextWorkspace: WorkspaceState) {
-        selectedWorkspaceID = nextWorkspace.id
-        skipPreviousWorkspaceSyncForNextAssignment = true
-        workspace = nextWorkspace
+        activateWorkspace(nextWorkspace, source: .listMutation, syncPreviousWorkspace: false)
     }
 
     private func updateWorkspace(containing terminalID: TerminalID, _ update: (inout WorkspaceState) -> Bool) -> Bool {
