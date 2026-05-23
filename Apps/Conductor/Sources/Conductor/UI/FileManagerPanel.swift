@@ -2102,10 +2102,9 @@ struct FileManagerPanel: View {
 
                 toolbarSeparator
 
-                panelIconButton("arrow.up", help: L("上级目录", "Parent Directory")) {
+                panelIconButton("arrow.up", help: L("上级目录", "Parent Directory"), disabled: store.currentURL == nil) {
                     Task { await store.goUp() }
                 }
-                .disabled(store.currentURL == nil)
 
                 panelIconButton("arrow.clockwise", help: L("刷新文件", "Refresh Files")) {
                     Task { await store.refresh() }
@@ -2589,10 +2588,9 @@ struct FileManagerPanel: View {
                 }
             }
 
-            panelIconButton("terminal", help: L("插入路径到终端", "Insert Path into Terminal")) {
+            panelIconButton("terminal", help: L("插入路径到终端", "Insert Path into Terminal"), disabled: model.focusedTerminalID == nil) {
                 _ = model.insertPathIntoFocusedTerminal(item.url)
             }
-            .disabled(model.focusedTerminalID == nil)
 
             panelIconButton("textformat", help: L("复制文件名", "Copy Name")) {
                 copyText(item.name)
@@ -2726,13 +2724,14 @@ struct FileManagerPanel: View {
             .frame(height: 1)
     }
 
-    private func panelIconButton(_ systemImage: String, help: String, action: @escaping () -> Void) -> some View {
-        ConductorNativeIconButton(
+    private func panelIconButton(_ systemImage: String, help: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+        FileManagerPanelIconButton(
             systemImage: systemImage,
             help: help,
             size: 28,
             symbolSize: 11,
             opacity: 0.72,
+            disabled: disabled,
             action: action
         )
         .frame(width: 28, height: 28)
@@ -4915,4 +4914,35 @@ private struct FileManagerRowView: View {
         return Color.clear
     }
 
+}
+
+private struct FileManagerPanelIconButton: View {
+    let systemImage: String
+    let help: String
+    let size: CGFloat
+    let symbolSize: CGFloat
+    let opacity: CGFloat
+    let disabled: Bool
+    let action: () -> Void
+
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorFontFamily) private var fontFamily
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Button {
+            guard !disabled else { return }
+            action()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: symbolSize, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(disabled ? 0.26 : opacity))
+                .frame(width: size, height: size)
+                .contentShape(Rectangle())
+                .accessibilityLabel(Text(help))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .macNativeTooltip(help)
+    }
 }
