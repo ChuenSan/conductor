@@ -400,6 +400,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         viewMenu.addItem(menuItem("Open Current Directory", "", [], #selector(openCurrentDirectoryCommand)))
         viewMenu.addItem(menuItem("Copy Current Directory Path", "", [], #selector(copyCurrentDirectoryCommand)))
         viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(menuItem("Context Search", "f", [], #selector(contextSearchCommand)))
+        viewMenu.addItem(menuItem("Find Next", "g", [], #selector(findNextCommand)))
+        viewMenu.addItem(menuItem("Find Previous", "G", [.shift], #selector(findPreviousCommand)))
+        viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(menuItem("Toggle Full Screen", "f", [.control], #selector(toggleFullScreenCommand)))
         viewMenu.addItem(menuItem("Reset Workspace", "", [], #selector(resetWorkspaceCommand)))
         viewMenuItem.submenu = viewMenu
@@ -442,6 +446,12 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             model.canPerformCommand(.openFocusedDirectory)
         case #selector(copyCurrentDirectoryCommand):
             model.canPerformCommand(.copyFocusedDirectory)
+        case #selector(contextSearchCommand):
+            model.canPerformCommand(.showTerminalSearch)
+        case #selector(findNextCommand):
+            model.canPerformCommand(.findNext)
+        case #selector(findPreviousCommand):
+            model.canPerformCommand(.findPrevious)
         default:
             true
         }
@@ -684,6 +694,18 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     @objc private func copyCurrentDirectoryCommand() {
         scheduleCommand(.copyFocusedDirectory)
+    }
+
+    @objc private func contextSearchCommand() {
+        scheduleCommand(.showTerminalSearch)
+    }
+
+    @objc private func findNextCommand() {
+        scheduleCommand(.findNext)
+    }
+
+    @objc private func findPreviousCommand() {
+        scheduleCommand(.findPrevious)
     }
 
     @objc private func toggleFullScreenCommand() {
