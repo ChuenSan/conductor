@@ -30,21 +30,11 @@ private struct FileManagerItem: Equatable, Identifiable, Sendable {
     let isReadable: Bool
     let isWritable: Bool
     let contentTypeIdentifier: String?
+    let subtitle: String
+    let typeLabel: String
     let rowDetail: String
     let isLargeEditableFile: Bool
     let isUnsupportedBinaryLikeFile: Bool
-
-    var subtitle: String {
-        if isDirectory { return L("文件夹", "Folder") }
-        guard let byteCount else { return L("文件", "File") }
-        return ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file)
-    }
-
-    var typeLabel: String {
-        if isDirectory { return L("文件夹", "Folder") }
-        let ext = url.pathExtension.lowercased()
-        return ext.isEmpty ? L("文件", "File") : ext.uppercased()
-    }
 }
 
 private struct FileManagerVisibleRow: Equatable, Identifiable {
@@ -507,6 +497,8 @@ private struct FileManagerService {
             let standardizedURL = childURL.standardizedFileURL
             let byteCount = values.fileSize.map(Int64.init)
             let contentType = values.contentType
+            let typeLabel = Self.typeLabel(for: standardizedURL, isDirectory: isDirectory)
+            let subtitle = Self.subtitle(for: isDirectory, byteCount: byteCount)
             return FileManagerItem(
                 url: standardizedURL,
                 name: values.name ?? childURL.lastPathComponent,
@@ -518,6 +510,8 @@ private struct FileManagerService {
                 isReadable: values.isReadable ?? true,
                 isWritable: values.isWritable ?? true,
                 contentTypeIdentifier: contentType?.identifier,
+                subtitle: subtitle,
+                typeLabel: typeLabel,
                 rowDetail: Self.rowDetail(
                     for: standardizedURL,
                     isDirectory: isDirectory,
@@ -536,6 +530,18 @@ private struct FileManagerService {
         .filter { includeHidden || !$0.name.hasPrefix(".") }
         .filter { $0.name != ".DS_Store" }
         .sorted { Self.sort($0, before: $1, mode: sortMode) }
+    }
+
+    private static func subtitle(for isDirectory: Bool, byteCount: Int64?) -> String {
+        if isDirectory { return L("文件夹", "Folder") }
+        guard let byteCount else { return L("文件", "File") }
+        return ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file)
+    }
+
+    private static func typeLabel(for url: URL, isDirectory: Bool) -> String {
+        if isDirectory { return L("文件夹", "Folder") }
+        let ext = url.pathExtension.lowercased()
+        return ext.isEmpty ? L("文件", "File") : ext.uppercased()
     }
 
     private static func rowDetail(
@@ -2726,7 +2732,7 @@ struct FileManagerPanel: View {
             help: help,
             size: 28,
             symbolSize: 11,
-            opacity: 0.62,
+            opacity: 0.72,
             action: action
         )
         .frame(width: 28, height: 28)

@@ -1395,10 +1395,7 @@ struct ConductorNativeIconButton: NSViewRepresentable {
     }
 
     private var tintColor: NSColor {
-        if theme.usesDarkChrome {
-            return NSColor.white.withAlphaComponent(opacity)
-        }
-        return NSColor.labelColor.withAlphaComponent(opacity)
+        NSColor(theme.shellChromeText.opacity(isEnabled ? opacity : 0.26))
     }
 
     final class Coordinator: NSObject {
