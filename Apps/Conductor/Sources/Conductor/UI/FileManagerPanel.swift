@@ -608,7 +608,15 @@ struct FileManagerPanel: View {
         VStack(spacing: 0) {
             previewToolbar(item: item)
             divider
-            previewContent
+            filePreviewBody(
+                state: store.previewState,
+                rootURL: request.rootURL,
+                currentURL: store.currentURL,
+                theme: theme,
+                terminalFontSize: model.appearance.terminalFontSize,
+                fontFamily: fontFamily,
+                fontScale: fontScale
+            )
         }
     }
 
@@ -670,83 +678,6 @@ struct FileManagerPanel: View {
         .frame(height: 44)
     }
 
-    @ViewBuilder
-    private var previewContent: some View {
-        switch store.previewState {
-        case .empty:
-            panelMessage(systemImage: "doc.text.magnifyingglass", text: L("选择文件开始预览", "Select a file to preview"))
-        case .loading:
-            panelMessage(systemImage: "hourglass", text: L("读取中", "Loading"))
-        case .directory(let message):
-            panelMessage(systemImage: "folder", text: message)
-        case .image(let url):
-            ConductorAsyncImage(url: url) { image in
-                GeometryReader { proxy in
-                    Image(nsImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: proxy.size.width, height: proxy.size.height)
-                        .background(theme.terminalBackground)
-                }
-            } placeholder: { isLoading, _ in
-                panelMessage(
-                    systemImage: isLoading ? "hourglass" : "photo",
-                    text: isLoading ? L("正在读取图片", "Loading image") : L("图片无法读取", "Image could not be loaded")
-                )
-            }
-        case .document(let url):
-            ConductorDocumentWorkspaceView(
-                fileURL: url,
-                rootURL: store.currentURL ?? request.rootURL,
-                title: url.lastPathComponent,
-                theme: theme,
-                fontSize: model.appearance.terminalFontSize,
-                isActive: false,
-                chromeStyle: .plain,
-                layoutRevision: 0,
-                searchQuery: "",
-                searchRevision: 0,
-                searchNextToken: 0,
-                searchPreviousToken: 0,
-                onSearchStatusChange: { _ in }
-            )
-        case .nativePreview(let url, let descriptor):
-            VStack(spacing: 0) {
-                HStack(spacing: 7) {
-                    infoPill(descriptor.title)
-                    Text(descriptor.reason)
-                        .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-                        .foregroundStyle(theme.shellChromeText.opacity(0.48))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 12)
-                .frame(height: 28)
-                .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.72 : 0.64))
-                .overlay(alignment: .bottom) {
-                    Rectangle()
-                        .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.35))
-                        .frame(height: 1)
-                }
-
-                ConductorNativePreviewSurface(url: url, backgroundColor: NSColor(theme.terminalBackground))
-                    .background(theme.terminalBackground)
-            }
-        case .text, .table, .keyValue, .structured:
-            filePreviewBody(
-                state: store.previewState,
-                theme: theme,
-                fontFamily: fontFamily,
-                fontScale: fontScale
-            )
-        case .message(let message):
-            panelMessage(systemImage: "doc", text: message)
-        case .failed(let message):
-            panelMessage(systemImage: "exclamationmark.triangle", text: message)
-        }
-    }
-
     private var divider: some View {
         Rectangle()
             .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.26 : 0.18))
@@ -773,31 +704,6 @@ struct FileManagerPanel: View {
     private var toolbarIconSymbolSize: CGFloat { 12.5 }
     private var toolbarIconOpacity: CGFloat { 0.86 }
     private var toolbarDisabledIconOpacity: CGFloat { theme.usesDarkChrome ? 0.34 : 0.38 }
-
-    private func infoPill(_ title: String) -> some View {
-        Text(title)
-            .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.52))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .frame(height: 19)
-            .background(theme.floatingControlFill.opacity(0.56))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-    }
-
-    private func panelMessage(systemImage: String, text: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 22, weight: .medium, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.30))
-            Text(text)
-                .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.52))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
 
     private func copyPath(_ url: URL) {
         copyText(url.standardizedFileURL.path)

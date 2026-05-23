@@ -938,4 +938,3 @@ struct FileManagerStructuredPreviewHost: NSViewRepresentable {
 
     private static let rowHeight: CGFloat = 28
 }
-

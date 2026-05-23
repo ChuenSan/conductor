@@ -2,15 +2,103 @@ import AppKit
 import SwiftUI
 
 @ViewBuilder
+@MainActor
 func filePreviewBody(
     state: FilePreviewState,
+    rootURL: URL,
+    currentURL: URL?,
     theme: TerminalTheme,
+    terminalFontSize: CGFloat,
     fontFamily: AppearanceFontFamily,
     fontScale: AppearanceFontScale
 ) -> some View {
     switch state {
     case .empty:
-        EmptyView()
+        filePreviewMessage(
+            systemImage: "doc.text.magnifyingglass",
+            text: fileManagerL("选择文件开始预览", "Select a file to preview"),
+            theme: theme,
+            fontFamily: fontFamily,
+            fontScale: fontScale
+        )
+    case .loading:
+        filePreviewMessage(
+            systemImage: "hourglass",
+            text: fileManagerL("读取中", "Loading"),
+            theme: theme,
+            fontFamily: fontFamily,
+            fontScale: fontScale
+        )
+    case .directory(let message):
+        filePreviewMessage(
+            systemImage: "folder",
+            text: message,
+            theme: theme,
+            fontFamily: fontFamily,
+            fontScale: fontScale
+        )
+    case .image(let url):
+        ConductorAsyncImage(url: url) { image in
+            GeometryReader { proxy in
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .background(theme.terminalBackground)
+            }
+        } placeholder: { isLoading, _ in
+            filePreviewMessage(
+                systemImage: isLoading ? "hourglass" : "photo",
+                text: isLoading ? fileManagerL("正在读取图片", "Loading image") : fileManagerL("图片无法读取", "Image could not be loaded"),
+                theme: theme,
+                fontFamily: fontFamily,
+                fontScale: fontScale
+            )
+        }
+    case .document(let url):
+        ConductorDocumentWorkspaceView(
+            fileURL: url,
+            rootURL: currentURL ?? rootURL,
+            title: url.lastPathComponent,
+            theme: theme,
+            fontSize: terminalFontSize,
+            isActive: false,
+            chromeStyle: .plain,
+            layoutRevision: 0,
+            searchQuery: "",
+            searchRevision: 0,
+            searchNextToken: 0,
+            searchPreviousToken: 0,
+            onSearchStatusChange: { _ in }
+        )
+    case .nativePreview(let url, let descriptor):
+        VStack(spacing: 0) {
+            HStack(spacing: 7) {
+                filePreviewInfoPill(
+                    descriptor.title,
+                    theme: theme,
+                    fontFamily: fontFamily,
+                    fontScale: fontScale
+                )
+                Text(descriptor.reason)
+                    .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(0.48))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.72 : 0.64))
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.35))
+                    .frame(height: 1)
+            }
+
+            ConductorNativePreviewSurface(url: url, backgroundColor: NSColor(theme.terminalBackground))
+                .background(theme.terminalBackground)
+        }
     case .text(let document, let truncated):
         FileManagerSourcePreview(
             document: document,
@@ -43,9 +131,61 @@ func filePreviewBody(
             fontFamily: fontFamily,
             fontScale: fontScale
         )
-    default:
-        EmptyView()
+    case .message(let message):
+        filePreviewMessage(
+            systemImage: "doc",
+            text: message,
+            theme: theme,
+            fontFamily: fontFamily,
+            fontScale: fontScale
+        )
+    case .failed(let message):
+        filePreviewMessage(
+            systemImage: "exclamationmark.triangle",
+            text: message,
+            theme: theme,
+            fontFamily: fontFamily,
+            fontScale: fontScale
+        )
     }
+}
+
+@MainActor
+private func filePreviewInfoPill(
+    _ title: String,
+    theme: TerminalTheme,
+    fontFamily: AppearanceFontFamily,
+    fontScale: AppearanceFontScale
+) -> some View {
+    Text(title)
+        .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
+        .foregroundStyle(theme.shellChromeText.opacity(0.52))
+        .lineLimit(1)
+        .padding(.horizontal, 7)
+        .frame(height: 19)
+        .background(theme.floatingControlFill.opacity(0.56))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+}
+
+@MainActor
+private func filePreviewMessage(
+    systemImage: String,
+    text: String,
+    theme: TerminalTheme,
+    fontFamily: AppearanceFontFamily,
+    fontScale: AppearanceFontScale
+) -> some View {
+    VStack(spacing: 8) {
+        Image(systemName: systemImage)
+            .font(.conductorSystem(size: 22, weight: .medium, family: fontFamily, scale: fontScale))
+            .foregroundStyle(theme.shellChromeText.opacity(0.30))
+        Text(text)
+            .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
+            .foregroundStyle(theme.shellChromeText.opacity(0.52))
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 20)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
 }
 
 struct FileManagerSourcePreview: View {
