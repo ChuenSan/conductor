@@ -554,9 +554,38 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func setTerminalBackgroundOpacity(_ opacity: CGFloat) {
-        let rounded = (min(max(opacity, 0.20), 1.0) * 100).rounded() / 100
+        let rounded = AppearanceCoordinator.roundedTerminalBackgroundOpacity(opacity)
         guard appearance.terminalRenderer.backgroundOpacity != rounded else { return }
-        appearance.terminalRenderer.backgroundOpacity = rounded
+        syncAppearanceCoordinatorFromPublished()
+        appearanceCoordinator.setTerminalBackgroundOpacity(opacity)
+        publishAppearanceState()
+    }
+
+    func setTerminalBackgroundBlur(_ enabled: Bool) {
+        let blurOverride = appearance.terminalRenderer.ghosttyOverride(for: "background-blur")
+        let value = enabled ? "true" : "false"
+        guard blurOverride.enabled != true || blurOverride.normalizedValue != value else { return }
+        syncAppearanceCoordinatorFromPublished()
+        appearanceCoordinator.setTerminalBackgroundBlur(enabled)
+        publishAppearanceState()
+    }
+
+    func setTerminalBackgroundImageURL(_ imageURL: URL?) {
+        let value = imageURL?.standardizedFileURL.path ?? ""
+        let imageOverride = appearance.terminalRenderer.ghosttyOverride(for: "background-image")
+        guard imageOverride.enabled != (!value.isEmpty) || imageOverride.normalizedValue != value else { return }
+        syncAppearanceCoordinatorFromPublished()
+        appearanceCoordinator.setTerminalBackgroundImageURL(imageURL)
+        publishAppearanceState()
+    }
+
+    func setTerminalBackgroundImageMode(_ imageMode: String) {
+        let value = imageMode.trimmingCharacters(in: .whitespacesAndNewlines)
+        let imageModeOverride = appearance.terminalRenderer.ghosttyOverride(for: "background-image-fit")
+        guard imageModeOverride.enabled != (!value.isEmpty) || imageModeOverride.normalizedValue != value else { return }
+        syncAppearanceCoordinatorFromPublished()
+        appearanceCoordinator.setTerminalBackgroundImageMode(imageMode)
+        publishAppearanceState()
     }
 
     func setTerminalCursorStyle(_ style: TerminalCursorStyle) {
