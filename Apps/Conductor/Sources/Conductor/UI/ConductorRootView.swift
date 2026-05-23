@@ -706,28 +706,36 @@ private struct CommandPaletteFilterResult: Equatable {
 
     init(commands: [CommandPaletteItem], query: String) {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let filteredCommands: [CommandPaletteItem]
-        if normalizedQuery.isEmpty {
-            filteredCommands = commands
-        } else {
-            filteredCommands = commands.filter { command in
-                command.searchText.contains(normalizedQuery)
+
+        var previousSection: String?
+        var rows: [CommandPaletteFilteredRow] = []
+        var enabledCommands: [CommandPaletteItem] = []
+        var enabledCommandIDs = Set<String>()
+        var commandIDs: [String] = []
+        rows.reserveCapacity(commands.count)
+        enabledCommands.reserveCapacity(commands.count)
+        commandIDs.reserveCapacity(commands.count)
+
+        for command in commands {
+            guard normalizedQuery.isEmpty || command.searchText.contains(normalizedQuery) else { continue }
+            let showsSectionTitle = command.section != previousSection
+            previousSection = command.section
+            rows.append(CommandPaletteFilteredRow(
+                command: command,
+                showsSectionTitle: showsSectionTitle,
+                presentationIndex: rows.count
+            ))
+            commandIDs.append(command.id)
+            if !command.disabled {
+                enabledCommands.append(command)
+                enabledCommandIDs.insert(command.id)
             }
         }
 
-        var previousSection: String?
-        self.rows = filteredCommands.enumerated().map { index, command in
-            let showsSectionTitle = command.section != previousSection
-            previousSection = command.section
-            return CommandPaletteFilteredRow(
-                command: command,
-                showsSectionTitle: showsSectionTitle,
-                presentationIndex: index
-            )
-        }
-        self.enabledCommands = filteredCommands.filter { !$0.disabled }
-        self.enabledCommandIDs = Set(enabledCommands.map(\.id))
-        self.commandIDs = filteredCommands.map(\.id)
+        self.rows = rows
+        self.enabledCommands = enabledCommands
+        self.enabledCommandIDs = enabledCommandIDs
+        self.commandIDs = commandIDs
     }
 
     private init(
