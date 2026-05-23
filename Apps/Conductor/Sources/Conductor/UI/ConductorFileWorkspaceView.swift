@@ -1019,7 +1019,14 @@ private struct ConductorWorkspaceFileEditorView: View {
         }
         let matches = searchMatches
         guard !matches.isEmpty else { return }
-        selectedSearchIndex = (selectedSearchIndex + delta + matches.count) % matches.count
+        let results = Self.searchSelectionResults(for: matches)
+        let nextID = ConductorSearchSelection.move(
+            currentID: String(selectedSearchIndex),
+            by: delta,
+            results: results,
+            wraps: true
+        )
+        selectedSearchIndex = nextID.flatMap(Int.init) ?? selectedSearchIndex
         selectCurrentSearchMatch()
     }
 
@@ -1051,8 +1058,8 @@ private struct ConductorWorkspaceFileEditorView: View {
             return
         }
 
-        let needle = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else {
+        let query = ConductorSearchQuery(searchQuery)
+        guard !query.isEmpty else {
             searchTask?.cancel()
             searchPending = false
             cachedSearchMatches = []
@@ -1065,6 +1072,7 @@ private struct ConductorWorkspaceFileEditorView: View {
         searchGeneration += 1
         let generation = searchGeneration
         let snapshot = text
+        let needle = query.normalized
         searchPending = true
         searchTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(resetSelection ? 80 : 160))
@@ -1085,8 +1093,9 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     nonisolated private static func searchMatches(in text: String, query: String, maxMatches: Int = .max) -> [NSRange] {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else { return [] }
+        let searchQuery = ConductorSearchQuery(query)
+        guard !searchQuery.isEmpty else { return [] }
+        let needle = searchQuery.normalized
         let haystack = text as NSString
         var matches: [NSRange] = []
         var range = NSRange(location: 0, length: haystack.length)
@@ -1099,6 +1108,17 @@ private struct ConductorWorkspaceFileEditorView: View {
             range = NSRange(location: nextLocation, length: haystack.length - nextLocation)
         }
         return matches
+    }
+
+    nonisolated private static func searchSelectionResults(for matches: [NSRange]) -> [ConductorSearchResult] {
+        matches.enumerated().map { index, _ in
+            ConductorSearchResult(
+                candidate: ConductorSearchCandidate(id: String(index), title: String(index)),
+                score: max(0, 10_000 - index),
+                matchedFields: [],
+                presentationIndex: index
+            )
+        }
     }
 
     private func recordSearchQuery() {

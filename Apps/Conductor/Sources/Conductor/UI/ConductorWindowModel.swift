@@ -1683,13 +1683,22 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func navigateTerminalSearch(previous: Bool) {
+        if routeContextualSearchNavigation(previous: previous) {
+            return
+        }
+        guard terminalSearchVisible,
+              let tab = terminalSearchTargetTab() else { return }
+        _ = surface(for: tab).navigateSearch(previous: previous)
+    }
+
+    private func routeContextualSearchNavigation(previous: Bool) -> Bool {
         if selectedWorkspaceFileTab != nil {
             if previous {
                 workspaceFileSearchPreviousGeneration &+= 1
             } else {
                 workspaceFileSearchNextGeneration &+= 1
             }
-            return
+            return true
         }
         if fileManagerPanelRequest != nil {
             if previous {
@@ -1697,11 +1706,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             } else {
                 fileManagerSearchNextGeneration &+= 1
             }
-            return
+            return true
         }
-        guard terminalSearchVisible,
-              let tab = terminalSearchTargetTab() else { return }
-        _ = surface(for: tab).navigateSearch(previous: previous)
+        return false
     }
 
     func closeTerminalSearch() {
