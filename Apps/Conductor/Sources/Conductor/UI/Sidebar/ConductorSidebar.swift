@@ -397,7 +397,7 @@ struct ConductorSidebar: View {
 
 private struct SidebarRailShape: InsettableShape {
     var bottomLeadingRadius: CGFloat = ConductorDesign.sidebarCornerRadius
-    var bottomTrailingRadius: CGFloat = ConductorDesign.sidebarCornerRadius
+    var bottomTrailingRadius: CGFloat = 0
     var insetAmount: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
