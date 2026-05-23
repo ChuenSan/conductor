@@ -48,6 +48,7 @@ struct FileManagerListView: View {
                                 renamingName: $store.renamingName,
                                 renamingFocusToken: store.renamingFocusToken,
                                 open: { open(row.item) },
+                                toggleExpansion: { Task { await store.toggleDirectory(row.item) } },
                                 openInWorkspace: { openInWorkspace(row.item) },
                                 openInSystemApp: { NSWorkspace.shared.open(row.item.url) },
                                 copyPath: { copyPaths(itemsForBatch(default: row.item).map(\.url)) },
@@ -154,7 +155,7 @@ struct FileManagerListView: View {
             return
         }
         if item.isDirectory {
-            Task { await store.open(item) }
+            Task { await store.openDirectory(item) }
             return
         }
         store.select(item)
@@ -292,6 +293,7 @@ struct FileManagerRowView: View {
     @Binding var renamingName: String
     let renamingFocusToken: Int
     let open: () -> Void
+    let toggleExpansion: () -> Void
     let openInWorkspace: () -> Void
     let openInSystemApp: () -> Void
     let copyPath: () -> Void
@@ -329,7 +331,7 @@ struct FileManagerRowView: View {
             }
             .contextMenu {
                 if item.isDirectory {
-                    Button(isExpanded ? fileManagerL("收起文件夹", "Collapse Folder") : fileManagerL("展开文件夹", "Expand Folder"), action: open)
+                    Button(isExpanded ? fileManagerL("收起文件夹", "Collapse Folder") : fileManagerL("展开文件夹", "Expand Folder"), action: toggleExpansion)
                 } else {
                     Button(fileManagerL("打开", "Open"), action: open)
                 }
@@ -383,10 +385,15 @@ struct FileManagerRowView: View {
     private var rowContent: some View {
         HStack(spacing: 8) {
             if item.isDirectory {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.conductorSystem(size: 8.5, weight: .bold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(rowIconSecondaryColor)
-                    .frame(width: 12)
+                Button(action: toggleExpansion) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.conductorSystem(size: 8.5, weight: .bold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(rowIconSecondaryColor)
+                        .frame(width: 12, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isExpanded ? fileManagerL("收起文件夹", "Collapse Folder") : fileManagerL("展开文件夹", "Expand Folder"))
             } else {
                 Spacer()
                     .frame(width: 12)

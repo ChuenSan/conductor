@@ -373,6 +373,11 @@ final class FileManagerPanelStore: ObservableObject {
         }
     }
 
+    func openDirectory(_ item: FileManagerItem) async {
+        guard item.isDirectory else { return }
+        await openDirectory(item.url, selecting: nil)
+    }
+
     func isExpanded(_ item: FileManagerItem) -> Bool {
         expandedDirectoryPaths.contains(item.url.path)
     }

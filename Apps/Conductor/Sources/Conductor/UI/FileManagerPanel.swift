@@ -608,7 +608,7 @@ struct FileManagerPanel: View {
             return
         }
         if item.isDirectory {
-            Task { await store.open(item) }
+            Task { await store.openDirectory(item) }
             return
         }
         store.select(item)
@@ -617,7 +617,7 @@ struct FileManagerPanel: View {
 
     private func openInWorkspace(_ item: FileManagerItem) {
         guard !item.isDirectory else {
-            Task { await store.open(item) }
+            Task { await store.openDirectory(item) }
             return
         }
         store.recordOpenedFile(item.url)
