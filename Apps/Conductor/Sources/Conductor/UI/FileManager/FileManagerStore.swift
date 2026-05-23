@@ -217,6 +217,33 @@ final class FileManagerPanelStore: ObservableObject {
             : .empty
     }
 
+    private func selectItemForAction(
+        _ item: FileManagerItem,
+        selectedPaths paths: Set<String>? = nil,
+        anchorPath: String? = nil
+    ) {
+        let paths = paths ?? [item.url.path]
+        guard !paths.isEmpty else {
+            clearSelectionForCurrentDisplay()
+            return
+        }
+        selectedPaths = paths
+        selectedItem = item
+        selectionAnchorPath = anchorPath ?? item.url.path
+        loadPreview(for: item.url)
+        if let index = displayedRows.firstIndex(where: { $0.item.url.path == item.url.path }) {
+            ensureVisibleRow(at: index)
+        }
+        operationMessage = nil
+    }
+
+    private func itemForSelection(_ paths: Set<String>, preferred item: FileManagerItem) -> FileManagerItem? {
+        if paths.contains(item.url.path) {
+            return item
+        }
+        return displayedRows.first { paths.contains($0.item.url.path) }?.item
+    }
+
     func load(_ request: FileManagerPanelRequest) async {
         guard requestID != request.id else { return }
         requestID = request.id
@@ -248,45 +275,37 @@ final class FileManagerPanelStore: ObservableObject {
     func select(_ item: FileManagerItem, mode: FileManagerSelectionMode = .primary) {
         switch mode {
         case .primary:
-            selectedPaths = [item.url.path]
-            selectionAnchorPath = item.url.path
+            selectItemForAction(item)
+            return
         case .toggle:
+            var paths = selectedPaths
             if selectedPaths.contains(item.url.path) {
-                selectedPaths.remove(item.url.path)
+                paths.remove(item.url.path)
             } else {
-                selectedPaths.insert(item.url.path)
+                paths.insert(item.url.path)
             }
-            selectionAnchorPath = item.url.path
+            guard let activeItem = itemForSelection(paths, preferred: item) else {
+                clearSelectionForCurrentDisplay()
+                operationMessage = nil
+                return
+            }
+            selectItemForAction(activeItem, selectedPaths: paths, anchorPath: item.url.path)
+            return
         case .range:
             let rows = displayedRows
             let anchorPath = selectionAnchorPath ?? selectedItem?.url.path ?? item.url.path
             guard let anchorIndex = rows.firstIndex(where: { $0.item.url.path == anchorPath }),
                   let itemIndex = rows.firstIndex(where: { $0.item.url.path == item.url.path }) else {
-                selectedPaths = [item.url.path]
-                selectionAnchorPath = item.url.path
-                selectedItem = item
-                loadPreview(for: item.url)
-                operationMessage = nil
+                selectItemForAction(item)
                 return
             }
             let range = min(anchorIndex, itemIndex)...max(anchorIndex, itemIndex)
-            selectedPaths = Set(range.map { rows[$0].item.url.path })
+            selectItemForAction(
+                item,
+                selectedPaths: Set(range.map { rows[$0].item.url.path }),
+                anchorPath: anchorPath
+            )
         }
-        if selectedPaths.isEmpty {
-            selectedItem = nil
-            selectionAnchorPath = nil
-            previewGeneration += 1
-            previewState = displaySnapshot.totalRowCount == 0
-                ? .message(fileManagerL("没有匹配的文件", "No matching files"))
-                : .empty
-        } else {
-            selectedItem = item
-            loadPreview(for: item.url)
-        }
-        if let index = displayedRows.firstIndex(where: { $0.item.url.path == item.url.path }) {
-            ensureVisibleRow(at: index)
-        }
-        operationMessage = nil
     }
 
     func selectAdjacentRow(by offset: Int) {
@@ -359,10 +378,7 @@ final class FileManagerPanelStore: ObservableObject {
 
     func toggleDirectory(_ item: FileManagerItem) async {
         guard item.isDirectory else { return }
-        selectedItem = item
-        selectedPaths = [item.url.path]
-        selectionAnchorPath = item.url.path
-        loadPreview(for: item.url)
+        selectItemForAction(item)
         let path = item.url.path
         if expandedDirectoryPaths.contains(path) {
             expandedDirectoryPaths.remove(path)
@@ -419,7 +435,10 @@ final class FileManagerPanelStore: ObservableObject {
 
     func markForDelete(_ items: [FileManagerItem]) {
         guard !items.isEmpty else { return }
-        selectedItem = items.last
+        let paths = Set(items.map { $0.url.path })
+        if let item = items.last {
+            selectItemForAction(item, selectedPaths: paths, anchorPath: item.url.path)
+        }
         for item in items {
             pendingDeletePaths.insert(item.url.path)
         }
@@ -587,7 +606,7 @@ final class FileManagerPanelStore: ObservableObject {
     }
 
     func beginRename(_ item: FileManagerItem) {
-        selectedItem = item
+        selectItemForAction(item)
         renamingPath = item.url.path
         renamingName = item.name
         renamingFocusToken &+= 1
