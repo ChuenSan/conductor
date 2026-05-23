@@ -899,8 +899,9 @@ struct FileManagerPanel: View {
                 Task { await store.duplicate(item) }
                 return true
             default:
-                if event.keyCode == 51, let item = store.selectedItem {
-                    store.markForDelete(item)
+                if event.keyCode == 51,
+                   !store.selectedURLs.isEmpty {
+                    deleteSelectedItem()
                     return true
                 }
                 return false

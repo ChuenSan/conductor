@@ -212,9 +212,14 @@ final class FileManagerPanelStore: ObservableObject {
         selectedPaths = []
         selectionAnchorPath = nil
         previewGeneration += 1
-        previewState = displaySnapshot.totalRowCount == 0
-            ? .message(fileManagerL("没有匹配的文件", "No matching files"))
-            : .empty
+        previewState = noSelectionPreviewState()
+    }
+
+    private func noSelectionPreviewState() -> FilePreviewState {
+        guard displaySnapshot.totalRowCount == 0 else { return .empty }
+        return items.isEmpty
+            ? .message(fileManagerL("这个目录没有可显示的文件", "This directory has no visible files"))
+            : .message(fileManagerL("没有匹配的文件", "No matching files"))
     }
 
     private func selectItemForAction(
@@ -747,15 +752,10 @@ final class FileManagerPanelStore: ObservableObject {
             }
             let selectedPath = selectedURL?.standardizedFileURL.path
             if let selectedPath,
-               let match = findItem(withPath: selectedPath) {
+               let match = findDisplayedItem(withPath: selectedPath) {
                 select(match)
             } else {
-                selectedItem = nil
-                selectedPaths = []
-                selectionAnchorPath = nil
-                previewState = loadedItems.isEmpty
-                    ? .message(fileManagerL("这个目录没有可显示的文件", "This directory has no visible files"))
-                    : .empty
+                clearSelectionForCurrentDisplay()
             }
         case .failure(let error):
             items = []
@@ -780,6 +780,10 @@ final class FileManagerPanelStore: ObservableObject {
             return match
         }
         return childItemsByDirectoryPath.values.flatMap { $0 }.first { $0.url.path == path }
+    }
+
+    private func findDisplayedItem(withPath path: String) -> FileManagerItem? {
+        displayedRows.first { $0.item.url.path == path }?.item
     }
 
     private func clearTreeState(for paths: Set<String>) {
