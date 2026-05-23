@@ -62,6 +62,20 @@ final class FileManagerPanelStore: ObservableObject {
         expandedRowsSnapshot.rows
     }
 
+    var logicalVisibleRange: Range<Int> {
+        let rows = expandedRowsSnapshot.rows
+        guard !rows.isEmpty else { return 0..<0 }
+        let lower = min(max(0, visibleStartIndex), rows.count - 1)
+        let upper = min(rows.count, lower + max(1, visibleRowCount))
+        return lower..<upper
+    }
+
+    var firstLogicalVisibleItem: FileManagerItem? {
+        let range = logicalVisibleRange
+        guard let firstIndex = range.first else { return nil }
+        return expandedRowsSnapshot.rows[firstIndex].item
+    }
+
     var totalKnownItemCount: Int {
         expandedRowsSnapshot.totalKnownItemCount
     }
@@ -129,7 +143,7 @@ final class FileManagerPanelStore: ObservableObject {
     }
 
     func showPreviousVisibleWindow() {
-        let nextStart = max(0, displaySnapshot.visibleRange.lowerBound - visibleRowCount)
+        let nextStart = max(0, logicalVisibleRange.lowerBound - visibleRowCount)
         updateVisibleWindow(startIndex: nextStart)
     }
 
@@ -293,11 +307,12 @@ final class FileManagerPanelStore: ObservableObject {
     }
 
     private func visibleFallbackIndex(for offset: Int) -> Int? {
-        guard !displaySnapshot.rows.isEmpty else { return nil }
+        let range = logicalVisibleRange
+        guard !range.isEmpty else { return nil }
         if offset >= 0 {
-            return max(displaySnapshot.visibleRange.lowerBound - 1, -1)
+            return max(range.lowerBound - 1, -1)
         }
-        return min(displaySnapshot.visibleRange.upperBound, displayedRows.count)
+        return min(range.upperBound, displayedRows.count)
     }
 
     func expandSelected() async {
