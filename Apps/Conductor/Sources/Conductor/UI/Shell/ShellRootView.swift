@@ -286,6 +286,7 @@ private struct TerminalSearchBar: View {
             Image(systemName: "magnifyingglass")
                 .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
+                .accessibilityHidden(true)
             TextField(L("搜索终端输出", "Search terminal output"), text: query)
                 .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 12, weight: .medium, scale: fontScale))
@@ -561,6 +562,7 @@ private struct CommandPaletteView: View {
             Image(systemName: "magnifyingglass")
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
+                .accessibilityHidden(true)
             TextField(L("搜索命令", "Search commands"), text: $query)
                 .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 13, weight: .medium, scale: fontScale))
@@ -1054,6 +1056,7 @@ private struct CommandPaletteHeader: View {
                 .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                 .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
                 .frame(width: 18, height: 18)
+                .accessibilityHidden(true)
 
             Text(L("命令", "Commands"))
                 .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
@@ -1079,6 +1082,7 @@ private struct CommandPaletteHeader: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(closeHelp)
             .macNativeTooltip(closeHelp)
         }
         .frame(height: 24)
@@ -1382,6 +1386,7 @@ private struct WorkspaceOverviewPanel: View {
             Image(systemName: "magnifyingglass")
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
+                .accessibilityHidden(true)
             TextField(L("搜索工作区", "Search workspaces"), text: $query)
                 .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 13, weight: .medium, scale: fontScale))
