@@ -83,7 +83,7 @@ private struct WorkspaceFileDiskSignature: Equatable {
 }
 
 private struct WorkspaceFileService {
-    private let maxEditableBytes = 20 * 1024 * 1024
+    private let maxEditableBytes = 2 * 1024 * 1024
 
     func document(for tab: ConductorWorkspaceFileTab) -> WorkspaceFileDocument {
         let fileURL = tab.fileURL.standardizedFileURL
@@ -177,7 +177,7 @@ private struct WorkspaceFileService {
         let data = Data(text.utf8)
         guard data.count <= maxEditableBytes else {
             throw NSError(domain: "ConductorFileWorkspace", code: 413, userInfo: [
-                NSLocalizedDescriptionKey: L("内容超过 20 MB，已停止保存以保护编辑器", "Content exceeds 20 MB; save was stopped to protect the editor")
+                NSLocalizedDescriptionKey: L("内容超过 2 MB，已停止保存以保护编辑器", "Content exceeds 2 MB; save was stopped to protect the editor")
             ])
         }
         try data.write(to: fileURL, options: .atomic)
@@ -473,8 +473,9 @@ private struct ConductorWorkspaceFileEditorView: View {
     @State private var documentSearchRevision = 0
     @State private var documentSearchNextToken = 0
     @State private var documentSearchPreviousToken = 0
-    @State private var markdownMode: WorkspaceMarkdownMode = .split
+    @State private var markdownMode: WorkspaceMarkdownMode = .source
     @State private var markdownPreviewText = ""
+    @State private var textMetricsUpdateTask: Task<Void, Never>?
     @State private var markdownPreviewUpdateTask: Task<Void, Never>?
 
     init(
@@ -539,12 +540,22 @@ private struct ConductorWorkspaceFileEditorView: View {
         canEditText && (isLogLikeFile || isLargeText)
     }
 
+    private var usesDocumentPreviewReader: Bool {
+        canEditText && usesProtectedTextReader
+    }
+
     private var usesDocumentSearch: Bool {
-        isMarkdown && canEditText && markdownMode != .source
+        canEditText && (usesDocumentPreviewReader || (isMarkdown && markdownMode != .source))
     }
 
     private var isSourceEditorMounted: Bool {
-        canEditText && (!isMarkdown || markdownMode != .preview)
+        canEditText && !usesDocumentPreviewReader && (!isMarkdown || markdownMode != .preview)
+    }
+
+    private var canRenderLiveMarkdownPreview: Bool {
+        canEditText &&
+            textMetrics.byteCount <= Self.liveMarkdownPreviewByteThreshold &&
+            textMetrics.lineCount <= Self.liveMarkdownPreviewLineThreshold
     }
 
     private var supportsFileSearch: Bool {
@@ -588,7 +599,7 @@ private struct ConductorWorkspaceFileEditorView: View {
             }
         }
         .onChange(of: text) {
-            textMetrics = Self.metrics(for: text)
+            scheduleTextMetricsRefresh()
             scheduleAutosave()
             refreshSearchMatches(resetSelection: false)
             scheduleMarkdownPreviewRefresh()
@@ -624,6 +635,7 @@ private struct ConductorWorkspaceFileEditorView: View {
             autosaveTask?.cancel()
             externalWatchTask?.cancel()
             searchTask?.cancel()
+            textMetricsUpdateTask?.cancel()
             markdownPreviewUpdateTask?.cancel()
             if isDirty, canEditSourceText, !externalChangeDetected {
                 saveGeneration += 1
@@ -670,7 +682,7 @@ private struct ConductorWorkspaceFileEditorView: View {
             }
 
             if canEditText {
-                if isMarkdown {
+                if isMarkdown && !usesDocumentPreviewReader {
                     Picker("", selection: $markdownMode) {
                         ForEach(WorkspaceMarkdownMode.allCases) { mode in
                             Label(mode.title, systemImage: mode.systemImage)
@@ -684,6 +696,7 @@ private struct ConductorWorkspaceFileEditorView: View {
                         if newValue == .source || newValue == .split {
                             editorFocusToken &+= 1
                         }
+                        scheduleMarkdownPreviewRefresh(force: true)
                     }
                 }
                 if canEditSourceText {
@@ -777,16 +790,14 @@ private struct ConductorWorkspaceFileEditorView: View {
     private var content: some View {
         if isImageFile {
             imageView(tab.fileURL)
+        } else if usesDocumentPreviewReader {
+            documentPreview(textOverride: nil)
         } else if isMarkdown, canEditText {
             markdownContent
         } else if canEditText {
             sourceEditor
         } else {
-            messageView(
-                systemImage: "doc.text.magnifyingglass",
-                title: fileKindTitle,
-                message: documentMessage
-            )
+            documentPreview(textOverride: nil)
         }
     }
 
@@ -814,14 +825,27 @@ private struct ConductorWorkspaceFileEditorView: View {
         case .source:
             sourceEditor
         case .preview:
-            documentPreview(textOverride: markdownPreviewText)
+            markdownPreviewPane
         case .split:
             HSplitView {
                 sourceEditor
                     .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
-                documentPreview(textOverride: markdownPreviewText)
+                markdownPreviewPane
                     .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var markdownPreviewPane: some View {
+        if canRenderLiveMarkdownPreview {
+            documentPreview(textOverride: markdownPreviewText)
+        } else {
+            messageView(
+                systemImage: "bolt.slash",
+                title: L("实时预览已暂停", "Live preview paused"),
+                message: L("Markdown 较大，已停止实时渲染以保持输入和滚动流畅。请使用源码模式或系统应用查看完整预览。", "This Markdown file is too large for live rendering. Use source mode or the system app for the full preview.")
+            )
         }
     }
 
@@ -1180,6 +1204,8 @@ private struct ConductorWorkspaceFileEditorView: View {
     private func loadDocument(resetDirty: Bool) async {
         autosaveTask?.cancel()
         searchTask?.cancel()
+        textMetricsUpdateTask?.cancel()
+        markdownPreviewUpdateTask?.cancel()
         loadGeneration += 1
         let generation = loadGeneration
         let tab = tab
@@ -1201,7 +1227,7 @@ private struct ConductorWorkspaceFileEditorView: View {
         case .editableText(let loadedText):
             text = loadedText
             textMetrics = Self.metrics(for: loadedText)
-            markdownPreviewText = loadedText
+            markdownPreviewText = ""
             if resetDirty {
                 savedText = loadedText
             }
@@ -1213,7 +1239,7 @@ private struct ConductorWorkspaceFileEditorView: View {
                 savedText = ""
             }
         }
-        markdownMode = isMarkdown && canEditText ? .split : markdownMode
+        markdownMode = isMarkdown && canEditText ? .source : markdownMode
         refreshSearchMatches(resetSelection: true)
         model.setWorkspaceFileTabDirty(tab.id, isDirty: false)
         model.setWorkspaceFileTabExternallyChanged(tab.id, changed: false)
@@ -1315,12 +1341,37 @@ private struct ConductorWorkspaceFileEditorView: View {
         autosaveTask?.cancel()
     }
 
-    private func scheduleMarkdownPreviewRefresh() {
+    private func scheduleTextMetricsRefresh() {
+        textMetricsUpdateTask?.cancel()
+        let snapshot = text
+        textMetricsUpdateTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            let metrics = await Task.detached(priority: .utility) {
+                Self.metrics(for: snapshot)
+            }.value
+            guard !Task.isCancelled else { return }
+            textMetrics = metrics
+        }
+    }
+
+    private func scheduleMarkdownPreviewRefresh(force: Bool = false) {
         guard isMarkdown else { return }
+        guard markdownMode != .source else {
+            markdownPreviewUpdateTask?.cancel()
+            markdownPreviewText = ""
+            return
+        }
         markdownPreviewUpdateTask?.cancel()
         let snapshot = text
+        guard snapshot.utf8.count <= Self.liveMarkdownPreviewByteThreshold else {
+            markdownPreviewText = ""
+            return
+        }
         markdownPreviewUpdateTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(180))
+            if !force {
+                try? await Task.sleep(for: .milliseconds(360))
+            }
             guard !Task.isCancelled else { return }
             markdownPreviewText = snapshot
         }
@@ -1328,6 +1379,8 @@ private struct ConductorWorkspaceFileEditorView: View {
 
     nonisolated private static let protectedTextReaderByteThreshold = 1_500_000
     nonisolated private static let protectedTextReaderLineThreshold = 20_000
+    nonisolated private static let liveMarkdownPreviewByteThreshold = 512_000
+    nonisolated private static let liveMarkdownPreviewLineThreshold = 8_000
 
     nonisolated private static func metrics(for text: String) -> WorkspaceTextMetrics {
         var count = 1

@@ -379,7 +379,7 @@ private struct ConductorDocumentPayload: Equatable, Sendable {
     }
 
     private nonisolated static func readText(fileURL: URL, byteCount: Int64) throws -> (text: String, truncated: Bool) {
-        let maxPreviewBytes = 12 * 1024 * 1024
+        let maxPreviewBytes = 2 * 1024 * 1024
         let data: Data
         let truncated: Bool
         if byteCount > maxPreviewBytes {
@@ -1490,7 +1490,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
 
         function isLargeText() {
           const text = payload.text || '';
-          return payload.isTruncated || text.length > 2_500_000 || lineCount(text) > 18000;
+          return payload.isTruncated || text.length > 1_500_000 || lineCount(text) > 18000;
         }
 
         function badgeHTML(kind) {
@@ -1507,7 +1507,7 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
             ['Size', formatBytes(payload.byteCount)],
             ['Lines', lineCount(text) || '-']
           ];
-          if (payload.isTruncated) metrics.push(['Loaded', 'First 12 MB']);
+          if (payload.isTruncated) metrics.push(['Loaded', 'First 2 MB']);
           if (payload.fileExtension) metrics.push(['Type', String(payload.fileExtension).toUpperCase()]);
           return metrics.map(([label, value]) => `<span class="metric">${escapeHTML(label)} · ${escapeHTML(value)}</span>`).join('');
         }
