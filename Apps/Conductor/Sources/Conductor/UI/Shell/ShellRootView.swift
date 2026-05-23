@@ -504,15 +504,14 @@ private struct CommandPaletteView: View {
     var body: some View {
         ZStack {
             ConductorGlassSurface(style: .panel, clarity: snapshot.chromeClarity, interactive: true) {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     commandHeader
-                    FloatingPanelDivider()
                     commandSearchField
                     commandResults
                 }
-                .padding(12)
+                .padding(10)
             }
-            .frame(width: 690, height: 486)
+            .frame(width: 660, height: 430)
             .onAppear {
                 refreshFilteredCommands()
                 focusSearchField()
@@ -545,9 +544,7 @@ private struct CommandPaletteView: View {
     }
 
     private var commandHeader: some View {
-        FloatingPanelHeader(
-            systemImage: "command",
-            title: "Command Center",
+        CommandPaletteHeader(
             subtitle: snapshot.subtitle,
             closeHelp: L("关闭命令中心", "Close Command Center")
         ) {
@@ -596,7 +593,7 @@ private struct CommandPaletteView: View {
                     LazyVStack(alignment: .leading, spacing: 3) {
                         ForEach(filteredResult.rows) { row in
                             if row.showsSectionTitle {
-                                CommandSectionTitle(row.command.section)
+                                CommandSectionTitle(row.command.section, compact: true)
                             }
                             CommandButton(
                                 command: row.command,
@@ -1040,25 +1037,71 @@ struct CommandShortcutGuideRowModel: Identifiable, Equatable {
     let isFirst: Bool
 }
 
-private struct CommandSectionTitle: View {
-    let title: String
+private struct CommandPaletteHeader: View {
+    let subtitle: String
+    let closeHelp: String
+    let onClose: () -> Void
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
-    init(_ title: String) {
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "command")
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
+                .frame(width: 18, height: 18)
+
+            Text(L("命令", "Commands"))
+                .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
+                .lineLimit(1)
+
+            Text(subtitle)
+                .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 10)
+
+            Button {
+                onClose()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .frame(width: 22, height: 22)
+                    .background(theme.floatingControlFill.opacity(0.82))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .macNativeTooltip(closeHelp)
+        }
+        .frame(height: 24)
+    }
+}
+
+private struct CommandSectionTitle: View {
+    let title: String
+    var compact = false
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    init(_ title: String, compact: Bool = false) {
         self.title = title
+        self.compact = compact
     }
 
     var body: some View {
         HStack(spacing: 6) {
             Text(title)
-                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .font(.conductorSystem(size: compact ? 9.8 : 10.5, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
             Rectangle()
                 .fill(theme.floatingSeparator)
                 .frame(height: 1)
         }
-        .padding(.top, 5)
+        .padding(.top, compact ? 3 : 5)
         .padding(.horizontal, 4)
     }
 }
