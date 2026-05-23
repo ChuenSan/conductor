@@ -275,6 +275,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var selectedWorkspaceID: WorkspaceID
     private var skipPreviousWorkspaceSyncForNextAssignment = false
     private var pendingNavigationRefreshTerminalIDs = Set<TerminalID>()
+    private var panelCoordinator = PanelCoordinator()
+    private var appearanceCoordinator = AppearanceCoordinator(appearance: AppearancePreferences())
+    private var fileWorkspaceCoordinator = FileWorkspaceCoordinator()
 
     init() {
         let persisted = persistence.load()
@@ -288,9 +291,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.selectedWorkspaceID = selectedID
         self.workspace = persistedWorkspaces.first { $0.id == selectedID } ?? persistedWorkspaces[0]
         self.theme = persisted?.theme ?? .graphite
-        self.appearance = persisted?.appearance ?? AppearancePreferences()
+        let resolvedAppearance = persisted?.appearance ?? AppearancePreferences()
+        self.appearance = resolvedAppearance
+        self.appearanceCoordinator = AppearanceCoordinator(appearance: resolvedAppearance)
         self.agentCLIStatuses = Dictionary(uniqueKeysWithValues: AgentHookProvider.allCases.map { ($0, .unknown(provider: $0)) })
         self.terminalFontDownloadStates = [:]
+        syncPanelCoordinatorFromPublished()
+        syncFileWorkspaceCoordinatorFromPublished()
         ConductorAppearanceRuntime.apply(self.appearance)
         TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
@@ -316,6 +323,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.workspace = resolvedWorkspaces.first { $0.id == selectedID } ?? resolvedWorkspaces[0]
         self.theme = theme
         self.appearance = appearance
+        self.appearanceCoordinator = AppearanceCoordinator(appearance: appearance)
         self.notifications = notifications
         self.agentCLIStatuses = Dictionary(uniqueKeysWithValues: AgentHookProvider.allCases.map { ($0, .unknown(provider: $0)) })
         self.terminalFontDownloadStates = [:]
@@ -324,11 +332,51 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.notificationPanelVisible = notificationPanelVisible
         self.settingsPanelVisible = settingsPanelVisible
         self.workspaceOverviewVisible = workspaceOverviewVisible
+        syncPanelCoordinatorFromPublished()
+        syncFileWorkspaceCoordinatorFromPublished()
         ConductorAppearanceRuntime.apply(self.appearance)
         TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
     }
     #endif
+
+    private func syncPanelCoordinatorFromPublished() {
+        panelCoordinator.commandPaletteVisible = commandPaletteVisible
+        panelCoordinator.settingsVisible = settingsPanelVisible
+        panelCoordinator.workspaceOverviewVisible = workspaceOverviewVisible
+        panelCoordinator.terminalSearchVisible = terminalSearchVisible
+    }
+
+    private func publishPanelState() {
+        commandPaletteVisible = panelCoordinator.commandPaletteVisible
+        settingsPanelVisible = panelCoordinator.settingsVisible
+        workspaceOverviewVisible = panelCoordinator.workspaceOverviewVisible
+        terminalSearchVisible = panelCoordinator.terminalSearchVisible
+    }
+
+    private func syncAppearanceCoordinatorFromPublished() {
+        appearanceCoordinator = AppearanceCoordinator(appearance: appearance)
+    }
+
+    private func publishAppearanceState() {
+        appearance = appearanceCoordinator.appearance
+    }
+
+    private func syncFileWorkspaceCoordinatorFromPublished() {
+        fileWorkspaceCoordinator = FileWorkspaceCoordinator(
+            tabs: workspaceFileTabs,
+            dirtyTabIDs: dirtyWorkspaceFileTabIDs,
+            externallyChangedTabIDs: externallyChangedWorkspaceFileTabIDs,
+            selectedContentTabID: selectedWorkspaceContentTabID
+        )
+    }
+
+    private func publishFileWorkspaceState() {
+        workspaceFileTabs = fileWorkspaceCoordinator.tabs
+        dirtyWorkspaceFileTabIDs = fileWorkspaceCoordinator.dirtyTabIDs
+        externallyChangedWorkspaceFileTabIDs = fileWorkspaceCoordinator.externallyChangedTabIDs
+        selectedWorkspaceContentTabID = fileWorkspaceCoordinator.selectedContentTabID
+    }
 
     var canSplit: Bool {
         workspace.canSplit()
@@ -368,17 +416,23 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func setAppearanceDensity(_ density: AppearanceDensity) {
         guard appearance.density != density else { return }
-        appearance.density = density
+        syncAppearanceCoordinatorFromPublished()
+        appearanceCoordinator.setDensity(density)
+        publishAppearanceState()
     }
 
     func setChromeClarity(_ chromeClarity: ChromeClarity) {
         guard appearance.chromeClarity != chromeClarity else { return }
-        appearance.chromeClarity = chromeClarity
+        syncAppearanceCoordinatorFromPublished()
+        appearanceCoordinator.setChromeClarity(chromeClarity)
+        publishAppearanceState()
     }
 
     func setFontScale(_ fontScale: AppearanceFontScale) {
         guard appearance.fontScale != fontScale else { return }
-        appearance.fontScale = fontScale
+        syncAppearanceCoordinatorFromPublished()
+        appearanceCoordinator.setFontScale(fontScale)
+        publishAppearanceState()
     }
 
     func setLanguage(_ language: AppearanceLanguage) {
@@ -395,7 +449,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let clamped = AppearancePreferences.clampedTerminalFontSize(terminalFontSize)
         let rounded = (clamped * 2).rounded() / 2
         guard appearance.terminalFontSize != rounded else { return }
-        appearance.terminalFontSize = rounded
+        syncAppearanceCoordinatorFromPublished()
+        appearanceCoordinator.setTerminalFontSize(terminalFontSize)
+        publishAppearanceState()
     }
 
     func setTerminalFontPreset(_ preset: TerminalFontPreset) {
@@ -935,19 +991,25 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func openFileInWorkspace(_ fileURL: URL, rootURL: URL? = nil) {
         let standardizedFile = fileURL.standardizedFileURL
         let resolvedRoot = (rootURL ?? standardizedFile.deletingLastPathComponent()).standardizedFileURL
-        let tab = ConductorWorkspaceFileTab(fileURL: standardizedFile, rootURL: resolvedRoot)
-        workspaceFileTabs = [tab]
-        pruneWorkspaceFileTabState(keeping: Set([tab.id]))
-        selectedWorkspaceContentTabID = .file(tab.id)
-        terminalSearchVisible = false
-        workspaceOverviewVisible = false
+        syncFileWorkspaceCoordinatorFromPublished()
+        fileWorkspaceCoordinator.openFile(standardizedFile, rootURL: resolvedRoot)
+        publishFileWorkspaceState()
+        pruneWorkspaceFileTabState(keeping: Set(workspaceFileTabs.map(\.id)))
+        syncFileWorkspaceCoordinatorFromPublished()
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.terminalSearchVisible = false
+        panelCoordinator.workspaceOverviewVisible = false
+        publishPanelState()
     }
 
     func selectWorkspaceFileTab(_ tabID: String) {
         guard workspaceFileTabs.contains(where: { $0.id == tabID }) else { return }
         selectedWorkspaceContentTabID = .file(tabID)
-        terminalSearchVisible = false
-        workspaceOverviewVisible = false
+        syncFileWorkspaceCoordinatorFromPublished()
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.terminalSearchVisible = false
+        panelCoordinator.workspaceOverviewVisible = false
+        publishPanelState()
     }
 
     func closeWorkspaceFileTab(_ tab: ConductorWorkspaceFileTab) {
@@ -1043,11 +1105,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func setWorkspaceFileTabDirty(_ tabID: String, isDirty: Bool) {
         guard workspaceFileTabs.contains(where: { $0.id == tabID }) else { return }
-        if isDirty {
-            dirtyWorkspaceFileTabIDs.insert(tabID)
-        } else {
-            dirtyWorkspaceFileTabIDs.remove(tabID)
-        }
+        syncFileWorkspaceCoordinatorFromPublished()
+        fileWorkspaceCoordinator.setDirty(tabID, isDirty: isDirty)
+        publishFileWorkspaceState()
     }
 
     func isWorkspaceFileTabDirty(_ tabID: String) -> Bool {
@@ -1150,8 +1210,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         guard workspace.paneID(containing: terminalID) != nil else { return }
         markTerminalInteractionFocus()
         selectedWorkspaceContentTabID = .terminal(terminalID)
-        terminalSearchVisible = false
-        workspaceOverviewVisible = false
+        syncFileWorkspaceCoordinatorFromPublished()
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.terminalSearchVisible = false
+        panelCoordinator.workspaceOverviewVisible = false
+        publishPanelState()
         focusTerminal(terminalID)
     }
 
@@ -1495,18 +1558,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func showTerminalSearch() {
         if fileManagerPanelRequest != nil, fileManagerKeyboardFocused {
-            commandPaletteVisible = false
-            settingsPanelVisible = false
-            workspaceOverviewVisible = false
-            terminalSearchVisible = false
+            syncPanelCoordinatorFromPublished()
+            panelCoordinator.closeTransientPanels()
+            publishPanelState()
             fileManagerSearchFocusGeneration &+= 1
             return
         }
         if selectedWorkspaceFileTab != nil {
-            commandPaletteVisible = false
-            settingsPanelVisible = false
-            workspaceOverviewVisible = false
-            terminalSearchVisible = false
+            syncPanelCoordinatorFromPublished()
+            panelCoordinator.closeTransientPanels()
+            publishPanelState()
             workspaceFileSearchFocusGeneration &+= 1
             return
         }
@@ -1519,12 +1580,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         defer { ConductorSignpost.end("terminal-search-show", signpost) }
         guard activateTerminalContextTarget(terminalID) != nil,
               let target = terminalSearchTarget(for: terminalID) else { return }
-        commandPaletteVisible = false
-        settingsPanelVisible = false
-        workspaceOverviewVisible = false
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.commandPaletteVisible = false
+        panelCoordinator.settingsVisible = false
+        panelCoordinator.workspaceOverviewVisible = false
+        panelCoordinator.terminalSearchVisible = true
         terminalSearchTargetID = terminalID
         terminalSearchQuery = metadata(for: terminalID).search.needle ?? ""
-        terminalSearchVisible = true
+        publishPanelState()
         terminalSearchFocusGeneration &+= 1
         let surface = surface(for: target.tab)
         if !terminalSearchQuery.isEmpty {
@@ -1592,6 +1655,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         terminalSearchVisible = false
         terminalSearchQuery = ""
         terminalSearchTargetID = nil
+        syncPanelCoordinatorFromPublished()
         if let restoreTerminalID {
             refreshSurfaceAfterNavigation(restoreTerminalID)
         }
@@ -1948,7 +2012,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
         workspaces = [keptWorkspace]
         selectWorkspaceAfterListMutation(keptWorkspace)
-        commandPaletteVisible = false
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.commandPaletteVisible = false
+        publishPanelState()
     }
 
     func closeWorkspacesToRight(of workspaceID: WorkspaceID) {
@@ -1967,7 +2033,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         } else {
             selectWorkspaceAfterListMutation(workspaces[index])
         }
-        commandPaletteVisible = false
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.commandPaletteVisible = false
+        publishPanelState()
     }
 
     func moveWorkspace(_ workspaceID: WorkspaceID, before targetWorkspaceID: WorkspaceID?) {
@@ -2128,46 +2196,55 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func toggleCommandPalette() {
         let signpost = ConductorSignpost.begin("palette-toggle")
         defer { ConductorSignpost.end("palette-toggle", signpost) }
-        commandPaletteVisible.toggle()
-        if commandPaletteVisible {
-            settingsPanelVisible = false
-            workspaceOverviewVisible = false
+        let shouldCloseTerminalSearch = !commandPaletteVisible && terminalSearchVisible
+        if shouldCloseTerminalSearch {
             closeTerminalSearch()
         }
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.toggleCommandPalette()
+        publishPanelState()
     }
 
     func hideCommandPalette() {
-        commandPaletteVisible = false
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.commandPaletteVisible = false
+        publishPanelState()
     }
 
     func toggleSettingsPanel() {
         let signpost = ConductorSignpost.begin("settings-toggle")
         defer { ConductorSignpost.end("settings-toggle", signpost) }
-        settingsPanelVisible.toggle()
-        if settingsPanelVisible {
-            commandPaletteVisible = false
-            workspaceOverviewVisible = false
+        let shouldCloseTerminalSearch = !settingsPanelVisible && terminalSearchVisible
+        if shouldCloseTerminalSearch {
             closeTerminalSearch()
         }
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.toggleSettings()
+        publishPanelState()
     }
 
     func hideSettingsPanel() {
-        settingsPanelVisible = false
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.settingsVisible = false
+        publishPanelState()
     }
 
     func toggleWorkspaceOverview() {
         let signpost = ConductorSignpost.begin("overview-toggle")
         defer { ConductorSignpost.end("overview-toggle", signpost) }
-        workspaceOverviewVisible.toggle()
-        if workspaceOverviewVisible {
-            commandPaletteVisible = false
-            settingsPanelVisible = false
+        let shouldCloseTerminalSearch = !workspaceOverviewVisible && terminalSearchVisible
+        if shouldCloseTerminalSearch {
             closeTerminalSearch()
         }
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.toggleWorkspaceOverview()
+        publishPanelState()
     }
 
     func hideWorkspaceOverview() {
-        workspaceOverviewVisible = false
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.workspaceOverviewVisible = false
+        publishPanelState()
     }
 
     @discardableResult
@@ -2176,19 +2253,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             closeTerminalSearch()
             return true
         }
-        if commandPaletteVisible {
-            commandPaletteVisible = false
-            return true
-        }
-        if settingsPanelVisible {
-            settingsPanelVisible = false
-            return true
-        }
-        if workspaceOverviewVisible {
-            workspaceOverviewVisible = false
-            return true
-        }
-        return false
+        syncPanelCoordinatorFromPublished()
+        let dismissed = panelCoordinator.dismissVisibleShellPanel()
+        publishPanelState()
+        return dismissed
     }
 
     func toggleNotificationPanel() {
@@ -2198,10 +2266,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             notificationPanelVisible = false
             return
         }
-        commandPaletteVisible = false
-        settingsPanelVisible = false
-        workspaceOverviewVisible = false
         closeTerminalSearch()
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.commandPaletteVisible = false
+        panelCoordinator.settingsVisible = false
+        panelCoordinator.workspaceOverviewVisible = false
+        publishPanelState()
         notificationPanelVisible = true
     }
 
@@ -2446,7 +2516,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         closeSurfaces(for: terminalIDs(in: workspace))
         let replacement = WorkspaceState(title: workspace.title)
         replaceSelectedWorkspace(with: replacement)
-        commandPaletteVisible = false
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.commandPaletteVisible = false
+        publishPanelState()
     }
 
     private func closeSurfaces(for terminalIDs: [TerminalID]) {
@@ -2457,6 +2529,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             terminalSearchVisible = false
             terminalSearchQuery = ""
             terminalSearchTargetID = nil
+            syncPanelCoordinatorFromPublished()
         }
         for terminalID in terminalIDs {
             metadataByTerminalID.removeValue(forKey: terminalID)
@@ -2811,12 +2884,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         if terminalSearchVisible {
             closeTerminalSearch()
         }
-        if commandPaletteVisible {
-            commandPaletteVisible = false
-        }
-        if workspaceOverviewVisible {
-            workspaceOverviewVisible = false
-        }
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.commandPaletteVisible = false
+        panelCoordinator.workspaceOverviewVisible = false
+        publishPanelState()
     }
 
     private func replaceSelectedWorkspace(with replacement: WorkspaceState) {
