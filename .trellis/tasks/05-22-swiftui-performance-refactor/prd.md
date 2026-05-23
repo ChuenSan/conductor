@@ -271,6 +271,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Connected the existing terminal tab strip `selectionNamespace` to the selected tab fill through `matchedGeometryEffect`, making terminal tab selection move as a real local capsule instead of only recoloring each tab.
   - Kept model selection unanimated and chrome-local: the visual selected tab updates with `selectionGlide`, while `TerminalSurfaceRepresentable` remains outside matched geometry and identity changes.
   - Verified this item immediately with `swift build`, focus autorun, and layout autorun.
+- Thirty-third implementation phase:
+  - Removed the terminal pane focus sweep visual after design review; focused pane feedback now uses only a restrained chrome ring opacity/line-width settle.
+  - Renamed the shared helper from `conductorFocusSweep` to `conductorFocusRing` so future motion work does not reintroduce traveling light around terminal panes by accident.
+  - Kept the Ghostty/AppKit terminal surface untouched and preserved explicit focused-pane flash behavior.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

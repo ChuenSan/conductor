@@ -867,7 +867,7 @@ private struct TerminalPaneView: View {
     @State private var highlightedDropTabID: TerminalID?
     @State private var isFileDropTargeted = false
     @State private var flashVisible = false
-    @State private var focusSweepToken: UInt64 = 0
+    @State private var focusRingToken: UInt64 = 0
     @Environment(\.conductorSplitResizeActive) private var splitResizeActive
     @Environment(\.conductorFilePanelLayoutActive) private var filePanelLayoutActive
 
@@ -908,12 +908,12 @@ private struct TerminalPaneView: View {
                 .allowsHitTesting(false)
             }
         }
-        .conductorFocusSweep(
+        .conductorFocusRing(
             color: snapshot.theme.accent,
             cornerRadius: ConductorTokens.Radius.terminalPane,
             active: isFocused,
-            trigger: TerminalPaneFocusSweepTrigger(
-                focusToken: focusSweepToken,
+            trigger: TerminalPaneFocusRingTrigger(
+                focusToken: focusRingToken,
                 flashToken: snapshot.flashToken
             )
         )
@@ -921,11 +921,11 @@ private struct TerminalPaneView: View {
         .animation(shellAnimation(ConductorMotion.dragPreview), value: paneDropTarget)
         .onChange(of: isFocused) { _, focused in
             guard focused, !splitResizeActive else { return }
-            focusSweepToken &+= 1
+            focusRingToken &+= 1
         }
         .onChange(of: snapshot.flashToken) { _, token in
             guard token > 0 else { return }
-            focusSweepToken &+= 1
+            focusRingToken &+= 1
             triggerFocusFlash()
         }
     }
@@ -1048,7 +1048,7 @@ private struct TerminalPaneView: View {
     }
 }
 
-private struct TerminalPaneFocusSweepTrigger: Equatable {
+private struct TerminalPaneFocusRingTrigger: Equatable {
     let focusToken: UInt64
     let flashToken: UInt64
 }
