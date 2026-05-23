@@ -127,6 +127,24 @@ func checkMixedPersistedLayoutNormalizes() {
     requireValidWorkspace(workspace, "normalize mixed persisted layout")
 }
 
+func checkSplitTreeReconciliationRestoresOrphanPanes() {
+    var workspace = WorkspaceState()
+    let firstPaneID = workspace.focusedPaneID
+    guard let secondPaneID = workspace.splitFocusedPane(.right, title: "two") else {
+        return require(false, "split setup should create second pane")
+    }
+
+    workspace.root = .leaf(firstPaneID)
+    workspace.focusedPaneID = secondPaneID
+    require(!workspace.hasCoherentSplitTree, "corrupted setup should detect orphan pane")
+
+    workspace.reconcileSplitTreeWithPanes()
+    require(workspace.hasCoherentSplitTree, "reconciliation should restore split tree coherence")
+    require(Set(workspace.root.leaves) == Set([firstPaneID, secondPaneID]), "reconciliation should keep every pane visible")
+    require(workspace.focusedPaneID == secondPaneID, "reconciliation should preserve valid focused pane")
+    requireValidWorkspace(workspace, "reconciled split tree")
+}
+
 func checkCloseSelectedTabFocusesNearestTab() {
     var workspace = WorkspaceState()
     let paneID = workspace.focusedPaneID
@@ -915,6 +933,7 @@ checkSplitRight()
 checkSplitDownNested()
 checkWorkspaceEdgeSplitAvoidsCornerNesting()
 checkMixedPersistedLayoutNormalizes()
+checkSplitTreeReconciliationRestoresOrphanPanes()
 checkCloseSelectedTabFocusesNearestTab()
 checkCloseInactiveTabPreservesSelection()
 checkCloseOnlyTerminalCreatesReplacement()

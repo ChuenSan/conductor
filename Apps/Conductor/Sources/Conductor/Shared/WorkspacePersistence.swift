@@ -138,12 +138,12 @@ final class WorkspacePersistence {
               workspace.panes[workspace.focusedPaneID] != nil else {
             return false
         }
-        let leaves = Set(workspace.root.leaves)
-        return !leaves.isEmpty && leaves.allSatisfy { workspace.panes[$0] != nil }
+        return workspace.hasCoherentSplitTree
     }
 
     private func sanitizedWorkspace(_ workspace: WorkspaceState) -> WorkspaceState {
         var sanitized = workspace
+        sanitized.reconcileSplitTreeWithPanes()
         sanitized.zoomedPaneID = nil
         return sanitized
     }

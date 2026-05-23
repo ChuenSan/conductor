@@ -103,6 +103,10 @@ Forbidden patterns:
 - `ConductorWindowModel.appearance` is the only published source of truth for shell
   appearance preferences.
 - Persistence writes the current appearance snapshot alongside workspace structure and theme.
+- Persisted workspace structure must keep `WorkspaceState.root.leaves` and `WorkspaceState.panes.keys`
+  as the same set with no duplicate leaves. Loading, saving, and workspace-array synchronization
+  must reconcile this invariant before accepting a snapshot; otherwise orphan panes can remain in
+  product state while disappearing from the rendered split tree.
 - `TerminalTheme` is the whole-shell preset source of truth. It owns terminal colors plus
   low-frequency SwiftUI chrome colors for sidebar/settings panels, selection, hover,
   strokes, controls, window backdrop, accent, and terminal pane outline.
@@ -131,6 +135,8 @@ Forbidden patterns:
 - Missing `appearance` in persisted state -> load `AppearancePreferences()` defaults.
 - Unknown enum raw value in persisted state -> persisted state may fail to decode and should
   fall back to a fresh valid workspace state rather than crashing.
+- Workspace with valid `panes` but a split tree that omits one or more pane IDs -> reconcile
+  the split tree so every pane is visible before saving or rendering.
 - Invalid workspace plus valid appearance -> reject the invalid workspace; do not resurrect
   unsafe layout data just to keep appearance settings.
 - Appearance change while terminals are streaming output -> only shell chrome invalidates;

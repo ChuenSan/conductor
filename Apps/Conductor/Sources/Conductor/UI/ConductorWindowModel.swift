@@ -278,6 +278,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let persisted = persistence.load()
         var persistedWorkspaces = persisted?.workspaces ?? [WorkspaceState()]
         for index in persistedWorkspaces.indices {
+            persistedWorkspaces[index].reconcileSplitTreeWithPanes()
             persistedWorkspaces[index].normalizeMixedSplitLayout()
         }
         let selectedID = persisted?.selectedWorkspaceID ?? persistedWorkspaces[0].id
@@ -2726,11 +2727,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func syncWorkspace(_ snapshot: WorkspaceState) {
-        if let index = workspaces.firstIndex(where: { $0.id == snapshot.id }) {
-            guard workspaces[index] != snapshot else { return }
-            workspaces[index] = snapshot
+        var synchronizedSnapshot = snapshot
+        synchronizedSnapshot.reconcileSplitTreeWithPanes()
+        if let index = workspaces.firstIndex(where: { $0.id == synchronizedSnapshot.id }) {
+            guard workspaces[index] != synchronizedSnapshot else { return }
+            workspaces[index] = synchronizedSnapshot
         } else {
-            workspaces.append(snapshot)
+            workspaces.append(synchronizedSnapshot)
         }
     }
 

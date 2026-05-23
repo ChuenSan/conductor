@@ -392,6 +392,51 @@ public indirect enum SplitNode: Equatable, Codable, Sendable {
             }
         }
     }
+
+    fileprivate func pruningInvalidOrDuplicateLeaves(validPaneIDs: Set<PaneID>, seenPaneIDs: inout Set<PaneID>) -> SplitNode? {
+        switch self {
+        case let .leaf(id):
+            guard validPaneIDs.contains(id), seenPaneIDs.insert(id).inserted else { return nil }
+            return self
+        case let .split(axis, first, second, fraction):
+            let firstResult = first.pruningInvalidOrDuplicateLeaves(
+                validPaneIDs: validPaneIDs,
+                seenPaneIDs: &seenPaneIDs
+            )
+            let secondResult = second.pruningInvalidOrDuplicateLeaves(
+                validPaneIDs: validPaneIDs,
+                seenPaneIDs: &seenPaneIDs
+            )
+
+            switch (firstResult, secondResult) {
+            case let (.some(firstNode), .some(secondNode)):
+                return .split(
+                    axis: axis,
+                    first: firstNode,
+                    second: secondNode,
+                    fraction: Self.clampedFraction(fraction)
+                )
+            case let (.some(firstNode), .none):
+                return firstNode
+            case let (.none, .some(secondNode)):
+                return secondNode
+            case (.none, .none):
+                return nil
+            }
+        }
+    }
+
+    fileprivate func appendingLeaves(_ leaves: [PaneID], axis: SplitAxis) -> SplitNode {
+        leaves.reduce(self) { current, paneID in
+            let existingCount = max(1, current.leaves.count)
+            return .split(
+                axis: axis,
+                first: current,
+                second: .leaf(paneID),
+                fraction: Self.clampedFraction(Double(existingCount) / Double(existingCount + 1))
+            )
+        }
+    }
 }
 
 public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
@@ -430,10 +475,20 @@ public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
         self.panes = panes
         self.focusedPaneID = panes[focusedPaneID] == nil ? panes.keys.sorted { $0.description < $1.description }[0] : focusedPaneID
         self.zoomedPaneID = zoomedPaneID.flatMap { panes[$0] == nil ? nil : $0 }
+        reconcileSplitTreeWithPanes()
     }
 
     public var focusedPane: PaneState? {
         panes[focusedPaneID]
+    }
+
+    public var hasCoherentSplitTree: Bool {
+        let leaves = root.leaves
+        return !leaves.isEmpty &&
+            Set(leaves).count == leaves.count &&
+            Set(leaves) == Set(panes.keys) &&
+            panes[focusedPaneID] != nil &&
+            (zoomedPaneID == nil || zoomedPaneID.flatMap { panes[$0] } != nil)
     }
 
     public var visibleRoot: SplitNode {
@@ -567,6 +622,53 @@ public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
         guard let normalizedRoot = SplitNode.line(leaves: validLeaves, axis: axis) else { return }
         root = normalizedRoot
         zoomedPaneID = nil
+    }
+
+    public mutating func reconcileSplitTreeWithPanes() {
+        for paneID in panes.keys {
+            guard var pane = panes[paneID] else { continue }
+            guard !pane.tabs.isEmpty else {
+                panes.removeValue(forKey: paneID)
+                continue
+            }
+            if !pane.tabs.contains(where: { $0.id == pane.selectedTabID }) {
+                pane.selectedTabID = pane.tabs[0].id
+                panes[paneID] = pane
+            }
+        }
+
+        guard !panes.isEmpty else { return }
+
+        let sortedPaneIDs = panes.keys.sorted { $0.description < $1.description }
+        var seenPaneIDs = Set<PaneID>()
+        let preservedRoot = root.pruningInvalidOrDuplicateLeaves(
+            validPaneIDs: Set(panes.keys),
+            seenPaneIDs: &seenPaneIDs
+        )
+        var orderedLeaves = preservedRoot?.leaves ?? []
+
+        if panes[focusedPaneID] == nil {
+            focusedPaneID = orderedLeaves.first ?? sortedPaneIDs[0]
+        }
+
+        if !orderedLeaves.contains(focusedPaneID) {
+            orderedLeaves.append(focusedPaneID)
+        }
+
+        let orderedSet = Set(orderedLeaves)
+        let missingPaneIDs = sortedPaneIDs.filter { !orderedSet.contains($0) }
+        let axis = root.primaryAxis ?? .horizontal
+        if let preservedRoot {
+            let preservedLeaves = Set(preservedRoot.leaves)
+            let appendedPaneIDs = orderedLeaves.filter { !preservedLeaves.contains($0) } + missingPaneIDs
+            root = preservedRoot.appendingLeaves(appendedPaneIDs, axis: axis)
+        } else if let rebuiltRoot = SplitNode.line(leaves: orderedLeaves + missingPaneIDs, axis: axis) {
+            root = rebuiltRoot
+        }
+
+        if zoomedPaneID.flatMap({ panes[$0] }) == nil {
+            zoomedPaneID = nil
+        }
     }
 
     public mutating func toggleZoom() {
