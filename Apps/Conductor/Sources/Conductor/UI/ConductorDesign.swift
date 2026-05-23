@@ -622,11 +622,11 @@ enum ConductorMotion {
     }
 
     static var reveal: Animation? {
-        reducedMotion ? nil : .smooth(duration: 0.135, extraBounce: 0.012)
+        cssEaseOut(duration: 0.16)
     }
 
     static var search: Animation? {
-        reducedMotion ? nil : .smooth(duration: 0.115, extraBounce: 0.010)
+        cssEaseOut(duration: 0.13)
     }
 
     static var scroll: Animation? {
@@ -646,11 +646,11 @@ enum ConductorMotion {
     }
 
     static var standard: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.095)
+        cssEaseOut(duration: 0.11)
     }
 
     static var panel: Animation? {
-        reducedMotion ? nil : .smooth(duration: 0.135, extraBounce: 0.012)
+        cssEaseOut(duration: 0.19)
     }
 
     static var list: Animation? {
@@ -678,21 +678,19 @@ enum ConductorMotion {
     }
 
     static var panelTransition: AnyTransition {
-        reducedMotion ? .identity : .modifier(
-            active: ConductorPanelRevealModifier(opacity: 0, y: -4),
-            identity: ConductorPanelRevealModifier(opacity: 1, y: 0)
-        )
+        floatingPanelTransition(edge: .top, distance: 18)
     }
 
     static var settingsPanelTransition: AnyTransition {
-        reducedMotion ? .identity : .opacity
+        floatingPanelTransition(edge: .trailing, distance: 24)
+    }
+
+    static var sidebarContentTransition: AnyTransition {
+        floatingPanelTransition(edge: .leading, distance: 12, scale: 1)
     }
 
     static var searchTransition: AnyTransition {
-        reducedMotion ? .identity : .modifier(
-            active: ConductorPanelRevealModifier(opacity: 0, y: -3),
-            identity: ConductorPanelRevealModifier(opacity: 1, y: 0)
-        )
+        floatingPanelTransition(edge: .top, distance: 10, scale: 0.998)
     }
 
     static var tabTransition: AnyTransition {
@@ -737,6 +735,38 @@ enum ConductorMotion {
         reducedMotion ? nil : .smooth(duration: duration, extraBounce: bounce)
     }
 
+    static func cssEaseOut(duration: Double) -> Animation? {
+        reducedMotion ? nil : .timingCurve(0.16, 1.0, 0.3, 1.0, duration: duration)
+    }
+
+    static func floatingPanelTransition(
+        edge: Edge,
+        distance: CGFloat,
+        scale: CGFloat = 0.986
+    ) -> AnyTransition {
+        guard !reducedMotion else { return .identity }
+        return .asymmetric(
+            insertion: .modifier(
+                active: ConductorPanelRevealModifier(
+                    opacity: 0,
+                    x: transitionOffset(edge: edge, distance: distance).x,
+                    y: transitionOffset(edge: edge, distance: distance).y,
+                    scale: scale
+                ),
+                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
+            ),
+            removal: .modifier(
+                active: ConductorPanelRevealModifier(
+                    opacity: 0,
+                    x: transitionOffset(edge: edge, distance: distance * 0.72).x,
+                    y: transitionOffset(edge: edge, distance: distance * 0.72).y,
+                    scale: max(scale, 0.992)
+                ),
+                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
+            )
+        )
+    }
+
     static func perform(_ action: () -> Void) {
         perform(standard, action)
     }
@@ -764,16 +794,32 @@ enum ConductorMotion {
     }
 
     private static let animatedCollectionLimit = 80
+
+    private static func transitionOffset(edge: Edge, distance: CGFloat) -> (x: CGFloat, y: CGFloat) {
+        switch edge {
+        case .top:
+            return (0, -distance)
+        case .bottom:
+            return (0, distance)
+        case .leading:
+            return (-distance, 0)
+        case .trailing:
+            return (distance, 0)
+        }
+    }
 }
 
 private struct ConductorPanelRevealModifier: ViewModifier {
     let opacity: Double
+    let x: CGFloat
     let y: CGFloat
+    let scale: CGFloat
 
     func body(content: Content) -> some View {
         content
             .opacity(opacity)
-            .offset(y: y)
+            .scaleEffect(scale, anchor: .center)
+            .offset(x: x, y: y)
     }
 }
 

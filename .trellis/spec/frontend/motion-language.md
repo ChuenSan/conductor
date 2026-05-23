@@ -6,6 +6,12 @@ Conductor motion exists to make state changes legible without making the termina
 decorative, sluggish, or unstable. The terminal renderer remains owned by GhosttyKit/AppKit.
 SwiftUI motion belongs to shell chrome, compact metadata, overlays, and interaction feedback.
 
+Panel and rail motion should feel closer to a carefully tuned CSS transition than a default
+SwiftUI fade. Use transform-based opacity, offset, and tiny scale changes with a fast-out,
+slow-settle timing curve. Opening should communicate where the surface comes from; closing
+should leave in the reverse direction without lingering. Do not animate layout-heavy properties
+when a transform can express the same motion.
+
 ## Global Rules
 
 - Never animate `TerminalSurfaceRepresentable`, Ghostty surface opacity, terminal text,
@@ -30,7 +36,7 @@ SwiftUI motion belongs to shell chrome, compact metadata, overlays, and interact
 | `selection` | Selected row/tab/category highlight migration | 110-150ms | smooth, very low bounce | instant selected state |
 | `selectionGlide` | Local visual selected capsule that moves independently from model switching | 140-165ms | smooth, almost no bounce | instant selected state |
 | `navigation` | Workspace/tab destination changes and scroll-to-visible | 120-170ms | smooth, no visible bounce | instant scroll |
-| `panel` | Command/settings/overview reveal | 120-160ms | smooth, tiny bounce | opacity or instant |
+| `panel` | Command/settings/overview reveal | 160-200ms | fast-out CSS ease | instant |
 | `search` | Terminal find bar reveal and result metadata | 90-130ms | smooth | instant |
 | `list` | Filtered list row insert/remove | 90-130ms | smooth | opacity or instant |
 | `layout` | Split create/close/equalize, sidebar width | 150-220ms | spatial smooth | instant layout |
@@ -46,8 +52,8 @@ SwiftUI motion belongs to shell chrome, compact metadata, overlays, and interact
 **Animate**:
 - Sidebar width.
 - Rail icon x-position through the width change.
-- Expanded text/content opacity after the width starts moving.
-- Collapsed rail action icons opacity after the width settles enough to avoid overlap.
+- Expanded/collapsed rail content slides horizontally with opacity.
+- Collapsed rail action icons enter as part of the rail content transition.
 
 **Do Not Animate**:
 - Terminal stage frame through opacity/scale.
@@ -56,8 +62,8 @@ SwiftUI motion belongs to shell chrome, compact metadata, overlays, and interact
 
 **Motion**:
 - Width: `layout`, 170-200ms.
-- Text reveal: opacity 55-80ms with 35-50ms delay.
-- Icon rail reveal: opacity 70ms, no vertical travel.
+- Rail content: `sidebarContentTransition`, transform-only horizontal slide.
+- Toggle feedback: `hover` and `press`.
 
 **Reduced Motion**:
 - Width snaps.
@@ -66,6 +72,7 @@ SwiftUI motion belongs to shell chrome, compact metadata, overlays, and interact
 **Acceptance**:
 - No exposed titlebar/backdrop corners when the sidebar touches the top edge.
 - Collapsed icons always show instant tooltip on hover.
+- Expanded and collapsed content do not crossfade in place; they slide with the rail.
 - Expanding/collapsing does not recreate terminal hosts.
 
 ### Sidebar Rail Icon Tooltip

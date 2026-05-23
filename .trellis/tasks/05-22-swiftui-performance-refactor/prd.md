@@ -249,6 +249,12 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Fixed the notification navigation regression introduced while scoping `NotificationPanelRootView`: `ConductorWindowModel.openNotification(_:)` now closes the detached notification panel after focusing the target terminal, marking the notification read, and refreshing the target surface.
   - Captured the behavior contract in frontend specs so notification row actions remain model-level navigation commands rather than partial row-local mutations.
   - Added `CONDUCTOR_NOTIFICATION_AUTORUN` to `check-conductor.sh` so notification clicks must open, close the detached panel, clear unread state, and keep the target terminal focused before the gate passes.
+- Twenty-eighth implementation phase:
+  - Reworked shared `ConductorMotion` panel timing toward CSS-style fast-out/slow-settle transitions using `.timingCurve(0.16, 1.0, 0.3, 1.0)`.
+  - Replaced the prior mostly-opacity floating panel transition with asymmetric transform-based opacity, offset, and subtle scale so Command Center and Workspace Overview slide from the top, Settings slides from the trailing edge, and removal exits in the matching direction.
+  - Added `sidebarContentTransition` so expanded/collapsed sidebar rail content slides horizontally instead of crossfading in place, while preserving the existing shell width animation and avoiding terminal surface transforms.
+  - Added matching AppKit frame/alpha motion for the detached notification `NSPanel`, including a `@MainActor` completion path that orders the panel out and restores main-window focus after the slide-out finishes.
+  - Updated the motion language spec to require CSS-like transform transitions for panels and rails, with reduced-motion and terminal-surface boundaries intact.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

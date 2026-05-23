@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import ConductorCore
+import QuartzCore
 import SwiftUI
 
 private let conductorUncaughtExceptionHandler: @convention(c) (NSException) -> Void = { exception in
@@ -215,6 +216,8 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     private var resizeStressOriginalTheme: TerminalTheme?
     private var didStart = false
     private var isTerminating = false
+    private let notificationWindowMotionDuration: TimeInterval = 0.18
+    private let notificationWindowMotionDistance: CGFloat = 18
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         startApplication()
@@ -713,8 +716,38 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     }
 
     private func hideNotificationWindow() {
-        notificationWindow?.orderOut(nil)
-        restoreMainWindowFocus()
+        guard let notificationWindow else {
+            restoreMainWindowFocus()
+            return
+        }
+        guard notificationWindow.isVisible else {
+            notificationWindow.orderOut(nil)
+            restoreMainWindowFocus()
+            return
+        }
+
+        let startFrame = notificationWindow.frame
+        let endFrame = startFrame.offsetBy(dx: notificationWindowMotionDistance * 0.72, dy: 0)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = notificationWindowMotionDuration
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1.0, 0.3, 1.0)
+            notificationWindow.animator().alphaValue = 0
+            notificationWindow.animator().setFrame(endFrame, display: true)
+        } completionHandler: { [weak self, weak notificationWindow] in
+            Task { @MainActor in
+                guard let self, let notificationWindow else { return }
+                guard !self.model.notificationPanelVisible else {
+                    notificationWindow.alphaValue = 1
+                    notificationWindow.setFrame(startFrame, display: false)
+                    notificationWindow.orderFrontRegardless()
+                    return
+                }
+                notificationWindow.orderOut(nil)
+                notificationWindow.alphaValue = 1
+                notificationWindow.setFrame(startFrame, display: false)
+                self.restoreMainWindowFocus()
+            }
+        }
     }
 
     private func restoreMainWindowFocus() {
@@ -728,7 +761,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     private func showNotificationWindow() {
         if let notificationWindow {
-            notificationWindow.orderFrontRegardless()
+            animateNotificationWindowIn(notificationWindow)
             return
         }
 
@@ -788,7 +821,25 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         ])
 
         notificationWindow = panel
+        animateNotificationWindowIn(panel)
+    }
+
+    private func animateNotificationWindowIn(_ panel: NSPanel) {
+        let targetFrame = panel.frame
+        if panel.isVisible {
+            panel.alphaValue = 1
+            panel.orderFrontRegardless()
+            return
+        }
+        panel.alphaValue = 0
+        panel.setFrame(targetFrame.offsetBy(dx: notificationWindowMotionDistance, dy: 0), display: false)
         panel.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = notificationWindowMotionDuration
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1.0, 0.3, 1.0)
+            panel.animator().alphaValue = 1
+            panel.animator().setFrame(targetFrame, display: true)
+        }
     }
 
     private func installAgentHookObserver() {

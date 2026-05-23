@@ -737,6 +737,10 @@ which feels like the app stopped accepting clicks.
 - Set `becomesKeyOnlyIfNeeded = true` for notification panels.
 - When hiding an auxiliary panel, call a main-window focus restoration helper that makes the
   main `ConductorWindow` key again while the app is active.
+- If an auxiliary panel uses AppKit frame/alpha animation for CSS-like slide-in/slide-out
+  motion, keep the animation transform-only and run `orderOut` plus main-window focus
+  restoration in the animation completion handler. Completion callbacks that touch `NSWindow`
+  state must hop back to `@MainActor`.
 - Opening an in-window modal surface such as Command Center, Appearance Center, or Workspace
   Overview must also dismiss any auxiliary notification panel.
 - Do not use separate `NSPanel` windows for shell surfaces that can live safely inside the
@@ -758,6 +762,17 @@ panel.orderFrontRegardless()
 
 notificationWindow?.orderOut(nil)
 restoreMainWindowFocus()
+
+NSAnimationContext.runAnimationGroup { context in
+    context.duration = 0.18
+    panel.animator().alphaValue = 0
+    panel.animator().setFrame(exitFrame, display: true)
+} completionHandler: {
+    Task { @MainActor in
+        panel.orderOut(nil)
+        restoreMainWindowFocus()
+    }
+}
 
 Color.black.opacity(0.12)
     .ignoresSafeArea()

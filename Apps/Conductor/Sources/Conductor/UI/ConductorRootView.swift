@@ -5412,10 +5412,10 @@ private struct ConductorSidebar: View {
 
             if sidebarVisible {
                 expandedSidebar
-                    .transition(.opacity)
+                    .transition(ConductorMotion.sidebarContentTransition)
             } else {
                 collapsedSidebar
-                    .transition(.opacity)
+                    .transition(ConductorMotion.sidebarContentTransition)
             }
         }
         .padding(.horizontal, sidebarVisible ? ConductorTokens.Space.sidebarX : 6)
