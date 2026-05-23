@@ -804,6 +804,36 @@ private enum ConductorCommandCatalog {
                 disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
                 keywords: "file files browser manager cwd folder directory preview"
             ),
+            CommandPaletteItem(
+                id: "context-search",
+                command: .showTerminalSearch,
+                section: L("上下文", "Context"),
+                title: L("搜索当前上下文", "Search Current Context"),
+                shortcut: "Cmd-F",
+                disabled: !canPerform(.showTerminalSearch),
+                disabledReason: L("当前没有可搜索的终端、文件或文件面板", "No searchable terminal, file, or file panel is active"),
+                keywords: "search find terminal file document context"
+            ),
+            CommandPaletteItem(
+                id: "find-next",
+                command: .findNext,
+                section: L("上下文", "Context"),
+                title: L("下一个搜索结果", "Next Search Result"),
+                shortcut: "Cmd-G",
+                disabled: !canPerform(.findNext),
+                disabledReason: L("先打开搜索", "Open search first"),
+                keywords: "search find next match"
+            ),
+            CommandPaletteItem(
+                id: "find-previous",
+                command: .findPrevious,
+                section: L("上下文", "Context"),
+                title: L("上一个搜索结果", "Previous Search Result"),
+                shortcut: "Cmd-Shift-G",
+                disabled: !canPerform(.findPrevious),
+                disabledReason: L("先打开搜索", "Open search first"),
+                keywords: "search find previous match"
+            ),
             CommandPaletteItem(id: "split-right", command: .splitRight, section: L("创建", "Create"), title: L("向右分屏", "Split Right"), shortcut: "Cmd-D", disabled: !canPerform(.splitRight), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split right vertical"),
             CommandPaletteItem(id: "split-down", command: .splitDown, section: L("创建", "Create"), title: L("向下分屏", "Split Down"), shortcut: "Cmd-Shift-D", disabled: !canPerform(.splitDown), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split down horizontal"),
             CommandPaletteItem(id: "next-tab", command: .selectNextTab, section: L("导航", "Navigate"), title: L("下一个标签", "Next Tab"), shortcut: "Cmd-]", keywords: "next tab"),

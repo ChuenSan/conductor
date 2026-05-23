@@ -463,6 +463,15 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         case ("f", _) where flags.contains(.control):
             scheduleCommand(.toggleFullScreen)
             return true
+        case ("f", _) where !flags.contains(.option):
+            scheduleCommand(.showTerminalSearch)
+            return true
+        case ("g", false) where !flags.contains(.option):
+            scheduleCommand(.findNext)
+            return true
+        case ("g", true) where !flags.contains(.option):
+            scheduleCommand(.findPrevious)
+            return true
         case ("n", _) where flags.contains(.option):
             scheduleCommand(.toggleNotifications)
             return true
