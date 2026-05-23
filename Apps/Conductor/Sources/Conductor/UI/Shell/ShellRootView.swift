@@ -527,26 +527,19 @@ private struct CommandPaletteView: View {
     }
 
     private func ensureSelection(in result: CommandPaletteFilterResult) {
-        guard !result.enabledCommands.isEmpty else {
-            selectedCommandID = nil
-            return
-        }
-        if let selectedCommandID,
-           result.enabledCommandIDs.contains(selectedCommandID) {
-            return
-        }
-        selectedCommandID = result.enabledCommands.first?.id
+        selectedCommandID = ConductorSearchSelection.resolvedSelection(
+            currentID: selectedCommandID,
+            results: result.searchResults
+        )
     }
 
     private func moveSelection(by offset: Int) {
-        let enabledCommands = filteredResult.enabledCommands
-        guard !enabledCommands.isEmpty else {
-            selectedCommandID = nil
-            return
-        }
-        let currentIndex = enabledCommands.firstIndex { $0.id == selectedCommandID } ?? 0
-        let nextIndex = (currentIndex + offset + enabledCommands.count) % enabledCommands.count
-        selectedCommandID = enabledCommands[nextIndex].id
+        selectedCommandID = ConductorSearchSelection.move(
+            currentID: selectedCommandID,
+            by: offset,
+            results: filteredResult.searchResults,
+            wraps: true
+        )
     }
 
     private func execute(_ command: CommandPaletteItem) {
@@ -581,27 +574,23 @@ private struct CommandPaletteView: View {
 }
 
 private struct CommandPaletteFilterResult: Equatable {
-    static let empty = CommandPaletteFilterResult(rows: [], enabledCommands: [], enabledCommandIDs: [], commandIDs: [])
+    static let empty = CommandPaletteFilterResult(rows: [], searchResults: [], commandIDs: [])
 
     let rows: [CommandPaletteFilteredRow]
-    let enabledCommands: [CommandPaletteItem]
-    let enabledCommandIDs: Set<String>
+    let searchResults: [ConductorSearchResult]
     let commandIDs: [String]
 
     init(commands: [CommandPaletteItem], query: String) {
-        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
+        let commandByID = Dictionary(uniqueKeysWithValues: commands.map { ($0.id, $0) })
+        let searchResults = ConductorSearchMatcher.results(for: query, in: commands.map(\.searchCandidate))
         var previousSection: String?
         var rows: [CommandPaletteFilteredRow] = []
-        var enabledCommands: [CommandPaletteItem] = []
-        var enabledCommandIDs = Set<String>()
         var commandIDs: [String] = []
         rows.reserveCapacity(commands.count)
-        enabledCommands.reserveCapacity(commands.count)
         commandIDs.reserveCapacity(commands.count)
 
-        for command in commands {
-            guard normalizedQuery.isEmpty || command.searchText.contains(normalizedQuery) else { continue }
+        for result in searchResults {
+            guard let command = commandByID[result.candidate.id] else { continue }
             let showsSectionTitle = command.section != previousSection
             previousSection = command.section
             rows.append(CommandPaletteFilteredRow(
@@ -610,27 +599,20 @@ private struct CommandPaletteFilterResult: Equatable {
                 presentationIndex: rows.count
             ))
             commandIDs.append(command.id)
-            if !command.disabled {
-                enabledCommands.append(command)
-                enabledCommandIDs.insert(command.id)
-            }
         }
 
         self.rows = rows
-        self.enabledCommands = enabledCommands
-        self.enabledCommandIDs = enabledCommandIDs
+        self.searchResults = searchResults
         self.commandIDs = commandIDs
     }
 
     private init(
         rows: [CommandPaletteFilteredRow],
-        enabledCommands: [CommandPaletteItem],
-        enabledCommandIDs: Set<String>,
+        searchResults: [ConductorSearchResult],
         commandIDs: [String]
     ) {
         self.rows = rows
-        self.enabledCommands = enabledCommands
-        self.enabledCommandIDs = enabledCommandIDs
+        self.searchResults = searchResults
         self.commandIDs = commandIDs
     }
 
@@ -676,6 +658,19 @@ private struct CommandPaletteItem: Identifiable, Equatable {
         self.disabledReason = disabledReason
         self.keywords = keywords
         self.searchText = "\(title) \(shortcut) \(section) \(keywords)".lowercased()
+    }
+
+    var searchCandidate: ConductorSearchCandidate {
+        ConductorSearchCandidate(
+            id: id,
+            title: title,
+            subtitle: shortcut,
+            keywords: [keywords, section, shortcut],
+            section: section,
+            systemImage: systemImage,
+            isEnabled: !disabled,
+            disabledReason: disabledReason
+        )
     }
 
     var systemImage: String {
