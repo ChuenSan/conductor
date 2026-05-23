@@ -1013,41 +1013,84 @@ struct SettingsSidebarItem: View {
     }
 }
 
+enum CommandShortcutGuideStyle {
+    case card
+    case plain
+}
+
 struct CommandShortcutGuide: View {
     let rows: [CommandShortcutGuideRowModel]
     var height: CGFloat = 178
+    var style: CommandShortcutGuideStyle = .card
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    @ViewBuilder
+    var body: some View {
+        let guide = ScrollView {
+            LazyVStack(alignment: .leading, spacing: 5) {
+                ForEach(rows) { row in
+                    if row.showsSectionTitle {
+                        CommandShortcutSectionDivider(title: row.item.section, isFirst: row.isFirst)
+                    }
+                    CommandShortcutGuideRow(item: row.item, style: style)
+                }
+            }
+            .padding(.vertical, style == .plain ? 4 : 2)
+        }
+        .scrollIndicators(.visible)
+        .frame(height: height)
+
+        switch style {
+        case .card:
+            guide
+                .background(theme.floatingControlFill)
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(theme.floatingStroke, lineWidth: 1)
+                }
+        case .plain:
+            guide
+                .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.10 : 0.16))
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.55 : 0.42))
+                        .frame(height: 1)
+                }
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.55 : 0.42))
+                        .frame(height: 1)
+                }
+        }
+    }
+}
+
+struct CommandShortcutSectionDivider: View {
+    let title: String
+    let isFirst: Bool
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 5) {
-                ForEach(rows) { row in
-                    if row.showsSectionTitle {
-                        Text(row.item.section)
-                            .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.tertiaryText)
-                            .padding(.top, row.isFirst ? 0 : 4)
-                            .padding(.horizontal, 2)
-                    }
-                    CommandShortcutGuideRow(item: row.item)
-                }
-            }
-            .padding(.vertical, 2)
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .textCase(.uppercase)
+            Rectangle()
+                .fill(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.38 : 0.30))
+                .frame(height: 1)
         }
-        .scrollIndicators(.visible)
-        .frame(height: height)
-        .background(theme.floatingControlFill)
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(theme.floatingStroke, lineWidth: 1)
-        }
+        .padding(.top, isFirst ? 0 : 8)
+        .padding(.horizontal, 4)
     }
 }
 
 struct CommandShortcutGuideRow: View {
     let item: CommandShortcutGuideItem
+    var style: CommandShortcutGuideStyle = .card
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -1068,13 +1111,30 @@ struct CommandShortcutGuideRow: View {
             Text(item.shortcut)
                 .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
-                .padding(.horizontal, 6)
-                .frame(height: 17)
-                .background(theme.floatingSelectedFill)
-                .clipShape(Capsule())
+                .padding(.horizontal, style == .plain ? 5 : 6)
+                .frame(height: style == .plain ? 16 : 17)
+                .background(shortcutBackground)
+                .clipShape(RoundedRectangle(cornerRadius: style == .plain ? 4 : 8, style: .continuous))
         }
-        .padding(.horizontal, 8)
-        .frame(height: 26)
+        .padding(.horizontal, style == .plain ? 6 : 8)
+        .frame(height: style == .plain ? 27 : 26)
+        .overlay(alignment: .bottom) {
+            if style == .plain {
+                Rectangle()
+                    .fill(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
+                    .frame(height: 1)
+                    .padding(.leading, 30)
+            }
+        }
+    }
+
+    private var shortcutBackground: Color {
+        switch style {
+        case .card:
+            return theme.floatingSelectedFill
+        case .plain:
+            return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.46 : 0.54)
+        }
     }
 }
 

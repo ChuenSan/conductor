@@ -1224,14 +1224,18 @@ extension AppearanceSettingsPanel {
     }
 
     func commandSettings() -> some View {
-        LazyVStack(alignment: .leading, spacing: 16) {
-            SettingsPreferenceGroup(
-                title: L("命令与快捷键", "Commands and Shortcuts"),
-                subtitle: L("保留密集列表，适合快速扫视", "Dense command list for fast scanning"),
-                systemImage: "keyboard"
-            ) {
-                CommandShortcutGuide(rows: commandShortcutRows(), height: 260)
+        LazyVStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "keyboard")
+                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                Text(L("命令与快捷键", "Commands and Shortcuts"))
+                    .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                Spacer(minLength: 0)
             }
+
+            CommandShortcutGuide(rows: commandShortcutRows(), height: 320, style: .plain)
         }
     }
 
