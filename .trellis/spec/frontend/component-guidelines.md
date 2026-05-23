@@ -252,6 +252,9 @@ workspace overview, and compact status modules.
   snapshots plus theme/appearance values to the view tree. The model may remain the command
   target for panel actions, but unrelated workspace, file-manager, search, and terminal chrome
   changes must not repaint an open detached panel.
+- Detached panel snapshots should include precomputed animation identity arrays for repeated
+  rows. Do not build `rows.map(\.id)` or equivalent arrays from a panel `body` just to drive
+  `.animation(_:value:)`; compute those IDs when the snapshot changes.
 - Notification Center row actions are navigation commands, not local row toggles. Opening a
   notification must focus the target terminal, mark the notification read, refresh the target
   surface, and close the detached notification panel as one model-level operation. Panel stores

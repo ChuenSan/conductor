@@ -287,6 +287,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Cleaned the terminal tab drag payload registration for Swift 6 by calling `NSItemProvider` data completion from `@MainActor`.
   - Removed the repeated actor-isolation build warnings from `SplitNodeView.swift` without changing the private terminal-tab payload format or the drag/drop model path.
   - Verified this item immediately with `swift build`, layout autorun, and focus autorun.
+- Thirty-seventh implementation phase:
+  - Added precomputed `rowIDs` to `NotificationPanelSnapshot` and changed Notification Center row animation to use the snapshot value instead of `snapshot.rows.map(\.id)` from `body`.
+  - Kept the detached panel store's compact snapshot boundary intact while removing a per-render row-ID array allocation.
+  - Verified this item immediately with `swift build` and notification autorun.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

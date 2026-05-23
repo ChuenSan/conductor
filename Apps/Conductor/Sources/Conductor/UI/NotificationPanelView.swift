@@ -9,6 +9,7 @@ private func L(_ zh: String, _ en: String) -> String {
 struct NotificationPanelSnapshot: Equatable {
     let chromeClarity: ChromeClarity
     let rows: [NotificationPanelRowSnapshot]
+    let rowIDs: [UUID]
     let unreadCount: Int
     let recordCount: Int
     let canJumpToLatestUnread: Bool
@@ -24,6 +25,7 @@ struct NotificationPanelSnapshot: Equatable {
     ) {
         self.chromeClarity = chromeClarity
         self.rows = rows
+        self.rowIDs = rows.map(\.id)
         self.unreadCount = unreadCount
         self.recordCount = recordCount
         self.canJumpToLatestUnread = canJumpToLatestUnread
@@ -34,15 +36,16 @@ struct NotificationPanelSnapshot: Equatable {
     init(model: ConductorWindowModel) {
         let notificationState = model.notifications
         let terminalTitles = Self.terminalTitlesByID(workspaces: model.workspaces)
+        let rows = notificationState.records.enumerated().map { index, notification in
+            NotificationPanelRowSnapshot(
+                notification: notification,
+                terminalTitle: terminalTitles[notification.terminalID] ?? L("终端", "Terminal"),
+                presentationIndex: index
+            )
+        }
         self.init(
             chromeClarity: model.appearance.chromeClarity,
-            rows: notificationState.records.enumerated().map { index, notification in
-                NotificationPanelRowSnapshot(
-                    notification: notification,
-                    terminalTitle: terminalTitles[notification.terminalID] ?? L("终端", "Terminal"),
-                    presentationIndex: index
-                )
-            },
+            rows: rows,
             unreadCount: notificationState.snapshot.unreadCount,
             recordCount: notificationState.records.count,
             canJumpToLatestUnread: model.canPerformCommand(.jumpToLatestUnread),
@@ -292,7 +295,7 @@ struct NotificationPanelView: View {
             minWidth: ConductorTokens.Space.notificationPanelMinWidth,
             minHeight: ConductorTokens.Space.notificationPanelMinHeight
         )
-        .animation(ConductorMotion.list(itemCount: snapshot.rows.count), value: snapshot.rows.map(\.id))
+        .animation(ConductorMotion.list(itemCount: snapshot.rows.count), value: snapshot.rowIDs)
         .animation(ConductorMotion.attention, value: snapshot.unreadCount)
     }
 
