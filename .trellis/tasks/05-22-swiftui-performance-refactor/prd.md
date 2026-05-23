@@ -279,6 +279,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Moved the sidebar workspace selected-row matched background out of `WorkspaceSidebarRowContent.equatable()` and onto the row container so selection glide is not trapped inside an equality/cache boundary.
   - Removed unused selection namespace/value inputs from the equatable content leaf and dropped the transaction-disabled subtree that was suppressing row selection motion.
   - Verified this item immediately with `swift build`, workspace autorun, and focus autorun before continuing.
+- Thirty-fifth implementation phase:
+  - Added `commandPaletteVisible` to `ToolbarChromeSnapshot` and wired it to the Command Center toolbar button's active state.
+  - Kept toolbar panel visibility inputs value-driven rather than reading unobserved model flags from the button subtree.
+  - Verified this item immediately with `swift build` and shell-panel autorun.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

@@ -171,6 +171,10 @@ workspace overview, and compact status modules.
   model reference; otherwise Settings changes, zoom toggles, and panel toggles can update the
   model while sidebar, tab, or toolbar chrome remains stale until another snapshot change
   happens.
+- Toolbar buttons that represent toggleable shell surfaces must receive their active state
+  through `ToolbarChromeSnapshot`, including Command Center, Workspace Overview, Notification
+  Center, file tools, and zoom. Do not leave a visible toolbar command without an active state
+  while its panel is open.
 - Floating shell panels must not use the terminal/workspace `accent` as their default selected,
   hover, icon, unread, or focus color. Use neutral panel tokens such as `floatingEmphasis`,
   `floatingSelectedFill`, `floatingHoverFill`, and `floatingSelectedStroke` so Command Center,

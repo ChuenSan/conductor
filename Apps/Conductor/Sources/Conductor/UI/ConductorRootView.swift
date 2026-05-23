@@ -6024,6 +6024,7 @@ private struct ToolbarChromeSnapshot: Equatable {
     let fileManagerActive: Bool
     let workspaceOverviewVisible: Bool
     let notificationPanelVisible: Bool
+    let commandPaletteVisible: Bool
 
     @MainActor
     init(model: ConductorWindowModel) {
@@ -6035,6 +6036,7 @@ private struct ToolbarChromeSnapshot: Equatable {
         self.fileManagerActive = model.fileManagerPanelRequest != nil
         self.workspaceOverviewVisible = model.workspaceOverviewVisible
         self.notificationPanelVisible = model.notificationPanelVisible
+        self.commandPaletteVisible = model.commandPaletteVisible
     }
 }
 
@@ -6570,7 +6572,12 @@ private struct ConductorToolbar: View {
                         model.performCommand(.toggleNotifications)
                     }
                     ConductorSegmentDivider()
-                    ConductorIconButton(systemImage: "ellipsis", help: L("命令面板 Cmd-K", "Command Center Cmd-K"), title: L("命令", "Command")) {
+                    ConductorIconButton(
+                        systemImage: "ellipsis",
+                        help: L("命令面板 Cmd-K", "Command Center Cmd-K"),
+                        title: L("命令", "Command"),
+                        active: toolbarSnapshot.commandPaletteVisible
+                    ) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.toggleCommandPalette)
                     }
