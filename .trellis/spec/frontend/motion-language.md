@@ -184,7 +184,8 @@ when a transform can express the same motion.
 
 **Animate**:
 - Tab hover fill/stroke.
-- A local selected capsule/fill that glides between tab bounds.
+- A local selected capsule/fill that glides between tab bounds through a per-strip matched
+  geometry namespace.
 - New tab opacity/scale.
 - Close removal width collapse.
 - Badge appear/update one-shot attention.

@@ -267,6 +267,10 @@ Improve Conductor's maintainability and responsiveness by using the SwiftUI Expe
   - Added shared `conductorFocusSweep(color:cornerRadius:active:trigger:)` motion for focused terminal pane chrome, using a staged border/sweep overlay that never wraps or transforms `TerminalSurfaceRepresentable`.
   - Wired focus navigation and explicit focused-pane flash tokens into `TerminalPaneView` through a compact local trigger so pane focus becomes legible without adding terminal output, cursor, or renderer state to SwiftUI.
   - Verified this product-code item immediately with `swift build`, the focus autorun route, a fresh app bundle launch, and screenshot inspection before moving on.
+- Thirty-second implementation phase:
+  - Connected the existing terminal tab strip `selectionNamespace` to the selected tab fill through `matchedGeometryEffect`, making terminal tab selection move as a real local capsule instead of only recoloring each tab.
+  - Kept model selection unanimated and chrome-local: the visual selected tab updates with `selectionGlide`, while `TerminalSurfaceRepresentable` remains outside matched geometry and identity changes.
+  - Verified this item immediately with `swift build`, focus autorun, and layout autorun.
 - Project specs read:
   - `.trellis/spec/guides/high-performance-terminal-roadmap.md`
   - `.trellis/spec/frontend/component-guidelines.md`

@@ -1611,6 +1611,7 @@ private struct TerminalTabButton: View {
                 if visuallySelected {
                     shape
                         .fill(selectedFill)
+                        .matchedGeometryEffect(id: "terminal-tab-selection", in: selectionNamespace)
                 }
             }
         }
