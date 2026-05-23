@@ -990,6 +990,14 @@ git add docs/superpowers/plans/2026-05-24-performance-first-aggressive-refactor.
 git commit -m "docs: record performance refactor verification"
 ```
 
+### Verification Record - 2026-05-24
+
+- `swift build --package-path Apps/Conductor --product Conductor`: passed after Task 7 follow-up.
+- `swift run --package-path Apps/Conductor ConductorModelCheck`: passed.
+- `./Scripts/check-conductor.sh`: build, `ConductorModelCheck`, smoke, shortcut, focus, layout, lifecycle, workspace, shell-panel, notification, long-output stress, resize-while-output stress, release bundle build, and app signing all passed. The command exited before printing `Conductor checks passed` because the existing Trellis validation step could not open `.trellis/scripts/task.py`, which is currently deleted outside this refactor.
+- Process cleanup check with the documented `pgrep` command returned no Conductor process before the manual pass.
+- Manual smoke launched `Apps/Conductor/.build/Conductor.app`, opened File Manager on `/tmp/conductor-large-dir` with 2,000 files, confirmed the panel rendered a bounded visible row window with `显示下一组` pagination instead of eager 2,000-row rendering, switched Settings sections while terminals remained visible, and inspected shared toolbar/sidebar/panel buttons through accessibility labels and visible layout.
+
 ---
 
 ## Self-Review
