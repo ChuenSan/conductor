@@ -473,8 +473,16 @@ struct FileManagerPanel: View {
             } else {
                 statusChip(systemImage: "line.3.horizontal.decrease", title: L("\(snapshot.totalRowCount)/\(snapshot.totalKnownItemCount)", "\(snapshot.totalRowCount)/\(snapshot.totalKnownItemCount)"))
             }
-            statusChip(systemImage: "folder", title: L("\(snapshot.displayedDirectoryCount)", "\(snapshot.displayedDirectoryCount)"))
-            statusChip(systemImage: "doc", title: L("\(snapshot.displayedFileCount)", "\(snapshot.displayedFileCount)"))
+            statusChip(
+                systemImage: "folder",
+                title: L("\(snapshot.displayedDirectoryCount)", "\(snapshot.displayedDirectoryCount)"),
+                accessibilityLabel: L("\(snapshot.displayedDirectoryCount) 个文件夹", "\(snapshot.displayedDirectoryCount) folders")
+            )
+            statusChip(
+                systemImage: "doc",
+                title: L("\(snapshot.displayedFileCount)", "\(snapshot.displayedFileCount)"),
+                accessibilityLabel: L("\(snapshot.displayedFileCount) 个文件", "\(snapshot.displayedFileCount) files")
+            )
 
             if store.kindFilter != .all {
                 statusChip(systemImage: store.kindFilter.systemImage, title: store.kindFilter.title)
@@ -505,10 +513,11 @@ struct FileManagerPanel: View {
         return L("\(items.count) 项\(size)", "\(items.count) item(s)\(size)")
     }
 
-    private func statusChip(systemImage: String, title: String) -> some View {
+    private func statusChip(systemImage: String, title: String, accessibilityLabel: String? = nil) -> some View {
         HStack(spacing: 5) {
             Image(systemName: systemImage)
                 .font(.conductorSystem(size: 9.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                .accessibilityHidden(true)
             Text(title)
                 .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
                 .lineLimit(1)
@@ -518,6 +527,8 @@ struct FileManagerPanel: View {
         .frame(height: 19)
         .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.26 : 0.22))
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel ?? title)
     }
 
     private func operationMessageBar(_ message: String) -> some View {
@@ -973,6 +984,7 @@ private struct FileManagerInfoSheet: View {
                     .font(.conductorSystem(size: 32, weight: .semibold, family: fontFamily, scale: fontScale))
                     .foregroundStyle(item.isDirectory ? theme.floatingEmphasis.opacity(0.95) : theme.shellChromeText.opacity(0.68))
                     .frame(width: 42, height: 42)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.name)

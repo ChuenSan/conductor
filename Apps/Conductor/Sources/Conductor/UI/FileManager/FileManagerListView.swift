@@ -418,6 +418,7 @@ struct FileManagerRowView: View {
                 .font(.conductorSystem(size: 12.5, weight: .semibold, family: fontFamily, scale: fontScale))
                 .foregroundStyle(rowIconColor)
                 .frame(width: 18)
+                .accessibilityHidden(true)
 
             nameView
 
@@ -517,6 +518,7 @@ struct FileManagerRowView: View {
             .font(.conductorSystem(size: 9.5, weight: .semibold, family: fontFamily, scale: fontScale))
             .foregroundStyle(theme.shellChromeText.opacity(0.42))
             .frame(width: 14, height: 16)
+            .accessibilityLabel(help)
             .macNativeTooltip(help)
     }
 
