@@ -168,7 +168,7 @@ struct FileManagerListView: View {
         }
         store.recordOpenedFile(item.url)
         model.openFileInWorkspace(item.url, rootURL: store.currentURL ?? rootURL)
-        focusKeyboard()
+        model.closeFileManagerPanel()
     }
 
     private var canPaste: Bool {

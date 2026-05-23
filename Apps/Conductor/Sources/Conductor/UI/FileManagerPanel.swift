@@ -622,7 +622,7 @@ struct FileManagerPanel: View {
         }
         store.recordOpenedFile(item.url)
         model.openFileInWorkspace(item.url, rootURL: store.currentURL ?? request.rootURL)
-        keyboardFocused = true
+        model.closeFileManagerPanel()
     }
 
     private func openURL(_ url: URL) {
@@ -632,7 +632,7 @@ struct FileManagerPanel: View {
         }
         store.recordOpenedFile(standardized)
         model.openFileInWorkspace(standardized, rootURL: standardized.deletingLastPathComponent())
-        keyboardFocused = true
+        model.closeFileManagerPanel()
     }
 
     private func openSelectedItem() {
