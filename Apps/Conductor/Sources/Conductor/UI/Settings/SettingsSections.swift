@@ -8,7 +8,7 @@ private func L(_ zh: String, _ en: String) -> String {
 
 
 extension AppearanceSettingsPanel {
-    var overviewSettings: some View {
+    func overviewSettings(snapshot: SettingsSnapshot) -> some View {
         LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("当前状态", "Current State"),
@@ -44,7 +44,7 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    var interfaceSettings: some View {
+    func interfaceSettings(snapshot: SettingsSnapshot) -> some View {
         let appearance = snapshot.appearance
         return LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
@@ -152,18 +152,18 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    var terminalSettingsDashboard: some View {
+    func terminalSettingsDashboard(snapshot: SettingsSnapshot) -> some View {
         LazyVStack(alignment: .leading, spacing: 16) {
-            terminalSettingsSectionRail
+            terminalSettingsSectionRail(snapshot: snapshot)
 
-            activeTerminalSettingsSection
+            activeTerminalSettingsSection(snapshot: snapshot)
                 .id(selectedTerminalSettingsSection)
                 .transition(ConductorMotion.contentSwapTransition(edge: terminalContentEdge))
         }
         .animation(ConductorMotion.contentSwap, value: selectedTerminalSettingsSection)
     }
 
-    var terminalSettingsSectionRail: some View {
+    func terminalSettingsSectionRail(snapshot: SettingsSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             TerminalSettingsSectionRail(
                 selection: selectedTerminalSettingsSection
@@ -179,18 +179,18 @@ extension AppearanceSettingsPanel {
     }
 
     @ViewBuilder
-    var activeTerminalSettingsSection: some View {
+    func activeTerminalSettingsSection(snapshot: SettingsSnapshot) -> some View {
         switch selectedTerminalSettingsSection {
         case .typography:
-            terminalTypographySettings
+            terminalTypographySettings(snapshot: snapshot)
         case .display:
-            terminalCursorSettings
-            terminalBackgroundSettings
+            terminalCursorSettings(snapshot: snapshot)
+            terminalBackgroundSettings(snapshot: snapshot)
         case .selection:
-            terminalSelectionMouseSettings
+            terminalSelectionMouseSettings(snapshot: snapshot)
         case .input:
-            terminalClipboardSettings
-            terminalKeyboardSettings
+            terminalClipboardSettings(snapshot: snapshot)
+            terminalKeyboardSettings(snapshot: snapshot)
         }
     }
 
@@ -214,34 +214,34 @@ extension AppearanceSettingsPanel {
         return nextIndex >= currentIndex ? .trailing : .leading
     }
 
-    var shellAndProxySettings: some View {
+    func shellAndProxySettings(snapshot: SettingsSnapshot) -> some View {
         LazyVStack(alignment: .leading, spacing: 18) {
-            terminalShellSettings
+            terminalShellSettings(snapshot: snapshot)
 
             SettingsSectionLabel(
                 title: L("网络环境", "Network Environment"),
                 subtitle: L("写入新终端进程的代理变量，和 Shell 启动项属于同一条启动路径", "Proxy variables for new terminal processes live with startup behavior")
             )
 
-            proxySettings
+            proxySettings(snapshot: snapshot)
         }
     }
 
-    var automationSettings: some View {
+    func automationSettings(snapshot: SettingsSnapshot) -> some View {
         LazyVStack(alignment: .leading, spacing: 18) {
-            aiSettings
+            aiSettings(snapshot: snapshot)
 
             SettingsSectionLabel(
                 title: L("终端提醒", "Terminal Alerts"),
                 subtitle: L("命令完成通知和铃声是工作流反馈，不再散落在终端视觉设置里", "Command finish alerts and bell feedback belong with workflow feedback")
             )
 
-            terminalNotificationSettings
+            terminalNotificationSettings(snapshot: snapshot)
         }
     }
 
     @ViewBuilder
-    var terminalShellSettings: some View {
+    func terminalShellSettings(snapshot: SettingsSnapshot) -> some View {
         let renderer = snapshot.appearance.terminalRenderer
         let commandOverride = renderer.ghosttyOverride(for: "initial-command")
         let directoryOverride = renderer.ghosttyOverride(for: "working-directory")
@@ -306,7 +306,7 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    var terminalBackgroundSettings: some View {
+    func terminalBackgroundSettings(snapshot: SettingsSnapshot) -> some View {
         let renderer = snapshot.appearance.terminalRenderer
         let blurOverride = renderer.ghosttyOverride(for: "background-blur")
         let imageOverride = renderer.ghosttyOverride(for: "background-image")
@@ -449,7 +449,7 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    var terminalSelectionMouseSettings: some View {
+    func terminalSelectionMouseSettings(snapshot: SettingsSnapshot) -> some View {
         let renderer = snapshot.appearance.terminalRenderer
         let clearTypingOverride = renderer.ghosttyOverride(for: "selection-clear-on-typing")
         let clearCopyOverride = renderer.ghosttyOverride(for: "selection-clear-on-copy")
@@ -578,7 +578,7 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    var terminalClipboardSettings: some View {
+    func terminalClipboardSettings(snapshot: SettingsSnapshot) -> some View {
         let renderer = snapshot.appearance.terminalRenderer
         let readOverride = renderer.ghosttyOverride(for: "clipboard-read")
         let writeOverride = renderer.ghosttyOverride(for: "clipboard-write")
@@ -658,7 +658,7 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    var terminalNotificationSettings: some View {
+    func terminalNotificationSettings(snapshot: SettingsSnapshot) -> some View {
         let renderer = snapshot.appearance.terminalRenderer
         let finishOverride = renderer.ghosttyOverride(for: "notify-on-command-finish")
         let actionOverride = renderer.ghosttyOverride(for: "notify-on-command-finish-action")
@@ -759,7 +759,7 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    var terminalKeyboardSettings: some View {
+    func terminalKeyboardSettings(snapshot: SettingsSnapshot) -> some View {
         let renderer = snapshot.appearance.terminalRenderer
         let optionOverride = renderer.ghosttyOverride(for: "macos-option-as-alt")
         let remapOverride = renderer.ghosttyOverride(for: "key-remap")
@@ -808,7 +808,7 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    var terminalTypographySettings: some View {
+    func terminalTypographySettings(snapshot: SettingsSnapshot) -> some View {
         let appearance = snapshot.appearance
         let renderer = appearance.terminalRenderer
         let downloadStates = snapshot.terminalFontDownloadStates
@@ -916,7 +916,7 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    var terminalCursorSettings: some View {
+    func terminalCursorSettings(snapshot: SettingsSnapshot) -> some View {
         let renderer = snapshot.appearance.terminalRenderer
         let colorOverride = renderer.ghosttyOverride(for: "cursor-color")
         let opacityOverride = renderer.ghosttyOverride(for: "cursor-opacity")
@@ -1045,7 +1045,7 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    var proxySettings: some View {
+    func proxySettings(snapshot: SettingsSnapshot) -> some View {
         let proxy = snapshot.appearance.terminalRenderer.proxy
         return VStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
@@ -1116,7 +1116,7 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    var aiSettings: some View {
+    func aiSettings(snapshot: SettingsSnapshot) -> some View {
         let appearance = snapshot.appearance
         let agentCLIStatuses = snapshot.agentCLIStatuses
         return VStack(alignment: .leading, spacing: 16) {
@@ -1223,19 +1223,19 @@ extension AppearanceSettingsPanel {
         "\(Int((value * 100).rounded()))%"
     }
 
-    var commandSettings: some View {
+    func commandSettings() -> some View {
         LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("命令与快捷键", "Commands and Shortcuts"),
                 subtitle: L("保留密集列表，适合快速扫视", "Dense command list for fast scanning"),
                 systemImage: "keyboard"
             ) {
-                CommandShortcutGuide(rows: snapshot.commandShortcutRows, height: 260)
+                CommandShortcutGuide(rows: commandShortcutRows(), height: 260)
             }
         }
     }
 
-    var themeSettings: some View {
+    func themeSettings(snapshot: SettingsSnapshot) -> some View {
         let activeTheme = snapshot.theme
         return LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(

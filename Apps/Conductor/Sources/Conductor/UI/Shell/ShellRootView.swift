@@ -63,7 +63,7 @@ struct ShellRootView: View {
                 if shellSnapshot.settingsPanelVisible {
                     AppearanceSettingsPanel(
                         model: model,
-                        commandShortcutRows: ConductorCommandCatalog.shortcutGuideRows(model: model)
+                        commandShortcutRows: { ConductorCommandCatalog.shortcutGuideRows(model: model) }
                     )
                         .environment(\.conductorTheme, model.theme)
                         .environment(\.conductorFontScale, model.appearance.fontScale)

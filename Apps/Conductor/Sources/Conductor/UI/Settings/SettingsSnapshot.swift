@@ -77,7 +77,6 @@ struct SettingsSnapshot: Equatable {
     let agentHookSettingsMessage: String?
     let agentCLIStatuses: [AgentHookProvider: AgentCLIStatus]
     let terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
-    let commandShortcutRows: [CommandShortcutGuideRowModel]
 
     init(
         selectedSection: SettingsSectionID,
@@ -85,8 +84,7 @@ struct SettingsSnapshot: Equatable {
         appearance: AppearancePreferences,
         agentHookSettingsMessage: String?,
         agentCLIStatuses: [AgentHookProvider: AgentCLIStatus],
-        terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState],
-        commandShortcutRows: [CommandShortcutGuideRowModel]
+        terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
     ) {
         RenderCounter.increment("settings-snapshot")
         self.selectedSection = selectedSection
@@ -95,6 +93,5 @@ struct SettingsSnapshot: Equatable {
         self.agentHookSettingsMessage = agentHookSettingsMessage
         self.agentCLIStatuses = agentCLIStatuses
         self.terminalFontDownloadStates = terminalFontDownloadStates
-        self.commandShortcutRows = commandShortcutRows
     }
 }

@@ -8,7 +8,7 @@ private func L(_ zh: String, _ en: String) -> String {
 
 struct AppearanceSettingsPanel: View {
     let model: ConductorWindowModel
-    let commandShortcutRows: [CommandShortcutGuideRowModel]
+    let commandShortcutRows: () -> [CommandShortcutGuideRowModel]
     @State private var selectedSection: SettingsSectionID = .overview
     @State var selectedTerminalSettingsSection: TerminalSettingsSection = .typography
     @State private var settingsContentEdge: Edge = .trailing
@@ -17,20 +17,16 @@ struct AppearanceSettingsPanel: View {
     @Environment(\.conductorTheme) var theme
     @Environment(\.conductorFontScale) var fontScale
 
-    var snapshot: SettingsSnapshot {
-        SettingsSnapshot(
+    var body: some View {
+        let snapshot = SettingsSnapshot(
             selectedSection: selectedSection,
             theme: model.theme,
             appearance: model.appearance,
             agentHookSettingsMessage: model.agentHookSettingsMessage,
             agentCLIStatuses: model.agentCLIStatuses,
-            terminalFontDownloadStates: model.terminalFontDownloadStates,
-            commandShortcutRows: commandShortcutRows
+            terminalFontDownloadStates: model.terminalFontDownloadStates
         )
-    }
-
-    var body: some View {
-        ZStack {
+        return ZStack {
             ConductorGlassSurface(style: .panel, clarity: snapshot.appearance.chromeClarity, interactive: true) {
                 VStack(spacing: 0) {
                     FloatingPanelHeader(
@@ -48,14 +44,14 @@ struct AppearanceSettingsPanel: View {
                         .padding(.horizontal, 14)
 
                     HStack(spacing: 0) {
-                        sidebar
+                        sidebar(snapshot: snapshot)
 
                         Rectangle()
                             .fill(theme.floatingSeparator)
                             .frame(width: 1)
                             .padding(.vertical, 14)
 
-                        contentPane
+                        contentPane(snapshot: snapshot)
                     }
                 }
             }
@@ -72,7 +68,7 @@ struct AppearanceSettingsPanel: View {
         }
     }
 
-    private var sidebar: some View {
+    private func sidebar(snapshot: SettingsSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             SettingsSidebarSummary(theme: snapshot.theme, appearance: snapshot.appearance)
 
@@ -118,13 +114,13 @@ struct AppearanceSettingsPanel: View {
         }
     }
 
-    private var contentPane: some View {
+    private func contentPane(snapshot: SettingsSnapshot) -> some View {
         ZStack {
             theme.floatingControlFill.opacity(0.06)
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    detailContent
+                    detailContent(snapshot: snapshot)
                         .id(selectedSection)
                         .transition(ConductorMotion.contentSwapTransition(edge: settingsContentEdge))
                 }
@@ -139,28 +135,28 @@ struct AppearanceSettingsPanel: View {
     }
 
     @ViewBuilder
-    private var detailContent: some View {
+    private func detailContent(snapshot: SettingsSnapshot) -> some View {
         SettingsPaneHeading(section: snapshot.selectedSection)
-        selectedSectionBody
+        selectedSectionBody(snapshot: snapshot)
     }
 
     @ViewBuilder
-    private var selectedSectionBody: some View {
+    private func selectedSectionBody(snapshot: SettingsSnapshot) -> some View {
         switch snapshot.selectedSection {
         case .overview:
-            overviewSettings
+            overviewSettings(snapshot: snapshot)
         case .interface:
-            interfaceSettings
+            interfaceSettings(snapshot: snapshot)
         case .terminal:
-            terminalSettingsDashboard
+            terminalSettingsDashboard(snapshot: snapshot)
         case .shell:
-            shellAndProxySettings
+            shellAndProxySettings(snapshot: snapshot)
         case .automation:
-            automationSettings
+            automationSettings(snapshot: snapshot)
         case .commands:
-            commandSettings
+            commandSettings()
         case .themes:
-            themeSettings
+            themeSettings(snapshot: snapshot)
         }
     }
 
@@ -175,6 +171,4 @@ struct AppearanceSettingsPanel: View {
             selectedSection = section
         }
     }
-
-
 }
