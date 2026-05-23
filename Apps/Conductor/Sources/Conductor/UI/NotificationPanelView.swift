@@ -338,6 +338,7 @@ struct NotificationPanelView: View {
             Image(systemName: "bell.slash")
                 .font(.conductorSystem(size: 21, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
+                .accessibilityHidden(true)
             Text(L("暂无通知", "No notifications"))
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
@@ -389,6 +390,7 @@ private struct NotificationRowView: View {
                         .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                         .foregroundStyle(iconColor)
                         .frame(width: 22, height: 22)
+                        .accessibilityHidden(true)
                         .background(
                             RoundedRectangle(cornerRadius: 7)
                                 .fill(theme.floatingControlFill)
@@ -429,6 +431,7 @@ private struct NotificationRowView: View {
                     .clipShape(Circle())
             }
             .buttonStyle(ConductorPressButtonStyle())
+            .accessibilityLabel(L("清除通知", "Clear Notification"))
             .macNativeTooltip(L("清除通知", "Clear Notification"))
         }
         .padding(.leading, 9)
