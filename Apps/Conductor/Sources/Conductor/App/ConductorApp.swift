@@ -1352,6 +1352,15 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             model.workspaceOverviewVisible = false
             model.notificationPanelVisible = true
 
+            model.toggleNotificationPanel()
+            let toggleClosed = !model.notificationPanelVisible
+            model.commandPaletteVisible = true
+            model.toggleNotificationPanel()
+            let toggleOpenedAlone = model.notificationPanelVisible &&
+                !model.commandPaletteVisible &&
+                !model.settingsPanelVisible &&
+                !model.workspaceOverviewVisible
+
             let focusedBefore = model.workspace.focusedPane?.selectedTabID
             model.notifyFocusedTerminalForTesting()
             let notification = model.notifications.snapshot.latestUnread
@@ -1360,11 +1369,13 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             let unreadCleared = focusedBefore.map { model.notifications.snapshot.unreadCount(for: $0) == 0 } ?? false
             let panelClosed = !model.notificationPanelVisible
             let targetFocused = focusedAfter == focusedBefore
-            let status = opened && panelClosed && unreadCleared && targetFocused
+            let status = toggleClosed && toggleOpenedAlone && opened && panelClosed && unreadCleared && targetFocused
 
             let summary = [
                 "status=\(status ? "ok" : "invalid")",
                 "notification=open",
+                "toggleClosed=\(toggleClosed)",
+                "toggleOpenedAlone=\(toggleOpenedAlone)",
                 "opened=\(opened)",
                 "panelClosed=\(panelClosed)",
                 "unreadCleared=\(unreadCleared)",

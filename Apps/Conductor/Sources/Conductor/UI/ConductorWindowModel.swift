@@ -2016,9 +2016,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let signpost = ConductorSignpost.begin("notifications-toggle")
         defer { ConductorSignpost.end("notifications-toggle", signpost) }
         if notificationPanelVisible {
-            onNotificationPanelVisibilityChange?(true)
+            notificationPanelVisible = false
             return
         }
+        commandPaletteVisible = false
+        settingsPanelVisible = false
+        workspaceOverviewVisible = false
+        closeTerminalSearch()
         notificationPanelVisible = true
     }
 
