@@ -1042,7 +1042,6 @@ private struct WorkspaceOverviewSnapshot: Equatable {
 
 private struct WorkspaceOverviewItemSnapshot: Identifiable, Equatable {
     let workspace: WorkspaceState
-    let searchText: String
 
     var id: WorkspaceID {
         workspace.id
@@ -1050,11 +1049,26 @@ private struct WorkspaceOverviewItemSnapshot: Identifiable, Equatable {
 
     init(workspace: WorkspaceState) {
         self.workspace = workspace
-        self.searchText = Self.searchText(for: workspace)
     }
 
-    private static func searchText(for workspace: WorkspaceState) -> String {
-        var parts = [workspace.title]
+    var searchCandidate: ConductorSearchCandidate {
+        ConductorSearchCandidate(
+            id: workspace.id.description,
+            title: workspace.title,
+            subtitle: Self.subtitle(for: workspace),
+            keywords: Self.keywords(for: workspace),
+            section: L("工作区", "Workspaces"),
+            systemImage: WorkspaceChromeGlyph.systemName(selected: false)
+        )
+    }
+
+    private static func subtitle(for workspace: WorkspaceState) -> String {
+        let terminalCount = workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+        return L("\(workspace.panes.count) 个分屏 · \(terminalCount) 个终端", "\(workspace.panes.count) panes · \(terminalCount) terminals")
+    }
+
+    private static func keywords(for workspace: WorkspaceState) -> [String] {
+        var parts: [String] = []
         for pane in workspace.panes.values {
             for tab in pane.tabs {
                 parts.append(tab.title)
@@ -1063,17 +1077,21 @@ private struct WorkspaceOverviewItemSnapshot: Identifiable, Equatable {
                 }
             }
         }
-        return parts.joined(separator: " ").lowercased()
+        return parts
     }
 }
 
 private struct WorkspaceOverviewFilterResult: Equatable {
     let items: [WorkspaceOverviewItemSnapshot]
     let ids: [WorkspaceID]
+    let searchResults: [ConductorSearchResult]
 
-    init(items: [WorkspaceOverviewItemSnapshot]) {
-        self.items = items
-        self.ids = items.map(\.id)
+    init(items: [WorkspaceOverviewItemSnapshot], query: String = "") {
+        let itemByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id.description, $0) })
+        let searchResults = ConductorSearchMatcher.results(for: query, in: items.map(\.searchCandidate))
+        self.items = searchResults.compactMap { itemByID[$0.candidate.id] }
+        self.ids = self.items.map(\.id)
+        self.searchResults = searchResults
     }
 }
 
@@ -1091,15 +1109,7 @@ private struct WorkspaceOverviewPanel: View {
     ]
 
     private var filteredResult: WorkspaceOverviewFilterResult {
-        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedQuery.isEmpty else {
-            return WorkspaceOverviewFilterResult(items: snapshot.items)
-        }
-        return WorkspaceOverviewFilterResult(
-            items: snapshot.items.filter { item in
-                item.searchText.contains(normalizedQuery)
-            }
-        )
+        WorkspaceOverviewFilterResult(items: snapshot.items, query: query)
     }
 
     var body: some View {
@@ -1229,26 +1239,29 @@ private struct WorkspaceOverviewPanel: View {
 
     private func ensureHighlight() {
         let result = filteredResult
-        guard !result.items.isEmpty else {
-            highlightedWorkspaceID = nil
-            return
+        let preferredID = highlightedWorkspaceID.flatMap { id in
+            result.ids.contains(id) ? id.description : nil
+        } ?? (result.ids.contains(snapshot.selectedWorkspaceID) ? snapshot.selectedWorkspaceID.description : nil)
+        let resolvedID = ConductorSearchSelection.resolvedSelection(
+            currentID: preferredID,
+            results: result.searchResults
+        )
+        highlightedWorkspaceID = resolvedID.flatMap { id in
+            result.items.first { $0.id.description == id }?.id
         }
-        if let highlightedWorkspaceID,
-           result.ids.contains(highlightedWorkspaceID) {
-            return
-        }
-        highlightedWorkspaceID = result.ids.contains(snapshot.selectedWorkspaceID) ? snapshot.selectedWorkspaceID : result.items.first?.id
     }
 
     private func moveHighlight(by offset: Int) {
         let result = filteredResult
-        guard !result.items.isEmpty else {
-            highlightedWorkspaceID = nil
-            return
+        let resolvedID = ConductorSearchSelection.move(
+            currentID: highlightedWorkspaceID?.description,
+            by: offset,
+            results: result.searchResults,
+            wraps: false
+        )
+        highlightedWorkspaceID = resolvedID.flatMap { id in
+            result.items.first { $0.id.description == id }?.id
         }
-        let currentIndex = result.ids.firstIndex { $0 == highlightedWorkspaceID } ?? 0
-        let nextIndex = max(0, min(result.items.count - 1, currentIndex + offset))
-        highlightedWorkspaceID = result.items[nextIndex].id
     }
 
     private func openHighlightedWorkspace() {
