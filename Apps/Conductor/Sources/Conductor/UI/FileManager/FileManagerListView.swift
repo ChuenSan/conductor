@@ -324,11 +324,6 @@ struct FileManagerRowView: View {
     var body: some View {
         rowContent
             .contentShape(Rectangle())
-            .onTapGesture {
-                if !isRenaming {
-                    open()
-                }
-            }
             .contextMenu {
                 if item.isDirectory {
                     Button(isExpanded ? fileManagerL("收起文件夹", "Collapse Folder") : fileManagerL("展开文件夹", "Expand Folder"), action: toggleExpansion)
@@ -399,6 +394,26 @@ struct FileManagerRowView: View {
                     .frame(width: 12)
             }
 
+            rowPrimaryContent
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if !isRenaming {
+                        open()
+                    }
+                }
+        }
+        .opacity(isPendingDelete ? 0.50 : 1)
+        .padding(.leading, 10 + CGFloat(min(depth, 8)) * 18)
+        .padding(.trailing, 10)
+        .frame(height: 31)
+        .background {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(backgroundColor)
+        }
+    }
+
+    private var rowPrimaryContent: some View {
+        HStack(spacing: 8) {
             Image(systemName: item.isDirectory ? (isExpanded ? "folder.fill" : "folder") : iconName)
                 .font(.conductorSystem(size: 12.5, weight: .semibold, family: fontFamily, scale: fontScale))
                 .foregroundStyle(rowIconColor)
@@ -455,14 +470,7 @@ struct FileManagerRowView: View {
                 )
             }
         }
-        .opacity(isPendingDelete ? 0.50 : 1)
-        .padding(.leading, 10 + CGFloat(min(depth, 8)) * 18)
-        .padding(.trailing, 10)
-        .frame(height: 31)
-        .background {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(backgroundColor)
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
