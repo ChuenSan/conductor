@@ -3115,6 +3115,10 @@ private struct GhosttyFunctionalConfigBrowser: View {
     }
 
     var body: some View {
+        let searching = isSearching
+        let currentGroup = selectedGroup
+        let visibleGroups = searching ? filteredGroups : []
+
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 TextField(L("搜索设置", "Search settings"), text: $search)
@@ -3135,7 +3139,7 @@ private struct GhosttyFunctionalConfigBrowser: View {
                     ForEach(TerminalGhosttyConfigCatalog.productGroups) { group in
                         GhosttySettingsCategoryRow(
                             group: group,
-                            selected: !isSearching && group.id == selectedGroup.id
+                            selected: !searching && group.id == currentGroup.id
                         ) {
                             search = ""
                             selectedGroupID = group.id
@@ -3152,8 +3156,8 @@ private struct GhosttyFunctionalConfigBrowser: View {
                 }
 
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    if isSearching {
-                        ForEach(filteredGroups) { group in
+                    if searching {
+                        ForEach(visibleGroups) { group in
                             GhosttyConfigFunctionSection(
                                 renderer: renderer,
                                 group: group,
@@ -3164,7 +3168,7 @@ private struct GhosttyFunctionalConfigBrowser: View {
                     } else {
                         GhosttyConfigFunctionSection(
                             renderer: renderer,
-                            group: selectedGroup,
+                            group: currentGroup,
                             updateOverrideValue: updateOverrideValue,
                             updateOverrideEnabled: updateOverrideEnabled
                         )
