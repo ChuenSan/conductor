@@ -1143,58 +1143,53 @@ struct SelectedThemeShowcase: View {
     @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ThemePreviewArtwork(theme: theme, height: 238)
+        HStack(alignment: .center, spacing: 12) {
+            ThemePreviewArtwork(theme: theme, height: 62)
+                .frame(width: 116)
 
-            HStack(alignment: .center, spacing: 14) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(L("当前主题", "Current Theme"))
-                        .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                        .textCase(.uppercase)
-                    Text(theme.title)
-                        .font(.conductorSystem(size: 22, weight: .bold, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.primaryText)
-                        .lineLimit(1)
-                    Text(theme.themeDescription)
-                        .font(.conductorSystem(size: 11.2, weight: .medium, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.secondaryText)
-                        .lineLimit(2)
-                }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L("当前主题", "Current Theme"))
+                    .font(.conductorSystem(size: 9.8, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .textCase(.uppercase)
 
-                Spacer(minLength: 0)
+                Text(theme.title)
+                    .font(.conductorSystem(size: 14.8, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
 
-                HStack(spacing: 5) {
-                    ThemeSwatch(color: theme.accent, width: 30)
-                    ThemeSwatch(color: theme.floatingPanelBase, width: 30)
-                    ThemeSwatch(color: theme.terminalChrome, width: 30)
-                    ThemeSwatch(color: theme.terminalBackground, width: 30)
+                Text(theme.themeDescription)
+                    .font(.conductorSystem(size: 10.8, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 7) {
+                HStack(spacing: 4) {
+                    ThemeSwatch(color: theme.accent, width: 22)
+                    ThemeSwatch(color: theme.floatingPanelBase, width: 22)
+                    ThemeSwatch(color: theme.terminalChrome, width: 22)
+                    ThemeSwatch(color: theme.terminalBackground, width: 22)
                 }
 
                 Text(theme.designLanguage.title)
-                    .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
+                    .font(.conductorSystem(size: 10.2, weight: .semibold, scale: fontScale))
                     .foregroundStyle(theme.floatingEmphasis)
-                    .padding(.horizontal, 9)
-                    .frame(height: 24)
-                    .background(theme.floatingSelectedFill)
-                    .clipShape(Capsule())
+                    .padding(.horizontal, 7)
+                    .frame(height: 20)
+                    .background(theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.56 : 0.7))
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             }
         }
-        .padding(12)
-        .background(
-            LinearGradient(
-                colors: [
-                    theme.floatingControlStrongFill,
-                    theme.floatingControlFill.opacity(0.62)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.card, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.card, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.82), lineWidth: 1)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.18 : 0.24))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.24 : 0.18))
+                .frame(height: 1)
         }
     }
 }
