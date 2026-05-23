@@ -705,9 +705,11 @@ terminal.
 - Split placeholders and tab insertion highlights may only appear for private internal tab
   drags: the private type or a text fallback must be paired with the active in-process
   drag-session marker and a valid terminal-tab ID payload.
-- Terminal-tab drop edge zones should scale with the target pane and stay below half the pane
-  size. Avoid fixed large minimum edge widths such as 80px because small panes then feel like
-  they only have a few legal drop positions.
+- Terminal-tab drops on the live terminal body are split-only: choose left/right/up/down from
+  the nearest pane edge so the whole terminal body remains a legal split target. Moving a tab
+  into an existing pane belongs to the pane's tab strip, not the terminal body. Avoid fixed
+  large minimum edge widths such as 80px because small panes then feel like they only have a
+  few legal drop positions.
 - When a live `NSViewRepresentable` terminal surface covers the pane, terminal-tab split drops
   must be handled by the stable AppKit host, not by a competing SwiftUI `.onDrop` around the
   live terminal surface: register the private tab type on `TerminalHostView`, publish deduped

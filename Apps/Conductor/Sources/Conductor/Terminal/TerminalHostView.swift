@@ -201,7 +201,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         if surface?.canAcceptTerminalTabDrop() == true,
            let draggedTerminalID = terminalTabID(from: sender.draggingPasteboard) {
-            let target = terminalTabDropTarget(for: convert(sender.draggingLocation, from: nil), size: bounds.size)
+            let target = terminalTabSplitTarget(for: convert(sender.draggingLocation, from: nil), size: bounds.size)
             hideTerminalTabDropOverlay()
             return surface?.performTerminalTabDrop(draggedTerminalID: draggedTerminalID, target: target) ?? false
         }
@@ -430,7 +430,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
 
     private func updateTerminalTabDropOverlay(for sender: NSDraggingInfo) {
         let location = convert(sender.draggingLocation, from: nil)
-        let target = terminalTabDropTarget(for: location, size: bounds.size)
+        let target = terminalTabSplitTarget(for: location, size: bounds.size)
         surface?.updateTerminalTabDropTarget(target)
     }
 
@@ -501,25 +501,19 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
         types.contains(where: Self.isInternalTerminalTabDragType)
     }
 
-    private func terminalTabDropTarget(for location: CGPoint, size: CGSize) -> TerminalTabDropTarget {
+    private func terminalTabSplitTarget(for location: CGPoint, size: CGSize) -> TerminalTabDropTarget {
         let width = max(1, size.width)
         let height = max(1, size.height)
-        let topOriginY = height - location.y
-        let horizontalEdge = min(max(36, width * 0.24), width * 0.42)
-        let verticalEdge = min(max(36, height * 0.24), height * 0.42)
-        if location.x < horizontalEdge {
-            return .left
-        }
-        if location.x > width - horizontalEdge {
-            return .right
-        }
-        if topOriginY < verticalEdge {
-            return .up
-        }
-        if topOriginY > height - verticalEdge {
-            return .down
-        }
-        return .center
+        let x = min(max(location.x, 0), width)
+        let y = min(max(location.y, 0), height)
+        let topOriginY = height - y
+        let edgeDistances: [(target: TerminalTabDropTarget, distance: CGFloat)] = [
+            (.left, x / width),
+            (.right, (width - x) / width),
+            (.up, topOriginY / height),
+            (.down, y / height)
+        ]
+        return edgeDistances.min { $0.distance < $1.distance }?.target ?? .right
     }
 
     private func droppedTerminalText(from pasteboard: NSPasteboard) -> String? {
