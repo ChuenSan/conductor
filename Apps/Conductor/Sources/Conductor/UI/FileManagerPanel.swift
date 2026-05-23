@@ -398,7 +398,7 @@ struct FileManagerPanel: View {
 
     @ViewBuilder
     private func content(snapshot: FileManagerDisplaySnapshot) -> some View {
-        if let selectedItem = store.selectedItem {
+        if let selectedItem = store.selectedItem, store.renamingPath == nil {
             filePreview(item: selectedItem)
         } else {
             browser(snapshot: snapshot)
