@@ -262,6 +262,7 @@ struct FileManagerPanel: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .macNativeTooltip(L("最近和收藏", "Recent and Favorites"))
+        .accessibilityLabel(Text(L("最近和收藏", "Recent and Favorites")))
     }
 
     private var sortMenuButton: some View {
@@ -286,6 +287,7 @@ struct FileManagerPanel: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .macNativeTooltip(L("排序方式", "Sort"))
+        .accessibilityLabel(Text(L("排序方式", "Sort")))
     }
 
     private var kindFilterMenuButton: some View {
@@ -310,6 +312,7 @@ struct FileManagerPanel: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .macNativeTooltip(L("类型过滤", "Kind Filter"))
+        .accessibilityLabel(Text(L("类型过滤", "Kind Filter")))
     }
 
     private var toolbarSeparator: some View {
@@ -338,6 +341,7 @@ struct FileManagerPanel: View {
         }
         .buttonStyle(.plain)
         .macNativeTooltip(L("收藏当前目录", "Favorite Current Directory"))
+        .accessibilityLabel(Text(L("收藏当前目录", "Favorite Current Directory")))
     }
 
     private var breadcrumbBar: some View {
@@ -346,6 +350,7 @@ struct FileManagerPanel: View {
                 .font(.conductorSystem(size: 9.5, weight: .semibold, family: fontFamily, scale: fontScale))
                 .foregroundStyle(theme.shellChromeText.opacity(0.42))
                 .frame(width: 14)
+                .accessibilityHidden(true)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 5) {
@@ -364,6 +369,7 @@ struct FileManagerPanel: View {
                             Image(systemName: "chevron.right")
                                 .font(.conductorSystem(size: 7.5, weight: .bold, family: fontFamily, scale: fontScale))
                                 .foregroundStyle(theme.shellChromeText.opacity(0.25))
+                                .accessibilityHidden(true)
                         }
                     }
                 }
