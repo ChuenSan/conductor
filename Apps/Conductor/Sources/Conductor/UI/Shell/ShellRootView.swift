@@ -1285,10 +1285,6 @@ private struct WorkspaceOverviewPanel: View {
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 214, maximum: 236), spacing: 10)
-    ]
-
     private var filteredResult: WorkspaceOverviewFilterResult {
         WorkspaceOverviewFilterResult(items: snapshot.items, query: query)
     }
@@ -1306,9 +1302,9 @@ private struct WorkspaceOverviewPanel: View {
                         emptyState
                     } else {
                         ScrollView {
-                            LazyVGrid(columns: columns, alignment: .center, spacing: 10) {
+                            LazyVStack(alignment: .leading, spacing: 3) {
                                 ForEach(result.items) { item in
-                                    WorkspaceOverviewCard(
+                                    WorkspaceOverviewRow(
                                         workspace: item.workspace,
                                         theme: theme,
                                         selected: item.id == snapshot.selectedWorkspaceID,
@@ -1322,11 +1318,10 @@ private struct WorkspaceOverviewPanel: View {
                                     } onHover: {
                                         highlightedWorkspaceID = item.id
                                     }
-                                    .transition(ConductorMotion.workspaceSpreadTransition(itemCount: result.items.count))
+                                    .transition(ConductorMotion.rowTransition(itemCount: result.items.count))
                                 }
                             }
-                            .padding(.horizontal, 2)
-                            .padding(.bottom, 2)
+                            .padding(.vertical, 1)
                             .animation(ConductorMotion.list(itemCount: result.items.count), value: result.ids)
                         }
                         .scrollIndicators(.visible)
@@ -1335,7 +1330,7 @@ private struct WorkspaceOverviewPanel: View {
                 }
                 .padding(12)
             }
-            .frame(width: 690, height: 486)
+            .frame(width: 620, height: 420)
             .onAppear {
                 highlightedWorkspaceID = snapshot.selectedWorkspaceID
                 focusSearchField()
@@ -1349,14 +1344,10 @@ private struct WorkspaceOverviewPanel: View {
             }
             .onMoveCommand { direction in
                 switch direction {
-                case .left:
-                    moveHighlight(by: -1)
-                case .right:
-                    moveHighlight(by: 1)
                 case .up:
-                    moveHighlight(by: -3)
+                    moveHighlight(by: -1)
                 case .down:
-                    moveHighlight(by: 3)
+                    moveHighlight(by: 1)
                 default:
                     break
                 }
@@ -1467,7 +1458,7 @@ private struct WorkspaceOverviewPanel: View {
     }
 }
 
-private struct WorkspaceOverviewCard: View {
+private struct WorkspaceOverviewRow: View {
     let workspace: WorkspaceState
     let theme: TerminalTheme
     let selected: Bool
@@ -1489,61 +1480,57 @@ private struct WorkspaceOverviewCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 9) {
-                WorkspaceMiniLayout(
-                    workspace: workspace,
-                    theme: theme,
-                    unreadCountForPane: unreadCountForPane
-                )
-                .frame(height: 114)
+            HStack(spacing: 10) {
+                Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
+                    .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
+                    .frame(width: 24, height: 24)
+                    .background(iconFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(spacing: 7) {
-                        Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
-                            .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
-                            .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
-                            .frame(width: 16)
-                        Text(workspace.title)
-                            .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.primaryText)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer(minLength: 0)
-                        if unreadCount > 0 {
-                            Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                                .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 5)
-                                .frame(minWidth: 16, minHeight: 15)
-                                .background(theme.floatingEmphasis)
-                                .clipShape(Capsule())
-                                .conductorSignalPulse(active: true, trigger: unreadCount)
-                        }
-                    }
-
-                    HStack(spacing: 6) {
-                        WorkspaceOverviewMetric(systemImage: "square.split.2x2", value: "\(workspace.panes.count)")
-                        WorkspaceOverviewMetric(systemImage: "terminal", value: "\(terminalCount)")
-                        if workspace.isZoomed {
-                            WorkspaceOverviewMetric(systemImage: "arrow.up.left.and.arrow.down.right", value: L("放大", "Zoom"))
-                        }
-                    }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(workspace.title)
+                        .font(.conductorSystem(size: 12.4, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.primaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
 
                     Text(focusedTerminalTitle)
-                        .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
+                        .font(.conductorSystem(size: 10.3, weight: .medium, scale: fontScale))
                         .foregroundStyle(ConductorDesign.tertiaryText)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+
+                Spacer(minLength: 10)
+
+                HStack(spacing: 5) {
+                    WorkspaceOverviewMetric(systemImage: "square.split.2x2", value: "\(workspace.panes.count)")
+                    WorkspaceOverviewMetric(systemImage: "terminal", value: "\(terminalCount)")
+                    if workspace.isZoomed {
+                        WorkspaceOverviewMetric(systemImage: "arrow.up.left.and.arrow.down.right", value: L("放大", "Zoom"))
+                    }
+                    if unreadCount > 0 {
+                        Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                            .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(theme.floatingEmphasis)
+                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                            .conductorSignalPulse(active: true, trigger: unreadCount)
+                    }
+                }
             }
-            .padding(9)
+            .padding(.horizontal, 8)
+            .frame(height: 46)
             .background(cardFill)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
                     .stroke(borderColor, lineWidth: selected || highlighted ? 1.5 : 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { value in
@@ -1554,13 +1541,6 @@ private struct WorkspaceOverviewCard: View {
                 onHover()
             }
         }
-        .scaleEffect(hovering ? 1.006 : 1)
-        .shadow(
-            color: Color.black.opacity(hovering ? (theme.usesDarkChrome ? 0.16 : 0.08) : 0),
-            radius: hovering ? 10 : 0,
-            x: 0,
-            y: hovering ? 5 : 0
-        )
         .animation(ConductorMotion.standard, value: selected)
         .animation(ConductorMotion.feedback, value: highlighted)
         .animation(ConductorMotion.hover, value: hovering)
@@ -1585,6 +1565,13 @@ private struct WorkspaceOverviewCard: View {
             return theme.floatingSelectedStroke.opacity(0.78)
         }
         return theme.floatingStroke
+    }
+
+    private var iconFill: Color {
+        if selected {
+            return theme.floatingSelectedFill
+        }
+        return theme.floatingControlFill.opacity(0.64)
     }
 }
 
