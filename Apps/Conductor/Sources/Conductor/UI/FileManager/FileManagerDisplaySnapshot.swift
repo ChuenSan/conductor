@@ -1,3 +1,4 @@
+import ConductorCore
 import Foundation
 import UniformTypeIdentifiers
 
@@ -87,6 +88,11 @@ struct FileManagerExpandedRowsSnapshot: Equatable {
     )
 }
 
+private struct FileManagerSearchRowCandidate {
+    let row: FileManagerVisibleRow
+    let candidate: ConductorSearchCandidate
+}
+
 enum FileManagerDisplaySnapshotBuilder {
     static func buildExpandedRows(
         items: [FileManagerItem],
@@ -97,10 +103,11 @@ enum FileManagerDisplaySnapshotBuilder {
     ) -> FileManagerExpandedRowsSnapshot {
         RenderCounter.increment("file-manager-display-snapshot")
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let searchQueryModel = ConductorSearchQuery(query)
         let totalKnownItemCount: Int
         let rows: [FileManagerVisibleRow]
 
-        if query.isEmpty {
+        if searchQueryModel.isEmpty {
             var expandedRows: [FileManagerVisibleRow] = []
             appendVisibleRows(
                 for: items,
@@ -114,16 +121,19 @@ enum FileManagerDisplaySnapshotBuilder {
                 ? indexedRows(expandedRows)
                 : indexedRows(expandedRows.filter { matchesKindFilter($0.item, kindFilter: kindFilter) })
         } else {
-            var matchingRows: [FileManagerVisibleRow] = []
-            totalKnownItemCount = appendKnownMatchingRows(
+            var searchRows: [FileManagerSearchRowCandidate] = []
+            totalKnownItemCount = appendKnownSearchRows(
                 for: items,
                 depth: 0,
                 childItemsByDirectoryPath: childItemsByDirectoryPath,
-                query: query,
                 kindFilter: kindFilter,
-                into: &matchingRows
+                into: &searchRows
             )
-            rows = indexedRows(matchingRows)
+            let rowByID = Dictionary(uniqueKeysWithValues: searchRows.map { ($0.candidate.id, $0.row) })
+            rows = indexedRows(
+                ConductorSearchMatcher.results(for: query, in: searchRows.map(\.candidate))
+                    .compactMap { rowByID[$0.candidate.id] }
+            )
         }
 
         var displayedFileCount = 0
@@ -167,35 +177,49 @@ enum FileManagerDisplaySnapshotBuilder {
         }
     }
 
-    private static func appendKnownMatchingRows(
+    private static func appendKnownSearchRows(
         for items: [FileManagerItem],
         depth: Int,
         childItemsByDirectoryPath: [String: [FileManagerItem]],
-        query: String,
         kindFilter: FileManagerKindFilter,
-        into rows: inout [FileManagerVisibleRow]
+        into rows: inout [FileManagerSearchRowCandidate]
     ) -> Int {
         rows.reserveCapacity(rows.count + items.count)
         var knownCount = 0
         for item in items {
             knownCount += 1
-            if matchesKindFilter(item, kindFilter: kindFilter) &&
-                (item.name.localizedCaseInsensitiveContains(query) ||
-                    item.url.path.localizedCaseInsensitiveContains(query)) {
-                rows.append(FileManagerVisibleRow(item: item, depth: depth))
+            if matchesKindFilter(item, kindFilter: kindFilter) {
+                let row = FileManagerVisibleRow(item: item, depth: depth)
+                rows.append(FileManagerSearchRowCandidate(row: row, candidate: searchCandidate(for: item)))
             }
             if item.isDirectory, let children = childItemsByDirectoryPath[item.url.path] {
-                knownCount += appendKnownMatchingRows(
+                knownCount += appendKnownSearchRows(
                     for: children,
                     depth: depth + 1,
                     childItemsByDirectoryPath: childItemsByDirectoryPath,
-                    query: query,
                     kindFilter: kindFilter,
                     into: &rows
                 )
             }
         }
         return knownCount
+    }
+
+    private static func searchCandidate(for item: FileManagerItem) -> ConductorSearchCandidate {
+        ConductorSearchCandidate(
+            id: item.url.path,
+            title: item.name,
+            subtitle: item.url.deletingLastPathComponent().path,
+            keywords: [
+                item.url.pathExtension,
+                item.typeLabel,
+                item.subtitle,
+                item.rowDetail,
+                item.url.path
+            ],
+            section: item.isDirectory ? fileManagerL("文件夹", "Folders") : fileManagerL("文件", "Files"),
+            systemImage: item.isDirectory ? "folder" : "doc"
+        )
     }
 
     private static func indexedRows(_ rows: [FileManagerVisibleRow]) -> [FileManagerVisibleRow] {
