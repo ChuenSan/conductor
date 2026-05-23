@@ -132,7 +132,7 @@ struct ShellRootView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipped()
                     fileManagerTray
-                    if model.terminalSearchVisible {
+                    if model.terminalSearchVisible && model.fileManagerPanelRequest == nil {
                         TerminalSearchBar(model: model, focus: $terminalSearchFocused)
                             .padding(.top, 12)
                             .padding(.trailing, 12)

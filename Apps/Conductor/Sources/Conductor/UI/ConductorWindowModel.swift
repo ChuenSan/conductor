@@ -1319,6 +1319,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func showFileManager(rootURL: URL, selectedURL: URL? = nil) {
+        if terminalSearchVisible {
+            closeTerminalSearch()
+        }
         let standardizedRoot = rootURL.standardizedFileURL
         fileManagerPanelRequest = FileManagerPanelRequest(rootURL: standardizedRoot, selectedURL: selectedURL)
     }
