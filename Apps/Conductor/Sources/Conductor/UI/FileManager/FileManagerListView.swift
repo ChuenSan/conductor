@@ -21,6 +21,8 @@ struct FileManagerListView: View {
                 panelMessage(systemImage: "exclamationmark.triangle", text: error)
             } else if store.items.isEmpty {
                 panelMessage(systemImage: "folder", text: fileManagerL("没有文件", "No files"))
+            } else if store.displaySnapshot.totalRowCount == 0 {
+                panelMessage(systemImage: "line.3.horizontal.decrease", text: fileManagerL("没有匹配的文件", "No matching files"))
             } else {
                 ScrollView {
                     LazyVStack(spacing: 1) {

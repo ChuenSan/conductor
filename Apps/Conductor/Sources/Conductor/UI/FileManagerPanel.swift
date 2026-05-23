@@ -26,6 +26,7 @@ struct FileManagerPanel: View {
     let searchPreviousToken: Int
     @StateObject private var store = FileManagerPanelStore()
     @FocusState private var keyboardFocused: Bool
+    @FocusState private var searchFocused: Bool
     @State private var searchVisible = false
     @State private var infoItem: FileManagerItem?
     @Environment(\.conductorTheme) private var theme
@@ -397,11 +398,55 @@ struct FileManagerPanel: View {
 
     @ViewBuilder
     private func content(snapshot: FileManagerDisplaySnapshot) -> some View {
-        browser(snapshot: snapshot)
+        if let selectedItem = store.selectedItem {
+            filePreview(item: selectedItem)
+        } else {
+            browser(snapshot: snapshot)
+        }
     }
 
     private func fileTreeSearchBar(snapshot: FileManagerDisplaySnapshot) -> some View {
-        EmptyView()
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.conductorSystem(size: 11.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.46))
+                .frame(width: 18)
+
+            TextField(L("搜索文件", "Search files"), text: $store.searchQuery)
+                .textFieldStyle(.plain)
+                .font(.conductorSystem(size: 12, weight: .medium, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.84))
+                .focused($searchFocused)
+                .onSubmit {
+                    store.recordSearchQuery()
+                }
+
+            if !store.searchQuery.isEmpty {
+                Button {
+                    store.searchQuery = ""
+                    searchFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.conductorSystem(size: 11.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.42))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+                .macNativeTooltip(L("清除搜索", "Clear Search"))
+            }
+
+            Text(L("\(snapshot.totalRowCount)/\(snapshot.totalKnownItemCount)", "\(snapshot.totalRowCount)/\(snapshot.totalKnownItemCount)"))
+                .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.42))
+                .lineLimit(1)
+
+            panelIconButton("xmark", help: L("关闭搜索", "Close Search")) {
+                closeSearch()
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 36)
+        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.18 : 0.10))
     }
 
     private func browser(snapshot: FileManagerDisplaySnapshot) -> some View {
@@ -777,12 +822,17 @@ struct FileManagerPanel: View {
     private func showSearch() {
         keyboardFocused = true
         searchVisible = true
+        Task { @MainActor in
+            searchFocused = true
+        }
     }
 
     private func closeSearch() {
         store.recordSearchQuery()
         searchVisible = false
+        searchFocused = false
         store.searchQuery = ""
+        keyboardFocused = true
     }
 
     private func handleKeyboardShortcut(_ event: NSEvent) -> Bool {

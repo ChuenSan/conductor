@@ -91,6 +91,7 @@ final class FileManagerPanelStore: ObservableObject {
         }
         rebuildDisplaySnapshot()
         rebuildSelectedItemsSnapshot()
+        reconcileSelectionWithDisplayedRows()
     }
 
     private func rebuildDisplaySnapshot() {
@@ -164,6 +165,44 @@ final class FileManagerPanelStore: ObservableObject {
         }
     }
 
+    private func reconcileSelectionWithDisplayedRows() {
+        guard !selectedPaths.isEmpty || selectedItem != nil else { return }
+        let visiblePaths = Set(expandedRowsSnapshot.rows.map { $0.item.url.path })
+        guard !visiblePaths.isEmpty else {
+            clearSelectionForCurrentDisplay()
+            return
+        }
+
+        let reconciledPaths = selectedPaths.intersection(visiblePaths)
+        if reconciledPaths != selectedPaths {
+            selectedPaths = reconciledPaths
+        }
+
+        if let selectedItem, visiblePaths.contains(selectedItem.url.path) {
+            return
+        }
+
+        if let firstSelectedPath = reconciledPaths.first,
+           let row = expandedRowsSnapshot.rows.first(where: { $0.item.url.path == firstSelectedPath }) {
+            selectedItem = row.item
+            selectionAnchorPath = row.item.url.path
+            loadPreview(for: row.item.url)
+            return
+        }
+
+        clearSelectionForCurrentDisplay()
+    }
+
+    private func clearSelectionForCurrentDisplay() {
+        selectedItem = nil
+        selectedPaths = []
+        selectionAnchorPath = nil
+        previewGeneration += 1
+        previewState = displaySnapshot.totalRowCount == 0
+            ? .message(fileManagerL("没有匹配的文件", "No matching files"))
+            : .empty
+    }
+
     func load(_ request: FileManagerPanelRequest) async {
         guard requestID != request.id else { return }
         requestID = request.id
@@ -212,6 +251,7 @@ final class FileManagerPanelStore: ObservableObject {
                 selectedPaths = [item.url.path]
                 selectionAnchorPath = item.url.path
                 selectedItem = item
+                loadPreview(for: item.url)
                 operationMessage = nil
                 return
             }
@@ -220,8 +260,14 @@ final class FileManagerPanelStore: ObservableObject {
         }
         if selectedPaths.isEmpty {
             selectedItem = nil
+            selectionAnchorPath = nil
+            previewGeneration += 1
+            previewState = displaySnapshot.totalRowCount == 0
+                ? .message(fileManagerL("没有匹配的文件", "No matching files"))
+                : .empty
         } else {
             selectedItem = item
+            loadPreview(for: item.url)
         }
         if let index = displayedRows.firstIndex(where: { $0.item.url.path == item.url.path }) {
             ensureVisibleRow(at: index)
@@ -259,7 +305,8 @@ final class FileManagerPanelStore: ObservableObject {
         selectedItem = nil
         selectedPaths = []
         selectionAnchorPath = nil
-        previewState = items.isEmpty
+        previewGeneration += 1
+        previewState = displaySnapshot.totalRowCount == 0
             ? .message(fileManagerL("这个目录没有可显示的文件", "This directory has no visible files"))
             : .empty
     }
@@ -283,6 +330,9 @@ final class FileManagerPanelStore: ObservableObject {
     func toggleDirectory(_ item: FileManagerItem) async {
         guard item.isDirectory else { return }
         selectedItem = item
+        selectedPaths = [item.url.path]
+        selectionAnchorPath = item.url.path
+        loadPreview(for: item.url)
         let path = item.url.path
         if expandedDirectoryPaths.contains(path) {
             expandedDirectoryPaths.remove(path)
@@ -383,9 +433,6 @@ final class FileManagerPanelStore: ObservableObject {
     func setKindFilter(_ filter: FileManagerKindFilter) {
         guard kindFilter != filter else { return }
         kindFilter = filter
-        if let selectedItem, !displayedRows.contains(where: { $0.item.url.path == selectedItem.url.path }) {
-            selectAdjacentRow(by: 1)
-        }
     }
 
     func recordOpenedFile(_ url: URL) {
