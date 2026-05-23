@@ -1647,6 +1647,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         publishPanelState()
         terminalSearchFocusGeneration &+= 1
         let surface = surface(for: target.tab)
+        _ = surface.startSearchPrompt()
         if !terminalSearchQuery.isEmpty {
             _ = surface.search(terminalSearchQuery)
         }
