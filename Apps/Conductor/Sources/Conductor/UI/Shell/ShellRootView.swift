@@ -93,7 +93,12 @@ struct ShellRootView: View {
             synchronizeFileManagerPresentation(animated: false)
         }
         .onChange(of: model.terminalSearchFocusGeneration) { _, _ in
-            terminalSearchFocused = true
+            focusTerminalSearchField()
+        }
+        .onChange(of: model.terminalSearchVisible) { _, visible in
+            if visible {
+                focusTerminalSearchField()
+            }
         }
         .onChange(of: model.fileManagerPanelRequest?.id) { _, _ in
             synchronizeFileManagerPresentation(animated: true)
@@ -244,6 +249,15 @@ struct ShellRootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private func focusTerminalSearchField() {
+        terminalSearchFocused = false
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(30))
+            guard model.terminalSearchVisible else { return }
+            terminalSearchFocused = true
+        }
+    }
+
 }
 
 private struct TerminalSearchBar: View {
@@ -307,7 +321,10 @@ private struct TerminalSearchBar: View {
         }
         .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.18 : 0.10), radius: 14, x: 0, y: 8)
         .onAppear {
-            focus.wrappedValue = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(30))
+                focus.wrappedValue = true
+            }
         }
     }
 
