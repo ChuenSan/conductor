@@ -878,6 +878,14 @@ private enum ConductorCommandCatalog {
             CommandPaletteItem(id: "new-workspace", command: .newWorkspace, section: L("创建", "Create"), title: L("新建工作区", "New Workspace"), shortcut: "Cmd-N", keywords: "workspace new"),
             CommandPaletteItem(id: "new-terminal", command: .newTerminal, section: L("创建", "Create"), title: L("新开终端", "New Terminal"), shortcut: "Cmd-T", keywords: "terminal pane shell"),
             CommandPaletteItem(
+                id: "new-web-tab",
+                command: .newWebTab,
+                section: L("文件", "File"),
+                title: L("新建网页标签页", "New Web Tab"),
+                shortcut: "",
+                keywords: "web browser url localhost website"
+            ),
+            CommandPaletteItem(
                 id: "new-terminal-current-directory",
                 command: .newTerminalAtFocusedDirectory,
                 section: L("创建", "Create"),
