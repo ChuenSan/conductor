@@ -11,6 +11,12 @@ private func L(_ zh: String, _ en: String) -> String {
     ConductorLocalization.text(zh: zh, en: en)
 }
 
+private enum WorkspaceTopTabScrollTarget: Hashable {
+    case workspace(WorkspaceID)
+    case file(String)
+    case web(String)
+}
+
 struct WorkspaceTabStrip: View {
     let model: ConductorWindowModel
     let snapshot: WorkspaceChromeSnapshot
@@ -21,7 +27,7 @@ struct WorkspaceTabStrip: View {
     let onCommitRename: () -> Void
     let onCancelRename: () -> Void
     @Namespace private var selectionNamespace
-    @State private var scrollTargetID: WorkspaceID?
+    @State private var scrollTargetID: WorkspaceTopTabScrollTarget?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -50,6 +56,7 @@ struct WorkspaceTabStrip: View {
                                 }
                             }
                         )
+                        .id(WorkspaceTopTabScrollTarget.file(fileTab.id))
                         .transition(ConductorMotion.tabTransition)
                     }
                     ForEach(snapshot.webTabs) { webTab in
@@ -68,6 +75,7 @@ struct WorkspaceTabStrip: View {
                                 }
                             }
                         )
+                        .id(WorkspaceTopTabScrollTarget.web(webTab.id))
                         .transition(ConductorMotion.tabTransition)
                     }
                 }
@@ -81,6 +89,12 @@ struct WorkspaceTabStrip: View {
             syncScrollTarget(animated: false)
         }
         .onChange(of: snapshot.selectedWorkspaceID) {
+            syncScrollTarget(animated: true)
+        }
+        .onChange(of: snapshot.selectedWorkspaceFileTabID) {
+            syncScrollTarget(animated: true)
+        }
+        .onChange(of: snapshot.selectedWorkspaceWebTabID) {
             syncScrollTarget(animated: true)
         }
         .onChange(of: snapshot.workspaceIDs) {
@@ -99,9 +113,21 @@ struct WorkspaceTabStrip: View {
     }
 
     private func syncScrollTarget(animated: Bool) {
-        guard snapshot.workspaceIDs.contains(snapshot.selectedWorkspaceID) else { return }
+        let nextTarget: WorkspaceTopTabScrollTarget?
+        if let webID = snapshot.selectedWorkspaceWebTabID,
+           snapshot.webTabs.contains(where: { $0.id == webID }) {
+            nextTarget = .web(webID)
+        } else if let fileID = snapshot.selectedWorkspaceFileTabID,
+                  snapshot.fileTabs.contains(where: { $0.id == fileID }) {
+            nextTarget = .file(fileID)
+        } else if snapshot.workspaceIDs.contains(snapshot.selectedWorkspaceID) {
+            nextTarget = .workspace(snapshot.selectedWorkspaceID)
+        } else {
+            nextTarget = nil
+        }
+
         let update = {
-            scrollTargetID = snapshot.selectedWorkspaceID
+            scrollTargetID = nextTarget
         }
         if animated {
             model.performShellMotion(ConductorMotion.scroll, update)
@@ -159,7 +185,7 @@ struct WorkspaceTabStrip: View {
                 }
             }
         )
-        .id(row.id)
+        .id(WorkspaceTopTabScrollTarget.workspace(row.id))
     }
 
     private func finishWorkspaceRenameIfNeeded(except workspaceID: WorkspaceID? = nil) {
@@ -370,6 +396,10 @@ private struct WorkspaceWebTopTab: View {
         L("网页 \(tab.title)", "Web \(tab.title)")
     }
 
+    private var closeAccessibilityTitle: String {
+        L("关闭网页 \(tab.title)", "Close Web Page \(tab.title)")
+    }
+
     var body: some View {
         ZStack(alignment: .trailing) {
             Button(action: onSelect) {
@@ -410,8 +440,8 @@ private struct WorkspaceWebTopTab: View {
             }
             .buttonStyle(ConductorPressButtonStyle())
             .padding(.trailing, 6)
-            .accessibilityLabel(L("关闭网页", "Close Web Page"))
-            .macNativeTooltip(L("关闭网页", "Close Web Page"))
+            .accessibilityLabel(closeAccessibilityTitle)
+            .macNativeTooltip(closeAccessibilityTitle)
         }
         .frame(
             width: WorkspaceTabMetrics.width(for: appearance),
@@ -441,7 +471,7 @@ private struct WorkspaceWebTopTab: View {
         }
         .contentShape(tabShape)
         .contextMenu {
-            Button(L("关闭网页", "Close Web Page")) {
+            Button(closeAccessibilityTitle) {
                 onClose()
             }
         }
