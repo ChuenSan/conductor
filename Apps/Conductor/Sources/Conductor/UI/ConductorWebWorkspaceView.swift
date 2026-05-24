@@ -214,6 +214,7 @@ private struct ConductorWebView: NSViewRepresentable {
         var tabID: String
         weak var model: ConductorWindowModel?
         private let observers = WebNavigationObservers()
+        private var webViewObservations: [NSKeyValueObservation] = []
 
         init(tabID: String, model: ConductorWindowModel) {
             self.tabID = tabID
@@ -222,6 +223,38 @@ private struct ConductorWebView: NSViewRepresentable {
 
         func bind(_ webView: WKWebView) {
             let center = NotificationCenter.default
+            webViewObservations = [
+                webView.observe(\.title, options: [.new]) { [weak self, weak webView] _, _ in
+                    Task { @MainActor [weak self, weak webView] in
+                        guard let webView else { return }
+                        self?.publish(webView, isLoading: webView.isLoading)
+                    }
+                },
+                webView.observe(\.url, options: [.new]) { [weak self, weak webView] _, _ in
+                    Task { @MainActor [weak self, weak webView] in
+                        guard let webView else { return }
+                        self?.publish(webView, isLoading: webView.isLoading)
+                    }
+                },
+                webView.observe(\.isLoading, options: [.new]) { [weak self, weak webView] _, _ in
+                    Task { @MainActor [weak self, weak webView] in
+                        guard let webView else { return }
+                        self?.publish(webView, isLoading: webView.isLoading)
+                    }
+                },
+                webView.observe(\.canGoBack, options: [.new]) { [weak self, weak webView] _, _ in
+                    Task { @MainActor [weak self, weak webView] in
+                        guard let webView else { return }
+                        self?.publish(webView, isLoading: webView.isLoading)
+                    }
+                },
+                webView.observe(\.canGoForward, options: [.new]) { [weak self, weak webView] _, _ in
+                    Task { @MainActor [weak self, weak webView] in
+                        guard let webView else { return }
+                        self?.publish(webView, isLoading: webView.isLoading)
+                    }
+                }
+            ]
             observers.replace(with: [
                 center.addObserver(forName: .conductorWebGoBack, object: nil, queue: .main) { [weak self, weak webView] note in
                     let requestedTabID = note.object as? String
@@ -256,6 +289,7 @@ private struct ConductorWebView: NSViewRepresentable {
 
         func clearObservers() {
             observers.removeAll()
+            webViewObservations.removeAll()
         }
 
         private func matches(_ requestedTabID: String?) -> Bool {
