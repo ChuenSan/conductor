@@ -314,14 +314,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     var selectedWorkspaceTerminalTabID: TerminalID? {
-        if case .terminal(let terminalID) = selectedWorkspaceContentTabID,
-           workspace.paneID(containing: terminalID) != nil {
+        switch selectedWorkspaceContentTabID {
+        case .terminal(let terminalID) where workspace.paneID(containing: terminalID) != nil:
             return terminalID
-        }
-        if selectedWorkspaceFileTab != nil || selectedWorkspaceWebTab != nil {
+        case .file, .web:
             return nil
+        default:
+            return focusedTerminalID
         }
-        return focusedTerminalID
     }
 
     var workspaceTerminalContentTabs: [TerminalTabState] {
