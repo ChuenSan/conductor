@@ -210,7 +210,13 @@ struct ShellRootView: View {
 
     @ViewBuilder
     private var primaryWorkspaceContent: some View {
-        if model.selectedWorkspaceFileTab != nil {
+        if model.selectedWorkspaceWebTab != nil {
+            ConductorWebWorkspaceView(
+                model: model,
+                snapshot: ConductorWebSnapshot(model: model)
+            )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.selectedWorkspaceFileTab != nil {
             ConductorFileWorkspaceView(
                 model: model,
                 snapshot: ConductorFileWorkspaceSnapshot(model: model)
