@@ -1178,15 +1178,21 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         pendingInput: String? = nil,
         isLoading: Bool? = nil,
         canGoBack: Bool? = nil,
-        canGoForward: Bool? = nil
+        canGoForward: Bool? = nil,
+        faviconURL: URL? = nil,
+        clearCurrentURL: Bool = false,
+        clearFaviconURL: Bool = false
     ) {
         guard let index = workspaceWebTabs.firstIndex(where: { $0.id == tabID }) else { return }
         if let title { workspaceWebTabs[index].title = title.isEmpty ? L("新标签页", "New Tab") : title }
-        if let currentURL { workspaceWebTabs[index].currentURL = currentURL }
+        if clearCurrentURL { workspaceWebTabs[index].currentURL = nil }
+        else if let currentURL { workspaceWebTabs[index].currentURL = currentURL }
         if let pendingInput { workspaceWebTabs[index].pendingInput = pendingInput }
         if let isLoading { workspaceWebTabs[index].isLoading = isLoading }
         if let canGoBack { workspaceWebTabs[index].canGoBack = canGoBack }
         if let canGoForward { workspaceWebTabs[index].canGoForward = canGoForward }
+        if clearFaviconURL { workspaceWebTabs[index].faviconURL = nil }
+        else if let faviconURL { workspaceWebTabs[index].faviconURL = faviconURL }
     }
 
     func openFileInWorkspace(_ fileURL: URL, rootURL: URL? = nil) {
