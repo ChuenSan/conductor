@@ -936,6 +936,19 @@ func checkAgentIntegrationCatalog() {
     require(AgentIntegrationCatalog.definition(named: "unknown-agent") == nil, "unknown agent should not resolve")
 }
 
+func checkWebAddressResolver() {
+    let resolver = WebAddressResolver()
+
+    require(resolver.resolve("https://example.com")?.absoluteString == "https://example.com", "https URL should pass through")
+    require(resolver.resolve("http://127.0.0.1:8080")?.absoluteString == "http://127.0.0.1:8080", "http loopback URL should pass through")
+    require(resolver.resolve("localhost:3000")?.absoluteString == "http://localhost:3000", "localhost host should default to http")
+    require(resolver.resolve("127.0.0.1:5173")?.absoluteString == "http://127.0.0.1:5173", "loopback host should default to http")
+    require(resolver.resolve("[::1]:9000")?.absoluteString == "http://[::1]:9000", "IPv6 loopback should default to http")
+    require(resolver.resolve("github.com/openai/codex")?.absoluteString == "https://github.com/openai/codex", "bare domain path should default to https")
+    require(resolver.resolve("swift webkit tabs")?.absoluteString == "https://duckduckgo.com/?q=swift%20webkit%20tabs", "phrases should become DuckDuckGo search URLs")
+    require(resolver.resolve("   ") == nil, "blank input should not resolve")
+}
+
 checkRenderBudgetDefaults()
 checkNewWorkspace()
 checkNewTerminalTab()
@@ -986,4 +999,5 @@ checkRapidTabSwitchingKeepsStableStructure()
 checkComplexWorkspaceStressMaintainsInvariants()
 checkTerminalNotificationStateIndexesAndLifecycle()
 checkAgentIntegrationCatalog()
+checkWebAddressResolver()
 print("ConductorModelCheck passed")
