@@ -245,11 +245,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     var selectedWorkspaceTerminalTabID: TerminalID? {
-        if case .terminal(let terminalID) = selectedWorkspaceContentTabID,
-           workspace.paneID(containing: terminalID) != nil {
+        switch selectedWorkspaceContentTabID {
+        case .terminal(let terminalID) where workspace.paneID(containing: terminalID) != nil:
             return terminalID
+        case .file:
+            return nil
+        default:
+            return focusedTerminalID
         }
-        return focusedTerminalID
     }
 
     var workspaceTerminalContentTabs: [TerminalTabState] {
@@ -1056,6 +1059,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         syncPanelCoordinatorFromPublished()
         panelCoordinator.terminalSearchVisible = false
         panelCoordinator.workspaceOverviewVisible = false
+        fileManagerKeyboardFocused = false
         publishPanelState()
     }
 
@@ -1066,6 +1070,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         syncPanelCoordinatorFromPublished()
         panelCoordinator.terminalSearchVisible = false
         panelCoordinator.workspaceOverviewVisible = false
+        fileManagerKeyboardFocused = false
         publishPanelState()
     }
 
@@ -1319,6 +1324,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func showFileManager(rootURL: URL, selectedURL: URL? = nil) {
+        if terminalSearchVisible {
+            closeTerminalSearch()
+        }
         let standardizedRoot = rootURL.standardizedFileURL
         fileManagerPanelRequest = FileManagerPanelRequest(rootURL: standardizedRoot, selectedURL: selectedURL)
     }
@@ -1647,6 +1655,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         publishPanelState()
         terminalSearchFocusGeneration &+= 1
         let surface = surface(for: target.tab)
+        _ = surface.startSearchPrompt()
         if !terminalSearchQuery.isEmpty {
             _ = surface.search(terminalSearchQuery)
         }
@@ -1683,13 +1692,22 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func navigateTerminalSearch(previous: Bool) {
+        if routeContextualSearchNavigation(previous: previous) {
+            return
+        }
+        guard terminalSearchVisible,
+              let tab = terminalSearchTargetTab() else { return }
+        _ = surface(for: tab).navigateSearch(previous: previous)
+    }
+
+    private func routeContextualSearchNavigation(previous: Bool) -> Bool {
         if selectedWorkspaceFileTab != nil {
             if previous {
                 workspaceFileSearchPreviousGeneration &+= 1
             } else {
                 workspaceFileSearchNextGeneration &+= 1
             }
-            return
+            return true
         }
         if fileManagerPanelRequest != nil {
             if previous {
@@ -1697,11 +1715,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             } else {
                 fileManagerSearchNextGeneration &+= 1
             }
-            return
+            return true
         }
-        guard terminalSearchVisible,
-              let tab = terminalSearchTargetTab() else { return }
-        _ = surface(for: tab).navigateSearch(previous: previous)
+        return false
     }
 
     func closeTerminalSearch() {

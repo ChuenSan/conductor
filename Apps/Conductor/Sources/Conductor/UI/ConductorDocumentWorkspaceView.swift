@@ -56,6 +56,29 @@ private final class ConductorDocumentVendorCache: @unchecked Sendable {
     }
 }
 
+private let conductorKatexFontNames = [
+    "KaTeX_AMS-Regular",
+    "KaTeX_Caligraphic-Bold",
+    "KaTeX_Caligraphic-Regular",
+    "KaTeX_Fraktur-Bold",
+    "KaTeX_Fraktur-Regular",
+    "KaTeX_Main-Bold",
+    "KaTeX_Main-BoldItalic",
+    "KaTeX_Main-Italic",
+    "KaTeX_Main-Regular",
+    "KaTeX_Math-BoldItalic",
+    "KaTeX_Math-Italic",
+    "KaTeX_SansSerif-Bold",
+    "KaTeX_SansSerif-Italic",
+    "KaTeX_SansSerif-Regular",
+    "KaTeX_Script-Regular",
+    "KaTeX_Size1-Regular",
+    "KaTeX_Size2-Regular",
+    "KaTeX_Size3-Regular",
+    "KaTeX_Size4-Regular",
+    "KaTeX_Typewriter-Regular"
+]
+
 struct ConductorDocumentWorkspaceView: View {
     let fileURL: URL
     let rootURL: URL
@@ -737,11 +760,8 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
 
     private static func vendorScript(_ name: String) -> String {
         ConductorDocumentVendorCache.shared.script(name) {
-            guard let url = Bundle.module.url(
-                forResource: name,
-                withExtension: "js",
-                subdirectory: "DocumentViewer/vendor"
-            ), let script = try? String(contentsOf: url, encoding: .utf8) else {
+            guard let url = resourceURL(fileName: "\(name).js"),
+                  let script = try? String(contentsOf: url, encoding: .utf8) else {
                 return ""
             }
             return script
@@ -750,24 +770,31 @@ private struct ConductorDocumentWebView: NSViewRepresentable {
 
     private static func vendorStyle(_ name: String) -> String {
         ConductorDocumentVendorCache.shared.style(name) {
-            guard let url = Bundle.module.url(
-                forResource: name,
-                withExtension: "css",
-                subdirectory: "DocumentViewer/vendor"
-            ), let style = try? String(contentsOf: url, encoding: .utf8) else {
+            guard let url = resourceURL(fileName: "\(name).css"),
+                  let style = try? String(contentsOf: url, encoding: .utf8) else {
                 return ""
             }
             var rewritten = style
-            if let fontURLs = Bundle.module.urls(forResourcesWithExtension: "woff2", subdirectory: "DocumentViewer/vendor/fonts") {
-                for fontURL in fontURLs {
-                    rewritten = rewritten.replacingOccurrences(
-                        of: "url(fonts/\(fontURL.lastPathComponent))",
-                        with: "url('\(fontURL.absoluteString)')"
-                    )
-                }
+            for fontName in conductorKatexFontNames {
+                guard let fontURL = resourceURL(fileName: "\(fontName).woff2") else { continue }
+                rewritten = rewritten.replacingOccurrences(
+                    of: "url(fonts/\(fontURL.lastPathComponent))",
+                    with: "url('\(fontURL.absoluteString)')"
+                )
             }
             return rewritten
         }
+    }
+
+    private static func resourceURL(fileName: String) -> URL? {
+        let resourceBundleName = "Conductor_Conductor.bundle"
+        let candidateRoots = [
+            Bundle.main.resourceURL?.appendingPathComponent(resourceBundleName, isDirectory: true),
+            Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent(resourceBundleName, isDirectory: true)
+        ].compactMap { $0 }
+        return candidateRoots
+            .map { $0.appendingPathComponent(fileName, isDirectory: false) }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     private static func vendorScriptBase64(_ name: String) -> String {

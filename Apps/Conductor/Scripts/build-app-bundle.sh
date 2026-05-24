@@ -28,6 +28,7 @@ MACOS="$CONTENTS/MacOS"
 RESOURCES="$CONTENTS/Resources"
 EXECUTABLE="$MACOS/Conductor"
 PRODUCT_EXECUTABLE=""
+PRODUCT_BIN_DIR=""
 
 prepare_dependencies() {
   ./Scripts/prepare-ghosttykit.sh
@@ -37,12 +38,24 @@ build_product() {
   swift build "${SWIFT_BUILD_ARGS[@]}"
   local bin_path
   bin_path="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)"
+  PRODUCT_BIN_DIR="$bin_path"
   PRODUCT_EXECUTABLE="$bin_path/Conductor"
 
   if [[ ! -x "$PRODUCT_EXECUTABLE" ]]; then
     echo "Built Conductor executable not found at $PRODUCT_EXECUTABLE" >&2
     exit 1
   fi
+}
+
+copy_swiftpm_resources() {
+  local resource_bundle="$PRODUCT_BIN_DIR/Conductor_Conductor.bundle"
+  if [[ ! -d "$resource_bundle" ]]; then
+    echo "warning: SwiftPM resource bundle not found at $resource_bundle" >&2
+    return
+  fi
+
+  rm -rf "$RESOURCES/Conductor_Conductor.bundle"
+  cp -R "$resource_bundle" "$RESOURCES/Conductor_Conductor.bundle"
 }
 
 create_app_layout() {
@@ -139,6 +152,7 @@ main() {
   prepare_dependencies >&2
   build_product >&2
   create_app_layout >&2
+  copy_swiftpm_resources >&2
   copy_ghostty_resources >&2
   write_info_plist
   sign_app_bundle >&2

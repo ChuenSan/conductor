@@ -135,8 +135,10 @@ struct ConductorSidebar: View {
                 .frame(width: 26, height: 24)
                 .background(sidebarToggleFill)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .accessibilityHidden(true)
         }
         .buttonStyle(ConductorPressButtonStyle())
+        .accessibilityLabel(sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
         .onHover { value in
             sidebarToggleHovering = value
         }
@@ -163,7 +165,7 @@ struct ConductorSidebar: View {
     }
 
     private var expandedSidebarDock: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        SidebarDockSurface {
             HStack(spacing: 6) {
                 SidebarDockButton(id: "sidebar-dock.new-terminal", icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
                     finishWorkspaceRenameIfNeeded()
@@ -181,9 +183,9 @@ struct ConductorSidebar: View {
                     }
                 }
             }
+            .padding(.horizontal, 2)
         }
-        .padding(.horizontal, 2)
-        .padding(.bottom, 9)
+        .padding(.bottom, 3)
     }
 
     private var workspaceSection: some View {
@@ -209,12 +211,13 @@ struct ConductorSidebar: View {
                         .contentShape(RoundedRectangle(cornerRadius: 5))
                 }
                 .buttonStyle(ConductorPressButtonStyle())
+                .accessibilityLabel(L("新建工作区 Cmd-N", "New Workspace Cmd-N"))
                 .macNativeTooltip(L("新建工作区 Cmd-N", "New Workspace Cmd-N"))
             }
             .padding(.trailing, 5)
 
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 3) {
+                LazyVStack(spacing: 3) {
                     ForEach(snapshot.rows) { row in
                         workspaceRow(for: row)
                             .id(row.id)
@@ -234,7 +237,7 @@ struct ConductorSidebar: View {
     private var collapsedSidebar: some View {
         VStack(spacing: 6) {
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 6) {
+                LazyVStack(spacing: 6) {
                     ForEach(snapshot.rows) { row in
                         SidebarRailButton(
                             id: "sidebar-rail.workspace.\(row.id)",
@@ -280,7 +283,7 @@ struct ConductorSidebar: View {
     }
 
     private var collapsedSidebarFooter: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 0) {
             SidebarRailButton(id: "sidebar-rail.settings", icon: "gearshape", help: L("设置", "Settings")) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.panel) {
@@ -288,7 +291,8 @@ struct ConductorSidebar: View {
                 }
             }
         }
-        .padding(.bottom, 10)
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 4)
     }
 
     @ViewBuilder
@@ -396,7 +400,7 @@ struct ConductorSidebar: View {
 
 private struct SidebarRailShape: InsettableShape {
     var bottomLeadingRadius: CGFloat = ConductorDesign.sidebarCornerRadius
-    var bottomTrailingRadius: CGFloat = 14
+    var bottomTrailingRadius: CGFloat = 0
     var insetAmount: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
@@ -649,7 +653,7 @@ private struct SidebarWorkspaceHeaderStats: View {
             }
         }
         .padding(.leading, 3)
-        .accessibilityElement(children: .combine)
+        .accessibilityHidden(true)
     }
 
     private func metric(
@@ -670,6 +674,7 @@ private struct SidebarWorkspaceHeaderStats: View {
         HStack(spacing: 3) {
             Image(systemName: systemImage)
                 .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                .accessibilityHidden(true)
             Text(valueText)
                 .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
         }
@@ -713,6 +718,31 @@ private struct SidebarSeparator: View {
             .frame(height: 1)
             .padding(.horizontal, 20)
             .padding(.vertical, 4)
+    }
+}
+
+private struct SidebarDockSurface<Content: View>: View {
+    var horizontalPadding: CGFloat = 2
+    @ViewBuilder var content: Content
+    @Environment(\.conductorTheme) private var theme
+
+    init(horizontalPadding: CGFloat = 2, @ViewBuilder content: () -> Content) {
+        self.horizontalPadding = horizontalPadding
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Rectangle()
+                .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.32 : 0.22))
+                .frame(height: 1)
+                .padding(.horizontal, horizontalPadding == 0 ? 9 : 4)
+
+            content
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, horizontalPadding)
+        .padding(.top, 2)
     }
 }
 
@@ -930,6 +960,7 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                 .frame(width: 22, height: 22)
                 .background(selected ? theme.shellControlRaisedFill.opacity(0.84) : (hovering ? theme.shellHoverFill.opacity(0.62) : Color.clear))
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -940,6 +971,7 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                 HStack(spacing: 4) {
                     Image(systemName: "folder")
                         .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
+                        .accessibilityHidden(true)
                     Text(subtitle)
                         .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
                         .lineLimit(1)
@@ -951,8 +983,16 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
 
             VStack(alignment: .trailing, spacing: 4) {
                 HStack(spacing: 4) {
-                    workspaceMetric(systemImage: "rectangle.split.2x1", value: splitCount)
-                    workspaceMetric(systemImage: "terminal", value: terminalCount)
+                    workspaceMetric(
+                        systemImage: "rectangle.split.2x1",
+                        value: splitCount,
+                        accessibilityLabel: L("\(splitCount) 个分屏", "\(splitCount) panes")
+                    )
+                    workspaceMetric(
+                        systemImage: "terminal",
+                        value: terminalCount,
+                        accessibilityLabel: L("\(terminalCount) 个终端", "\(terminalCount) terminals")
+                    )
                 }
                 if unreadCount > 0 {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
@@ -962,16 +1002,18 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                         .frame(minWidth: 16, minHeight: 15)
                         .background(theme.floatingEmphasis)
                         .clipShape(Capsule())
+                        .accessibilityLabel(L("\(unreadCount) 条未读通知", "\(unreadCount) unread notifications"))
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
-    private func workspaceMetric(systemImage: String, value: Int) -> some View {
+    private func workspaceMetric(systemImage: String, value: Int, accessibilityLabel: String) -> some View {
         HStack(spacing: 3) {
             Image(systemName: systemImage)
                 .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
+                .accessibilityHidden(true)
             Text("\(value)")
                 .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
                 .monospacedDigit()
@@ -981,6 +1023,8 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         .frame(height: 16)
         .background(selected ? theme.shellHoverFill.opacity(0.70) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.22 : 0.14))
         .clipShape(Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

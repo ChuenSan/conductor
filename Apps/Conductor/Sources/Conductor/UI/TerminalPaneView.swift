@@ -621,6 +621,7 @@ private struct PaneBarButton: View {
                     HStack(spacing: 4) {
                         Image(systemName: systemImage)
                             .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                            .accessibilityHidden(true)
                         Text(title)
                             .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
                             .lineLimit(1)
@@ -628,6 +629,7 @@ private struct PaneBarButton: View {
                 }
                 Image(systemName: systemImage)
                     .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                    .accessibilityHidden(true)
             }
             .foregroundStyle(hovering ? theme.shellChromeText.opacity(0.92) : theme.shellChromeTextMuted)
             .padding(.horizontal, showsTitle ? 5 : 4)
@@ -642,6 +644,7 @@ private struct PaneBarButton: View {
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
         }
         .buttonStyle(ConductorPressButtonStyle())
+        .accessibilityLabel(showsTitle ? title : help)
         .disabled(disabled)
         .opacity(disabled ? 0.35 : 1)
         .animation(ConductorMotion.micro, value: disabled)
@@ -751,6 +754,7 @@ private struct TerminalTabButton: View {
                 Image(systemName: "terminal")
                     .font(.conductorSystem(size: 10, scale: fontScale))
                     .foregroundStyle(isSelected ? theme.shellChromeText : theme.shellChromeTextMuted)
+                    .accessibilityHidden(true)
                 RenameTextField(
                     text: $titleDraft,
                     placeholder: L("标签名称", "Tab Name"),
@@ -764,24 +768,27 @@ private struct TerminalTabButton: View {
                     renameCancelled = false
                 }
             } else {
-                TerminalTabButtonContent(
-                    title: tab.title,
-                    detail: terminalDetailLabel,
-                    selected: isSelected,
-                    hasUnread: unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0,
-                    showsProgress: metadata?.progressKind != nil,
-                    readonly: metadata?.readonly == true,
-                    themeID: theme.id,
-                    fontScaleID: fontScale.id
-                )
-                .equatable()
-                .contentShape(Rectangle())
-                .onTapGesture {
+                Button {
                     onVisualSelect()
                     ConductorMotion.withoutAnimation {
                         model.selectTab(tab.id, in: paneID)
                     }
+                } label: {
+                    TerminalTabButtonContent(
+                        title: tab.title,
+                        detail: terminalDetailLabel,
+                        selected: isSelected,
+                        hasUnread: unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0,
+                        showsProgress: metadata?.progressKind != nil,
+                        readonly: metadata?.readonly == true,
+                        themeID: theme.id,
+                        fontScaleID: fontScale.id
+                    )
+                    .equatable()
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(terminalHelpText)
                 .simultaneousGesture(
                     TapGesture(count: 2).onEnded {
                         guard !editingTitle else { return }
@@ -803,6 +810,7 @@ private struct TerminalTabButton: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(ConductorPressButtonStyle())
+                .accessibilityLabel(L("关闭标签", "Close Tab"))
                 .macNativeTooltip(L("关闭标签", "Close Tab"))
             }
         }
@@ -986,6 +994,7 @@ private struct TerminalTabButtonContent: View, Equatable {
             Image(systemName: "terminal")
                 .font(.conductorSystem(size: 10.5, scale: fontScale))
                 .foregroundStyle(selected ? theme.shellChromeText : theme.shellChromeTextMuted)
+                .accessibilityHidden(true)
             Text(title)
                 .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(selected ? theme.shellChromeText : theme.shellChromeTextMuted)

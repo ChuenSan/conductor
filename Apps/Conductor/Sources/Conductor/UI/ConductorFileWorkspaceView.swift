@@ -405,6 +405,7 @@ private struct ConductorWorkspaceContentTabPill: View {
                     }
                     .buttonStyle(.plain)
                     .opacity(isHovered || isSelected ? 1 : 0.36)
+                    .accessibilityLabel(L("关闭文件", "Close File"))
                 }
             }
             .foregroundStyle(theme.shellChromeText.opacity(isSelected ? 0.94 : 0.62))
@@ -462,6 +463,7 @@ private struct ConductorWorkspaceFileEditorView: View {
     @Environment(\.workspaceFileSearchPreviousToken) private var searchPreviousToken
     @State private var searchVisible = false
     @State private var searchQuery = ""
+    @FocusState private var fileSearchFocused: Bool
     @State private var searchHistory: [String]
     @State private var selectedSearchIndex = 0
     @State private var cachedSearchMatches: [NSRange] = []
@@ -871,7 +873,41 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     private var fileSearchField: some View {
-        EmptyView()
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.46))
+            TextField(L("搜索文件内容", "Search file contents"), text: $searchQuery)
+                .textFieldStyle(.plain)
+                .font(.conductorSystem(size: 12, weight: .medium, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.84))
+                .focused($fileSearchFocused)
+                .frame(width: 190)
+                .onSubmit {
+                    moveSearchSelection(1)
+                }
+            Text(searchStatus)
+                .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.46))
+                .monospacedDigit()
+                .frame(minWidth: 34, alignment: .trailing)
+            if !searchQuery.isEmpty {
+                editorButton("xmark.circle.fill", help: L("清除搜索", "Clear Search")) {
+                    searchQuery = ""
+                    fileSearchFocused = true
+                }
+                .frame(width: 24, height: 24)
+            }
+            editorButton("xmark", help: L("关闭搜索", "Close Search")) {
+                closeSearch()
+            }
+            .frame(width: 24, height: 24)
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 5)
+        .frame(height: 30)
+        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.38 : 0.22))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var searchStatus: String {
@@ -996,11 +1032,15 @@ private struct ConductorWorkspaceFileEditorView: View {
     private func showSearch() {
         searchVisible = true
         documentSearchRevision &+= 1
+        Task { @MainActor in
+            fileSearchFocused = true
+        }
     }
 
     private func closeSearch() {
         recordSearchQuery()
         searchVisible = false
+        fileSearchFocused = false
         searchQuery = ""
         documentSearchStatus = "0/0"
         documentSearchRevision &+= 1
@@ -1019,7 +1059,14 @@ private struct ConductorWorkspaceFileEditorView: View {
         }
         let matches = searchMatches
         guard !matches.isEmpty else { return }
-        selectedSearchIndex = (selectedSearchIndex + delta + matches.count) % matches.count
+        let results = Self.searchSelectionResults(for: matches)
+        let nextID = ConductorSearchSelection.move(
+            currentID: String(selectedSearchIndex),
+            by: delta,
+            results: results,
+            wraps: true
+        )
+        selectedSearchIndex = nextID.flatMap(Int.init) ?? selectedSearchIndex
         selectCurrentSearchMatch()
     }
 
@@ -1051,8 +1098,8 @@ private struct ConductorWorkspaceFileEditorView: View {
             return
         }
 
-        let needle = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else {
+        let query = ConductorSearchQuery(searchQuery)
+        guard !query.isEmpty else {
             searchTask?.cancel()
             searchPending = false
             cachedSearchMatches = []
@@ -1065,6 +1112,7 @@ private struct ConductorWorkspaceFileEditorView: View {
         searchGeneration += 1
         let generation = searchGeneration
         let snapshot = text
+        let needle = query.normalized
         searchPending = true
         searchTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(resetSelection ? 80 : 160))
@@ -1085,8 +1133,9 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     nonisolated private static func searchMatches(in text: String, query: String, maxMatches: Int = .max) -> [NSRange] {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else { return [] }
+        let searchQuery = ConductorSearchQuery(query)
+        guard !searchQuery.isEmpty else { return [] }
+        let needle = searchQuery.normalized
         let haystack = text as NSString
         var matches: [NSRange] = []
         var range = NSRange(location: 0, length: haystack.length)
@@ -1099,6 +1148,17 @@ private struct ConductorWorkspaceFileEditorView: View {
             range = NSRange(location: nextLocation, length: haystack.length - nextLocation)
         }
         return matches
+    }
+
+    nonisolated private static func searchSelectionResults(for matches: [NSRange]) -> [ConductorSearchResult] {
+        matches.enumerated().map { index, _ in
+            ConductorSearchResult(
+                candidate: ConductorSearchCandidate(id: String(index), title: String(index)),
+                score: max(0, 10_000 - index),
+                matchedFields: [],
+                presentationIndex: index
+            )
+        }
     }
 
     private func recordSearchQuery() {

@@ -11,6 +11,11 @@ private func L(_ zh: String, _ en: String) -> String {
     ConductorLocalization.text(zh: zh, en: en)
 }
 
+private enum WorkspaceTopTabScrollTarget: Hashable {
+    case workspace(WorkspaceID)
+    case file(String)
+}
+
 struct WorkspaceTabStrip: View {
     let model: ConductorWindowModel
     let snapshot: WorkspaceChromeSnapshot
@@ -21,7 +26,7 @@ struct WorkspaceTabStrip: View {
     let onCommitRename: () -> Void
     let onCancelRename: () -> Void
     @Namespace private var selectionNamespace
-    @State private var scrollTargetID: WorkspaceID?
+    @State private var scrollTargetID: WorkspaceTopTabScrollTarget?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -50,6 +55,7 @@ struct WorkspaceTabStrip: View {
                                 }
                             }
                         )
+                        .id(WorkspaceTopTabScrollTarget.file(fileTab.id))
                         .transition(ConductorMotion.tabTransition)
                     }
                 }
@@ -63,6 +69,9 @@ struct WorkspaceTabStrip: View {
             syncScrollTarget(animated: false)
         }
         .onChange(of: snapshot.selectedWorkspaceID) {
+            syncScrollTarget(animated: true)
+        }
+        .onChange(of: snapshot.selectedWorkspaceFileTabID) {
             syncScrollTarget(animated: true)
         }
         .onChange(of: snapshot.workspaceIDs) {
@@ -81,9 +90,18 @@ struct WorkspaceTabStrip: View {
     }
 
     private func syncScrollTarget(animated: Bool) {
-        guard snapshot.workspaceIDs.contains(snapshot.selectedWorkspaceID) else { return }
+        let nextTarget: WorkspaceTopTabScrollTarget?
+        if let fileID = snapshot.selectedWorkspaceFileTabID,
+                  snapshot.fileTabs.contains(where: { $0.id == fileID }) {
+            nextTarget = .file(fileID)
+        } else if snapshot.workspaceIDs.contains(snapshot.selectedWorkspaceID) {
+            nextTarget = .workspace(snapshot.selectedWorkspaceID)
+        } else {
+            nextTarget = nil
+        }
+
         let update = {
-            scrollTargetID = snapshot.selectedWorkspaceID
+            scrollTargetID = nextTarget
         }
         if animated {
             model.performShellMotion(ConductorMotion.scroll, update)
@@ -141,7 +159,7 @@ struct WorkspaceTabStrip: View {
                 }
             }
         )
-        .id(row.id)
+        .id(WorkspaceTopTabScrollTarget.workspace(row.id))
     }
 
     private func finishWorkspaceRenameIfNeeded(except workspaceID: WorkspaceID? = nil) {
@@ -227,6 +245,12 @@ private struct WorkspaceFileTopTab: View {
         return "doc.text"
     }
 
+    private var accessibilityTitle: String {
+        dirty
+            ? L("文件 \(tab.title)，有未保存更改", "File \(tab.title), unsaved changes")
+            : L("文件 \(tab.title)", "File \(tab.title)")
+    }
+
     var body: some View {
         ZStack(alignment: .trailing) {
             Button(action: onSelect) {
@@ -257,6 +281,7 @@ private struct WorkspaceFileTopTab: View {
                 .contentShape(tabShape)
             }
             .buttonStyle(ConductorPressButtonStyle())
+            .accessibilityLabel(accessibilityTitle)
 
             Button {
                 onClose()
@@ -270,6 +295,7 @@ private struct WorkspaceFileTopTab: View {
             }
             .buttonStyle(ConductorPressButtonStyle())
             .padding(.trailing, 6)
+            .accessibilityLabel(L("关闭文件", "Close File"))
             .macNativeTooltip(L("关闭文件", "Close File"))
         }
         .frame(
@@ -366,6 +392,12 @@ private struct WorkspaceTopTab: View {
 
     private var titleColor: Color {
         selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86)
+    }
+
+    private var tabAccessibilityTitle: String {
+        let base = L("\(row.title)，\(row.terminalCount) 个终端", "\(row.title), \(row.terminalCount) terminals")
+        guard unreadCount > 0 else { return base }
+        return base + L("，\(unreadCount) 条未读", ", \(unreadCount) unread")
     }
 
     var body: some View {
@@ -475,6 +507,7 @@ private struct WorkspaceTopTab: View {
                 .contentShape(tabShape)
             }
             .buttonStyle(ConductorPressButtonStyle())
+            .accessibilityLabel(tabAccessibilityTitle)
             .simultaneousGesture(
                 TapGesture(count: 2).onEnded {
                     guard !editing else { return }
@@ -496,6 +529,7 @@ private struct WorkspaceTopTab: View {
             .buttonStyle(ConductorPressButtonStyle())
             .disabled(!canClose)
             .padding(.trailing, 6)
+            .accessibilityLabel(L("关闭工作区", "Close Workspace"))
             .macNativeTooltip(L("关闭工作区", "Close Workspace"))
         }
     }
@@ -561,5 +595,6 @@ private struct WorkspaceTabGlyph: View {
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
             .frame(width: 17, height: 17)
+            .accessibilityHidden(true)
     }
 }

@@ -4,6 +4,10 @@ import ConductorCore
 import QuartzCore
 import SwiftUI
 
+private func L(_ zh: String, _ en: String) -> String {
+    ConductorLocalization.text(zh: zh, en: en)
+}
+
 private let conductorUncaughtExceptionHandler: @convention(c) (NSException) -> Void = { exception in
     ConductorDiagnostics.recordSync(
         "uncaught-nsexception",
@@ -354,54 +358,61 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu(title: "Conductor")
-        appMenu.addItem(menuItem("Settings...", ",", [], #selector(settingsPanelCommand)))
+        appMenu.addItem(menuItem(L("设置...", "Settings..."), ",", [], #selector(settingsPanelCommand)))
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(NSMenuItem(title: "Quit Conductor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        appMenu.addItem(NSMenuItem(title: L("退出 Conductor", "Quit Conductor"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
         let fileMenuItem = NSMenuItem()
-        let fileMenu = NSMenu(title: "File")
-        fileMenu.addItem(menuItem("New Workspace", "n", [], #selector(newWorkspaceCommand)))
-        fileMenu.addItem(menuItem("New Terminal", "t", [], #selector(newTerminalCommand)))
+        fileMenuItem.title = L("文件", "File")
+        let fileMenu = NSMenu(title: L("文件", "File"))
+        fileMenu.addItem(menuItem(L("新建工作区", "New Workspace"), "n", [], #selector(newWorkspaceCommand)))
+        fileMenu.addItem(menuItem(L("新开终端", "New Terminal"), "t", [], #selector(newTerminalCommand)))
         fileMenu.addItem(NSMenuItem.separator())
-        fileMenu.addItem(menuItem("Close Tab", "w", [], #selector(closeTabCommand)))
-        fileMenu.addItem(menuItem("Close Pane", "w", [.shift], #selector(closePaneCommand)))
+        fileMenu.addItem(menuItem(L("关闭标签", "Close Tab"), "w", [], #selector(closeTabCommand)))
+        fileMenu.addItem(menuItem(L("关闭分屏", "Close Pane"), "w", [.shift], #selector(closePaneCommand)))
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)
 
         let layoutMenuItem = NSMenuItem()
-        let layoutMenu = NSMenu(title: "Layout")
-        layoutMenu.addItem(menuItem("Split Right", "d", [], #selector(splitRightCommand)))
-        layoutMenu.addItem(menuItem("Split Down", "d", [.shift], #selector(splitDownCommand)))
+        layoutMenuItem.title = L("布局", "Layout")
+        let layoutMenu = NSMenu(title: L("布局", "Layout"))
+        layoutMenu.addItem(menuItem(L("向右分屏", "Split Right"), "d", [], #selector(splitRightCommand)))
+        layoutMenu.addItem(menuItem(L("向下分屏", "Split Down"), "d", [.shift], #selector(splitDownCommand)))
         layoutMenu.addItem(NSMenuItem.separator())
-        layoutMenu.addItem(menuItem("Next Tab", "]", [], #selector(selectNextTabCommand)))
-        layoutMenu.addItem(menuItem("Previous Tab", "[", [], #selector(selectPreviousTabCommand)))
-        layoutMenu.addItem(menuItem("Next Pane", "]", [.shift], #selector(focusNextPaneCommand)))
-        layoutMenu.addItem(menuItem("Previous Pane", "[", [.shift], #selector(focusPreviousPaneCommand)))
+        layoutMenu.addItem(menuItem(L("下一个标签", "Next Tab"), "]", [], #selector(selectNextTabCommand)))
+        layoutMenu.addItem(menuItem(L("上一个标签", "Previous Tab"), "[", [], #selector(selectPreviousTabCommand)))
+        layoutMenu.addItem(menuItem(L("下一个分屏", "Next Pane"), "]", [.shift], #selector(focusNextPaneCommand)))
+        layoutMenu.addItem(menuItem(L("上一个分屏", "Previous Pane"), "[", [.shift], #selector(focusPreviousPaneCommand)))
         layoutMenu.addItem(NSMenuItem.separator())
-        layoutMenu.addItem(menuItem("Equalize Splits", "=", [.shift], #selector(equalizeSplitsCommand)))
-        layoutMenu.addItem(menuItem("Toggle Pane Zoom", "z", [.option], #selector(toggleZoomCommand)))
+        layoutMenu.addItem(menuItem(L("均分分屏", "Equalize Splits"), "=", [.shift], #selector(equalizeSplitsCommand)))
+        layoutMenu.addItem(menuItem(L("切换分屏放大", "Toggle Pane Zoom"), "z", [.option], #selector(toggleZoomCommand)))
         layoutMenu.addItem(NSMenuItem.separator())
-        layoutMenu.addItem(menuItem("Move Tab Left", ",", [.shift], #selector(moveTabLeftCommand)))
-        layoutMenu.addItem(menuItem("Move Tab Right", ".", [.shift], #selector(moveTabRightCommand)))
-        layoutMenu.addItem(menuItem("Move Tab to Next Pane", "m", [.option], #selector(moveTabToNextPaneCommand)))
-        layoutMenu.addItem(menuItem("Move Tab to New Right Split", "m", [.option, .shift], #selector(moveTabToNewRightSplitCommand)))
+        layoutMenu.addItem(menuItem(L("标签左移", "Move Tab Left"), ",", [.shift], #selector(moveTabLeftCommand)))
+        layoutMenu.addItem(menuItem(L("标签右移", "Move Tab Right"), ".", [.shift], #selector(moveTabRightCommand)))
+        layoutMenu.addItem(menuItem(L("移动标签到下一个分屏", "Move Tab to Next Pane"), "m", [.option], #selector(moveTabToNextPaneCommand)))
+        layoutMenu.addItem(menuItem(L("移动标签到右侧新分屏", "Move Tab to New Right Split"), "m", [.option, .shift], #selector(moveTabToNewRightSplitCommand)))
         layoutMenuItem.submenu = layoutMenu
         mainMenu.addItem(layoutMenuItem)
 
         let viewMenuItem = NSMenuItem()
-        let viewMenu = NSMenu(title: "View")
-        viewMenu.addItem(menuItem("Workspace Overview", "o", [], #selector(workspaceOverviewCommand)))
-        viewMenu.addItem(menuItem("Command Palette", "k", [], #selector(commandPaletteCommand)))
-        viewMenu.addItem(menuItem("Notifications", "n", [.option], #selector(notificationCenterCommand)))
-        viewMenu.addItem(menuItem("Jump to Latest Unread", "j", [.option], #selector(jumpToLatestUnreadCommand)))
+        viewMenuItem.title = L("视图", "View")
+        let viewMenu = NSMenu(title: L("视图", "View"))
+        viewMenu.addItem(menuItem(L("工作区总览", "Workspace Overview"), "o", [], #selector(workspaceOverviewCommand)))
+        viewMenu.addItem(menuItem(L("命令面板", "Command Palette"), "k", [], #selector(commandPaletteCommand)))
+        viewMenu.addItem(menuItem(L("通知中心", "Notifications"), "n", [.option], #selector(notificationCenterCommand)))
+        viewMenu.addItem(menuItem(L("跳转到最新未读", "Jump to Latest Unread"), "j", [.option], #selector(jumpToLatestUnreadCommand)))
         viewMenu.addItem(NSMenuItem.separator())
-        viewMenu.addItem(menuItem("Open Current Directory", "", [], #selector(openCurrentDirectoryCommand)))
-        viewMenu.addItem(menuItem("Copy Current Directory Path", "", [], #selector(copyCurrentDirectoryCommand)))
+        viewMenu.addItem(menuItem(L("打开当前目录", "Open Current Directory"), "", [], #selector(openCurrentDirectoryCommand)))
+        viewMenu.addItem(menuItem(L("复制当前目录路径", "Copy Current Directory Path"), "", [], #selector(copyCurrentDirectoryCommand)))
         viewMenu.addItem(NSMenuItem.separator())
-        viewMenu.addItem(menuItem("Toggle Full Screen", "f", [.control], #selector(toggleFullScreenCommand)))
-        viewMenu.addItem(menuItem("Reset Workspace", "", [], #selector(resetWorkspaceCommand)))
+        viewMenu.addItem(menuItem(L("上下文搜索", "Context Search"), "f", [], #selector(contextSearchCommand)))
+        viewMenu.addItem(menuItem(L("查找下一个", "Find Next"), "g", [], #selector(findNextCommand)))
+        viewMenu.addItem(menuItem(L("查找上一个", "Find Previous"), "G", [.shift], #selector(findPreviousCommand)))
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(menuItem(L("切换全屏", "Toggle Full Screen"), "f", [.control], #selector(toggleFullScreenCommand)))
+        viewMenu.addItem(menuItem(L("重置工作区", "Reset Workspace"), "", [], #selector(resetWorkspaceCommand)))
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
@@ -442,6 +453,12 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             model.canPerformCommand(.openFocusedDirectory)
         case #selector(copyCurrentDirectoryCommand):
             model.canPerformCommand(.copyFocusedDirectory)
+        case #selector(contextSearchCommand):
+            model.canPerformCommand(.showTerminalSearch)
+        case #selector(findNextCommand):
+            model.canPerformCommand(.findNext)
+        case #selector(findPreviousCommand):
+            model.canPerformCommand(.findPrevious)
         default:
             true
         }
@@ -462,6 +479,15 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         switch (characters, flags.contains(.shift)) {
         case ("f", _) where flags.contains(.control):
             scheduleCommand(.toggleFullScreen)
+            return true
+        case ("f", _) where !flags.contains(.option):
+            scheduleCommand(.showTerminalSearch)
+            return true
+        case ("g", false) where !flags.contains(.option):
+            scheduleCommand(.findNext)
+            return true
+        case ("g", true) where !flags.contains(.option):
+            scheduleCommand(.findPrevious)
             return true
         case ("n", _) where flags.contains(.option):
             scheduleCommand(.toggleNotifications)
@@ -675,6 +701,18 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     @objc private func copyCurrentDirectoryCommand() {
         scheduleCommand(.copyFocusedDirectory)
+    }
+
+    @objc private func contextSearchCommand() {
+        scheduleCommand(.showTerminalSearch)
+    }
+
+    @objc private func findNextCommand() {
+        scheduleCommand(.findNext)
+    }
+
+    @objc private func findPreviousCommand() {
+        scheduleCommand(.findPrevious)
     }
 
     @objc private func toggleFullScreenCommand() {

@@ -15,6 +15,7 @@ struct ShellRootView: View {
     @State private var fileManagerPresentationRequest: FileManagerPanelRequest?
     @State private var fileManagerTrayVisible = false
     @State private var fileManagerAnimationGeneration = 0
+    @FocusState private var terminalSearchFocused: Bool
 
     private let fileManagerTargetWidth: CGFloat = 468
     private let fileManagerAnimationDuration: TimeInterval = 0.18
@@ -87,8 +88,17 @@ struct ShellRootView: View {
         .animation(model.shellAnimation(ConductorMotion.panel), value: shellSnapshot.commandPaletteVisible)
         .animation(model.shellAnimation(ConductorMotion.panel), value: shellSnapshot.settingsPanelVisible)
         .animation(model.shellAnimation(ConductorMotion.panel), value: shellSnapshot.workspaceOverviewVisible)
+        .animation(model.shellAnimation(ConductorMotion.panel), value: model.terminalSearchVisible)
         .onAppear {
             synchronizeFileManagerPresentation(animated: false)
+        }
+        .onChange(of: model.terminalSearchFocusGeneration) { _, _ in
+            focusTerminalSearchField()
+        }
+        .onChange(of: model.terminalSearchVisible) { _, visible in
+            if visible {
+                focusTerminalSearchField()
+            }
         }
         .onChange(of: model.fileManagerPanelRequest?.id) { _, _ in
             synchronizeFileManagerPresentation(animated: true)
@@ -122,6 +132,13 @@ struct ShellRootView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipped()
                     fileManagerTray
+                    if model.terminalSearchVisible && model.fileManagerPanelRequest == nil {
+                        TerminalSearchBar(model: model, focus: $terminalSearchFocused)
+                            .padding(.top, 12)
+                            .padding(.trailing, 12)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                            .transition(ConductorMotion.panelTransition)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .clipped()
@@ -215,7 +232,7 @@ struct ShellRootView: View {
                 model: model,
                 snapshot: ConductorFileWorkspaceSnapshot(model: model)
             )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             terminalStage
         }
@@ -232,6 +249,100 @@ struct ShellRootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private func focusTerminalSearchField() {
+        terminalSearchFocused = false
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(30))
+            guard model.terminalSearchVisible else { return }
+            terminalSearchFocused = true
+        }
+    }
+
+}
+
+private struct TerminalSearchBar: View {
+    let model: ConductorWindowModel
+    var focus: FocusState<Bool>.Binding
+
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    private var query: Binding<String> {
+        Binding(
+            get: { model.terminalSearchQuery },
+            set: { model.setTerminalSearchQuery($0) }
+        )
+    }
+
+    private var statusText: String {
+        let metadata = model.focusedTerminalSearchMetadata
+        guard let total = metadata.total, total > 0 else { return "0/0" }
+        let selected = min(max((metadata.selected ?? 0) + 1, 1), total)
+        return "\(selected)/\(total)"
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .accessibilityHidden(true)
+            TextField(L("搜索终端输出", "Search terminal output"), text: query)
+                .textFieldStyle(.plain)
+                .font(.conductorSystem(size: 12, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
+                .focused(focus)
+                .frame(width: 220)
+                .onSubmit {
+                    model.navigateTerminalSearch(previous: false)
+                }
+            Text(statusText)
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .monospacedDigit()
+                .frame(minWidth: 38, alignment: .trailing)
+            terminalSearchButton("chevron.up", help: L("上一个搜索结果", "Previous Search Result")) {
+                model.navigateTerminalSearch(previous: true)
+            }
+            terminalSearchButton("chevron.down", help: L("下一个搜索结果", "Next Search Result")) {
+                model.navigateTerminalSearch(previous: false)
+            }
+            terminalSearchButton("xmark", help: L("关闭搜索", "Close Search")) {
+                model.closeTerminalSearch()
+            }
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
+        .frame(height: 34)
+        .background(theme.floatingControlStrongFill)
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
+                .stroke(theme.floatingStroke, lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.18 : 0.10), radius: 14, x: 0, y: 8)
+        .onAppear {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(30))
+                focus.wrappedValue = true
+            }
+        }
+    }
+
+    private func terminalSearchButton(_ systemImage: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .frame(width: 24, height: 24)
+                .background(theme.floatingControlFill)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .accessibilityHidden(true)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(help)
+        .macNativeTooltip(help)
+    }
 }
 
 private struct ConductorShellJoiner: View {
@@ -291,6 +402,7 @@ struct FloatingPanelHeader<Trailing: View>: View {
     var body: some View {
         HStack(spacing: 9) {
             Image(systemName: systemImage)
+                .accessibilityHidden(true)
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
                 .frame(width: 24, height: 24)
@@ -324,6 +436,7 @@ struct FloatingPanelHeader<Trailing: View>: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(closeHelp)
             .macNativeTooltip(closeHelp)
         }
     }
@@ -396,15 +509,14 @@ private struct CommandPaletteView: View {
     var body: some View {
         ZStack {
             ConductorGlassSurface(style: .panel, clarity: snapshot.chromeClarity, interactive: true) {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     commandHeader
-                    FloatingPanelDivider()
                     commandSearchField
                     commandResults
                 }
-                .padding(12)
+                .padding(10)
             }
-            .frame(width: 690, height: 486)
+            .frame(width: 660, height: 430)
             .onAppear {
                 refreshFilteredCommands()
                 focusSearchField()
@@ -437,9 +549,7 @@ private struct CommandPaletteView: View {
     }
 
     private var commandHeader: some View {
-        FloatingPanelHeader(
-            systemImage: "command",
-            title: "Command Center",
+        CommandPaletteHeader(
             subtitle: snapshot.subtitle,
             closeHelp: L("关闭命令中心", "Close Command Center")
         ) {
@@ -452,6 +562,7 @@ private struct CommandPaletteView: View {
             Image(systemName: "magnifyingglass")
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
+                .accessibilityHidden(true)
             TextField(L("搜索命令", "Search commands"), text: $query)
                 .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 13, weight: .medium, scale: fontScale))
@@ -488,7 +599,7 @@ private struct CommandPaletteView: View {
                     LazyVStack(alignment: .leading, spacing: 3) {
                         ForEach(filteredResult.rows) { row in
                             if row.showsSectionTitle {
-                                CommandSectionTitle(row.command.section)
+                                CommandSectionTitle(row.command.section, compact: true)
                             }
                             CommandButton(
                                 command: row.command,
@@ -527,26 +638,19 @@ private struct CommandPaletteView: View {
     }
 
     private func ensureSelection(in result: CommandPaletteFilterResult) {
-        guard !result.enabledCommands.isEmpty else {
-            selectedCommandID = nil
-            return
-        }
-        if let selectedCommandID,
-           result.enabledCommandIDs.contains(selectedCommandID) {
-            return
-        }
-        selectedCommandID = result.enabledCommands.first?.id
+        selectedCommandID = ConductorSearchSelection.resolvedSelection(
+            currentID: selectedCommandID,
+            results: result.searchResults
+        )
     }
 
     private func moveSelection(by offset: Int) {
-        let enabledCommands = filteredResult.enabledCommands
-        guard !enabledCommands.isEmpty else {
-            selectedCommandID = nil
-            return
-        }
-        let currentIndex = enabledCommands.firstIndex { $0.id == selectedCommandID } ?? 0
-        let nextIndex = (currentIndex + offset + enabledCommands.count) % enabledCommands.count
-        selectedCommandID = enabledCommands[nextIndex].id
+        selectedCommandID = ConductorSearchSelection.move(
+            currentID: selectedCommandID,
+            by: offset,
+            results: filteredResult.searchResults,
+            wraps: true
+        )
     }
 
     private func execute(_ command: CommandPaletteItem) {
@@ -581,27 +685,23 @@ private struct CommandPaletteView: View {
 }
 
 private struct CommandPaletteFilterResult: Equatable {
-    static let empty = CommandPaletteFilterResult(rows: [], enabledCommands: [], enabledCommandIDs: [], commandIDs: [])
+    static let empty = CommandPaletteFilterResult(rows: [], searchResults: [], commandIDs: [])
 
     let rows: [CommandPaletteFilteredRow]
-    let enabledCommands: [CommandPaletteItem]
-    let enabledCommandIDs: Set<String>
+    let searchResults: [ConductorSearchResult]
     let commandIDs: [String]
 
     init(commands: [CommandPaletteItem], query: String) {
-        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
+        let commandByID = Dictionary(uniqueKeysWithValues: commands.map { ($0.id, $0) })
+        let searchResults = ConductorSearchMatcher.results(for: query, in: commands.map(\.searchCandidate))
         var previousSection: String?
         var rows: [CommandPaletteFilteredRow] = []
-        var enabledCommands: [CommandPaletteItem] = []
-        var enabledCommandIDs = Set<String>()
         var commandIDs: [String] = []
         rows.reserveCapacity(commands.count)
-        enabledCommands.reserveCapacity(commands.count)
         commandIDs.reserveCapacity(commands.count)
 
-        for command in commands {
-            guard normalizedQuery.isEmpty || command.searchText.contains(normalizedQuery) else { continue }
+        for result in searchResults {
+            guard let command = commandByID[result.candidate.id] else { continue }
             let showsSectionTitle = command.section != previousSection
             previousSection = command.section
             rows.append(CommandPaletteFilteredRow(
@@ -610,27 +710,20 @@ private struct CommandPaletteFilterResult: Equatable {
                 presentationIndex: rows.count
             ))
             commandIDs.append(command.id)
-            if !command.disabled {
-                enabledCommands.append(command)
-                enabledCommandIDs.insert(command.id)
-            }
         }
 
         self.rows = rows
-        self.enabledCommands = enabledCommands
-        self.enabledCommandIDs = enabledCommandIDs
+        self.searchResults = searchResults
         self.commandIDs = commandIDs
     }
 
     private init(
         rows: [CommandPaletteFilteredRow],
-        enabledCommands: [CommandPaletteItem],
-        enabledCommandIDs: Set<String>,
+        searchResults: [ConductorSearchResult],
         commandIDs: [String]
     ) {
         self.rows = rows
-        self.enabledCommands = enabledCommands
-        self.enabledCommandIDs = enabledCommandIDs
+        self.searchResults = searchResults
         self.commandIDs = commandIDs
     }
 
@@ -676,6 +769,19 @@ private struct CommandPaletteItem: Identifiable, Equatable {
         self.disabledReason = disabledReason
         self.keywords = keywords
         self.searchText = "\(title) \(shortcut) \(section) \(keywords)".lowercased()
+    }
+
+    var searchCandidate: ConductorSearchCandidate {
+        ConductorSearchCandidate(
+            id: id,
+            title: title,
+            subtitle: shortcut,
+            keywords: [keywords, section, shortcut],
+            section: section,
+            systemImage: systemImage,
+            isEnabled: !disabled,
+            disabledReason: disabledReason
+        )
     }
 
     var systemImage: String {
@@ -809,6 +915,36 @@ private enum ConductorCommandCatalog {
                 disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
                 keywords: "file files browser manager cwd folder directory preview"
             ),
+            CommandPaletteItem(
+                id: "context-search",
+                command: .showTerminalSearch,
+                section: L("上下文", "Context"),
+                title: L("搜索当前上下文", "Search Current Context"),
+                shortcut: "Cmd-F",
+                disabled: !canPerform(.showTerminalSearch),
+                disabledReason: L("当前没有可搜索的终端、文件或文件面板", "No searchable terminal, file, or file panel is active"),
+                keywords: "search find terminal file document context"
+            ),
+            CommandPaletteItem(
+                id: "find-next",
+                command: .findNext,
+                section: L("上下文", "Context"),
+                title: L("下一个搜索结果", "Next Search Result"),
+                shortcut: "Cmd-G",
+                disabled: !canPerform(.findNext),
+                disabledReason: L("先打开搜索", "Open search first"),
+                keywords: "search find next match"
+            ),
+            CommandPaletteItem(
+                id: "find-previous",
+                command: .findPrevious,
+                section: L("上下文", "Context"),
+                title: L("上一个搜索结果", "Previous Search Result"),
+                shortcut: "Cmd-Shift-G",
+                disabled: !canPerform(.findPrevious),
+                disabledReason: L("先打开搜索", "Open search first"),
+                keywords: "search find previous match"
+            ),
             CommandPaletteItem(id: "split-right", command: .splitRight, section: L("创建", "Create"), title: L("向右分屏", "Split Right"), shortcut: "Cmd-D", disabled: !canPerform(.splitRight), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split right vertical"),
             CommandPaletteItem(id: "split-down", command: .splitDown, section: L("创建", "Create"), title: L("向下分屏", "Split Down"), shortcut: "Cmd-Shift-D", disabled: !canPerform(.splitDown), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split down horizontal"),
             CommandPaletteItem(id: "next-tab", command: .selectNextTab, section: L("导航", "Navigate"), title: L("下一个标签", "Next Tab"), shortcut: "Cmd-]", keywords: "next tab"),
@@ -907,25 +1043,73 @@ struct CommandShortcutGuideRowModel: Identifiable, Equatable {
     let isFirst: Bool
 }
 
-private struct CommandSectionTitle: View {
-    let title: String
+private struct CommandPaletteHeader: View {
+    let subtitle: String
+    let closeHelp: String
+    let onClose: () -> Void
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
-    init(_ title: String) {
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "command")
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
+                .frame(width: 18, height: 18)
+                .accessibilityHidden(true)
+
+            Text(L("命令", "Commands"))
+                .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
+                .lineLimit(1)
+
+            Text(subtitle)
+                .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 10)
+
+            Button {
+                onClose()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .frame(width: 22, height: 22)
+                    .background(theme.floatingControlFill.opacity(0.82))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(closeHelp)
+            .macNativeTooltip(closeHelp)
+        }
+        .frame(height: 24)
+    }
+}
+
+private struct CommandSectionTitle: View {
+    let title: String
+    var compact = false
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    init(_ title: String, compact: Bool = false) {
         self.title = title
+        self.compact = compact
     }
 
     var body: some View {
         HStack(spacing: 6) {
             Text(title)
-                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .font(.conductorSystem(size: compact ? 9.8 : 10.5, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
             Rectangle()
                 .fill(theme.floatingSeparator)
                 .frame(height: 1)
         }
-        .padding(.top, 5)
+        .padding(.top, compact ? 3 : 5)
         .padding(.horizontal, 4)
     }
 }
@@ -1047,7 +1231,6 @@ private struct WorkspaceOverviewSnapshot: Equatable {
 
 private struct WorkspaceOverviewItemSnapshot: Identifiable, Equatable {
     let workspace: WorkspaceState
-    let searchText: String
 
     var id: WorkspaceID {
         workspace.id
@@ -1055,11 +1238,26 @@ private struct WorkspaceOverviewItemSnapshot: Identifiable, Equatable {
 
     init(workspace: WorkspaceState) {
         self.workspace = workspace
-        self.searchText = Self.searchText(for: workspace)
     }
 
-    private static func searchText(for workspace: WorkspaceState) -> String {
-        var parts = [workspace.title]
+    var searchCandidate: ConductorSearchCandidate {
+        ConductorSearchCandidate(
+            id: workspace.id.description,
+            title: workspace.title,
+            subtitle: Self.subtitle(for: workspace),
+            keywords: Self.keywords(for: workspace),
+            section: L("工作区", "Workspaces"),
+            systemImage: WorkspaceChromeGlyph.systemName(selected: false)
+        )
+    }
+
+    private static func subtitle(for workspace: WorkspaceState) -> String {
+        let terminalCount = workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+        return L("\(workspace.panes.count) 个分屏 · \(terminalCount) 个终端", "\(workspace.panes.count) panes · \(terminalCount) terminals")
+    }
+
+    private static func keywords(for workspace: WorkspaceState) -> [String] {
+        var parts: [String] = []
         for pane in workspace.panes.values {
             for tab in pane.tabs {
                 parts.append(tab.title)
@@ -1068,17 +1266,21 @@ private struct WorkspaceOverviewItemSnapshot: Identifiable, Equatable {
                 }
             }
         }
-        return parts.joined(separator: " ").lowercased()
+        return parts
     }
 }
 
 private struct WorkspaceOverviewFilterResult: Equatable {
     let items: [WorkspaceOverviewItemSnapshot]
     let ids: [WorkspaceID]
+    let searchResults: [ConductorSearchResult]
 
-    init(items: [WorkspaceOverviewItemSnapshot]) {
-        self.items = items
-        self.ids = items.map(\.id)
+    init(items: [WorkspaceOverviewItemSnapshot], query: String = "") {
+        let itemByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id.description, $0) })
+        let searchResults = ConductorSearchMatcher.results(for: query, in: items.map(\.searchCandidate))
+        self.items = searchResults.compactMap { itemByID[$0.candidate.id] }
+        self.ids = self.items.map(\.id)
+        self.searchResults = searchResults
     }
 }
 
@@ -1096,15 +1298,7 @@ private struct WorkspaceOverviewPanel: View {
     ]
 
     private var filteredResult: WorkspaceOverviewFilterResult {
-        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedQuery.isEmpty else {
-            return WorkspaceOverviewFilterResult(items: snapshot.items)
-        }
-        return WorkspaceOverviewFilterResult(
-            items: snapshot.items.filter { item in
-                item.searchText.contains(normalizedQuery)
-            }
-        )
+        WorkspaceOverviewFilterResult(items: snapshot.items, query: query)
     }
 
     var body: some View {
@@ -1201,6 +1395,7 @@ private struct WorkspaceOverviewPanel: View {
             Image(systemName: "magnifyingglass")
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
+                .accessibilityHidden(true)
             TextField(L("搜索工作区", "Search workspaces"), text: $query)
                 .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 13, weight: .medium, scale: fontScale))
@@ -1234,26 +1429,29 @@ private struct WorkspaceOverviewPanel: View {
 
     private func ensureHighlight() {
         let result = filteredResult
-        guard !result.items.isEmpty else {
-            highlightedWorkspaceID = nil
-            return
+        let preferredID = highlightedWorkspaceID.flatMap { id in
+            result.ids.contains(id) ? id.description : nil
+        } ?? (result.ids.contains(snapshot.selectedWorkspaceID) ? snapshot.selectedWorkspaceID.description : nil)
+        let resolvedID = ConductorSearchSelection.resolvedSelection(
+            currentID: preferredID,
+            results: result.searchResults
+        )
+        highlightedWorkspaceID = resolvedID.flatMap { id in
+            result.items.first { $0.id.description == id }?.id
         }
-        if let highlightedWorkspaceID,
-           result.ids.contains(highlightedWorkspaceID) {
-            return
-        }
-        highlightedWorkspaceID = result.ids.contains(snapshot.selectedWorkspaceID) ? snapshot.selectedWorkspaceID : result.items.first?.id
     }
 
     private func moveHighlight(by offset: Int) {
         let result = filteredResult
-        guard !result.items.isEmpty else {
-            highlightedWorkspaceID = nil
-            return
+        let resolvedID = ConductorSearchSelection.move(
+            currentID: highlightedWorkspaceID?.description,
+            by: offset,
+            results: result.searchResults,
+            wraps: false
+        )
+        highlightedWorkspaceID = resolvedID.flatMap { id in
+            result.items.first { $0.id.description == id }?.id
         }
-        let currentIndex = result.ids.firstIndex { $0 == highlightedWorkspaceID } ?? 0
-        let nextIndex = max(0, min(result.items.count - 1, currentIndex + offset))
-        highlightedWorkspaceID = result.items[nextIndex].id
     }
 
     private func openHighlightedWorkspace() {
@@ -1296,6 +1494,22 @@ private struct WorkspaceOverviewCard: View {
 
     private var focusedTerminalTitle: String {
         workspace.focusedPane?.selectedTab?.title ?? L("终端", "Terminal")
+    }
+
+    private var accessibilityTitle: String {
+        var parts = [
+            workspace.title,
+            L("\(workspace.panes.count) 个分屏", "\(workspace.panes.count) panes"),
+            L("\(terminalCount) 个终端", "\(terminalCount) terminals"),
+            focusedTerminalTitle
+        ]
+        if workspace.isZoomed {
+            parts.append(L("已放大", "Zoomed"))
+        }
+        if unreadCount > 0 {
+            parts.append(L("\(unreadCount) 条未读", "\(unreadCount) unread"))
+        }
+        return parts.joined(separator: "，")
     }
 
     var body: some View {
@@ -1357,6 +1571,9 @@ private struct WorkspaceOverviewCard: View {
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityTitle)
+        .accessibilityAddTraits(.isButton)
         .onHover { value in
             ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
