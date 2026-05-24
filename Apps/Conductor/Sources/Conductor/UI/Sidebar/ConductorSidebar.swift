@@ -526,9 +526,11 @@ private struct SidebarBookSpineChrome: View {
 struct WorkspaceChromeSnapshot: Equatable {
     let selectedWorkspaceID: WorkspaceID
     let selectedWorkspaceFileTabID: String?
+    let selectedWorkspaceWebTabID: WebTabID?
     let rows: [WorkspaceChromeDisplayModel]
     let workspaceIDs: [WorkspaceID]
     let fileTabs: [WorkspaceFileTabDisplayModel]
+    let webTabs: [WorkspaceWebTabDisplayModel]
     let currentSplitCount: Int
     let currentTerminalCount: Int
     let totalUnreadCount: Int
@@ -552,9 +554,11 @@ struct WorkspaceChromeSnapshot: Equatable {
             )
         }
         let selectedWorkspaceFileTabID = model.selectedWorkspaceFileTab?.id
+        let selectedWorkspaceWebTabID = model.selectedWorkspaceWebTab?.id
 
         self.selectedWorkspaceID = selectedWorkspaceID
         self.selectedWorkspaceFileTabID = selectedWorkspaceFileTabID
+        self.selectedWorkspaceWebTabID = selectedWorkspaceWebTabID
         self.rows = rows
         self.workspaceIDs = rows.map(\.id)
         self.fileTabs = model.workspaceFileTabs.map { tab in
@@ -562,6 +566,12 @@ struct WorkspaceChromeSnapshot: Equatable {
                 tab: tab,
                 selected: tab.id == selectedWorkspaceFileTabID,
                 dirty: model.isWorkspaceFileTabDirty(tab.id)
+            )
+        }
+        self.webTabs = model.workspaceWebTabs.map { tab in
+            WorkspaceWebTabDisplayModel(
+                tab: tab,
+                selected: tab.id == selectedWorkspaceWebTabID
             )
         }
         self.currentSplitCount = model.workspace.panes.count
@@ -624,6 +634,12 @@ struct WorkspaceFileTabDisplayModel: Identifiable, Equatable {
     let tab: ConductorWorkspaceFileTab
     let selected: Bool
     let dirty: Bool
+}
+
+struct WorkspaceWebTabDisplayModel: Identifiable, Equatable {
+    var id: WebTabID { tab.id }
+    let tab: WorkspaceWebTabState
+    let selected: Bool
 }
 
 enum WorkspaceChromeGlyph {

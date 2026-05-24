@@ -68,6 +68,11 @@ struct ConductorToolbar: View {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.newTerminal)
                     }
+                    ConductorSegmentDivider()
+                    ConductorIconButton(state: toolbarControlState(id: "new-web-tab", systemImage: "globe", tooltip: L("新建网页标签 Cmd-Shift-T", "New Web Tab Cmd-Shift-T"), title: L("网页", "Web"))) {
+                        finishWorkspaceRenameIfNeeded()
+                        model.performCommand(.newWebTab)
+                    }
                 }
 
                 ConductorPillGroup {

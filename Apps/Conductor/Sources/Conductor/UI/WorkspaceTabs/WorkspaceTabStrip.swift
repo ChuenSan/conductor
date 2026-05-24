@@ -31,7 +31,7 @@ struct WorkspaceTabStrip: View {
                         .transition(ConductorMotion.tabTransition)
                 }
 
-                if !snapshot.fileTabs.isEmpty {
+                if !snapshot.fileTabs.isEmpty || !snapshot.webTabs.isEmpty {
                     WorkspaceTabSectionDivider()
                     ForEach(snapshot.fileTabs) { fileTab in
                         WorkspaceFileTopTab(
@@ -47,6 +47,24 @@ struct WorkspaceTabStrip: View {
                                 withoutShellAnimation {
                                     finishWorkspaceRenameIfNeeded()
                                     model.closeWorkspaceFileTab(fileTab.tab)
+                                }
+                            }
+                        )
+                        .transition(ConductorMotion.tabTransition)
+                    }
+                    ForEach(snapshot.webTabs) { webTab in
+                        WorkspaceWebTopTab(
+                            tab: webTab.tab,
+                            appearance: appearance,
+                            selected: webTab.selected,
+                            onSelect: {
+                                finishWorkspaceRenameIfNeeded()
+                                model.selectWorkspaceWebTab(webTab.id)
+                            },
+                            onClose: {
+                                withoutShellAnimation {
+                                    finishWorkspaceRenameIfNeeded()
+                                    model.closeWorkspaceWebTab(webTab.id)
                                 }
                             }
                         )
@@ -96,8 +114,8 @@ struct WorkspaceTabStrip: View {
         WorkspaceTopTab(
             row: row,
             appearance: appearance,
-            active: row.selected && snapshot.selectedWorkspaceFileTabID == nil,
-            visuallySelected: row.selected && snapshot.selectedWorkspaceFileTabID == nil,
+            active: row.selected && snapshot.selectedWorkspaceFileTabID == nil && snapshot.selectedWorkspaceWebTabID == nil,
+            visuallySelected: row.selected && snapshot.selectedWorkspaceFileTabID == nil && snapshot.selectedWorkspaceWebTabID == nil,
             selectionNamespace: selectionNamespace,
             canClose: snapshot.canCloseWorkspace,
             editing: editingWorkspaceID == row.id,
@@ -306,6 +324,133 @@ private struct WorkspaceFileTopTab: View {
             Button(L("在访达中显示", "Reveal in Finder")) {
                 NSWorkspace.shared.activateFileViewerSelecting([tab.fileURL])
             }
+        }
+    }
+}
+
+private struct WorkspaceWebTopTab: View {
+    let tab: WorkspaceWebTabState
+    let appearance: AppearancePreferences
+    let selected: Bool
+    let onSelect: () -> Void
+    let onClose: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+    private let closeButtonSlotWidth: CGFloat = 21
+
+    private var tabShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous)
+    }
+
+    private var baseFill: Color {
+        if theme.usesDarkChrome {
+            return hovering ? theme.shellHoverFill.opacity(0.92) : theme.shellControlFill.opacity(0.58)
+        }
+        return hovering ? theme.shellHoverFill.opacity(0.86) : theme.shellControlFill.opacity(0.52)
+    }
+
+    private var selectedFill: Color {
+        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.72) : theme.shellPanelStrong.opacity(0.82)
+    }
+
+    private var tabStroke: Color {
+        if selected {
+            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.58 : 0.42) * appearance.chromeClarity.strokeMultiplier)
+        }
+        return theme.shellStroke.opacity(hovering ? 0.34 : 0.18)
+    }
+
+    private var titleColor: Color {
+        selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86)
+    }
+
+    private var webIcon: String {
+        tab.errorMessage == nil ? "globe" : "globe.badge.chevron.backward"
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(action: onSelect) {
+                HStack(spacing: 7) {
+                    Image(systemName: webIcon)
+                        .font(.system(size: 10.8, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
+                        .frame(width: 17, height: 17)
+                    Text(tab.displayTitle)
+                        .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(titleColor)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Circle()
+                        .fill(theme.floatingEmphasis.opacity(0.92))
+                        .frame(width: 5, height: 5)
+                        .opacity(tab.isLoading ? 1 : 0)
+                }
+                .padding(.leading, 8)
+                .padding(.trailing, closeButtonSlotWidth + 5)
+                .frame(
+                    width: WorkspaceTabMetrics.width(for: appearance),
+                    height: WorkspaceTabMetrics.height(for: appearance),
+                    alignment: .leading
+                )
+                .contentShape(tabShape)
+            }
+            .buttonStyle(ConductorPressButtonStyle())
+
+            Button {
+                onClose()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
+                    .foregroundStyle(titleColor.opacity(selected || hovering ? 0.74 : 0.52))
+                    .frame(width: 13, height: 13)
+                    .clipShape(Circle())
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(ConductorPressButtonStyle())
+            .padding(.trailing, 6)
+            .macNativeTooltip(L("关闭网页", "Close Web Tab"))
+        }
+        .frame(
+            width: WorkspaceTabMetrics.width(for: appearance),
+            height: WorkspaceTabMetrics.height(for: appearance)
+        )
+        .background {
+            ZStack {
+                tabShape
+                    .fill(baseFill)
+                if selected {
+                    tabShape
+                        .fill(selectedFill)
+                }
+            }
+        }
+        .clipShape(tabShape)
+        .overlay {
+            tabShape
+                .stroke(tabStroke, lineWidth: 1)
+        }
+        .scaleEffect(hovering && !selected ? 1.006 : 1)
+        .animation(ConductorMotion.hover, value: hovering)
+        .onHover { value in
+            ConductorMotion.perform(ConductorMotion.hover) {
+                hovering = value
+            }
+        }
+        .contentShape(tabShape)
+        .contextMenu {
+            Button(L("关闭网页", "Close Web Tab")) {
+                onClose()
+            }
+            Button(L("在浏览器中打开", "Open in Browser")) {
+                if let url = tab.url {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .disabled(tab.url == nil)
         }
     }
 }
