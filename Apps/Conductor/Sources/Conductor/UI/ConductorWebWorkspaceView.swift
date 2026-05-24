@@ -25,6 +25,7 @@ struct ConductorWebWorkspaceView: View {
                     url: url,
                     model: model
                 )
+                .id(tab.id)
             } else {
                 newTabSurface
             }
@@ -45,6 +46,11 @@ struct ConductorWebWorkspaceView: View {
         .onChange(of: tab.currentURL) {
             guard !addressFocused else { return }
             addressText = tab.currentURL?.absoluteString ?? ""
+        }
+        .onChange(of: addressFocused) { _, focused in
+            if !focused {
+                addressText = tab.currentURL?.absoluteString ?? tab.pendingInput
+            }
         }
     }
 
@@ -95,24 +101,35 @@ struct ConductorWebWorkspaceView: View {
     private var newTabSurface: some View {
         VStack(spacing: 16) {
             Spacer(minLength: 0)
-            TextField(L("输入网址或搜索", "Search or enter website"), text: $addressText)
-                .textFieldStyle(.plain)
-                .focused($addressFocused)
-                .font(.conductorSystem(size: 20, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.92))
-                .padding(.horizontal, 18)
-                .frame(width: 520, height: 48)
-                .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.36 : 0.24))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.36 : 0.24), lineWidth: 1)
+            HStack {
+                TextField(L("输入网址或搜索", "Search or enter website"), text: $addressText)
+                    .textFieldStyle(.plain)
+                    .focused($addressFocused)
+                    .font(.conductorSystem(size: 20, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(0.92))
+                    .padding(.horizontal, 18)
+                    .frame(maxWidth: 520)
+                    .frame(height: 48)
+                    .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.36 : 0.24))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.36 : 0.24), lineWidth: 1)
+                    }
+                    .onSubmit { submitAddress() }
+            }
+            .padding(.horizontal, 24)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    quickOpen("localhost:3000")
+                    quickOpen("localhost:5173")
+                    quickOpen("github.com")
                 }
-                .onSubmit { submitAddress() }
-            HStack(spacing: 8) {
-                quickOpen("localhost:3000")
-                quickOpen("localhost:5173")
-                quickOpen("github.com")
+                VStack(spacing: 8) {
+                    quickOpen("localhost:3000")
+                    quickOpen("localhost:5173")
+                    quickOpen("github.com")
+                }
             }
             Spacer(minLength: 0)
         }
@@ -188,6 +205,11 @@ private struct ConductorWebView: NSViewRepresentable {
         }
     }
 
+    static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
+        webView.navigationDelegate = nil
+        coordinator.clearObservers()
+    }
+
     final class Coordinator: NSObject, WKNavigationDelegate {
         var tabID: String
         weak var model: ConductorWindowModel?
@@ -230,6 +252,10 @@ private struct ConductorWebView: NSViewRepresentable {
                     }
                 }
             ])
+        }
+
+        func clearObservers() {
+            observers.removeAll()
         }
 
         private func matches(_ requestedTabID: String?) -> Bool {
@@ -278,7 +304,7 @@ private final class WebNavigationObservers: @unchecked Sendable {
         self.tokens = tokens
     }
 
-    private func removeAll() {
+    func removeAll() {
         tokens.forEach(NotificationCenter.default.removeObserver)
         tokens.removeAll()
     }
