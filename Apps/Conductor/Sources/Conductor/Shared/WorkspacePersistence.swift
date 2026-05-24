@@ -6,23 +6,31 @@ struct PersistedWindowState: Codable {
     var selectedWorkspaceID: WorkspaceID
     var theme: TerminalTheme
     var appearance: AppearancePreferences
+    var workspaceWebTabs: [WorkspaceWebTabState]
+    var selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID?
 
     init(
         workspaces: [WorkspaceState],
         selectedWorkspaceID: WorkspaceID,
         theme: TerminalTheme,
-        appearance: AppearancePreferences = AppearancePreferences()
+        appearance: AppearancePreferences = AppearancePreferences(),
+        workspaceWebTabs: [WorkspaceWebTabState] = [],
+        selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID? = nil
     ) {
         self.workspaces = workspaces
         self.selectedWorkspaceID = selectedWorkspaceID
         self.theme = theme
         self.appearance = appearance
+        self.workspaceWebTabs = workspaceWebTabs
+        self.selectedWorkspaceContentTabID = selectedWorkspaceContentTabID
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.theme = try container.decode(TerminalTheme.self, forKey: .theme)
         self.appearance = try container.decodeIfPresent(AppearancePreferences.self, forKey: .appearance) ?? AppearancePreferences()
+        self.workspaceWebTabs = try container.decodeIfPresent([WorkspaceWebTabState].self, forKey: .workspaceWebTabs) ?? []
+        self.selectedWorkspaceContentTabID = try container.decodeIfPresent(PersistedWorkspaceContentTabID.self, forKey: .selectedWorkspaceContentTabID)
 
         if let workspaces = try container.decodeIfPresent([WorkspaceState].self, forKey: .workspaces),
            !workspaces.isEmpty {
@@ -42,6 +50,8 @@ struct PersistedWindowState: Codable {
         try container.encode(selectedWorkspaceID, forKey: .selectedWorkspaceID)
         try container.encode(theme, forKey: .theme)
         try container.encode(appearance, forKey: .appearance)
+        try container.encode(workspaceWebTabs, forKey: .workspaceWebTabs)
+        try container.encodeIfPresent(selectedWorkspaceContentTabID, forKey: .selectedWorkspaceContentTabID)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -50,7 +60,15 @@ struct PersistedWindowState: Codable {
         case selectedWorkspaceID
         case theme
         case appearance
+        case workspaceWebTabs
+        case selectedWorkspaceContentTabID
     }
+}
+
+enum PersistedWorkspaceContentTabID: Codable, Equatable {
+    case terminal(TerminalID)
+    case file(String)
+    case web(WebTabID)
 }
 
 final class WorkspacePersistence {
@@ -103,7 +121,9 @@ final class WorkspacePersistence {
             workspaces: validWorkspaces,
             selectedWorkspaceID: selectedWorkspaceID,
             theme: state.theme,
-            appearance: state.appearance
+            appearance: state.appearance,
+            workspaceWebTabs: sanitizedWebTabs(state.workspaceWebTabs),
+            selectedWorkspaceContentTabID: state.selectedWorkspaceContentTabID
         )
     }
 
@@ -111,7 +131,9 @@ final class WorkspacePersistence {
         workspaces: [WorkspaceState],
         selectedWorkspaceID: WorkspaceID,
         theme: TerminalTheme,
-        appearance: AppearancePreferences
+        appearance: AppearancePreferences,
+        workspaceWebTabs: [WorkspaceWebTabState] = [],
+        selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID? = nil
     ) {
         guard isEnabled else { return }
         let persistedWorkspaces = workspaces.map(sanitizedWorkspace).filter(isValid)
@@ -123,7 +145,9 @@ final class WorkspacePersistence {
             workspaces: persistedWorkspaces,
             selectedWorkspaceID: selectedID,
             theme: theme,
-            appearance: appearance
+            appearance: appearance,
+            workspaceWebTabs: sanitizedWebTabs(workspaceWebTabs),
+            selectedWorkspaceContentTabID: selectedWorkspaceContentTabID
         )
         guard let data = try? JSONEncoder().encode(state) else { return }
         try? data.write(to: fileURL, options: [.atomic])
@@ -146,5 +170,17 @@ final class WorkspacePersistence {
         sanitized.reconcileSplitTreeWithPanes()
         sanitized.zoomedPaneID = nil
         return sanitized
+    }
+
+    private func sanitizedWebTabs(_ tabs: [WorkspaceWebTabState]) -> [WorkspaceWebTabState] {
+        tabs.map { tab in
+            var sanitized = tab
+            sanitized.isLoading = false
+            sanitized.estimatedProgress = 0
+            sanitized.canGoBack = false
+            sanitized.canGoForward = false
+            sanitized.errorMessage = nil
+            return sanitized
+        }
     }
 }

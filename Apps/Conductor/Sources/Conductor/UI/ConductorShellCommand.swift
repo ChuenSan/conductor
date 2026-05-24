@@ -6,6 +6,7 @@ import Foundation
 enum ConductorShellCommand: String, CaseIterable {
     case newWorkspace
     case newTerminal
+    case newWebTab
     case closeSelectedTab
     case closeOtherTabs
     case closeTabsToRight
@@ -58,6 +59,8 @@ enum ConductorShellCommand: String, CaseIterable {
             return "command-new-workspace"
         case .newTerminal, .newTerminalAtFocusedDirectory:
             return "command-new-terminal"
+        case .newWebTab:
+            return "command-new-web-tab"
         case .closeSelectedTab, .closeOtherTabs, .closeTabsToRight:
             return "command-close-tab"
         case .closeFocusedPane:
@@ -135,7 +138,7 @@ enum ConductorShellCommand: String, CaseIterable {
         case .jumpToLatestUnread:
             model.notifications.snapshot.latestUnread != nil
         case .showTerminalSearch:
-            model.selectedWorkspaceFileTab != nil || model.fileManagerPanelRequest != nil || model.focusedTerminalID != nil
+            model.selectedWorkspaceWebTab == nil && (model.selectedWorkspaceFileTab != nil || model.fileManagerPanelRequest != nil || model.focusedTerminalID != nil)
         case .findNext, .findPrevious:
             model.terminalSearchVisible || model.selectedWorkspaceFileTab != nil || model.fileManagerPanelRequest != nil
         case .toggleFileManager:
@@ -159,6 +162,8 @@ enum ConductorShellCommand: String, CaseIterable {
             model.newWorkspace()
         case .newTerminal:
             model.newTerminal()
+        case .newWebTab:
+            model.newWorkspaceWebTab()
         case .closeSelectedTab:
             model.closeSelectedTab()
         case .closeOtherTabs:

@@ -227,7 +227,13 @@ struct ShellRootView: View {
 
     @ViewBuilder
     private var primaryWorkspaceContent: some View {
-        if model.selectedWorkspaceFileTab != nil {
+        if model.selectedWorkspaceWebTab != nil {
+            ConductorWebWorkspaceView(
+                model: model,
+                snapshot: ConductorWebSnapshot(model: model)
+            )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.selectedWorkspaceFileTab != nil {
             ConductorFileWorkspaceView(
                 model: model,
                 snapshot: ConductorFileWorkspaceSnapshot(model: model)
@@ -790,6 +796,8 @@ private struct CommandPaletteItem: Identifiable, Equatable {
             WorkspaceChromeGlyph.systemName(selected: false)
         case "new-terminal":
             "plus.rectangle.on.rectangle"
+        case "new-web-tab":
+            "globe"
         case "new-terminal-current-directory":
             "arrow.turn.down.right"
         case "open-current-directory":
@@ -874,6 +882,7 @@ private enum ConductorCommandCatalog {
         return [
             CommandPaletteItem(id: "new-workspace", command: .newWorkspace, section: L("创建", "Create"), title: L("新建工作区", "New Workspace"), shortcut: "Cmd-N", keywords: "workspace new"),
             CommandPaletteItem(id: "new-terminal", command: .newTerminal, section: L("创建", "Create"), title: L("新开终端", "New Terminal"), shortcut: "Cmd-T", keywords: "terminal pane shell"),
+            CommandPaletteItem(id: "new-web-tab", command: .newWebTab, section: L("创建", "Create"), title: L("新建网页标签", "New Web Tab"), shortcut: "Cmd-Shift-T", keywords: "web browser tab url docs preview localhost"),
             CommandPaletteItem(
                 id: "new-terminal-current-directory",
                 command: .newTerminalAtFocusedDirectory,

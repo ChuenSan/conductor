@@ -369,6 +369,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let fileMenu = NSMenu(title: L("文件", "File"))
         fileMenu.addItem(menuItem(L("新建工作区", "New Workspace"), "n", [], #selector(newWorkspaceCommand)))
         fileMenu.addItem(menuItem(L("新开终端", "New Terminal"), "t", [], #selector(newTerminalCommand)))
+        fileMenu.addItem(menuItem(L("新建网页标签", "New Web Tab"), "t", [.shift], #selector(newWebTabCommand)))
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(menuItem(L("关闭标签", "Close Tab"), "w", [], #selector(closeTabCommand)))
         fileMenu.addItem(menuItem(L("关闭分屏", "Close Pane"), "w", [.shift], #selector(closePaneCommand)))
@@ -494,6 +495,9 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             return true
         case ("n", _):
             scheduleCommand(.newWorkspace)
+            return true
+        case ("t", true):
+            scheduleCommand(.newWebTab)
             return true
         case ("j", _) where flags.contains(.option):
             scheduleCommand(.jumpToLatestUnread)
@@ -633,6 +637,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     @objc private func newTerminalCommand() {
         scheduleCommand(.newTerminal)
+    }
+
+    @objc private func newWebTabCommand() {
+        scheduleCommand(.newWebTab)
     }
 
     @objc private func closeTabCommand() {

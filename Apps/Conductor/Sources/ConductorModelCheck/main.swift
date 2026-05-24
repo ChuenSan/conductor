@@ -962,6 +962,52 @@ func checkSearchSelection() {
     require(ConductorSearchSelection.resolvedSelection(currentID: "other", results: results) == "other", "selection should preserve a still-visible enabled result")
 }
 
+func checkWebAddressResolver() {
+    let resolver = WebAddressResolver()
+
+    require(resolver.resolve("https://example.com")?.absoluteString == "https://example.com", "https URL should pass through")
+    require(resolver.resolve("http://127.0.0.1:8080")?.absoluteString == "http://127.0.0.1:8080", "http loopback URL should pass through")
+    require(resolver.resolve("localhost:3000")?.absoluteString == "http://localhost:3000", "localhost host should default to http")
+    require(resolver.resolve("127.0.0.1:5173")?.absoluteString == "http://127.0.0.1:5173", "loopback host should default to http")
+    require(resolver.resolve("[::1]:9000")?.absoluteString == "http://[::1]:9000", "IPv6 loopback should default to http")
+    require(resolver.resolve("github.com/openai/codex")?.absoluteString == "https://github.com/openai/codex", "bare domain path should default to https")
+    require(resolver.resolve("swift webkit tabs")?.absoluteString == "https://duckduckgo.com/?q=swift%20webkit%20tabs", "phrases should become DuckDuckGo search URLs")
+    require(resolver.resolve("   ") == nil, "blank input should not resolve")
+}
+
+func checkWorkspaceWebTabList() {
+    var list = WorkspaceWebTabList()
+    let first = list.append(url: URL(string: "https://example.com")!, title: "Example")
+    let second = list.append(url: nil, title: nil)
+
+    require(list.tabs.map(\.id) == [first, second], "append should preserve order")
+    require(list.selectedTabID == second, "append should select new tab")
+
+    list.update(first) { tab in
+        tab.title = "Docs"
+        tab.url = URL(string: "https://docs.example.com")!
+        tab.isLoading = true
+        tab.estimatedProgress = 0.5
+        tab.canGoBack = true
+    }
+    require(list.tabs.first?.displayTitle == "Docs", "title update should apply")
+    require(list.tabs.first?.hostDisplay == "docs.example.com", "host display should prefer host")
+    require(list.tabs.first?.estimatedProgress == 0.5, "progress should update")
+
+    list.select(first)
+    let closeSelected = list.close(first, fallbackFileTabID: "file.swift", fallbackTerminalID: TerminalID(UUID()))
+    require(closeSelected.closedTabID == first, "close should report closed tab")
+    require(closeSelected.nextContentSelection == .web(second), "closing first selected tab should select nearest web tab")
+
+    let terminalID = TerminalID(UUID())
+    _ = list.close(second, fallbackFileTabID: "file.swift", fallbackTerminalID: terminalID)
+    require(list.tabs.isEmpty, "closing last web tab should empty list")
+    require(list.selectedTabID == nil, "closing last web tab should clear web selection")
+
+    let emptyClose = list.close(WebTabID(), fallbackFileTabID: "file.swift", fallbackTerminalID: terminalID)
+    require(emptyClose.nextContentSelection == .file("file.swift"), "missing web close should fall back to provided file")
+}
+
 checkRenderBudgetDefaults()
 checkNewWorkspace()
 checkNewTerminalTab()
@@ -1014,4 +1060,6 @@ checkTerminalNotificationStateIndexesAndLifecycle()
 checkAgentIntegrationCatalog()
 checkSearchMatcherRanking()
 checkSearchSelection()
+checkWebAddressResolver()
+checkWorkspaceWebTabList()
 print("ConductorModelCheck passed")
