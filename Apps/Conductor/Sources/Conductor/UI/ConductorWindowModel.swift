@@ -130,6 +130,7 @@ struct ConductorWorkspaceFileTab: Identifiable, Equatable, Hashable, Sendable {
 enum ConductorWorkspaceContentTabID: Equatable, Hashable {
     case terminal(TerminalID)
     case file(String)
+    case web(WebTabID)
 
     var diagnosticName: String {
         switch self {
@@ -137,6 +138,8 @@ enum ConductorWorkspaceContentTabID: Equatable, Hashable {
             "terminal"
         case .file:
             "file"
+        case .web:
+            "web"
         }
     }
 }
@@ -218,6 +221,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var fileManagerSearchFocusGeneration = 0
     @Published private(set) var fileManagerSearchNextGeneration = 0
     @Published private(set) var fileManagerSearchPreviousGeneration = 0
+    @Published private(set) var workspaceWebTabs: [WorkspaceWebTabState] = []
+    @Published private(set) var workspaceWebTabNavigationGenerationByID: [WebTabID: Int] = [:]
+    @Published private(set) var workspaceWebTabReloadGenerationByID: [WebTabID: Int] = [:]
+    @Published private(set) var workspaceWebTabStopGenerationByID: [WebTabID: Int] = [:]
+    @Published private(set) var workspaceWebTabBackGenerationByID: [WebTabID: Int] = [:]
+    @Published private(set) var workspaceWebTabForwardGenerationByID: [WebTabID: Int] = [:]
     @Published private(set) var selectedWorkspaceContentTabID: ConductorWorkspaceContentTabID?
     @Published var terminalSearchQuery = ""
     @Published private(set) var agentHookSettingsMessage: String?
@@ -242,6 +251,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     var selectedWorkspaceFileTabID: String? {
         guard case .file(let selectedWorkspaceFileTabID) = selectedWorkspaceContentTabID else { return nil }
         return selectedWorkspaceFileTabID
+    }
+
+    var selectedWorkspaceWebTab: WorkspaceWebTabState? {
+        guard case .web(let selectedWorkspaceWebTabID) = selectedWorkspaceContentTabID else { return nil }
+        return workspaceWebTabs.first { $0.id == selectedWorkspaceWebTabID }
+    }
+
+    var selectedWorkspaceWebTabID: WebTabID? {
+        guard case .web(let selectedWorkspaceWebTabID) = selectedWorkspaceContentTabID else { return nil }
+        return selectedWorkspaceWebTabID
     }
 
     var selectedWorkspaceTerminalTabID: TerminalID? {
@@ -291,6 +310,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.appearanceCoordinator = AppearanceCoordinator(appearance: resolvedAppearance)
         self.agentCLIStatuses = Dictionary(uniqueKeysWithValues: AgentHookProvider.allCases.map { ($0, .unknown(provider: $0)) })
         self.terminalFontDownloadStates = [:]
+        self.workspaceWebTabs = persisted?.workspaceWebTabs ?? []
+        self.selectedWorkspaceContentTabID = Self.restoredWorkspaceContentSelection(
+            persisted?.selectedWorkspaceContentTabID,
+            workspace: self.workspace,
+            webTabs: self.workspaceWebTabs
+        )
         syncPanelCoordinatorFromPublished()
         syncFileWorkspaceCoordinatorFromPublished()
         ConductorAppearanceRuntime.apply(self.appearance)
@@ -1045,6 +1070,93 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         fileManagerKeyboardFocused = focused
     }
 
+    func newWorkspaceWebTab(initialInput: String = "") {
+        let resolver = WebAddressResolver()
+        let url = resolver.resolve(initialInput)
+        var list = WorkspaceWebTabList(tabs: workspaceWebTabs, selectedTabID: selectedWorkspaceWebTabID)
+        let id = list.append(url: url, pendingAddress: initialInput)
+        workspaceWebTabs = list.tabs
+        selectedWorkspaceContentTabID = .web(id)
+        closeWorkspaceTransientPanels()
+        if url != nil {
+            workspaceWebTabNavigationGenerationByID[id, default: 0] += 1
+        }
+        persist()
+    }
+
+    func selectWorkspaceWebTab(_ tabID: WebTabID) {
+        guard workspaceWebTabs.contains(where: { $0.id == tabID }) else { return }
+        selectedWorkspaceContentTabID = .web(tabID)
+        closeWorkspaceTransientPanels()
+        persist()
+    }
+
+    func closeWorkspaceWebTab(_ tabID: WebTabID) {
+        var list = WorkspaceWebTabList(tabs: workspaceWebTabs, selectedTabID: selectedWorkspaceWebTabID)
+        let result = list.close(
+            tabID,
+            fallbackFileTabID: workspaceFileTabs.last?.id,
+            fallbackTerminalID: focusedTerminalID
+        )
+        workspaceWebTabs = list.tabs
+        applyWorkspaceContentSelection(result.nextContentSelection)
+        pruneWorkspaceWebTabCommands(keeping: Set(workspaceWebTabs.map(\.id)))
+        persist()
+    }
+
+    func navigateWorkspaceWebTab(_ tabID: WebTabID, input: String) {
+        guard let url = WebAddressResolver().resolve(input) else { return }
+        updateWorkspaceWebTab(tabID) { tab in
+            tab.url = url
+            tab.pendingAddress = input
+            tab.errorMessage = nil
+            tab.isLoading = true
+            tab.estimatedProgress = 0
+        }
+        workspaceWebTabNavigationGenerationByID[tabID, default: 0] += 1
+        persist()
+    }
+
+    func reloadWorkspaceWebTab(_ tabID: WebTabID) {
+        guard workspaceWebTabs.contains(where: { $0.id == tabID }) else { return }
+        workspaceWebTabReloadGenerationByID[tabID, default: 0] += 1
+    }
+
+    func stopWorkspaceWebTab(_ tabID: WebTabID) {
+        guard workspaceWebTabs.contains(where: { $0.id == tabID }) else { return }
+        workspaceWebTabStopGenerationByID[tabID, default: 0] += 1
+    }
+
+    func goBackWorkspaceWebTab(_ tabID: WebTabID) {
+        guard workspaceWebTabs.first(where: { $0.id == tabID })?.canGoBack == true else { return }
+        workspaceWebTabBackGenerationByID[tabID, default: 0] += 1
+    }
+
+    func goForwardWorkspaceWebTab(_ tabID: WebTabID) {
+        guard workspaceWebTabs.first(where: { $0.id == tabID })?.canGoForward == true else { return }
+        workspaceWebTabForwardGenerationByID[tabID, default: 0] += 1
+    }
+
+    func openWorkspaceWebTabExternally(_ tabID: WebTabID) {
+        guard let url = workspaceWebTabs.first(where: { $0.id == tabID })?.url else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    func updateWorkspaceWebTab(_ tabID: WebTabID, mutate: (inout WorkspaceWebTabState) -> Void) {
+        guard let index = workspaceWebTabs.firstIndex(where: { $0.id == tabID }) else { return }
+        mutate(&workspaceWebTabs[index])
+    }
+
+    func failWorkspaceWebTab(_ tabID: WebTabID, url: URL?, message: String) {
+        updateWorkspaceWebTab(tabID) { tab in
+            tab.url = url ?? tab.url
+            tab.isLoading = false
+            tab.estimatedProgress = 0
+            tab.errorMessage = String(message.prefix(240))
+        }
+        persist()
+    }
+
     func openFileInWorkspace(_ fileURL: URL, rootURL: URL? = nil) {
         let standardizedFile = fileURL.standardizedFileURL
         let resolvedRoot = (rootURL ?? standardizedFile.deletingLastPathComponent()).standardizedFileURL
@@ -1226,6 +1338,31 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         externallyChangedWorkspaceFileTabIDs.formIntersection(retainedIDs)
         workspaceFileEditorSaveRequestTokensByTabID = workspaceFileEditorSaveRequestTokensByTabID.filter { retainedIDs.contains($0.key) }
         workspaceFileEditorSaveAndCloseRequestTokensByTabID = workspaceFileEditorSaveAndCloseRequestTokensByTabID.filter { retainedIDs.contains($0.key) }
+    }
+
+    private func applyWorkspaceContentSelection(_ selection: WorkspaceContentSelection?) {
+        switch selection {
+        case .web(let tabID):
+            selectedWorkspaceContentTabID = workspaceWebTabs.contains(where: { $0.id == tabID }) ? .web(tabID) : nil
+        case .file(let tabID):
+            selectedWorkspaceContentTabID = workspaceFileTabs.contains(where: { $0.id == tabID }) ? .file(tabID) : focusedTerminalID.map { .terminal($0) }
+        case .terminal(let terminalID):
+            if workspace.paneID(containing: terminalID) != nil {
+                selectedWorkspaceContentTabID = .terminal(terminalID)
+            } else {
+                selectedWorkspaceContentTabID = focusedTerminalID.map { .terminal($0) }
+            }
+        case nil:
+            selectedWorkspaceContentTabID = focusedTerminalID.map { .terminal($0) }
+        }
+    }
+
+    private func pruneWorkspaceWebTabCommands(keeping retainedIDs: Set<WebTabID>) {
+        workspaceWebTabNavigationGenerationByID = workspaceWebTabNavigationGenerationByID.filter { retainedIDs.contains($0.key) }
+        workspaceWebTabReloadGenerationByID = workspaceWebTabReloadGenerationByID.filter { retainedIDs.contains($0.key) }
+        workspaceWebTabStopGenerationByID = workspaceWebTabStopGenerationByID.filter { retainedIDs.contains($0.key) }
+        workspaceWebTabBackGenerationByID = workspaceWebTabBackGenerationByID.filter { retainedIDs.contains($0.key) }
+        workspaceWebTabForwardGenerationByID = workspaceWebTabForwardGenerationByID.filter { retainedIDs.contains($0.key) }
     }
 
     private func movedRootURL(for rootURL: URL, oldPath: String, newPath: String, isDirectory: Bool) -> URL {
@@ -1614,6 +1751,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func showTerminalSearch() {
+        if selectedWorkspaceWebTab != nil {
+            return
+        }
         if fileManagerPanelRequest != nil, fileManagerKeyboardFocused {
             syncPanelCoordinatorFromPublished()
             panelCoordinator.closeTransientPanels()
@@ -2149,6 +2289,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func closeSelectedTab() {
         let signpost = ConductorSignpost.begin("close-selected-tab")
         defer { ConductorSignpost.end("close-selected-tab", signpost) }
+        if let webTabID = selectedWorkspaceWebTabID {
+            closeWorkspaceWebTab(webTabID)
+            return
+        }
+        if let fileTab = selectedWorkspaceFileTab {
+            closeWorkspaceFileTab(fileTab)
+            return
+        }
         let result = workspace.closeSelectedTab()
         closeSurfaces(for: result.closedTerminalIDs)
     }
@@ -2562,7 +2710,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             workspaces: workspaces,
             selectedWorkspaceID: selectedWorkspaceID,
             theme: theme,
-            appearance: appearance
+            appearance: appearance,
+            workspaceWebTabs: workspaceWebTabs,
+            selectedWorkspaceContentTabID: persistedWorkspaceContentSelection()
         )
     }
 
@@ -2870,6 +3020,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let selectedWorkspaceID = selectedWorkspaceID
         let theme = theme
         let appearance = appearance
+        let workspaceWebTabs = workspaceWebTabs
+        let selectedWorkspaceContentTabID = persistedWorkspaceContentSelection()
         let item = DispatchWorkItem { [persistence] in
             let signpost = ConductorSignpost.begin("persistence-save")
             defer { ConductorSignpost.end("persistence-save", signpost) }
@@ -2877,7 +3029,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 workspaces: workspaces,
                 selectedWorkspaceID: selectedWorkspaceID,
                 theme: theme,
-                appearance: appearance
+                appearance: appearance,
+                workspaceWebTabs: workspaceWebTabs,
+                selectedWorkspaceContentTabID: selectedWorkspaceContentTabID
             )
         }
         pendingPersistence = item
@@ -2917,6 +3071,36 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let source = trimmed.isEmpty ? fallback : trimmed
         return String(source.prefix(48))
+    }
+
+    private static func restoredWorkspaceContentSelection(
+        _ selection: PersistedWorkspaceContentTabID?,
+        workspace: WorkspaceState,
+        webTabs: [WorkspaceWebTabState]
+    ) -> ConductorWorkspaceContentTabID? {
+        switch selection {
+        case .terminal(let terminalID):
+            return workspace.paneID(containing: terminalID) == nil ? nil : .terminal(terminalID)
+        case .file:
+            return nil
+        case .web(let webTabID):
+            return webTabs.contains(where: { $0.id == webTabID }) ? .web(webTabID) : nil
+        case nil:
+            return nil
+        }
+    }
+
+    private func persistedWorkspaceContentSelection() -> PersistedWorkspaceContentTabID? {
+        switch selectedWorkspaceContentTabID {
+        case .terminal(let terminalID):
+            return .terminal(terminalID)
+        case .file(let tabID):
+            return .file(tabID)
+        case .web(let tabID):
+            return .web(tabID)
+        case nil:
+            return nil
+        }
     }
 
     private func syncSelectedWorkspace() {
