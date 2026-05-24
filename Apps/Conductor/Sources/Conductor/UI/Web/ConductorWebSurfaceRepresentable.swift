@@ -84,22 +84,30 @@ struct ConductorWebSurfaceRepresentable: NSViewRepresentable {
                 load(url)
             }
 
-            if reloadGeneration != lastReloadGeneration {
+            if lastReloadGeneration == -1 {
+                lastReloadGeneration = reloadGeneration
+            } else if reloadGeneration != lastReloadGeneration {
                 lastReloadGeneration = reloadGeneration
                 webView.reload()
             }
-            if stopGeneration != lastStopGeneration {
+            if lastStopGeneration == -1 {
+                lastStopGeneration = stopGeneration
+            } else if stopGeneration != lastStopGeneration {
                 lastStopGeneration = stopGeneration
                 webView.stopLoading()
                 publishState()
             }
-            if backGeneration != lastBackGeneration {
+            if lastBackGeneration == -1 {
+                lastBackGeneration = backGeneration
+            } else if backGeneration != lastBackGeneration {
                 lastBackGeneration = backGeneration
                 if webView.canGoBack {
                     webView.goBack()
                 }
             }
-            if forwardGeneration != lastForwardGeneration {
+            if lastForwardGeneration == -1 {
+                lastForwardGeneration = forwardGeneration
+            } else if forwardGeneration != lastForwardGeneration {
                 lastForwardGeneration = forwardGeneration
                 if webView.canGoForward {
                     webView.goForward()
@@ -173,6 +181,7 @@ struct ConductorWebSurfaceRepresentable: NSViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             publishState()
+            model?.persistWorkspaceWebTabs()
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -232,6 +241,7 @@ struct ConductorWebSurfaceRepresentable: NSViewRepresentable {
 
         func downloadDidFinish(_ download: WKDownload) {
             publishState()
+            model?.persistWorkspaceWebTabs()
         }
 
         func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {

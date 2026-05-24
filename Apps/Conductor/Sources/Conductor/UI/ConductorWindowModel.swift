@@ -1147,6 +1147,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         mutate(&workspaceWebTabs[index])
     }
 
+    func persistWorkspaceWebTabs() {
+        persist()
+    }
+
     func failWorkspaceWebTab(_ tabID: WebTabID, url: URL?, message: String) {
         updateWorkspaceWebTab(tabID) { tab in
             tab.url = url ?? tab.url
