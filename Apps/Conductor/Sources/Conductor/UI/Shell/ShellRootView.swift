@@ -793,6 +793,8 @@ private struct CommandPaletteItem: Identifiable, Equatable {
             WorkspaceChromeGlyph.systemName(selected: false)
         case "new-terminal":
             "plus.rectangle.on.rectangle"
+        case "new-web-tab":
+            "globe"
         case "new-terminal-current-directory":
             "arrow.turn.down.right"
         case "open-current-directory":
