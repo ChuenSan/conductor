@@ -43,6 +43,7 @@ struct FileManagerPanel: View {
             if searchVisible || !store.searchQuery.isEmpty {
                 fileTreeSearchBar(snapshot: snapshot)
                     .zIndex(1)
+                    .transition(ConductorMotion.rowTransition(itemCount: 1))
                 divider
                     .zIndex(1)
             }
@@ -54,10 +55,12 @@ struct FileManagerPanel: View {
             if let message = store.operationMessage {
                 divider
                 operationMessageBar(message)
+                    .transition(ConductorMotion.rowTransition(itemCount: 1))
             }
             if store.pendingDeleteCount > 0 {
                 divider
                 deleteConfirmationBar(count: store.pendingDeleteCount)
+                    .transition(ConductorMotion.rowTransition(itemCount: 1))
             }
         }
         .background(panelBackground)
@@ -76,14 +79,14 @@ struct FileManagerPanel: View {
             await store.load(request)
             keyboardFocused = model.selectedWorkspaceFileTab == nil
         }
-        .focusable()
+        .focusable(canReceiveKeyboardFocus)
         .focused($keyboardFocused)
         .focusEffectDisabled()
         .onTapGesture {
-            keyboardFocused = true
+            focusKeyboardIfBrowsing()
         }
         .simultaneousGesture(TapGesture().onEnded {
-            keyboardFocused = true
+            focusKeyboardIfBrowsing()
         })
         .onChange(of: keyboardFocused) { _, newValue in
             model.setFileManagerKeyboardFocused(newValue)
@@ -132,9 +135,15 @@ struct FileManagerPanel: View {
             store.selectAdjacentRow(by: -1)
         }
         .onChange(of: model.selectedWorkspaceFileTab?.id) { _, newValue in
-            guard newValue == nil else { return }
-            keyboardFocused = true
+            if !canReceiveKeyboardFocus {
+                keyboardFocused = false
+            } else if newValue == nil {
+                keyboardFocused = true
+            }
         }
+        .animation(ConductorMotion.contentSwap, value: searchVisible || !store.searchQuery.isEmpty)
+        .animation(ConductorMotion.contentSwap, value: store.operationMessage)
+        .animation(ConductorMotion.contentSwap, value: store.pendingDeleteCount)
         .sheet(item: $infoItem) { item in
             FileManagerInfoSheet(item: item)
         }
@@ -187,29 +196,24 @@ struct FileManagerPanel: View {
 
             breadcrumbBar
                 .padding(.horizontal, 14)
-                .padding(.bottom, 7)
+                .padding(.bottom, 6)
 
-            HStack(spacing: 5) {
+            headerToolbar
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+        }
+        .background(headerBackground)
+    }
+
+    private var headerToolbar: some View {
+        HStack(spacing: 7) {
+            toolbarGroup {
                 quickAccessMenuButton
                 sortMenuButton
                 kindFilterMenuButton
+            }
 
-                toolbarSeparator
-
-                panelIconButton(store.includeHiddenFiles ? "eye" : "eye.slash", id: "file-manager.panel.toggle-hidden", help: L("显示/隐藏隐藏文件", "Show/Hide Hidden Files")) {
-                    Task { await store.setIncludeHiddenFiles(!store.includeHiddenFiles) }
-                }
-
-                panelIconButton("doc.badge.plus", id: "file-manager.panel.new-file", help: L("新建文件", "New File")) {
-                    Task { await store.createFile() }
-                }
-
-                panelIconButton("folder.badge.plus", id: "file-manager.panel.new-folder", help: L("新建文件夹", "New Folder")) {
-                    Task { await store.createFolder() }
-                }
-
-                toolbarSeparator
-
+            toolbarGroup {
                 panelIconButton("arrow.up", id: "file-manager.panel.parent-directory", help: L("上级目录", "Parent Directory"), disabled: store.currentURL == nil) {
                     Task { await store.goUp() }
                 }
@@ -218,17 +222,41 @@ struct FileManagerPanel: View {
                     Task { await store.refresh() }
                 }
 
+                panelIconButton(store.includeHiddenFiles ? "eye" : "eye.slash", id: "file-manager.panel.toggle-hidden", help: L("显示/隐藏隐藏文件", "Show/Hide Hidden Files")) {
+                    Task { await store.setIncludeHiddenFiles(!store.includeHiddenFiles) }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            toolbarGroup {
+                panelIconButton("doc.badge.plus", id: "file-manager.panel.new-file", help: L("新建文件", "New File")) {
+                    Task { await store.createFile() }
+                }
+
+                panelIconButton("folder.badge.plus", id: "file-manager.panel.new-folder", help: L("新建文件夹", "New Folder")) {
+                    Task { await store.createFolder() }
+                }
+
                 panelIconButton("folder", id: "file-manager.panel.reveal-current-directory", help: L("在 Finder 中显示当前目录", "Reveal Current Directory in Finder")) {
                     reveal(store.currentURL ?? request.rootURL)
                 }
-
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.18 : 0.10))
         }
-        .background(headerBackground)
+        .frame(height: 32)
+    }
+
+    private func toolbarGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 1) {
+            content()
+        }
+        .padding(2)
+        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.20 : 0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.16 : 0.14), lineWidth: 1)
+        }
     }
 
     private var quickAccessMenuButton: some View {
@@ -404,11 +432,7 @@ struct FileManagerPanel: View {
 
     @ViewBuilder
     private func content(snapshot: FileManagerDisplaySnapshot) -> some View {
-        if let selectedItem = store.selectedItem, store.renamingPath == nil {
-            filePreview(item: selectedItem)
-        } else {
-            browser(snapshot: snapshot)
-        }
+        browser(snapshot: snapshot)
     }
 
     private func fileTreeSearchBar(snapshot: FileManagerDisplaySnapshot) -> some View {
@@ -468,29 +492,11 @@ struct FileManagerPanel: View {
     private func statusBar(snapshot: FileManagerDisplaySnapshot) -> some View {
         let selectedItems = store.selectedItemsForDisplay
         return HStack(spacing: 8) {
-            if store.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, store.kindFilter == .all {
-                statusChip(systemImage: "list.bullet", title: L("\(snapshot.totalKnownItemCount) 项", "\(snapshot.totalKnownItemCount) items"))
-            } else {
-                statusChip(systemImage: "line.3.horizontal.decrease", title: L("\(snapshot.totalRowCount)/\(snapshot.totalKnownItemCount)", "\(snapshot.totalRowCount)/\(snapshot.totalKnownItemCount)"))
-            }
-            statusChip(
-                systemImage: "folder",
-                title: L("\(snapshot.displayedDirectoryCount)", "\(snapshot.displayedDirectoryCount)"),
-                accessibilityLabel: L("\(snapshot.displayedDirectoryCount) 个文件夹", "\(snapshot.displayedDirectoryCount) folders")
-            )
-            statusChip(
-                systemImage: "doc",
-                title: L("\(snapshot.displayedFileCount)", "\(snapshot.displayedFileCount)"),
-                accessibilityLabel: L("\(snapshot.displayedFileCount) 个文件", "\(snapshot.displayedFileCount) files")
-            )
-
-            if store.kindFilter != .all {
-                statusChip(systemImage: store.kindFilter.systemImage, title: store.kindFilter.title)
-            }
-
-            if !selectedItems.isEmpty {
-                statusChip(systemImage: "checkmark.circle", title: selectionSummary(for: selectedItems))
-            }
+            Text(statusSummary(snapshot: snapshot, selectedItems: selectedItems))
+                .font(.conductorSystem(size: 10.8, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.54))
+                .lineLimit(1)
+                .truncationMode(.tail)
 
             Spacer(minLength: 8)
 
@@ -499,11 +505,37 @@ struct FileManagerPanel: View {
                 .foregroundStyle(theme.shellChromeText.opacity(0.42))
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .textSelection(.enabled)
         }
         .padding(.horizontal, 12)
         .frame(height: 30)
         .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.12 : 0.08))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(statusBarAccessibilityLabel(snapshot: snapshot, selectedItems: selectedItems))
+        .accessibilityAddTraits(.isStaticText)
+    }
+
+    private func statusBarAccessibilityLabel(snapshot: FileManagerDisplaySnapshot, selectedItems: [FileManagerItem]) -> String {
+        var parts = [statusSummary(snapshot: snapshot, selectedItems: selectedItems)]
+        parts.append((store.currentURL ?? request.rootURL).path)
+        return parts.joined(separator: "，")
+    }
+
+    private func statusSummary(snapshot: FileManagerDisplaySnapshot, selectedItems: [FileManagerItem]) -> String {
+        var parts: [String] = []
+        if store.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, store.kindFilter == .all {
+            parts.append(L("\(snapshot.totalKnownItemCount) 项", "\(snapshot.totalKnownItemCount) items"))
+        } else {
+            parts.append(L("显示 \(snapshot.totalRowCount)/\(snapshot.totalKnownItemCount) 项", "Showing \(snapshot.totalRowCount)/\(snapshot.totalKnownItemCount) items"))
+        }
+        parts.append(L("\(snapshot.displayedDirectoryCount) 个文件夹", "\(snapshot.displayedDirectoryCount) folders"))
+        parts.append(L("\(snapshot.displayedFileCount) 个文件", "\(snapshot.displayedFileCount) files"))
+        if store.kindFilter != .all {
+            parts.append(store.kindFilter.title)
+        }
+        if !selectedItems.isEmpty {
+            parts.append(L("已选 \(selectionSummary(for: selectedItems))", "Selected \(selectionSummary(for: selectedItems))"))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func selectionSummary(for items: [FileManagerItem]) -> String {
@@ -639,7 +671,6 @@ struct FileManagerPanel: View {
         }
         store.recordOpenedFile(item.url)
         model.openFileInWorkspace(item.url, rootURL: store.currentURL ?? request.rootURL)
-        model.closeFileManagerPanel()
     }
 
     private func openURL(_ url: URL) {
@@ -649,7 +680,6 @@ struct FileManagerPanel: View {
         }
         store.recordOpenedFile(standardized)
         model.openFileInWorkspace(standardized, rootURL: standardized.deletingLastPathComponent())
-        model.closeFileManagerPanel()
     }
 
     private func openSelectedItem() {
@@ -853,7 +883,16 @@ struct FileManagerPanel: View {
         searchVisible = false
         searchFocused = false
         store.searchQuery = ""
+        focusKeyboardIfBrowsing()
+    }
+
+    private func focusKeyboardIfBrowsing() {
+        guard model.selectedWorkspaceFileTab == nil else { return }
         keyboardFocused = true
+    }
+
+    private var canReceiveKeyboardFocus: Bool {
+        model.selectedWorkspaceFileTab == nil || searchVisible || store.renamingPath != nil
     }
 
     private func handleKeyboardShortcut(_ event: NSEvent) -> Bool {

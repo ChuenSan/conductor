@@ -768,24 +768,27 @@ private struct TerminalTabButton: View {
                     renameCancelled = false
                 }
             } else {
-                TerminalTabButtonContent(
-                    title: tab.title,
-                    detail: terminalDetailLabel,
-                    selected: isSelected,
-                    hasUnread: unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0,
-                    showsProgress: metadata?.progressKind != nil,
-                    readonly: metadata?.readonly == true,
-                    themeID: theme.id,
-                    fontScaleID: fontScale.id
-                )
-                .equatable()
-                .contentShape(Rectangle())
-                .onTapGesture {
+                Button {
                     onVisualSelect()
                     ConductorMotion.withoutAnimation {
                         model.selectTab(tab.id, in: paneID)
                     }
+                } label: {
+                    TerminalTabButtonContent(
+                        title: tab.title,
+                        detail: terminalDetailLabel,
+                        selected: isSelected,
+                        hasUnread: unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0,
+                        showsProgress: metadata?.progressKind != nil,
+                        readonly: metadata?.readonly == true,
+                        themeID: theme.id,
+                        fontScaleID: fontScale.id
+                    )
+                    .equatable()
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(terminalHelpText)
                 .simultaneousGesture(
                     TapGesture(count: 2).onEnded {
                         guard !editingTitle else { return }

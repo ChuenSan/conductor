@@ -127,65 +127,9 @@ struct ConductorWorkspaceFileTab: Identifiable, Equatable, Hashable, Sendable {
     }
 }
 
-struct ConductorWorkspaceWebTab: Identifiable, Equatable, Hashable, Sendable {
-    let id: String
-    var title: String
-    var currentURL: URL?
-    var pendingInput: String
-    var isLoading: Bool
-    var canGoBack: Bool
-    var canGoForward: Bool
-    var faviconURL: URL?
-
-    init(
-        id: String,
-        title: String,
-        currentURL: URL?,
-        pendingInput: String,
-        isLoading: Bool,
-        canGoBack: Bool,
-        canGoForward: Bool,
-        faviconURL: URL?
-    ) {
-        self.id = id
-        self.title = title
-        self.currentURL = currentURL
-        self.pendingInput = pendingInput
-        self.isLoading = isLoading
-        self.canGoBack = canGoBack
-        self.canGoForward = canGoForward
-        self.faviconURL = faviconURL
-    }
-
-    static func blank() -> ConductorWorkspaceWebTab {
-        ConductorWorkspaceWebTab(
-            id: UUID().uuidString,
-            title: L("新标签页", "New Tab"),
-            currentURL: nil,
-            pendingInput: "",
-            isLoading: false,
-            canGoBack: false,
-            canGoForward: false,
-            faviconURL: nil
-        )
-    }
-
-    init(url: URL) {
-        self.id = UUID().uuidString
-        self.title = url.host ?? url.absoluteString
-        self.currentURL = url
-        self.pendingInput = url.absoluteString
-        self.isLoading = false
-        self.canGoBack = false
-        self.canGoForward = false
-        self.faviconURL = nil
-    }
-}
-
 enum ConductorWorkspaceContentTabID: Equatable, Hashable {
     case terminal(TerminalID)
     case file(String)
-    case web(String)
 
     var diagnosticName: String {
         switch self {
@@ -193,8 +137,6 @@ enum ConductorWorkspaceContentTabID: Equatable, Hashable {
             "terminal"
         case .file:
             "file"
-        case .web:
-            "web"
         }
     }
 }
@@ -264,7 +206,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published var terminalSearchVisible = false
     @Published var fileManagerPanelRequest: FileManagerPanelRequest?
     @Published private(set) var workspaceFileTabs: [ConductorWorkspaceFileTab] = []
-    @Published private(set) var workspaceWebTabs: [ConductorWorkspaceWebTab] = []
     @Published private(set) var dirtyWorkspaceFileTabIDs: Set<String> = []
     @Published private(set) var externallyChangedWorkspaceFileTabIDs: Set<String> = []
     @Published private(set) var workspaceFileEditorSaveRequestTokensByTabID: [String: Int] = [:]
@@ -303,21 +244,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         return selectedWorkspaceFileTabID
     }
 
-    var selectedWorkspaceWebTab: ConductorWorkspaceWebTab? {
-        guard case .web(let selectedWorkspaceWebTabID) = selectedWorkspaceContentTabID else { return nil }
-        return workspaceWebTabs.first { $0.id == selectedWorkspaceWebTabID }
-    }
-
-    var selectedWorkspaceWebTabID: String? {
-        guard case .web(let selectedWorkspaceWebTabID) = selectedWorkspaceContentTabID else { return nil }
-        return selectedWorkspaceWebTabID
-    }
-
     var selectedWorkspaceTerminalTabID: TerminalID? {
         switch selectedWorkspaceContentTabID {
         case .terminal(let terminalID) where workspace.paneID(containing: terminalID) != nil:
             return terminalID
-        case .file, .web:
+        case .file:
             return nil
         default:
             return focusedTerminalID
@@ -1117,84 +1048,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         fileManagerKeyboardFocused = focused
     }
 
-    func newWorkspaceWebTab(initialInput: String = "") {
-        var tab = ConductorWorkspaceWebTab.blank()
-        tab.pendingInput = initialInput
-        workspaceWebTabs.append(tab)
-        selectedWorkspaceContentTabID = .web(tab.id)
-        terminalSearchVisible = false
-        workspaceOverviewVisible = false
-        fileManagerKeyboardFocused = false
-    }
-
-    func openWebInWorkspace(_ url: URL) {
-        let tab = ConductorWorkspaceWebTab(url: url)
-        workspaceWebTabs.append(tab)
-        selectedWorkspaceContentTabID = .web(tab.id)
-        terminalSearchVisible = false
-        workspaceOverviewVisible = false
-        fileManagerKeyboardFocused = false
-    }
-
-    func navigateWorkspaceWebTab(_ tabID: String, to url: URL) {
-        guard let index = workspaceWebTabs.firstIndex(where: { $0.id == tabID }) else { return }
-        workspaceWebTabs[index].currentURL = url
-        workspaceWebTabs[index].pendingInput = url.absoluteString
-        workspaceWebTabs[index].title = url.host ?? url.absoluteString
-        selectedWorkspaceContentTabID = .web(tabID)
-        terminalSearchVisible = false
-        workspaceOverviewVisible = false
-        fileManagerKeyboardFocused = false
-    }
-
-    func selectWorkspaceWebTab(_ tabID: String) {
-        guard workspaceWebTabs.contains(where: { $0.id == tabID }) else { return }
-        selectedWorkspaceContentTabID = .web(tabID)
-        terminalSearchVisible = false
-        workspaceOverviewVisible = false
-        fileManagerKeyboardFocused = false
-    }
-
-    func closeWorkspaceWebTab(_ tab: ConductorWorkspaceWebTab) {
-        guard let index = workspaceWebTabs.firstIndex(where: { $0.id == tab.id }) else { return }
-        workspaceWebTabs.remove(at: index)
-        if selectedWorkspaceWebTabID == tab.id {
-            if !workspaceWebTabs.isEmpty {
-                let nextIndex = min(index, workspaceWebTabs.count - 1)
-                let nextWeb = workspaceWebTabs[nextIndex]
-                selectedWorkspaceContentTabID = .web(nextWeb.id)
-            } else if let file = workspaceFileTabs.last {
-                selectedWorkspaceContentTabID = .file(file.id)
-            } else {
-                selectedWorkspaceContentTabID = focusedTerminalID.map { .terminal($0) }
-            }
-        }
-    }
-
-    func updateWorkspaceWebTab(
-        _ tabID: String,
-        title: String? = nil,
-        currentURL: URL? = nil,
-        pendingInput: String? = nil,
-        isLoading: Bool? = nil,
-        canGoBack: Bool? = nil,
-        canGoForward: Bool? = nil,
-        faviconURL: URL? = nil,
-        clearCurrentURL: Bool = false,
-        clearFaviconURL: Bool = false
-    ) {
-        guard let index = workspaceWebTabs.firstIndex(where: { $0.id == tabID }) else { return }
-        if let title { workspaceWebTabs[index].title = title.isEmpty ? L("新标签页", "New Tab") : title }
-        if clearCurrentURL { workspaceWebTabs[index].currentURL = nil }
-        if let currentURL { workspaceWebTabs[index].currentURL = currentURL }
-        if let pendingInput { workspaceWebTabs[index].pendingInput = pendingInput }
-        if let isLoading { workspaceWebTabs[index].isLoading = isLoading }
-        if let canGoBack { workspaceWebTabs[index].canGoBack = canGoBack }
-        if let canGoForward { workspaceWebTabs[index].canGoForward = canGoForward }
-        if clearFaviconURL { workspaceWebTabs[index].faviconURL = nil }
-        if let faviconURL { workspaceWebTabs[index].faviconURL = faviconURL }
-    }
-
     func openFileInWorkspace(_ fileURL: URL, rootURL: URL? = nil) {
         let standardizedFile = fileURL.standardizedFileURL
         let resolvedRoot = (rootURL ?? standardizedFile.deletingLastPathComponent()).standardizedFileURL
@@ -1206,6 +1059,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         syncPanelCoordinatorFromPublished()
         panelCoordinator.terminalSearchVisible = false
         panelCoordinator.workspaceOverviewVisible = false
+        fileManagerKeyboardFocused = false
         publishPanelState()
     }
 
@@ -1216,6 +1070,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         syncPanelCoordinatorFromPublished()
         panelCoordinator.terminalSearchVisible = false
         panelCoordinator.workspaceOverviewVisible = false
+        fileManagerKeyboardFocused = false
         publishPanelState()
     }
 

@@ -14,7 +14,6 @@ private func L(_ zh: String, _ en: String) -> String {
 private enum WorkspaceTopTabScrollTarget: Hashable {
     case workspace(WorkspaceID)
     case file(String)
-    case web(String)
 }
 
 struct WorkspaceTabStrip: View {
@@ -37,7 +36,7 @@ struct WorkspaceTabStrip: View {
                         .transition(ConductorMotion.tabTransition)
                 }
 
-                if !snapshot.fileTabs.isEmpty || !snapshot.webTabs.isEmpty {
+                if !snapshot.fileTabs.isEmpty {
                     WorkspaceTabSectionDivider()
                     ForEach(snapshot.fileTabs) { fileTab in
                         WorkspaceFileTopTab(
@@ -59,25 +58,6 @@ struct WorkspaceTabStrip: View {
                         .id(WorkspaceTopTabScrollTarget.file(fileTab.id))
                         .transition(ConductorMotion.tabTransition)
                     }
-                    ForEach(snapshot.webTabs) { webTab in
-                        WorkspaceWebTopTab(
-                            tab: webTab.tab,
-                            appearance: appearance,
-                            selected: webTab.selected,
-                            onSelect: {
-                                finishWorkspaceRenameIfNeeded()
-                                model.selectWorkspaceWebTab(webTab.id)
-                            },
-                            onClose: {
-                                withoutShellAnimation {
-                                    finishWorkspaceRenameIfNeeded()
-                                    model.closeWorkspaceWebTab(webTab.tab)
-                                }
-                            }
-                        )
-                        .id(WorkspaceTopTabScrollTarget.web(webTab.id))
-                        .transition(ConductorMotion.tabTransition)
-                    }
                 }
             }
             .padding(.horizontal, WorkspaceTabMetrics.edgePadding)
@@ -92,9 +72,6 @@ struct WorkspaceTabStrip: View {
             syncScrollTarget(animated: true)
         }
         .onChange(of: snapshot.selectedWorkspaceFileTabID) {
-            syncScrollTarget(animated: true)
-        }
-        .onChange(of: snapshot.selectedWorkspaceWebTabID) {
             syncScrollTarget(animated: true)
         }
         .onChange(of: snapshot.workspaceIDs) {
@@ -114,10 +91,7 @@ struct WorkspaceTabStrip: View {
 
     private func syncScrollTarget(animated: Bool) {
         let nextTarget: WorkspaceTopTabScrollTarget?
-        if let webID = snapshot.selectedWorkspaceWebTabID,
-           snapshot.webTabs.contains(where: { $0.id == webID }) {
-            nextTarget = .web(webID)
-        } else if let fileID = snapshot.selectedWorkspaceFileTabID,
+        if let fileID = snapshot.selectedWorkspaceFileTabID,
                   snapshot.fileTabs.contains(where: { $0.id == fileID }) {
             nextTarget = .file(fileID)
         } else if snapshot.workspaceIDs.contains(snapshot.selectedWorkspaceID) {
@@ -140,8 +114,8 @@ struct WorkspaceTabStrip: View {
         WorkspaceTopTab(
             row: row,
             appearance: appearance,
-            active: row.selected && snapshot.selectedWorkspaceFileTabID == nil && snapshot.selectedWorkspaceWebTabID == nil,
-            visuallySelected: row.selected && snapshot.selectedWorkspaceFileTabID == nil && snapshot.selectedWorkspaceWebTabID == nil,
+            active: row.selected && snapshot.selectedWorkspaceFileTabID == nil,
+            visuallySelected: row.selected && snapshot.selectedWorkspaceFileTabID == nil,
             selectionNamespace: selectionNamespace,
             canClose: snapshot.canCloseWorkspace,
             editing: editingWorkspaceID == row.id,
@@ -271,6 +245,12 @@ private struct WorkspaceFileTopTab: View {
         return "doc.text"
     }
 
+    private var accessibilityTitle: String {
+        dirty
+            ? L("文件 \(tab.title)，有未保存更改", "File \(tab.title), unsaved changes")
+            : L("文件 \(tab.title)", "File \(tab.title)")
+    }
+
     var body: some View {
         ZStack(alignment: .trailing) {
             Button(action: onSelect) {
@@ -301,6 +281,7 @@ private struct WorkspaceFileTopTab: View {
                 .contentShape(tabShape)
             }
             .buttonStyle(ConductorPressButtonStyle())
+            .accessibilityLabel(accessibilityTitle)
 
             Button {
                 onClose()
@@ -350,129 +331,6 @@ private struct WorkspaceFileTopTab: View {
             }
             Button(L("在访达中显示", "Reveal in Finder")) {
                 NSWorkspace.shared.activateFileViewerSelecting([tab.fileURL])
-            }
-        }
-    }
-}
-
-private struct WorkspaceWebTopTab: View {
-    let tab: ConductorWorkspaceWebTab
-    let appearance: AppearancePreferences
-    let selected: Bool
-    let onSelect: () -> Void
-    let onClose: () -> Void
-    @State private var hovering = false
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-    private let closeButtonSlotWidth: CGFloat = 21
-
-    private var tabShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous)
-    }
-
-    private var baseFill: Color {
-        if theme.usesDarkChrome {
-            return hovering ? theme.shellHoverFill.opacity(0.92) : theme.shellControlFill.opacity(0.58)
-        }
-        return hovering ? theme.shellHoverFill.opacity(0.86) : theme.shellControlFill.opacity(0.52)
-    }
-
-    private var selectedFill: Color {
-        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.72) : theme.shellPanelStrong.opacity(0.82)
-    }
-
-    private var tabStroke: Color {
-        if selected {
-            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.58 : 0.42) * appearance.chromeClarity.strokeMultiplier)
-        }
-        return theme.shellStroke.opacity(hovering ? 0.34 : 0.18)
-    }
-
-    private var titleColor: Color {
-        selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86)
-    }
-
-    private var accessibilityTitle: String {
-        L("网页 \(tab.title)", "Web \(tab.title)")
-    }
-
-    private var closeAccessibilityTitle: String {
-        L("关闭网页 \(tab.title)", "Close Web Page \(tab.title)")
-    }
-
-    var body: some View {
-        ZStack(alignment: .trailing) {
-            Button(action: onSelect) {
-                HStack(spacing: 7) {
-                    Image(systemName: "globe")
-                        .font(.system(size: 10.8, weight: .semibold))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
-                        .frame(width: 17, height: 17)
-                    Text(tab.title)
-                        .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(titleColor)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.leading, 8)
-                .padding(.trailing, closeButtonSlotWidth + 5)
-                .frame(
-                    width: WorkspaceTabMetrics.width(for: appearance),
-                    height: WorkspaceTabMetrics.height(for: appearance),
-                    alignment: .leading
-                )
-                .contentShape(tabShape)
-            }
-            .buttonStyle(ConductorPressButtonStyle())
-            .accessibilityLabel(accessibilityTitle)
-
-            Button {
-                onClose()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
-                    .foregroundStyle(titleColor.opacity(selected || hovering ? 0.74 : 0.52))
-                    .frame(width: 13, height: 13)
-                    .clipShape(Circle())
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(ConductorPressButtonStyle())
-            .padding(.trailing, 6)
-            .accessibilityLabel(closeAccessibilityTitle)
-            .macNativeTooltip(closeAccessibilityTitle)
-        }
-        .frame(
-            width: WorkspaceTabMetrics.width(for: appearance),
-            height: WorkspaceTabMetrics.height(for: appearance)
-        )
-        .background {
-            ZStack {
-                tabShape
-                    .fill(baseFill)
-                if selected {
-                    tabShape
-                        .fill(selectedFill)
-                }
-            }
-        }
-        .clipShape(tabShape)
-        .overlay {
-            tabShape
-                .stroke(tabStroke, lineWidth: 1)
-        }
-        .scaleEffect(hovering && !selected ? 1.006 : 1)
-        .animation(ConductorMotion.hover, value: hovering)
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
-        .contentShape(tabShape)
-        .contextMenu {
-            Button(closeAccessibilityTitle) {
-                onClose()
             }
         }
     }
@@ -534,6 +392,12 @@ private struct WorkspaceTopTab: View {
 
     private var titleColor: Color {
         selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86)
+    }
+
+    private var tabAccessibilityTitle: String {
+        let base = L("\(row.title)，\(row.terminalCount) 个终端", "\(row.title), \(row.terminalCount) terminals")
+        guard unreadCount > 0 else { return base }
+        return base + L("，\(unreadCount) 条未读", ", \(unreadCount) unread")
     }
 
     var body: some View {
@@ -643,6 +507,7 @@ private struct WorkspaceTopTab: View {
                 .contentShape(tabShape)
             }
             .buttonStyle(ConductorPressButtonStyle())
+            .accessibilityLabel(tabAccessibilityTitle)
             .simultaneousGesture(
                 TapGesture(count: 2).onEnded {
                     guard !editing else { return }

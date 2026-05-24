@@ -71,18 +71,6 @@ struct ConductorToolbar: View {
                 }
 
                 ConductorPillGroup {
-                    ConductorIconButton(state: toolbarControlState(
-                        id: "new-web-tab",
-                        systemImage: "globe",
-                        tooltip: L("新建网页标签页", "New Web Tab"),
-                        title: L("网页", "Web")
-                    )) {
-                        finishWorkspaceRenameIfNeeded()
-                        model.performCommand(.newWebTab)
-                    }
-                }
-
-                ConductorPillGroup {
                     ConductorIconButton(state: toolbarControlState(id: "split-right", systemImage: "rectangle.split.2x1", tooltip: L("向右分屏 Cmd-D", "Split Right Cmd-D"), title: L("右分屏", "Right"), isEnabled: toolbarSnapshot.canSplitRight)) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {

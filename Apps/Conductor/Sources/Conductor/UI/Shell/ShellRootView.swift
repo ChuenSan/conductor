@@ -227,10 +227,7 @@ struct ShellRootView: View {
 
     @ViewBuilder
     private var primaryWorkspaceContent: some View {
-        if let webTab = model.selectedWorkspaceWebTab {
-            ConductorWebWorkspaceView(model: model, tab: webTab)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if model.selectedWorkspaceFileTab != nil {
+        if model.selectedWorkspaceFileTab != nil {
             ConductorFileWorkspaceView(
                 model: model,
                 snapshot: ConductorFileWorkspaceSnapshot(model: model)
@@ -793,8 +790,6 @@ private struct CommandPaletteItem: Identifiable, Equatable {
             WorkspaceChromeGlyph.systemName(selected: false)
         case "new-terminal":
             "plus.rectangle.on.rectangle"
-        case "new-web-tab":
-            "globe"
         case "new-terminal-current-directory":
             "arrow.turn.down.right"
         case "open-current-directory":
@@ -879,14 +874,6 @@ private enum ConductorCommandCatalog {
         return [
             CommandPaletteItem(id: "new-workspace", command: .newWorkspace, section: L("创建", "Create"), title: L("新建工作区", "New Workspace"), shortcut: "Cmd-N", keywords: "workspace new"),
             CommandPaletteItem(id: "new-terminal", command: .newTerminal, section: L("创建", "Create"), title: L("新开终端", "New Terminal"), shortcut: "Cmd-T", keywords: "terminal pane shell"),
-            CommandPaletteItem(
-                id: "new-web-tab",
-                command: .newWebTab,
-                section: L("文件", "File"),
-                title: L("新建网页标签页", "New Web Tab"),
-                shortcut: "",
-                keywords: "web browser url localhost website"
-            ),
             CommandPaletteItem(
                 id: "new-terminal-current-directory",
                 command: .newTerminalAtFocusedDirectory,
@@ -1306,6 +1293,10 @@ private struct WorkspaceOverviewPanel: View {
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
+    private let columns = [
+        GridItem(.adaptive(minimum: 214, maximum: 236), spacing: 10)
+    ]
+
     private var filteredResult: WorkspaceOverviewFilterResult {
         WorkspaceOverviewFilterResult(items: snapshot.items, query: query)
     }
@@ -1323,9 +1314,9 @@ private struct WorkspaceOverviewPanel: View {
                         emptyState
                     } else {
                         ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 3) {
+                            LazyVGrid(columns: columns, alignment: .center, spacing: 10) {
                                 ForEach(result.items) { item in
-                                    WorkspaceOverviewRow(
+                                    WorkspaceOverviewCard(
                                         workspace: item.workspace,
                                         theme: theme,
                                         selected: item.id == snapshot.selectedWorkspaceID,
@@ -1339,10 +1330,11 @@ private struct WorkspaceOverviewPanel: View {
                                     } onHover: {
                                         highlightedWorkspaceID = item.id
                                     }
-                                    .transition(ConductorMotion.rowTransition(itemCount: result.items.count))
+                                    .transition(ConductorMotion.workspaceSpreadTransition(itemCount: result.items.count))
                                 }
                             }
-                            .padding(.vertical, 1)
+                            .padding(.horizontal, 2)
+                            .padding(.bottom, 2)
                             .animation(ConductorMotion.list(itemCount: result.items.count), value: result.ids)
                         }
                         .scrollIndicators(.visible)
@@ -1351,7 +1343,7 @@ private struct WorkspaceOverviewPanel: View {
                 }
                 .padding(12)
             }
-            .frame(width: 620, height: 420)
+            .frame(width: 690, height: 486)
             .onAppear {
                 highlightedWorkspaceID = snapshot.selectedWorkspaceID
                 focusSearchField()
@@ -1365,10 +1357,14 @@ private struct WorkspaceOverviewPanel: View {
             }
             .onMoveCommand { direction in
                 switch direction {
-                case .up:
+                case .left:
                     moveHighlight(by: -1)
-                case .down:
+                case .right:
                     moveHighlight(by: 1)
+                case .up:
+                    moveHighlight(by: -3)
+                case .down:
+                    moveHighlight(by: 3)
                 default:
                     break
                 }
@@ -1480,7 +1476,7 @@ private struct WorkspaceOverviewPanel: View {
     }
 }
 
-private struct WorkspaceOverviewRow: View {
+private struct WorkspaceOverviewCard: View {
     let workspace: WorkspaceState
     let theme: TerminalTheme
     let selected: Bool
@@ -1500,61 +1496,84 @@ private struct WorkspaceOverviewRow: View {
         workspace.focusedPane?.selectedTab?.title ?? L("终端", "Terminal")
     }
 
+    private var accessibilityTitle: String {
+        var parts = [
+            workspace.title,
+            L("\(workspace.panes.count) 个分屏", "\(workspace.panes.count) panes"),
+            L("\(terminalCount) 个终端", "\(terminalCount) terminals"),
+            focusedTerminalTitle
+        ]
+        if workspace.isZoomed {
+            parts.append(L("已放大", "Zoomed"))
+        }
+        if unreadCount > 0 {
+            parts.append(L("\(unreadCount) 条未读", "\(unreadCount) unread"))
+        }
+        return parts.joined(separator: "，")
+    }
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
-                    .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
-                    .frame(width: 24, height: 24)
-                    .background(iconFill)
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 9) {
+                WorkspaceMiniLayout(
+                    workspace: workspace,
+                    theme: theme,
+                    unreadCountForPane: unreadCountForPane
+                )
+                .frame(height: 114)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(workspace.title)
-                        .font(.conductorSystem(size: 12.4, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.primaryText)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 7) {
+                        Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
+                            .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
+                            .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
+                            .frame(width: 16)
+                        Text(workspace.title)
+                            .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.primaryText)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 0)
+                        if unreadCount > 0 {
+                            Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                                .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .frame(minWidth: 16, minHeight: 15)
+                                .background(theme.floatingEmphasis)
+                                .clipShape(Capsule())
+                                .conductorSignalPulse(active: true, trigger: unreadCount)
+                        }
+                    }
+
+                    HStack(spacing: 6) {
+                        WorkspaceOverviewMetric(systemImage: "square.split.2x2", value: "\(workspace.panes.count)")
+                        WorkspaceOverviewMetric(systemImage: "terminal", value: "\(terminalCount)")
+                        if workspace.isZoomed {
+                            WorkspaceOverviewMetric(systemImage: "arrow.up.left.and.arrow.down.right", value: L("放大", "Zoom"))
+                        }
+                    }
 
                     Text(focusedTerminalTitle)
-                        .font(.conductorSystem(size: 10.3, weight: .medium, scale: fontScale))
+                        .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
                         .foregroundStyle(ConductorDesign.tertiaryText)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-
-                Spacer(minLength: 10)
-
-                HStack(spacing: 5) {
-                    WorkspaceOverviewMetric(systemImage: "square.split.2x2", value: "\(workspace.panes.count)")
-                    WorkspaceOverviewMetric(systemImage: "terminal", value: "\(terminalCount)")
-                    if workspace.isZoomed {
-                        WorkspaceOverviewMetric(systemImage: "arrow.up.left.and.arrow.down.right", value: L("放大", "Zoom"))
-                    }
-                    if unreadCount > 0 {
-                        Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                            .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 5)
-                            .frame(minWidth: 16, minHeight: 16)
-                            .background(theme.floatingEmphasis)
-                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                            .conductorSignalPulse(active: true, trigger: unreadCount)
-                    }
-                }
             }
-            .padding(.horizontal, 8)
-            .frame(height: 46)
+            .padding(9)
             .background(cardFill)
-            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(borderColor, lineWidth: selected || highlighted ? 1.5 : 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityTitle)
+        .accessibilityAddTraits(.isButton)
         .onHover { value in
             ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
@@ -1563,6 +1582,13 @@ private struct WorkspaceOverviewRow: View {
                 onHover()
             }
         }
+        .scaleEffect(hovering ? 1.006 : 1)
+        .shadow(
+            color: Color.black.opacity(hovering ? (theme.usesDarkChrome ? 0.16 : 0.08) : 0),
+            radius: hovering ? 10 : 0,
+            x: 0,
+            y: hovering ? 5 : 0
+        )
         .animation(ConductorMotion.standard, value: selected)
         .animation(ConductorMotion.feedback, value: highlighted)
         .animation(ConductorMotion.hover, value: hovering)
@@ -1588,13 +1614,6 @@ private struct WorkspaceOverviewRow: View {
         }
         return theme.floatingStroke
     }
-
-    private var iconFill: Color {
-        if selected {
-            return theme.floatingSelectedFill
-        }
-        return theme.floatingControlFill.opacity(0.64)
-    }
 }
 
 private struct WorkspaceOverviewMetric: View {
@@ -1616,5 +1635,151 @@ private struct WorkspaceOverviewMetric: View {
         .frame(height: 18)
         .background(theme.floatingControlFill)
         .clipShape(Capsule())
+    }
+}
+
+private struct WorkspaceMiniLayout: View {
+    let workspace: WorkspaceState
+    let theme: TerminalTheme
+    let unreadCountForPane: (PaneID) -> Int
+
+    var body: some View {
+        WorkspaceMiniNode(
+            node: workspace.root,
+            workspace: workspace,
+            theme: theme,
+            unreadCountForPane: unreadCountForPane
+        )
+        .padding(5)
+        .background(
+            LinearGradient(
+                colors: [
+                    theme.terminalChrome.opacity(0.96),
+                    theme.terminalRaisedBackground.opacity(0.98)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+        }
+    }
+}
+
+private struct WorkspaceMiniNode: View {
+    let node: SplitNode
+    let workspace: WorkspaceState
+    let theme: TerminalTheme
+    let unreadCountForPane: (PaneID) -> Int
+
+    var body: some View {
+        GeometryReader { proxy in
+            nodeView(node, size: proxy.size)
+        }
+    }
+
+    @ViewBuilder
+    private func nodeView(_ node: SplitNode, size: CGSize) -> some View {
+        switch node {
+        case let .leaf(paneID):
+            WorkspaceMiniPane(
+                pane: workspace.panes[paneID],
+                focused: paneID == workspace.focusedPaneID,
+                unreadCount: unreadCountForPane(paneID),
+                theme: theme
+            )
+        case let .split(axis, first, second, fraction):
+            let gap: CGFloat = 4
+            if axis == .horizontal {
+                HStack(spacing: gap) {
+                    WorkspaceMiniNode(node: first, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                        .frame(width: max(1, (size.width - gap) * fraction))
+                    WorkspaceMiniNode(node: second, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                        .frame(width: max(1, (size.width - gap) * (1 - fraction)))
+                }
+            } else {
+                VStack(spacing: gap) {
+                    WorkspaceMiniNode(node: first, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                        .frame(height: max(1, (size.height - gap) * fraction))
+                    WorkspaceMiniNode(node: second, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                        .frame(height: max(1, (size.height - gap) * (1 - fraction)))
+                }
+            }
+        }
+    }
+}
+
+private struct WorkspaceMiniPane: View {
+    let pane: PaneState?
+    let focused: Bool
+    let unreadCount: Int
+    let theme: TerminalTheme
+
+    private var title: String {
+        pane?.selectedTab?.title ?? "终端"
+    }
+
+    private var tabCount: Int {
+        pane?.tabs.count ?? 0
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(theme.terminalBackground)
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(theme.terminalChrome.opacity(0.92))
+                        .frame(height: 13)
+                }
+
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(focused ? theme.floatingEmphasis : Color.white.opacity(0.32))
+                    .frame(width: 4.5, height: 4.5)
+                Text(title)
+                    .font(.system(size: 7.5, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(focused ? 0.86 : 0.58))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                if tabCount > 1 {
+                    Text("\(tabCount)")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.70))
+                }
+            }
+            .padding(.horizontal, 5)
+            .frame(height: 13)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Spacer(minLength: 13)
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(Color.white.opacity(0.30))
+                    .frame(width: 32, height: 2)
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(theme.floatingEmphasis.opacity(focused ? 0.76 : 0.34))
+                    .frame(width: focused ? 44 : 25, height: 2)
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 22, height: 2)
+            }
+            .padding(6)
+
+            if unreadCount > 0 {
+                Circle()
+                    .fill(theme.floatingEmphasis)
+                    .frame(width: 6, height: 6)
+                    .offset(x: -1, y: -1)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(focused ? theme.floatingSelectedStroke : Color.white.opacity(0.14), lineWidth: focused ? 1.3 : 1)
+        }
     }
 }

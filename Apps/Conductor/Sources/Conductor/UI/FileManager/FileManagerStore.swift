@@ -235,7 +235,6 @@ final class FileManagerPanelStore: ObservableObject {
         selectedPaths = paths
         selectedItem = item
         selectionAnchorPath = anchorPath ?? item.url.path
-        loadPreview(for: item.url)
         if let index = displayedRows.firstIndex(where: { $0.item.url.path == item.url.path }) {
             ensureVisibleRow(at: index)
         }

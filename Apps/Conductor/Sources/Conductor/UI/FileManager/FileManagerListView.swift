@@ -47,7 +47,8 @@ struct FileManagerListView: View {
                                 isPendingDelete: store.isPendingDelete(row.item),
                                 renamingName: $store.renamingName,
                                 renamingFocusToken: store.renamingFocusToken,
-                                open: { open(row.item) },
+                                primaryAction: { primaryAction(row.item) },
+                                open: { activate(row.item) },
                                 toggleExpansion: { Task { await store.toggleDirectory(row.item, selectsItem: false) } },
                                 openInWorkspace: { openInWorkspace(row.item) },
                                 openInSystemApp: { NSWorkspace.shared.open(row.item.url) },
@@ -84,6 +85,7 @@ struct FileManagerListView: View {
                                     Task { await store.pasteItems(urls, into: row.item, move: move) }
                                 }
                             )
+                            .transition(ConductorMotion.rowTransition(itemCount: store.displaySnapshot.rows.count))
                         }
 
                         if store.displaySnapshot.visibleRange.upperBound < store.displaySnapshot.totalRowCount {
@@ -97,6 +99,7 @@ struct FileManagerListView: View {
                     }
                     .padding(.horizontal, 11)
                     .padding(.vertical, 10)
+                    .animation(ConductorMotion.list(itemCount: store.displaySnapshot.rows.count), value: store.displaySnapshot.rows.map(\.id))
                 }
                 .scrollIndicators(.visible)
             }
@@ -144,7 +147,7 @@ struct FileManagerListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func open(_ item: FileManagerItem) {
+    private func primaryAction(_ item: FileManagerItem) {
         let flags = NSApp.currentEvent?.modifierFlags.intersection(.deviceIndependentFlagsMask) ?? []
         if flags.contains(.shift) {
             store.select(item, mode: .range)
@@ -162,6 +165,14 @@ struct FileManagerListView: View {
         openInWorkspace(item)
     }
 
+    private func activate(_ item: FileManagerItem) {
+        if item.isDirectory {
+            Task { await store.openDirectory(item) }
+            return
+        }
+        openInWorkspace(item)
+    }
+
     private func openInWorkspace(_ item: FileManagerItem) {
         guard !item.isDirectory else {
             Task { await store.open(item) }
@@ -169,7 +180,6 @@ struct FileManagerListView: View {
         }
         store.recordOpenedFile(item.url)
         model.openFileInWorkspace(item.url, rootURL: store.currentURL ?? rootURL)
-        model.closeFileManagerPanel()
     }
 
     private var canPaste: Bool {
@@ -292,6 +302,7 @@ struct FileManagerRowView: View {
     let isPendingDelete: Bool
     @Binding var renamingName: String
     let renamingFocusToken: Int
+    let primaryAction: () -> Void
     let open: () -> Void
     let toggleExpansion: () -> Void
     let openInWorkspace: () -> Void
@@ -320,6 +331,7 @@ struct FileManagerRowView: View {
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorFontFamily) private var fontFamily
     @State private var isDropTargeted = false
+    @State private var hovering = false
 
     var body: some View {
         rowContent
@@ -381,10 +393,11 @@ struct FileManagerRowView: View {
         HStack(spacing: 8) {
             if item.isDirectory {
                 Button(action: toggleExpansion) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: "chevron.right")
                         .font(.conductorSystem(size: 8.5, weight: .bold, family: fontFamily, scale: fontScale))
                         .foregroundStyle(rowIconSecondaryColor)
                         .frame(width: 12, height: 22)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -394,21 +407,52 @@ struct FileManagerRowView: View {
                     .frame(width: 12)
             }
 
-            rowPrimaryContent
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if !isRenaming {
-                        open()
-                    }
-                }
+            rowPrimaryActionArea
         }
         .opacity(isPendingDelete ? 0.50 : 1)
         .padding(.leading, 10 + CGFloat(min(depth, 8)) * 18)
         .padding(.trailing, 10)
-        .frame(height: 31)
+        .frame(height: 34)
         .background {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(backgroundColor)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(rowStrokeColor, lineWidth: isSelected || isDropTargeted ? 1 : 0)
+        }
+        .onHover { value in
+            ConductorMotion.perform(ConductorMotion.hover) {
+                hovering = value
+            }
+        }
+        .animation(ConductorMotion.hover, value: hovering)
+        .animation(ConductorMotion.selection, value: isSelected)
+        .animation(ConductorMotion.micro, value: isExpanded)
+        .animation(ConductorMotion.micro, value: isDropTargeted)
+    }
+
+    @ViewBuilder
+    private var rowPrimaryActionArea: some View {
+        if isRenaming {
+            rowPrimaryContent
+        } else if item.isDirectory {
+            Button(action: primaryAction) {
+                rowPrimaryContent
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(rowAccessibilityLabel)
+        } else {
+            Button(action: primaryAction) {
+                rowPrimaryContent
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .simultaneousGesture(
+                TapGesture(count: 2).onEnded(open)
+            )
+            .accessibilityLabel(rowAccessibilityLabel)
         }
     }
 
@@ -472,6 +516,11 @@ struct FileManagerRowView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var rowAccessibilityLabel: String {
+        let kind = item.isDirectory ? fileManagerL("文件夹", "Folder") : fileManagerL("文件", "File")
+        return "\(kind) \(item.name)"
     }
 
     @ViewBuilder
@@ -547,7 +596,20 @@ struct FileManagerRowView: View {
         if isSelected {
             return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.48 : 0.54)
         }
+        if hovering {
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.34 : 0.24)
+        }
         return Color.clear
+    }
+
+    private var rowStrokeColor: Color {
+        if isDropTargeted {
+            return theme.floatingSelectedStroke.opacity(0.90)
+        }
+        if isSelected {
+            return theme.floatingSelectedStroke.opacity(theme.usesDarkChrome ? 0.58 : 0.48)
+        }
+        return .clear
     }
 
 }

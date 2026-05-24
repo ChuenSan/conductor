@@ -36,33 +36,6 @@ func checkRenderBudgetDefaults() {
     require(RenderBudget.visibleRowWindow(defaultVisibleCount: 40, overscan: 12) == 64, "visible row window should include overscan")
 }
 
-func checkWebAddressResolver() {
-    require(
-        WebAddressResolver.resolve("https://example.com")?.absoluteString == "https://example.com",
-        "https URL should open directly"
-    )
-    require(
-        WebAddressResolver.resolve("github.com")?.absoluteString == "https://github.com",
-        "bare domain should become https"
-    )
-    require(
-        WebAddressResolver.resolve("localhost:3000")?.absoluteString == "http://localhost:3000",
-        "localhost with port should become http"
-    )
-    require(
-        WebAddressResolver.resolve("127.0.0.1:5173")?.absoluteString == "http://127.0.0.1:5173",
-        "loopback with port should become http"
-    )
-    require(
-        WebAddressResolver.resolve("swift webview focus")?.absoluteString == "https://www.google.com/search?q=swift%20webview%20focus",
-        "plain text should become a search URL"
-    )
-    require(
-        WebAddressResolver.resolve("   ") == nil,
-        "blank input should not produce a URL"
-    )
-}
-
 extension SplitNode {
     func usesOnly(axis expectedAxis: SplitAxis) -> Bool {
         switch self {
@@ -990,7 +963,6 @@ func checkSearchSelection() {
 }
 
 checkRenderBudgetDefaults()
-checkWebAddressResolver()
 checkNewWorkspace()
 checkNewTerminalTab()
 checkSplitRight()
