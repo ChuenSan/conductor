@@ -653,7 +653,7 @@ private struct SidebarWorkspaceHeaderStats: View {
             }
         }
         .padding(.leading, 3)
-        .accessibilityElement(children: .combine)
+        .accessibilityHidden(true)
     }
 
     private func metric(
@@ -674,6 +674,7 @@ private struct SidebarWorkspaceHeaderStats: View {
         HStack(spacing: 3) {
             Image(systemName: systemImage)
                 .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                .accessibilityHidden(true)
             Text(valueText)
                 .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
         }
@@ -959,6 +960,7 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                 .frame(width: 22, height: 22)
                 .background(selected ? theme.shellControlRaisedFill.opacity(0.84) : (hovering ? theme.shellHoverFill.opacity(0.62) : Color.clear))
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -969,6 +971,7 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                 HStack(spacing: 4) {
                     Image(systemName: "folder")
                         .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
+                        .accessibilityHidden(true)
                     Text(subtitle)
                         .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
                         .lineLimit(1)
@@ -980,8 +983,16 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
 
             VStack(alignment: .trailing, spacing: 4) {
                 HStack(spacing: 4) {
-                    workspaceMetric(systemImage: "rectangle.split.2x1", value: splitCount)
-                    workspaceMetric(systemImage: "terminal", value: terminalCount)
+                    workspaceMetric(
+                        systemImage: "rectangle.split.2x1",
+                        value: splitCount,
+                        accessibilityLabel: L("\(splitCount) 个分屏", "\(splitCount) panes")
+                    )
+                    workspaceMetric(
+                        systemImage: "terminal",
+                        value: terminalCount,
+                        accessibilityLabel: L("\(terminalCount) 个终端", "\(terminalCount) terminals")
+                    )
                 }
                 if unreadCount > 0 {
                     Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
@@ -991,16 +1002,18 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                         .frame(minWidth: 16, minHeight: 15)
                         .background(theme.floatingEmphasis)
                         .clipShape(Capsule())
+                        .accessibilityLabel(L("\(unreadCount) 条未读通知", "\(unreadCount) unread notifications"))
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
-    private func workspaceMetric(systemImage: String, value: Int) -> some View {
+    private func workspaceMetric(systemImage: String, value: Int, accessibilityLabel: String) -> some View {
         HStack(spacing: 3) {
             Image(systemName: systemImage)
                 .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
+                .accessibilityHidden(true)
             Text("\(value)")
                 .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
                 .monospacedDigit()
@@ -1010,6 +1023,8 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         .frame(height: 16)
         .background(selected ? theme.shellHoverFill.opacity(0.70) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.22 : 0.14))
         .clipShape(Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
