@@ -949,6 +949,39 @@ func checkWebAddressResolver() {
     require(resolver.resolve("   ") == nil, "blank input should not resolve")
 }
 
+func checkWorkspaceWebTabList() {
+    var list = WorkspaceWebTabList()
+    let first = list.append(url: URL(string: "https://example.com")!, title: "Example")
+    let second = list.append(url: nil, title: nil)
+
+    require(list.tabs.map(\.id) == [first, second], "append should preserve order")
+    require(list.selectedTabID == second, "append should select new tab")
+
+    list.update(first) { tab in
+        tab.title = "Docs"
+        tab.url = URL(string: "https://docs.example.com")!
+        tab.isLoading = true
+        tab.estimatedProgress = 0.5
+        tab.canGoBack = true
+    }
+    require(list.tabs.first?.displayTitle == "Docs", "title update should apply")
+    require(list.tabs.first?.hostDisplay == "docs.example.com", "host display should prefer host")
+    require(list.tabs.first?.estimatedProgress == 0.5, "progress should update")
+
+    list.select(first)
+    let closeSelected = list.close(first, fallbackFileTabID: "file.swift", fallbackTerminalID: TerminalID(UUID()))
+    require(closeSelected.closedTabID == first, "close should report closed tab")
+    require(closeSelected.nextContentSelection == .web(second), "closing first selected tab should select nearest web tab")
+
+    let terminalID = TerminalID(UUID())
+    _ = list.close(second, fallbackFileTabID: "file.swift", fallbackTerminalID: terminalID)
+    require(list.tabs.isEmpty, "closing last web tab should empty list")
+    require(list.selectedTabID == nil, "closing last web tab should clear web selection")
+
+    let emptyClose = list.close(WebTabID(), fallbackFileTabID: "file.swift", fallbackTerminalID: terminalID)
+    require(emptyClose.nextContentSelection == .file("file.swift"), "missing web close should fall back to provided file")
+}
+
 checkRenderBudgetDefaults()
 checkNewWorkspace()
 checkNewTerminalTab()
@@ -1000,4 +1033,5 @@ checkComplexWorkspaceStressMaintainsInvariants()
 checkTerminalNotificationStateIndexesAndLifecycle()
 checkAgentIntegrationCatalog()
 checkWebAddressResolver()
+checkWorkspaceWebTabList()
 print("ConductorModelCheck passed")
