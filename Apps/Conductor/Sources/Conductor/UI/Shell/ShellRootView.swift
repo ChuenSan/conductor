@@ -227,12 +227,15 @@ struct ShellRootView: View {
 
     @ViewBuilder
     private var primaryWorkspaceContent: some View {
-        if model.selectedWorkspaceFileTab != nil {
+        if let webTab = model.selectedWorkspaceWebTab {
+            ConductorWebWorkspaceView(model: model, tab: webTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.selectedWorkspaceFileTab != nil {
             ConductorFileWorkspaceView(
                 model: model,
                 snapshot: ConductorFileWorkspaceSnapshot(model: model)
             )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             terminalStage
         }
