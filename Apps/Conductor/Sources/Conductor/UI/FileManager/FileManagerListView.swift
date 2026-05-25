@@ -421,11 +421,7 @@ struct FileManagerRowView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(rowStrokeColor, lineWidth: isSelected || isDropTargeted ? 1 : 0)
         }
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
+        .conductorHover($hovering)
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.selection, value: isSelected)
         .animation(ConductorMotion.micro, value: isExpanded)

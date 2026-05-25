@@ -329,17 +329,19 @@ struct ConductorGlassSurface<Content: View>: View {
                     .allowsHitTesting(false)
             }
             .overlay(alignment: .topLeading) {
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(topHighlightOpacity * clarity.highlightMultiplier),
-                        Color.white.opacity(midHighlightOpacity * clarity.highlightMultiplier),
-                        Color.clear
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .clipShape(surfaceShape)
-                .allowsHitTesting(false)
+                if drawsSpecularHighlight {
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(topHighlightOpacity * clarity.highlightMultiplier),
+                            Color.white.opacity(midHighlightOpacity * clarity.highlightMultiplier),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(surfaceShape)
+                    .allowsHitTesting(false)
+                }
             }
     }
 
@@ -395,6 +397,10 @@ struct ConductorGlassSurface<Content: View>: View {
         return style == .sidebar ? 0.014 : 0.04
     }
 
+    private var drawsSpecularHighlight: Bool {
+        clarity == .crisp || style == .terminalToolbar
+    }
+
     @ViewBuilder
     private var surfaceFill: some View {
         if style == .settings || style == .palette || style == .panel {
@@ -403,10 +409,6 @@ struct ConductorGlassSurface<Content: View>: View {
                 .overlay {
                     surfaceShape
                         .fill(resolvedTint)
-                }
-                .overlay {
-                    surfaceShape
-                        .fill(Color.white.opacity((theme.usesDarkChrome ? 0.004 : 0.010) * clarity.highlightMultiplier))
                 }
         } else if style == .sidebar {
             surfaceShape
@@ -418,18 +420,6 @@ struct ConductorGlassSurface<Content: View>: View {
                 .overlay {
                     surfaceShape
                         .fill(theme.usesDarkChrome ? theme.terminalBackground.opacity(0.18) : Color.white.opacity(0.16))
-                }
-                .overlay {
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(theme.usesDarkChrome ? 0.018 : 0.20),
-                            Color.clear,
-                            theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.16 : 0.030)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .clipShape(surfaceShape)
                 }
         } else {
             surfaceShape
@@ -513,11 +503,15 @@ private struct ConductorBackdropMotif: View {
                 .padding(.top, 20)
             case .glass, .fluid, .frost:
                 ZStack {
-                    Circle()
-                        .fill(theme.accent.opacity(theme.usesDarkChrome ? 0.10 : 0.14))
-                        .frame(width: proxy.size.width * 0.36)
-                        .blur(radius: 52)
-                        .offset(x: proxy.size.width * 0.30, y: -proxy.size.height * 0.20)
+                    RadialGradient(
+                        colors: [
+                            theme.accent.opacity(theme.usesDarkChrome ? 0.10 : 0.14),
+                            Color.clear
+                        ],
+                        center: .topTrailing,
+                        startRadius: 0,
+                        endRadius: max(proxy.size.width, proxy.size.height) * 0.34
+                    )
                     RoundedRectangle(cornerRadius: 36, style: .continuous)
                         .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.040 : 0.13), lineWidth: 1)
                         .frame(width: proxy.size.width * 0.34, height: proxy.size.height * 0.48)
@@ -606,19 +600,19 @@ enum ConductorMotion {
     // preserves continuity, spatial motion changes layout, and reveal motion
     // introduces transient panels. Terminal surfaces opt out of all of these.
     static var micro: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.040)
+        reducedMotion ? nil : .easeOut(duration: 0.060)
     }
 
     static var hover: Animation? {
-        feedback
+        reducedMotion ? nil : .easeOut(duration: 0.070)
     }
 
     static var feedback: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.045)
+        reducedMotion ? nil : .easeOut(duration: 0.065)
     }
 
     static var press: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.032)
+        reducedMotion ? nil : .easeOut(duration: 0.050)
     }
 
     static var reveal: Animation? {
@@ -638,15 +632,15 @@ enum ConductorMotion {
     }
 
     static var selectionGlide: Animation? {
-        magnetic(duration: 0.155, bounce: 0.016)
+        magnetic(duration: 0.150, bounce: 0.004)
     }
 
     static var navigation: Animation? {
-        magnetic(duration: 0.125, bounce: 0.018)
+        magnetic(duration: 0.140, bounce: 0.006)
     }
 
     static var standard: Animation? {
-        cssEaseOut(duration: 0.11)
+        cssEaseOut(duration: 0.125)
     }
 
     static var panel: Animation? {
@@ -654,7 +648,7 @@ enum ConductorMotion {
     }
 
     static var list: Animation? {
-        magnetic(duration: 0.115, bounce: 0.014)
+        magnetic(duration: 0.120, bounce: 0.004)
     }
 
     static var layout: Animation? {
@@ -852,8 +846,8 @@ enum ConductorMotion {
         return transaction
     }
 
-    private static let animatedCollectionLimit = 80
-    private static let signatureCollectionLimit = 36
+    private static let animatedCollectionLimit = 48
+    private static let signatureCollectionLimit = 24
 
     private static func transitionOffset(edge: Edge, distance: CGFloat) -> (x: CGFloat, y: CGFloat) {
         switch edge {
@@ -922,6 +916,28 @@ extension View {
                 trigger: trigger
             )
         )
+    }
+
+    func conductorHover(
+        _ hovering: Binding<Bool>,
+        animation: Animation? = ConductorMotion.hover
+    ) -> some View {
+        modifier(ConductorHoverStateModifier(hovering: hovering, animation: animation))
+    }
+}
+
+private struct ConductorHoverStateModifier: ViewModifier {
+    @Binding var hovering: Bool
+    let animation: Animation?
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { value in
+                guard hovering != value else { return }
+                ConductorMotion.perform(animation) {
+                    hovering = value
+                }
+            }
     }
 }
 
@@ -1159,7 +1175,8 @@ private struct ConductorFocusRingOverlay: View {
 }
 
 struct ConductorPressButtonStyle: ButtonStyle {
-    var pressedScale: CGFloat = 1.0
+    var pressedScale: CGFloat = 0.985
+    var pressedOpacity: Double = 0.92
 
     private var effectivePressedScale: CGFloat {
         max(pressedScale, 0.94)
@@ -1168,6 +1185,7 @@ struct ConductorPressButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? effectivePressedScale : 1)
+            .opacity(configuration.isPressed ? pressedOpacity : 1)
             .transaction { transaction in
                 transaction.animation = ConductorMotion.press
                 transaction.disablesAnimations = ConductorMotion.press == nil

@@ -1658,6 +1658,6 @@ struct SettingsQuickJumpButton: View {
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(ConductorPressButtonStyle())
-        .onHover { hovering = $0 }
+        .conductorHover($hovering)
     }
 }

@@ -139,9 +139,7 @@ struct ConductorSidebar: View {
         }
         .buttonStyle(ConductorPressButtonStyle())
         .accessibilityLabel(sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
-        .onHover { value in
-            sidebarToggleHovering = value
-        }
+        .conductorHover($sidebarToggleHovering)
         .macNativeTooltip(sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
     }
 
@@ -877,11 +875,7 @@ private struct WorkspaceSidebarRow: View {
         .animation(nil, value: editing)
         .animation(ConductorMotion.emphasized, value: unreadCount)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
+        .conductorHover($hovering)
     }
 
     private var editingRow: some View {
@@ -915,7 +909,6 @@ private struct WorkspaceSidebarRow: View {
                 terminalCount: terminalCount,
                 unreadCount: unreadCount,
                 selected: selected,
-                hovering: hovering,
                 themeID: theme.id,
                 fontScaleID: fontScale.id
             )
@@ -950,7 +943,6 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
     let terminalCount: Int
     let unreadCount: Int
     let selected: Bool
-    let hovering: Bool
     let themeID: String
     let fontScaleID: String
     @Environment(\.conductorFontScale) private var fontScale
@@ -963,7 +955,6 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
             lhs.terminalCount == rhs.terminalCount &&
             lhs.unreadCount == rhs.unreadCount &&
             lhs.selected == rhs.selected &&
-            lhs.hovering == rhs.hovering &&
             lhs.themeID == rhs.themeID &&
             lhs.fontScaleID == rhs.fontScaleID
     }
@@ -974,7 +965,7 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                 .font(.conductorSystem(size: 11, weight: .bold, scale: fontScale))
                 .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : ConductorDesign.secondaryText)
                 .frame(width: 22, height: 22)
-                .background(selected ? theme.shellControlRaisedFill.opacity(0.84) : (hovering ? theme.shellHoverFill.opacity(0.62) : Color.clear))
+                .background(selected ? theme.shellControlRaisedFill.opacity(0.84) : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .accessibilityHidden(true)
 
@@ -1081,11 +1072,7 @@ private struct SidebarActionRow: View {
         .scaleEffect(hovering && !disabled ? (showsTitle ? 1.006 : 1.032) : 1)
         .animation(ConductorMotion.micro, value: disabled)
         .animation(ConductorMotion.hover, value: hovering)
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
+        .conductorHover($hovering)
         .macNativeTooltip(help ?? title, enabled: !showsTitle)
     }
 }

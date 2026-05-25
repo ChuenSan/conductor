@@ -448,11 +448,7 @@ private struct NotificationRowView: View {
         }
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.attention, value: row.unread)
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
+        .conductorHover($hovering)
     }
 
     private var rowTitle: some View {

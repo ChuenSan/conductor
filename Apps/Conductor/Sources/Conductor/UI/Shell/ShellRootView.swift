@@ -1182,6 +1182,7 @@ private struct CommandButton: View {
         .animation(ConductorMotion.selectionGlide, value: selected)
         .animation(ConductorMotion.hover, value: hovering)
         .onHover { value in
+            guard hovering != value else { return }
             ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }
@@ -1584,6 +1585,7 @@ private struct WorkspaceOverviewCard: View {
         .accessibilityLabel(accessibilityTitle)
         .accessibilityAddTraits(.isButton)
         .onHover { value in
+            guard hovering != value else { return }
             ConductorMotion.perform(ConductorMotion.hover) {
                 hovering = value
             }

@@ -415,7 +415,7 @@ private struct ConductorWorkspaceContentTabPill: View {
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
+        .conductorHover($isHovered)
     }
 
     private var backgroundColor: Color {

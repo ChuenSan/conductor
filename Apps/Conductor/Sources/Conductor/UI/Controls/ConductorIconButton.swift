@@ -72,7 +72,7 @@ struct ConductorIconButton: View {
         .animation(ConductorMotion.selection, value: state.isActive)
         .animation(ConductorMotion.micro, value: state.isEnabled)
         .animation(ConductorMotion.hover, value: hovering)
-        .onHover { hovering = $0 }
+        .conductorHover($hovering)
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)
     }
@@ -249,9 +249,9 @@ struct ConductorIconButton: View {
     private var hoverScale: CGFloat {
         switch variant {
         case .toolbar:
-            1.018
+            1.004
         case .sidebarDock, .sidebarRail:
-            1.035
+            1.010
         case .settingsIcon, .fileManagerPanel:
             1
         }

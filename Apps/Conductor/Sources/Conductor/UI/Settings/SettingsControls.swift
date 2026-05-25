@@ -1003,11 +1003,7 @@ struct SettingsSidebarItem: View {
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
         }
         .buttonStyle(ConductorPressButtonStyle())
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
+        .conductorHover($hovering)
         .animation(ConductorMotion.selectionGlide, value: selected)
         .animation(ConductorMotion.hover, value: hovering)
     }
@@ -1262,11 +1258,7 @@ struct ThemeOptionRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
+        .conductorHover($hovering)
         .animation(ConductorMotion.hover, value: hovering)
     }
 

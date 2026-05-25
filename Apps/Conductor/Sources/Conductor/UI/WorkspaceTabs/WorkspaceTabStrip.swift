@@ -272,23 +272,15 @@ private struct WorkspaceFileTopTab: View {
     var body: some View {
         ZStack(alignment: .trailing) {
             Button(action: onSelect) {
-                HStack(spacing: 7) {
-                    Image(systemName: fileIcon)
-                        .font(.system(size: 10.8, weight: .semibold))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
-                        .frame(width: 17, height: 17)
-                    Text(tab.title)
-                        .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(titleColor)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Circle()
-                        .fill(theme.floatingEmphasis.opacity(0.92))
-                        .frame(width: 5, height: 5)
-                        .opacity(dirty ? 1 : 0)
-                }
+                WorkspaceFileTopTabContent(
+                    title: tab.title,
+                    systemImage: fileIcon,
+                    selected: selected,
+                    dirty: dirty,
+                    themeID: theme.id,
+                    fontScaleID: fontScale.id
+                )
+                .equatable()
                 .padding(.leading, 8)
                 .padding(.trailing, closeButtonSlotWidth + 5)
                 .frame(
@@ -337,11 +329,7 @@ private struct WorkspaceFileTopTab: View {
         }
         .scaleEffect(hovering && !selected ? 1.006 : 1)
         .animation(ConductorMotion.hover, value: hovering)
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
+        .conductorHover($hovering)
         .contentShape(tabShape)
         .contextMenu {
             Button(L("关闭文件", "Close File")) {
@@ -350,6 +338,46 @@ private struct WorkspaceFileTopTab: View {
             Button(L("在访达中显示", "Reveal in Finder")) {
                 NSWorkspace.shared.activateFileViewerSelecting([tab.fileURL])
             }
+        }
+    }
+}
+
+private struct WorkspaceFileTopTabContent: View, Equatable {
+    let title: String
+    let systemImage: String
+    let selected: Bool
+    let dirty: Bool
+    let themeID: String
+    let fontScaleID: String
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    nonisolated static func == (lhs: WorkspaceFileTopTabContent, rhs: WorkspaceFileTopTabContent) -> Bool {
+        lhs.title == rhs.title &&
+            lhs.systemImage == rhs.systemImage &&
+            lhs.selected == rhs.selected &&
+            lhs.dirty == rhs.dirty &&
+            lhs.themeID == rhs.themeID &&
+            lhs.fontScaleID == rhs.fontScaleID
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .font(.system(size: 10.8, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
+                .frame(width: 17, height: 17)
+            Text(title)
+                .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Circle()
+                .fill(theme.floatingEmphasis.opacity(0.92))
+                .frame(width: 5, height: 5)
+                .opacity(dirty ? 1 : 0)
         }
     }
 }
@@ -398,23 +426,15 @@ private struct WorkspaceWebTopTab: View {
     var body: some View {
         ZStack(alignment: .trailing) {
             Button(action: onSelect) {
-                HStack(spacing: 7) {
-                    Image(systemName: webIcon)
-                        .font(.system(size: 10.8, weight: .semibold))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
-                        .frame(width: 17, height: 17)
-                    Text(tab.displayTitle)
-                        .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(titleColor)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Circle()
-                        .fill(theme.floatingEmphasis.opacity(0.92))
-                        .frame(width: 5, height: 5)
-                        .opacity(tab.isLoading ? 1 : 0)
-                }
+                WorkspaceWebTopTabContent(
+                    title: tab.displayTitle,
+                    systemImage: webIcon,
+                    selected: selected,
+                    loading: tab.isLoading,
+                    themeID: theme.id,
+                    fontScaleID: fontScale.id
+                )
+                .equatable()
                 .padding(.leading, 8)
                 .padding(.trailing, closeButtonSlotWidth + 5)
                 .frame(
@@ -461,11 +481,7 @@ private struct WorkspaceWebTopTab: View {
         }
         .scaleEffect(hovering && !selected ? 1.006 : 1)
         .animation(ConductorMotion.hover, value: hovering)
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
+        .conductorHover($hovering)
         .contentShape(tabShape)
         .contextMenu {
             Button(L("关闭网页", "Close Web Tab")) {
@@ -477,6 +493,46 @@ private struct WorkspaceWebTopTab: View {
                 }
             }
             .disabled(tab.url == nil)
+        }
+    }
+}
+
+private struct WorkspaceWebTopTabContent: View, Equatable {
+    let title: String
+    let systemImage: String
+    let selected: Bool
+    let loading: Bool
+    let themeID: String
+    let fontScaleID: String
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    nonisolated static func == (lhs: WorkspaceWebTopTabContent, rhs: WorkspaceWebTopTabContent) -> Bool {
+        lhs.title == rhs.title &&
+            lhs.systemImage == rhs.systemImage &&
+            lhs.selected == rhs.selected &&
+            lhs.loading == rhs.loading &&
+            lhs.themeID == rhs.themeID &&
+            lhs.fontScaleID == rhs.fontScaleID
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .font(.system(size: 10.8, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
+                .frame(width: 17, height: 17)
+            Text(title)
+                .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Circle()
+                .fill(theme.floatingEmphasis.opacity(0.92))
+                .frame(width: 5, height: 5)
+                .opacity(loading ? 1 : 0)
         }
     }
 }
@@ -577,11 +633,7 @@ private struct WorkspaceTopTab: View {
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.selection, value: editing)
         .animation(ConductorMotion.attention, value: unreadCount)
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
+        .conductorHover($hovering)
         .contentShape(tabShape)
         .contextMenu {
             Button(L("重命名工作区...", "Rename Workspace...")) {

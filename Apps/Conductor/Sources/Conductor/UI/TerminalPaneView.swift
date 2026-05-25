@@ -649,11 +649,7 @@ private struct PaneBarButton: View {
         .opacity(disabled ? 0.35 : 1)
         .animation(ConductorMotion.micro, value: disabled)
         .animation(ConductorMotion.hover, value: hovering)
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
+        .conductorHover($hovering)
         .macNativeTooltip(help, enabled: !showsTitle)
     }
 }
@@ -852,11 +848,7 @@ private struct TerminalTabButton: View {
         .animation(ConductorMotion.selection, value: editingTitle)
         .animation(ConductorMotion.attention, value: unreadCount)
         .animation(ConductorMotion.dragPreview, value: display.isDragging)
-        .onHover { value in
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
-        }
+        .conductorHover($hovering)
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab))
         .onDrag {
             ConductorMotion.withoutAnimation {
