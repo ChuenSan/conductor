@@ -3,7 +3,13 @@ import AppKit
 extension StatusItemController {
     func usesPersistentMenuActionItem(for action: MenuDescriptor.MenuAction) -> Bool {
         switch action {
-        case .installUpdate, .refresh, .settings, .about, .quit:
+        case .settings:
+            #if CONDUCTOR_EMBEDDED
+            false
+            #else
+            true
+            #endif
+        case .installUpdate, .refresh, .about, .quit:
             true
         default:
             false

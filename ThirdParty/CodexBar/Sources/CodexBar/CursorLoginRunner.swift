@@ -103,7 +103,8 @@ final class CursorLoginRunner {
     }
 
     private static func timeoutMessage(lastError: Error?) -> String {
-        let hint = "Sign in to cursor.com in your browser, then refresh Cursor in CodexBar."
+        let hint = CodexBarDisplayBrand.userFacing(
+            "Sign in to cursor.com in your browser, then refresh Cursor in CodexBar.")
         guard let lastError else {
             return "Timed out waiting for Cursor login. \(hint)"
         }

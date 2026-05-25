@@ -27,8 +27,8 @@ public enum KeychainCacheStore {
     }
 
     private static let log = CodexBarLog.logger(LogCategories.keychainCache)
-    private static let cacheService = "com.steipete.codexbar.cache"
-    private static let cacheLabel = "CodexBar Cache"
+    private static let standaloneCacheService = "com.steipete.codexbar.cache"
+    private static let embeddedCacheService = "app.conductor.usage.cache"
     private nonisolated(unsafe) static var globalServiceOverride: String?
     @TaskLocal private static var serviceOverride: String?
     #if DEBUG && os(macOS)
@@ -260,7 +260,15 @@ public enum KeychainCacheStore {
     }
 
     private static var serviceName: String {
-        serviceOverride ?? self.globalServiceOverride ?? self.cacheService
+        serviceOverride ?? self.globalServiceOverride ?? self.defaultCacheService
+    }
+
+    private static var defaultCacheService: String {
+        CodexBarDisplayBrand.isRunningInsideConductor ? self.embeddedCacheService : self.standaloneCacheService
+    }
+
+    private static var cacheLabel: String {
+        "\(CodexBarDisplayBrand.productName) Cache"
     }
 
     private static var canUseRealKeychain: Bool {

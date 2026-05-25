@@ -201,8 +201,9 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
            !allowBackgroundDelegatedRefresh
         {
             throw ClaudeUsageError.oauthFailed(
-                "Claude OAuth token expired, but background repair is suppressed when Keychain prompt policy "
-                    + "is set to only prompt on user action. Open the CodexBar menu or click Refresh to retry.")
+                CodexBarDisplayBrand.userFacing(
+                    "Claude OAuth token expired, but background repair is suppressed when Keychain prompt policy "
+                        + "is set to only prompt on user action. Open the CodexBar menu or click Refresh to retry."))
         }
     }
 

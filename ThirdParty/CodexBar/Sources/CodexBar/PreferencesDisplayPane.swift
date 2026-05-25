@@ -12,61 +12,70 @@ struct DisplayPane: View {
     @State private var isOverviewProviderPopoverPresented = false
     @Bindable var settings: SettingsStore
     @Bindable var store: UsageStore
+    let showsMenuBarControls: Bool
+
+    init(settings: SettingsStore, store: UsageStore, showsMenuBarControls: Bool = true) {
+        self.settings = settings
+        self.store = store
+        self.showsMenuBarControls = showsMenuBarControls
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 16) {
-                SettingsSection(contentSpacing: 12) {
-                    Text(L("section_menu_bar"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                    PreferenceToggleRow(
-                        title: L("merge_icons_title"),
-                        subtitle: L("merge_icons_subtitle"),
-                        binding: self.$settings.mergeIcons)
-                    PreferenceToggleRow(
-                        title: L("switcher_shows_icons_title"),
-                        subtitle: L("switcher_shows_icons_subtitle"),
-                        binding: self.$settings.switcherShowsIcons)
-                        .disabled(!self.settings.mergeIcons)
-                        .opacity(self.settings.mergeIcons ? 1 : 0.5)
-                    PreferenceToggleRow(
-                        title: L("show_most_used_provider_title"),
-                        subtitle: L("show_most_used_provider_subtitle"),
-                        binding: self.$settings.menuBarShowsHighestUsage)
-                        .disabled(!self.settings.mergeIcons)
-                        .opacity(self.settings.mergeIcons ? 1 : 0.5)
-                    PreferenceToggleRow(
-                        title: L("menu_bar_shows_percent_title"),
-                        subtitle: L("menu_bar_shows_percent_subtitle"),
-                        binding: self.$settings.menuBarShowsBrandIconWithPercent)
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(L("display_mode_title"))
-                                .font(.body)
-                            Text(L("display_mode_subtitle"))
-                                .font(.footnote)
-                                .foregroundStyle(.tertiary)
-                        }
-                        Spacer()
-                        Picker("Display mode", selection: self.$settings.menuBarDisplayMode) {
-                            ForEach(MenuBarDisplayMode.allCases) { mode in
-                                Text(mode.label).tag(mode)
+                if self.showsMenuBarControls {
+                    SettingsSection(contentSpacing: 12) {
+                        Text(L("section_menu_bar"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                        PreferenceToggleRow(
+                            title: L("merge_icons_title"),
+                            subtitle: L("merge_icons_subtitle"),
+                            binding: self.$settings.mergeIcons)
+                        PreferenceToggleRow(
+                            title: L("switcher_shows_icons_title"),
+                            subtitle: L("switcher_shows_icons_subtitle"),
+                            binding: self.$settings.switcherShowsIcons)
+                            .disabled(!self.settings.mergeIcons)
+                            .opacity(self.settings.mergeIcons ? 1 : 0.5)
+                        PreferenceToggleRow(
+                            title: L("show_most_used_provider_title"),
+                            subtitle: L("show_most_used_provider_subtitle"),
+                            binding: self.$settings.menuBarShowsHighestUsage)
+                            .disabled(!self.settings.mergeIcons)
+                            .opacity(self.settings.mergeIcons ? 1 : 0.5)
+                        PreferenceToggleRow(
+                            title: L("menu_bar_shows_percent_title"),
+                            subtitle: L("menu_bar_shows_percent_subtitle"),
+                            binding: self.$settings.menuBarShowsBrandIconWithPercent)
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L("display_mode_title"))
+                                    .font(.body)
+                                Text(L("display_mode_subtitle"))
+                                    .font(.footnote)
+                                    .foregroundStyle(.tertiary)
                             }
+                            Spacer()
+                            Picker("Display mode", selection: self.$settings.menuBarDisplayMode) {
+                                ForEach(MenuBarDisplayMode.allCases) { mode in
+                                    Text(mode.label).tag(mode)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: 200)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: 200)
+                        .disabled(!self.settings.menuBarShowsBrandIconWithPercent)
+                        .opacity(self.settings.menuBarShowsBrandIconWithPercent ? 1 : 0.5)
                     }
-                    .disabled(!self.settings.menuBarShowsBrandIconWithPercent)
-                    .opacity(self.settings.menuBarShowsBrandIconWithPercent ? 1 : 0.5)
+
+                    Divider()
                 }
 
-                Divider()
-
                 SettingsSection(contentSpacing: 12) {
-                    Text(L("section_menu_content"))
+                    Text(self.showsMenuBarControls ? L("section_menu_content") : L("section_usage"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .textCase(.uppercase)
@@ -127,7 +136,9 @@ struct DisplayPane: View {
                         .pickerStyle(.menu)
                         .frame(maxWidth: 200)
                     }
-                    self.overviewProviderSelector
+                    if self.showsMenuBarControls {
+                        self.overviewProviderSelector
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

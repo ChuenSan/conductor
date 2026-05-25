@@ -266,6 +266,17 @@ enum AppearanceLanguage: String, CaseIterable, Codable, Identifiable {
             "en"
         }
     }
+
+    var usageFeatureLanguageIdentifier: String {
+        switch resolvedForDisplay {
+        case .system:
+            "en"
+        case .simplifiedChinese:
+            "zh-Hans"
+        case .english:
+            "en"
+        }
+    }
 }
 
 enum AppearanceFontFamily: String, CaseIterable, Codable, Identifiable {

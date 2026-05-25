@@ -1,5 +1,6 @@
 import ConductorCore
 import AppKit
+import CodexBar
 import SwiftUI
 
 private func L(_ zh: String, _ en: String) -> String {
@@ -42,6 +43,28 @@ extension AppearanceSettingsPanel {
                 }
             }
         }
+    }
+
+    func usageSettings(snapshot: SettingsSnapshot) -> some View {
+        ConductorUsageSettingsContent(
+            style: usagePanelStyle,
+            languageIdentifier: snapshot.appearance.language.usageFeatureLanguageIdentifier)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var usagePanelStyle: ConductorUsagePanelStyle {
+        ConductorUsagePanelStyle(
+            panelBase: theme.floatingPanelBase,
+            panelWash: theme.floatingPanelWash,
+            controlFill: theme.floatingControlFill,
+            controlStrongFill: theme.floatingControlStrongFill,
+            stroke: theme.floatingStroke,
+            separator: theme.floatingSeparator,
+            emphasis: theme.floatingEmphasis,
+            primaryText: theme.shellChromeText,
+            secondaryText: theme.shellChromeTextMuted.opacity(0.86),
+            tertiaryText: theme.shellChromeTextMuted.opacity(0.64),
+            usesDarkChrome: theme.usesDarkChrome)
     }
 
     func interfaceSettings(snapshot: SettingsSnapshot) -> some View {

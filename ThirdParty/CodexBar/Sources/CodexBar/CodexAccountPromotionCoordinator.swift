@@ -1,4 +1,5 @@
 import Foundation
+import CodexBarCore
 import Observation
 
 struct CodexSystemAccountPromotionUserFacingError: Error, Equatable {
@@ -105,7 +106,9 @@ final class CodexAccountPromotionCoordinator {
                 "CodexBar could not replace the live Codex auth on this Mac."
             }
 
-            return CodexSystemAccountPromotionUserFacingError(title: title, message: message)
+            return CodexSystemAccountPromotionUserFacingError(
+                title: title,
+                message: CodexBarDisplayBrand.userFacing(message))
         }
 
         return CodexSystemAccountPromotionUserFacingError(title: title, message: error.localizedDescription)

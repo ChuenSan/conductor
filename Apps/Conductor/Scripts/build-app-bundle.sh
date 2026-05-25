@@ -48,14 +48,21 @@ build_product() {
 }
 
 copy_swiftpm_resources() {
-  local resource_bundle="$PRODUCT_BIN_DIR/Conductor_Conductor.bundle"
-  if [[ ! -d "$resource_bundle" ]]; then
-    echo "warning: SwiftPM resource bundle not found at $resource_bundle" >&2
+  shopt -s nullglob
+  local resource_bundles=("$PRODUCT_BIN_DIR"/*.bundle)
+  shopt -u nullglob
+  if [[ ${#resource_bundles[@]} -eq 0 ]]; then
+    echo "warning: SwiftPM resource bundles not found in $PRODUCT_BIN_DIR" >&2
     return
   fi
 
-  rm -rf "$RESOURCES/Conductor_Conductor.bundle"
-  cp -R "$resource_bundle" "$RESOURCES/Conductor_Conductor.bundle"
+  local resource_bundle
+  for resource_bundle in "${resource_bundles[@]}"; do
+    local bundle_name
+    bundle_name="$(basename "$resource_bundle")"
+    rm -rf "$RESOURCES/$bundle_name"
+    cp -R "$resource_bundle" "$RESOURCES/$bundle_name"
+  done
 }
 
 create_app_layout() {
@@ -144,8 +151,66 @@ PLIST
 
 sign_app_bundle() {
   if command -v codesign >/dev/null 2>&1; then
-    codesign --force --deep --sign - "$APP" >/dev/null
+    local identity
+    identity="$(resolve_signing_identity)"
+    if [[ "$identity" == "-" ]]; then
+      echo "Signing Conductor.app with ad-hoc identity." >&2
+    else
+      echo "Signing Conductor.app with identity: $identity" >&2
+    fi
+    if codesign --force --deep --sign "$identity" "$APP" >/dev/null; then
+      return
+    fi
+    if [[ "$identity" != "-" ]]; then
+      echo "warning: signing with '$identity' failed; falling back to ad-hoc signing." >&2
+      codesign --force --deep --sign - "$APP" >/dev/null
+    fi
   fi
+}
+
+has_signing_identity() {
+  local identity="$1"
+  security find-identity -p codesigning -v 2>/dev/null | grep -F "\"$identity\"" >/dev/null 2>&1
+}
+
+resolve_signing_identity() {
+  local requested="${CONDUCTOR_CODE_SIGN_IDENTITY:-${APP_IDENTITY:-}}"
+  if [[ -z "$requested" ]]; then
+    printf '%s\n' "-"
+    return
+  fi
+
+  if [[ "$requested" != "auto" ]]; then
+    if [[ "$requested" == "-" ]] || has_signing_identity "$requested"; then
+      printf '%s\n' "$requested"
+      return
+    fi
+    echo "warning: requested signing identity not found: $requested; falling back to ad-hoc signing" >&2
+    printf '%s\n' "-"
+    return
+  fi
+
+  local candidate
+  for candidate in \
+    "FlowDesk AI Local Update Test" \
+    "CodexBar Development"
+  do
+    if has_signing_identity "$candidate"; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+
+  candidate="$(
+    security find-identity -p codesigning -v 2>/dev/null |
+      awk -F '"' '/"Apple Development:|Mac Developer:|Developer ID Application:/ { print $2; exit }'
+  )"
+  if [[ -n "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return
+  fi
+
+  printf '%s\n' "-"
 }
 
 main() {

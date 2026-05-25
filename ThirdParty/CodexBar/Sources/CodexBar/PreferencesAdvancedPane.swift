@@ -6,34 +6,49 @@ import SwiftUI
 @MainActor
 struct AdvancedPane: View {
     @Bindable var settings: SettingsStore
+    let showsKeyboardShortcutControls: Bool
+    let showsMenuEffectControls: Bool
     @State private var isInstallingCLI = false
     @State private var cliStatus: String?
+
+    init(
+        settings: SettingsStore,
+        showsKeyboardShortcutControls: Bool = true,
+        showsMenuEffectControls: Bool = true)
+    {
+        self.settings = settings
+        self.showsKeyboardShortcutControls = showsKeyboardShortcutControls
+        self.showsMenuEffectControls = showsMenuEffectControls
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 16) {
-                SettingsSection(contentSpacing: 8) {
-                    Text(L("section_keyboard_shortcut"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                    HStack(alignment: .center, spacing: 12) {
-                        Text(L("open_menu_shortcut_title"))
-                            .font(.body)
-                        Spacer()
-                        #if canImport(KeyboardShortcuts)
-                        KeyboardShortcuts.Recorder(for: .openMenu)
-                        #else
-                        Text(L("updates_unavailable"))
+                if self.showsKeyboardShortcutControls {
+                    SettingsSection(contentSpacing: 8) {
+                        Text(L("section_keyboard_shortcut"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                        HStack(alignment: .center, spacing: 12) {
+                            Text(L("open_menu_shortcut_title"))
+                                .font(.body)
+                            Spacer()
+                            #if canImport(KeyboardShortcuts)
+                            KeyboardShortcuts.Recorder(for: .openMenu)
+                            #else
+                            Text(L("updates_unavailable"))
+                                .font(.footnote)
+                                .foregroundStyle(.tertiary)
+                            #endif
+                        }
+                        Text(L("open_menu_shortcut_subtitle"))
                             .font(.footnote)
                             .foregroundStyle(.tertiary)
-                        #endif
                     }
-                    Text(L("open_menu_shortcut_subtitle"))
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
                 }
 
+                #if !CONDUCTOR_EMBEDDED
                 Divider()
 
                 SettingsSection(contentSpacing: 10) {
@@ -60,22 +75,27 @@ struct AdvancedPane: View {
                         .font(.footnote)
                         .foregroundStyle(.tertiary)
                 }
+                #endif
 
-                Divider()
+                if self.showsKeyboardShortcutControls {
+                    Divider()
+                }
 
                 SettingsSection(contentSpacing: 10) {
                     PreferenceToggleRow(
                         title: L("show_debug_settings_title"),
                         subtitle: L("show_debug_settings_subtitle"),
                         binding: self.$settings.debugMenuEnabled)
-                    PreferenceToggleRow(
-                        title: L("surprise_me_title"),
-                        subtitle: L("surprise_me_subtitle"),
-                        binding: self.$settings.randomBlinkEnabled)
-                    PreferenceToggleRow(
-                        title: L("weekly_limit_confetti_title"),
-                        subtitle: L("weekly_limit_confetti_subtitle"),
-                        binding: self.$settings.confettiOnWeeklyLimitResetsEnabled)
+                    if self.showsMenuEffectControls {
+                        PreferenceToggleRow(
+                            title: L("surprise_me_title"),
+                            subtitle: L("surprise_me_subtitle"),
+                            binding: self.$settings.randomBlinkEnabled)
+                        PreferenceToggleRow(
+                            title: L("weekly_limit_confetti_title"),
+                            subtitle: L("weekly_limit_confetti_subtitle"),
+                            binding: self.$settings.confettiOnWeeklyLimitResetsEnabled)
+                    }
                 }
 
                 Divider()

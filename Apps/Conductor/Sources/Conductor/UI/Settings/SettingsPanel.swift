@@ -61,9 +61,15 @@ struct AppearanceSettingsPanel: View {
                     .stroke(theme.floatingStroke.opacity(0.82), lineWidth: 0.8)
                     .allowsHitTesting(false)
             }
-            .frame(width: 900, height: 610)
+            .frame(width: 1080, height: 650)
             .onExitCommand {
                 model.hideSettingsPanel()
+            }
+            .onAppear {
+                applyRequestedSettingsSection(model.requestedSettingsSection)
+            }
+            .onChange(of: model.requestedSettingsSection) { _, section in
+                applyRequestedSettingsSection(section)
             }
         }
     }
@@ -79,7 +85,7 @@ struct AppearanceSettingsPanel: View {
 
             sidebarGroup(
                 title: L("工作流", "Workflow"),
-                sections: [.shell, .automation, .commands]
+                sections: [.shell, .usage, .automation, .commands]
             )
 
             sidebarGroup(
@@ -118,18 +124,30 @@ struct AppearanceSettingsPanel: View {
         ZStack {
             theme.floatingControlFill.opacity(0.06)
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
+            if selectedSection == .usage {
+                VStack(alignment: .leading, spacing: 18) {
                     detailContent(snapshot: snapshot)
                         .id(selectedSection)
                         .transition(ConductorMotion.contentSwapTransition(edge: settingsContentEdge))
                 }
-                .frame(maxWidth: 660, alignment: .topLeading)
+                .frame(maxWidth: 820, maxHeight: .infinity, alignment: .topLeading)
                 .padding(.horizontal, 22)
                 .padding(.vertical, 18)
                 .animation(ConductorMotion.contentSwap, value: selectedSection)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 18) {
+                        detailContent(snapshot: snapshot)
+                            .id(selectedSection)
+                            .transition(ConductorMotion.contentSwapTransition(edge: settingsContentEdge))
+                    }
+                    .frame(maxWidth: 660, alignment: .topLeading)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 18)
+                    .animation(ConductorMotion.contentSwap, value: selectedSection)
+                }
+                .scrollIndicators(.visible)
             }
-            .scrollIndicators(.visible)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -151,6 +169,8 @@ struct AppearanceSettingsPanel: View {
             terminalSettingsDashboard(snapshot: snapshot)
         case .shell:
             shellAndProxySettings(snapshot: snapshot)
+        case .usage:
+            usageSettings(snapshot: snapshot)
         case .automation:
             automationSettings(snapshot: snapshot)
         case .commands:
@@ -170,5 +190,11 @@ struct AppearanceSettingsPanel: View {
         ConductorMotion.perform(ConductorMotion.contentSwap) {
             selectedSection = section
         }
+    }
+
+    private func applyRequestedSettingsSection(_ section: SettingsSectionID?) {
+        guard let section else { return }
+        selectSection(section)
+        model.requestedSettingsSection = nil
     }
 }

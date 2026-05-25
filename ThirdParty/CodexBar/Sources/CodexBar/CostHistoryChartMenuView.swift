@@ -114,7 +114,7 @@ struct CostHistoryChartMenuView: View {
 
                 let detail = self.detailContent(model: model)
                 VStack(alignment: .leading, spacing: Self.detailSpacing) {
-                    Text(detail.primary)
+                    Text(codexBarLocalizedDisplayText(detail.primary))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -130,14 +130,14 @@ struct CostHistoryChartMenuView: View {
                                 .padding(.top, 1)
 
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(row.title)
+                                Text(codexBarLocalizedDisplayText(row.title))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                                     .frame(height: Self.detailTitleLineHeight, alignment: .leading)
                                 if let subtitle = row.subtitle {
-                                    Text(subtitle)
+                                    Text(codexBarLocalizedDisplayText(subtitle))
                                         .font(.caption2)
                                         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
                                         .lineLimit(1)
@@ -145,7 +145,7 @@ struct CostHistoryChartMenuView: View {
                                         .frame(height: Self.detailSubtitleLineHeight, alignment: .leading)
                                 }
                                 if let modeSubtitle = row.modeSubtitle {
-                                    Text(modeSubtitle)
+                                    Text(codexBarLocalizedDisplayText(modeSubtitle))
                                         .font(.caption2)
                                         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
                                         .lineLimit(1)
@@ -171,7 +171,7 @@ struct CostHistoryChartMenuView: View {
             }
 
             if let total = self.totalCostUSD {
-                Text("Est. total (\(Self.windowLabel(days: self.historyDays))): \(UsageFormatter.usdString(total))")
+                Text(self.estimatedTotalText(total))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -207,6 +207,14 @@ struct CostHistoryChartMenuView: View {
 
     private static func windowLabel(days: Int) -> String {
         days == 1 ? "today" : "\(days)d"
+    }
+
+    private func estimatedTotalText(_ total: Double) -> String {
+        if (ConductorUsageFeature.currentHostLanguageIdentifier ?? "").lowercased().hasPrefix("zh") {
+            let window = self.historyDays == 1 ? "今日" : "\(self.historyDays) 天"
+            return "预估总计（\(window)）：\(UsageFormatter.usdString(total))"
+        }
+        return "Est. total (\(Self.windowLabel(days: self.historyDays))): \(UsageFormatter.usdString(total))"
     }
 
     private static func detailRowHeight(for row: DetailRow) -> CGFloat {
@@ -416,7 +424,7 @@ struct CostHistoryChartMenuView: View {
               let point = model.pointsByDateKey[key],
               let date = Self.dateFromDayKey(key)
         else {
-            return DetailContent(primary: "Hover a bar for details", rows: [])
+            return DetailContent(primary: L("Hover a bar for details"), rows: [])
         }
 
         let dayLabel = date.formatted(.dateTime.month(.abbreviated).day())

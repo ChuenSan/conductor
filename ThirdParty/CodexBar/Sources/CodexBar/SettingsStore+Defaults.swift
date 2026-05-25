@@ -18,7 +18,9 @@ extension SettingsStore {
         set {
             self.defaultsState.launchAtLogin = newValue
             self.userDefaults.set(newValue, forKey: "launchAtLogin")
+            #if !CONDUCTOR_EMBEDDED
             LaunchAtLoginManager.setEnabled(newValue)
+            #endif
         }
     }
 

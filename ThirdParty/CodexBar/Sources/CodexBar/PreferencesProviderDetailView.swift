@@ -223,7 +223,7 @@ private struct ProviderDetailHeaderView: View {
                     Text(self.store.metadata(for: self.provider).displayName)
                         .font(.title3.weight(.semibold))
 
-                    Text(self.detailSubtitle)
+                    Text(codexBarLocalizedDisplayText(self.detailSubtitle))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -237,7 +237,7 @@ private struct ProviderDetailHeaderView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help("Refresh")
+                .help(L("Refresh"))
 
                 Toggle("", isOn: self.$isEnabled)
                     .labelsHidden()
@@ -360,7 +360,7 @@ private struct ProviderDetailInfoRow: View {
         GridRow {
             Text(self.label)
                 .frame(width: self.labelWidth, alignment: .leading)
-            Text(self.value)
+            Text(codexBarLocalizedDisplayText(self.value))
                 .lineLimit(2)
         }
     }
@@ -465,13 +465,13 @@ private struct ProviderMetricInlineRow: View {
                     .frame(minWidth: ProviderSettingsMetrics.metricBarWidth, maxWidth: .infinity)
 
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(self.metric.percentLabel)
+                    Text(codexBarLocalizedDisplayText(self.metric.percentLabel))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                     Spacer(minLength: 8)
                     if let resetText = self.metric.resetText, !resetText.isEmpty {
-                        Text(resetText)
+                        Text(codexBarLocalizedDisplayText(resetText))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -482,13 +482,13 @@ private struct ProviderMetricInlineRow: View {
                 if hasLeftDetail || hasRightDetail {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         if let leftDetail = self.metric.detailLeftText, !leftDetail.isEmpty {
-                            Text(leftDetail)
+                            Text(codexBarLocalizedDisplayText(leftDetail))
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 8)
                         if let rightDetail = self.metric.detailRightText, !rightDetail.isEmpty {
-                            Text(rightDetail)
+                            Text(codexBarLocalizedDisplayText(rightDetail))
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -496,7 +496,7 @@ private struct ProviderMetricInlineRow: View {
                 }
 
                 if let detail = self.detailText, !detail.isEmpty {
-                    Text(detail)
+                    Text(codexBarLocalizedDisplayText(detail))
                         .font(.footnote)
                         .foregroundStyle(.tertiary)
                 }
@@ -525,7 +525,7 @@ private struct ProviderUsageNotesInlineView: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(self.notes.enumerated()), id: \.offset) { _, note in
-                    Text(note)
+                    Text(codexBarLocalizedDisplayText(note))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -549,7 +549,7 @@ private struct ProviderMetricInlineTextRow: View {
                 .font(.subheadline.weight(.semibold))
                 .frame(width: self.labelWidth, alignment: .leading)
 
-            Text(self.value)
+            Text(codexBarLocalizedDisplayText(self.value))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
@@ -566,7 +566,7 @@ private struct ProviderMetricInlineCostRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Text(self.section.title)
+            Text(codexBarLocalizedDisplayText(self.section.title))
                 .font(.subheadline.weight(.semibold))
                 .frame(width: self.labelWidth, alignment: .leading)
 
@@ -581,13 +581,13 @@ private struct ProviderMetricInlineCostRow: View {
 
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     if let percentLine = self.section.percentLine {
-                        Text(percentLine)
+                    Text(codexBarLocalizedDisplayText(percentLine))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
                     Spacer(minLength: 8)
-                    Text(self.section.spendLine)
+                    Text(codexBarLocalizedDisplayText(self.section.spendLine))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

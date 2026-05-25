@@ -521,7 +521,7 @@ struct InlineUsageDashboardContent: View {
     private var detailLines: some View {
         VStack(alignment: .leading, spacing: 3) {
             ForEach(Array(self.model.detailLines.enumerated()), id: \.offset) { _, line in
-                Text(line)
+                Text(codexBarLocalizedDisplayText(line))
                     .font(.caption)
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                     .lineLimit(1)
@@ -537,7 +537,7 @@ struct InlineUsageDashboardContent: View {
 
         var body: some View {
             VStack(alignment: .leading, spacing: 1) {
-                Text(self.title)
+                Text(codexBarLocalizedDisplayText(self.title))
                     .font(.caption2)
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                     .lineLimit(1)

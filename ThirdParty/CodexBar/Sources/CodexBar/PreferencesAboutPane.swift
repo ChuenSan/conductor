@@ -1,4 +1,5 @@
 import AppKit
+import CodexBarCore
 import SwiftUI
 
 @MainActor
@@ -49,7 +50,7 @@ struct AboutPane: View {
             }
 
             VStack(spacing: 2) {
-                Text("CodexBar")
+                Text(CodexBarDisplayBrand.productName)
                     .font(.title3).bold()
                 Text(String(format: L("version_format"), self.versionString))
                     .foregroundStyle(.secondary)

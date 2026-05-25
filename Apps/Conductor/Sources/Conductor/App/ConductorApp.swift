@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CodexBar
 import ConductorCore
 import QuartzCore
 import SwiftUI
@@ -209,6 +210,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     private var window: ConductorWindow?
     private var notificationWindow: NSPanel?
     private var notificationWindowDelegate: NotificationWindowDelegate?
+    private var codexBarRuntime: CodexBarEmbeddedRuntime?
     private var agentHookObserver: NSObjectProtocol?
     private var shellKeyMonitor: Any?
     private var cancellables = Set<AnyCancellable>()
@@ -281,6 +283,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
+        startCodexBarIfEnabled()
         installAppearanceBinding()
         installMainMenu()
         runShortcutAutomationIfRequested()
@@ -312,6 +315,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         ConductorLog.app.info("Conductor will terminate")
         Self.appendStressTrace("applicationWillTerminate", to: ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"])
         model.flushPersistence()
+        codexBarRuntime?.stop()
         notificationWindow?.close()
         if let agentHookObserver {
             DistributedNotificationCenter.default().removeObserver(agentHookObserver)
@@ -463,6 +467,36 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         default:
             true
         }
+    }
+
+    private func startCodexBarIfEnabled() {
+        guard ProcessInfo.processInfo.environment["CONDUCTOR_DISABLE_CODEXBAR"] != "1",
+              !Self.isAutomationRun else {
+            return
+        }
+        ConductorUsageFeature.configureOpenSettings { [weak self] in
+            guard let self else { return }
+            self.model.showSettingsPanel(section: .usage)
+            self.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        let runtime = CodexBarEmbeddedRuntime.shared
+        runtime.start()
+        codexBarRuntime = runtime
+    }
+
+    private static var isAutomationRun: Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["CONDUCTOR_SMOKE_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_SHORTCUT_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_FOCUS_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_LAYOUT_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_LIFECYCLE_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_SHELL_PANEL_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_NOTIFICATION_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_STRESS_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_RESIZE_STRESS_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_WORKSPACE_AUTORUN"] == "1"
     }
 
     private func routeAppShortcut(_ event: NSEvent) -> Bool {

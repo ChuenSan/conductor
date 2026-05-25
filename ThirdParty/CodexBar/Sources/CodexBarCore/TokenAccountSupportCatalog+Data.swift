@@ -32,7 +32,7 @@ extension TokenAccountSupportCatalog {
             cookieName: nil),
         .zai: TokenAccountSupport(
             title: "API tokens",
-            subtitle: "Stored in the CodexBar config file.",
+            subtitle: CodexBarDisplayBrand.userFacing("Stored in the CodexBar config file."),
             placeholder: "Paste token…",
             injection: .environment(key: ZaiSettingsReader.apiTokenKey),
             requiresManualCookieSource: false,

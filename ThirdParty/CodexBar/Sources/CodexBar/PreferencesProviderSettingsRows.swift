@@ -1,3 +1,4 @@
+import CodexBarCore
 import SwiftUI
 
 struct ProviderSettingsSection<Content: View>: View {
@@ -23,7 +24,7 @@ struct ProviderSettingsSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: self.spacing) {
-            Text(self.title)
+            Text(codexBarLocalizedDisplayText(self.title))
                 .font(.headline)
             self.content()
         }
@@ -41,9 +42,9 @@ struct ProviderSettingsToggleRowView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(self.toggle.title)
+                    Text(codexBarLocalizedDisplayText(self.toggle.title))
                         .font(.subheadline.weight(.semibold))
-                    Text(self.toggle.subtitle)
+                    Text(codexBarLocalizedDisplayText(self.toggle.subtitle))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -56,7 +57,7 @@ struct ProviderSettingsToggleRowView: View {
 
             if self.toggle.binding.wrappedValue {
                 if let status = self.toggle.statusText?(), !status.isEmpty {
-                    Text(status)
+                    Text(codexBarLocalizedDisplayText(status))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(4)
@@ -67,7 +68,7 @@ struct ProviderSettingsToggleRowView: View {
                 if !actions.isEmpty {
                     HStack(spacing: 10) {
                         ForEach(actions) { action in
-                            Button(action.title) {
+                            Button(codexBarLocalizedDisplayText(action.title)) {
                                 Task { @MainActor in
                                     await action.perform()
                                 }
@@ -101,13 +102,13 @@ struct ProviderSettingsPickerRowView: View {
         let isEnabled = self.picker.isEnabled?() ?? true
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(self.picker.title)
+                Text(codexBarLocalizedDisplayText(self.picker.title))
                     .font(.subheadline.weight(.semibold))
                     .frame(width: ProviderSettingsMetrics.pickerLabelWidth, alignment: .leading)
 
                 Picker("", selection: self.picker.binding) {
                     ForEach(self.picker.options) { option in
-                        Text(option.title).tag(option.id)
+                        Text(codexBarLocalizedDisplayText(option.title)).tag(option.id)
                     }
                 }
                 .labelsHidden()
@@ -115,7 +116,7 @@ struct ProviderSettingsPickerRowView: View {
                 .controlSize(.small)
 
                 if let trailingText = self.picker.trailingText?(), !trailingText.isEmpty {
-                    Text(trailingText)
+                    Text(codexBarLocalizedDisplayText(trailingText))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -126,7 +127,7 @@ struct ProviderSettingsPickerRowView: View {
                 Spacer(minLength: 0)
             }
 
-            let subtitle = self.picker.dynamicSubtitle?() ?? self.picker.subtitle
+            let subtitle = codexBarLocalizedDisplayText(self.picker.dynamicSubtitle?() ?? self.picker.subtitle)
             if !subtitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(subtitle)
                     .font(.footnote)
@@ -157,11 +158,11 @@ struct ProviderSettingsFieldRowView: View {
             if hasHeader {
                 VStack(alignment: .leading, spacing: 4) {
                     if !trimmedTitle.isEmpty {
-                        Text(trimmedTitle)
+                        Text(codexBarLocalizedDisplayText(trimmedTitle))
                             .font(.subheadline.weight(.semibold))
                     }
                     if !trimmedSubtitle.isEmpty {
-                        Text(trimmedSubtitle)
+                        Text(codexBarLocalizedDisplayText(trimmedSubtitle))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -171,12 +172,12 @@ struct ProviderSettingsFieldRowView: View {
 
             switch self.field.kind {
             case .plain:
-                TextField(self.field.placeholder ?? "", text: self.field.binding)
+                TextField(codexBarLocalizedDisplayText(self.field.placeholder ?? ""), text: self.field.binding)
                     .textFieldStyle(.roundedBorder)
                     .font(.footnote)
                     .onTapGesture { self.field.onActivate?() }
             case .secure:
-                SecureField(self.field.placeholder ?? "", text: self.field.binding)
+                SecureField(codexBarLocalizedDisplayText(self.field.placeholder ?? ""), text: self.field.binding)
                     .textFieldStyle(.roundedBorder)
                     .font(.footnote)
                     .onTapGesture { self.field.onActivate?() }
@@ -186,7 +187,7 @@ struct ProviderSettingsFieldRowView: View {
             if !actions.isEmpty {
                 HStack(spacing: 10) {
                     ForEach(actions) { action in
-                        Button(action.title) {
+                        Button(codexBarLocalizedDisplayText(action.title)) {
                             Task { @MainActor in
                                 await action.perform()
                             }
@@ -198,7 +199,7 @@ struct ProviderSettingsFieldRowView: View {
             }
 
             if let footer = self.field.footerText, !footer.isEmpty {
-                Text(footer)
+                Text(codexBarLocalizedDisplayText(footer))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -213,11 +214,11 @@ struct ProviderSettingsActionsRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(self.descriptor.title)
+            Text(codexBarLocalizedDisplayText(self.descriptor.title))
                 .font(.subheadline.weight(.semibold))
 
             if !self.descriptor.subtitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(self.descriptor.subtitle)
+                Text(codexBarLocalizedDisplayText(self.descriptor.subtitle))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -227,7 +228,7 @@ struct ProviderSettingsActionsRowView: View {
             if !actions.isEmpty {
                 HStack(spacing: 10) {
                     ForEach(actions) { action in
-                        Button(action.title) {
+                        Button(codexBarLocalizedDisplayText(action.title)) {
                             Task { @MainActor in
                                 await action.perform()
                             }
@@ -251,13 +252,13 @@ struct ProviderSettingsTokenAccountsRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
-                Text(self.descriptor.title)
+                Text(codexBarLocalizedDisplayText(self.descriptor.title))
                     .font(.subheadline.weight(.semibold))
                 Spacer(minLength: 8)
                 if let title = self.descriptor.primaryAddActionTitle,
                    let action = self.descriptor.primaryAddAction
                 {
-                    Button(title) {
+                    Button(codexBarLocalizedDisplayText(title)) {
                         Task { @MainActor in
                             await action()
                         }
@@ -268,7 +269,7 @@ struct ProviderSettingsTokenAccountsRowView: View {
             }
 
             if !self.descriptor.subtitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(self.descriptor.subtitle)
+                Text(codexBarLocalizedDisplayText(self.descriptor.subtitle))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -276,7 +277,7 @@ struct ProviderSettingsTokenAccountsRowView: View {
 
             let accounts = self.descriptor.accounts()
             if accounts.isEmpty {
-                Text("No token accounts yet.")
+                Text(codexBarLocalizedDisplayText("No token accounts yet."))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -304,7 +305,7 @@ struct ProviderSettingsTokenAccountsRowView: View {
                             }
                             .buttonStyle(.plain)
 
-                            Button("Remove") {
+                            Button(codexBarLocalizedDisplayText("Remove")) {
                                 self.descriptor.removeAccount(account.id)
                             }
                             .buttonStyle(.bordered)
@@ -320,13 +321,13 @@ struct ProviderSettingsTokenAccountsRowView: View {
             if self.descriptor.primaryAddAction == nil {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
-                        TextField("Label", text: self.$newLabel)
+                        TextField(codexBarLocalizedDisplayText("Label"), text: self.$newLabel)
                             .textFieldStyle(.roundedBorder)
                             .font(.footnote)
-                        SecureField(self.descriptor.placeholder, text: self.$newToken)
+                        SecureField(codexBarLocalizedDisplayText(self.descriptor.placeholder), text: self.$newToken)
                             .textFieldStyle(.roundedBorder)
                             .font(.footnote)
-                        Button("Add") {
+                        Button(codexBarLocalizedDisplayText("Add")) {
                             let label = self.newLabel.trimmingCharacters(in: .whitespacesAndNewlines)
                             let token = self.newToken.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !label.isEmpty, !token.isEmpty else { return }
@@ -344,21 +345,22 @@ struct ProviderSettingsTokenAccountsRowView: View {
                             self.newToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     if self.descriptor.showsOrganizationField {
-                        TextField("Org ID (optional)", text: self.$newOrgID)
+                        TextField(codexBarLocalizedDisplayText("Org ID (optional)"), text: self.$newOrgID)
                             .textFieldStyle(.roundedBorder)
                             .font(.footnote)
-                            .help("Optional organization ID for accounts linked to multiple Anthropic organizations.")
+                            .help(codexBarLocalizedDisplayText(
+                                "Optional organization ID for accounts linked to multiple Anthropic organizations."))
                     }
                 }
             }
 
             HStack(spacing: 10) {
-                Button("Open token file") {
+                Button(codexBarLocalizedDisplayText("Open token file")) {
                     self.descriptor.openConfigFile()
                 }
                 .buttonStyle(.link)
                 .controlSize(.small)
-                Button("Reload") {
+                Button(codexBarLocalizedDisplayText("Reload")) {
                     self.descriptor.reloadFromDisk()
                 }
                 .buttonStyle(.link)
@@ -395,7 +397,7 @@ struct ProviderSettingsOrganizationsRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
-                Text(self.descriptor.title)
+                Text(codexBarLocalizedDisplayText(self.descriptor.title))
                     .font(.subheadline.weight(.semibold))
                 Spacer(minLength: 8)
             }
@@ -403,7 +405,7 @@ struct ProviderSettingsOrganizationsRowView: View {
             if let subtitle = self.descriptor.subtitle,
                !subtitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             {
-                Text(subtitle)
+                Text(codexBarLocalizedDisplayText(subtitle))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -411,7 +413,7 @@ struct ProviderSettingsOrganizationsRowView: View {
 
             let entries = self.descriptor.entries()
             if entries.allSatisfy(\.isLocked) {
-                Text("No organizations loaded. Click Refresh after setting your API key.")
+                Text(codexBarLocalizedDisplayText("No organizations loaded. Click Refresh after setting your API key."))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -428,7 +430,7 @@ struct ProviderSettingsOrganizationsRowView: View {
                                     if let subtitle = entry.subtitle,
                                        !subtitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                     {
-                                        Text(subtitle)
+                                        Text(codexBarLocalizedDisplayText(subtitle))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
@@ -441,7 +443,7 @@ struct ProviderSettingsOrganizationsRowView: View {
             }
 
             HStack(spacing: 10) {
-                Button("Refresh organizations") {
+                Button(codexBarLocalizedDisplayText("Refresh organizations")) {
                     Task { @MainActor in
                         self.isRefreshing = true
                         let result = await self.descriptor.onRefresh()
@@ -453,7 +455,7 @@ struct ProviderSettingsOrganizationsRowView: View {
                 .controlSize(.small)
                 .disabled(!self.descriptor.canRefresh() || self.isRefreshing)
                 if let errorMessage = self.errorMessage, !errorMessage.isEmpty {
-                    Text(errorMessage)
+                    Text(codexBarLocalizedDisplayText(errorMessage))
                         .font(.caption)
                         .foregroundStyle(.red)
                 }

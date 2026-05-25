@@ -573,13 +573,13 @@ struct MenuDescriptor {
         if updateReady {
             entries.append(.action("Update ready, restart now?", .installUpdate))
         }
-        entries.append(contentsOf: [
-            .action("Refresh", .refresh),
-            .action("Settings...", .settings),
-            .action("About CodexBar", .about),
-        ])
+        entries.append(.action("Refresh", .refresh))
+        #if !CONDUCTOR_EMBEDDED
+        entries.append(.action("Settings...", .settings))
+        #endif
+        entries.append(.action("About \(CodexBarDisplayBrand.productName)", .about))
         #if CONDUCTOR_EMBEDDED
-        entries.append(.action("Close", .quit))
+        entries.append(.action("Hide \(CodexBarDisplayBrand.productName)", .quit))
         #else
         entries.append(.action("Quit", .quit))
         #endif

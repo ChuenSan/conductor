@@ -6,6 +6,7 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
     case interface
     case terminal
     case shell
+    case usage
     case automation
     case commands
     case themes
@@ -22,6 +23,8 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
             ConductorLocalization.text(zh: "终端体验", en: "Terminal")
         case .shell:
             ConductorLocalization.text(zh: "启动/代理", en: "Startup")
+        case .usage:
+            ConductorLocalization.text(zh: "用量", en: "Usage")
         case .automation:
             ConductorLocalization.text(zh: "AI/通知", en: "AI")
         case .commands:
@@ -41,6 +44,8 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
             ConductorLocalization.text(zh: "字体、显示、输入", en: "Font, display, input")
         case .shell:
             ConductorLocalization.text(zh: "命令、目录、网络", en: "Command, directory, network")
+        case .usage:
+            ConductorLocalization.text(zh: "Token 记录和本地用量", en: "Token records and local usage")
         case .automation:
             ConductorLocalization.text(zh: "Agent、通知、铃声", en: "Agents, alerts, bell")
         case .commands:
@@ -60,6 +65,8 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
             "terminal"
         case .shell:
             "network"
+        case .usage:
+            "chart.bar"
         case .automation:
             "sparkles"
         case .commands:

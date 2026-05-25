@@ -677,6 +677,10 @@ final class UsageStore {
         }
     }
 
+    func refreshTokenUsageNow(force: Bool = true) async {
+        await refreshTokenUsageSequenceNow(force: force)
+    }
+
     private func refreshTokenUsageSequenceNow(force: Bool) async {
         if force, let existing = self.tokenRefreshSequenceTask {
             existing.cancel()

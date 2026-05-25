@@ -12,6 +12,9 @@ let package = Package(
         .executable(name: "ConductorModelCheck", targets: ["ConductorModelCheck"]),
         .library(name: "ConductorCore", targets: ["ConductorCore"])
     ],
+    dependencies: [
+        .package(path: "../../ThirdParty/CodexBar")
+    ],
     targets: [
         .binaryTarget(
             name: "GhosttyKit",
@@ -24,7 +27,8 @@ let package = Package(
             name: "Conductor",
             dependencies: [
                 "ConductorCore",
-                "GhosttyKit"
+                "GhosttyKit",
+                .product(name: "CodexBarFeature", package: "CodexBar")
             ],
             resources: [
                 .process("Resources")

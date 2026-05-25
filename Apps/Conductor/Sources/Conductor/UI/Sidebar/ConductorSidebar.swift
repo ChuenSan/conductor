@@ -1,4 +1,5 @@
 import AppKit
+import CodexBar
 import ConductorCore
 import SwiftUI
 
@@ -155,6 +156,8 @@ struct ConductorSidebar: View {
             workspaceSection
                 .frame(maxHeight: .infinity)
 
+            tokenRecordsSidebarEntry
+
             Spacer(minLength: 8)
 
             expandedSidebarDock
@@ -184,6 +187,34 @@ struct ConductorSidebar: View {
             .padding(.horizontal, 2)
         }
         .padding(.bottom, 3)
+    }
+
+    private var tokenRecordsSidebarEntry: some View {
+        SidebarDockSurface(horizontalPadding: 0) {
+            TokenRecordsSidebarCard {
+                finishWorkspaceRenameIfNeeded()
+                ConductorMotion.perform(ConductorMotion.panel) {
+                    ConductorUsageFeature.openTokenRecords(
+                        style: tokenRecordsPanelStyle,
+                        languageIdentifier: appearance.language.usageFeatureLanguageIdentifier)
+                }
+            }
+        }
+    }
+
+    private var tokenRecordsPanelStyle: ConductorUsagePanelStyle {
+        ConductorUsagePanelStyle(
+            panelBase: theme.floatingPanelBase,
+            panelWash: theme.floatingPanelWash,
+            controlFill: theme.floatingControlFill,
+            controlStrongFill: theme.floatingControlStrongFill,
+            stroke: theme.floatingStroke,
+            separator: theme.floatingSeparator,
+            emphasis: theme.floatingEmphasis,
+            primaryText: theme.shellChromeText,
+            secondaryText: theme.shellChromeTextMuted.opacity(0.86),
+            tertiaryText: theme.shellChromeTextMuted.opacity(0.64),
+            usesDarkChrome: theme.usesDarkChrome)
     }
 
     private var workspaceSection: some View {
@@ -276,6 +307,12 @@ struct ConductorSidebar: View {
             SidebarRailButton(id: "sidebar-rail.command-center", icon: "command", help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.toggleCommandPalette)
+            }
+            SidebarRailButton(id: "sidebar-rail.token-records", icon: "chart.bar.fill", help: L("Token 记录", "Token Records")) {
+                finishWorkspaceRenameIfNeeded()
+                ConductorUsageFeature.openTokenRecords(
+                    style: tokenRecordsPanelStyle,
+                    languageIdentifier: appearance.language.usageFeatureLanguageIdentifier)
             }
         }
     }
@@ -698,6 +735,63 @@ private struct SidebarWorkspaceHeaderStats: View {
         .background(emphasis ? theme.shellSelectedFill.opacity(0.90) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.22 : 0.14))
         .clipShape(Capsule())
         .macNativeTooltip(help)
+    }
+}
+
+private struct TokenRecordsSidebarCard: View {
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: "chart.bar.fill")
+                    .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis)
+                    .frame(width: 26, height: 26)
+                    .background(theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.18 : 0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("Token 记录", "Token Records"))
+                        .font(.conductorSystem(size: 12.2, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText)
+                        .lineLimit(1)
+                    Text(L("用量详情", "Usage details"))
+                        .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeTextMuted.opacity(0.72))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.right")
+                    .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.62))
+            }
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+            .background(cardFill)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(theme.shellStroke.opacity(hovering ? 0.36 : 0.22), lineWidth: 0.7)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .conductorHover($hovering)
+        .macNativeTooltip(L("打开 Token 记录", "Open Token Records"))
+    }
+
+    private var cardFill: Color {
+        if hovering {
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.72 : 0.54)
+        }
+        return theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.26 : 0.16)
     }
 }
 

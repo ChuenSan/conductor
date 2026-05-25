@@ -1,4 +1,5 @@
 import AppKit
+import CodexBar
 import ConductorCore
 import Foundation
 import QuartzCore
@@ -185,6 +186,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         didSet {
             guard oldValue != appearance else { return }
             ConductorAppearanceRuntime.apply(appearance)
+            ConductorUsageFeature.configureHostLanguageIdentifier(appearance.language.usageFeatureLanguageIdentifier)
             TerminalAppearanceRuntime.apply(appearance)
             ConductorMotion.setReducedMotion(appearance.reducedMotion)
             if oldValue.terminalFontSize != appearance.terminalFontSize ||
@@ -205,6 +207,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published var sidebarVisible = true
     @Published var commandPaletteVisible = false
     @Published var settingsPanelVisible = false
+    @Published var requestedSettingsSection: SettingsSectionID?
     @Published var workspaceOverviewVisible = false
     @Published var terminalSearchVisible = false
     @Published var fileManagerPanelRequest: FileManagerPanelRequest?
@@ -322,6 +325,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         syncPanelCoordinatorFromPublished()
         syncFileWorkspaceCoordinatorFromPublished()
         ConductorAppearanceRuntime.apply(self.appearance)
+        ConductorUsageFeature.configureHostLanguageIdentifier(self.appearance.language.usageFeatureLanguageIdentifier)
         TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
     }
@@ -358,6 +362,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         syncPanelCoordinatorFromPublished()
         syncFileWorkspaceCoordinatorFromPublished()
         ConductorAppearanceRuntime.apply(self.appearance)
+        ConductorUsageFeature.configureHostLanguageIdentifier(self.appearance.language.usageFeatureLanguageIdentifier)
         TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
     }
@@ -2445,6 +2450,21 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
         syncPanelCoordinatorFromPublished()
         panelCoordinator.toggleSettings()
+        publishPanelState()
+    }
+
+    func showSettingsPanel(section: SettingsSectionID? = nil) {
+        let signpost = ConductorSignpost.begin("settings-show")
+        defer { ConductorSignpost.end("settings-show", signpost) }
+        if terminalSearchVisible {
+            closeTerminalSearch()
+        }
+        requestedSettingsSection = section
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.settingsVisible = true
+        panelCoordinator.commandPaletteVisible = false
+        panelCoordinator.workspaceOverviewVisible = false
+        panelCoordinator.terminalSearchVisible = false
         publishPanelState()
     }
 

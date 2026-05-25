@@ -18,8 +18,8 @@ struct UsageMenuCardView: View {
 
             var accessibilityLabel: String {
                 switch self {
-                case .left: "Usage remaining"
-                case .used: "Usage used"
+                case .left: codexBarLocalizedDisplayText("Usage remaining")
+                case .used: codexBarLocalizedDisplayText("Usage used")
                 }
             }
         }
@@ -70,7 +70,7 @@ struct UsageMenuCardView: View {
             }
 
             var percentLabel: String {
-                String(format: "%.0f%% %@", self.percent, self.percentStyle.labelSuffix)
+                codexBarLocalizedDisplayText(String(format: "%.0f%% %@", self.percent, self.percentStyle.labelSuffix))
             }
         }
 
@@ -140,7 +140,7 @@ struct UsageMenuCardView: View {
                 } else if !self.model.usageNotes.isEmpty {
                     UsageNotesContent(notes: self.model.usageNotes)
                 } else if let placeholder = self.model.placeholder {
-                    Text(placeholder)
+                    Text(codexBarLocalizedDisplayText(placeholder))
                         .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                         .font(.subheadline)
                 }
@@ -190,22 +190,22 @@ struct UsageMenuCardView: View {
                     }
                     if let tokenUsage = self.model.tokenUsage {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("cost_header_estimated")
+                            Text(L("cost_header_estimated"))
                                 .font(.body)
                                 .fontWeight(.medium)
-                            Text(tokenUsage.sessionLine)
+                            Text(codexBarLocalizedDisplayText(tokenUsage.sessionLine))
                                 .font(.footnote)
-                            Text(tokenUsage.monthLine)
+                            Text(codexBarLocalizedDisplayText(tokenUsage.monthLine))
                                 .font(.footnote)
                             if let hint = tokenUsage.hintLine, !hint.isEmpty {
-                                Text(hint)
+                                Text(codexBarLocalizedDisplayText(hint))
                                     .font(.footnote)
                                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                                     .lineLimit(4)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             if let error = tokenUsage.errorLine, !error.isEmpty {
-                                Text(error)
+                                Text(codexBarLocalizedDisplayText(error))
                                     .font(.footnote)
                                     .foregroundStyle(MenuHighlightStyle.error(self.isHighlighted))
                                     .lineLimit(4)
@@ -250,7 +250,7 @@ private struct UsageMenuCardHeaderView: View {
             }
             let subtitleAlignment: VerticalAlignment = self.model.subtitleStyle == .error ? .top : .firstTextBaseline
             HStack(alignment: subtitleAlignment) {
-                Text(self.model.subtitleText)
+                Text(codexBarLocalizedDisplayText(self.model.subtitleText))
                     .font(.footnote)
                     .foregroundStyle(self.subtitleColor)
                     .lineLimit(self.model.subtitleStyle == .error ? 4 : 1)
@@ -263,7 +263,7 @@ private struct UsageMenuCardHeaderView: View {
                     CopyIconButton(copyText: self.model.subtitleText, isHighlighted: self.isHighlighted)
                 }
                 if let plan = self.model.planText {
-                    Text(plan)
+                    Text(codexBarLocalizedDisplayText(plan))
                         .font(.footnote)
                         .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                         .lineLimit(1)
@@ -323,7 +323,7 @@ private struct CopyIconButton: View {
                 .frame(width: 18, height: 18)
         }
         .buttonStyle(CopyIconButtonStyle(isHighlighted: self.isHighlighted))
-        .accessibilityLabel(self.didCopy ? "Copied" : "Copy error")
+        .accessibilityLabel(codexBarLocalizedDisplayText(self.didCopy ? "Copied" : "Copy error"))
     }
 
     private func copyToPasteboard() {
@@ -340,21 +340,21 @@ private struct ProviderCostContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(self.section.title)
+            Text(codexBarLocalizedDisplayText(self.section.title))
                 .font(.body)
                 .fontWeight(.medium)
             if let percentUsed = self.section.percentUsed {
                 UsageProgressBar(
                     percent: percentUsed,
                     tint: self.progressColor,
-                    accessibilityLabel: "Extra usage spent")
+                    accessibilityLabel: codexBarLocalizedDisplayText("Extra usage spent"))
             }
             HStack(alignment: .firstTextBaseline) {
-                Text(self.section.spendLine)
+                Text(codexBarLocalizedDisplayText(self.section.spendLine))
                     .font(.footnote)
                 Spacer()
                 if let percentLine = self.section.percentLine {
-                    Text(percentLine)
+                    Text(codexBarLocalizedDisplayText(percentLine))
                         .font(.footnote)
                         .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                 }
@@ -371,11 +371,11 @@ private struct MetricRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(self.title)
+            Text(codexBarLocalizedDisplayText(self.title))
                 .font(.body)
                 .fontWeight(.medium)
             if let statusText = self.metric.statusText {
-                Text(statusText)
+                Text(codexBarLocalizedDisplayText(statusText))
                     .font(.footnote)
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                     .lineLimit(1)
@@ -394,7 +394,7 @@ private struct MetricRow: View {
                             .lineLimit(1)
                         Spacer()
                         if let rightLabel = self.metric.resetText {
-                            Text(rightLabel)
+                            Text(codexBarLocalizedDisplayText(rightLabel))
                                 .font(.footnote)
                                 .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                                 .lineLimit(1)
@@ -403,14 +403,14 @@ private struct MetricRow: View {
                     if self.metric.detailLeftText != nil || self.metric.detailRightText != nil {
                         HStack(alignment: .firstTextBaseline) {
                             if let detailLeft = self.metric.detailLeftText {
-                                Text(detailLeft)
+                                Text(codexBarLocalizedDisplayText(detailLeft))
                                     .font(.footnote)
                                     .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
                                     .lineLimit(1)
                             }
                             Spacer()
                             if let detailRight = self.metric.detailRightText {
-                                Text(detailRight)
+                                Text(codexBarLocalizedDisplayText(detailRight))
                                     .font(.footnote)
                                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                                     .lineLimit(1)
@@ -420,7 +420,7 @@ private struct MetricRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if let detail = self.metric.detailText {
-                    Text(detail)
+                    Text(codexBarLocalizedDisplayText(detail))
                         .font(.footnote)
                         .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                         .lineLimit(1)
@@ -441,7 +441,7 @@ private struct UsageNotesContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(self.notes.enumerated()), id: \.offset) { _, note in
-                Text(note)
+                Text(codexBarLocalizedDisplayText(note))
                     .font(.footnote)
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                     .lineLimit(2)
@@ -487,7 +487,7 @@ struct UsageMenuCardUsageSectionView: View {
                 } else if !self.model.usageNotes.isEmpty {
                     UsageNotesContent(notes: self.model.usageNotes)
                 } else if let placeholder = self.model.placeholder {
-                    Text(placeholder)
+                    Text(codexBarLocalizedDisplayText(placeholder))
                         .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                         .font(.subheadline)
                 }
@@ -561,21 +561,21 @@ private struct CreditsBarContent: View {
 
     private var scaleText: String {
         let scale = UsageFormatter.tokenCountString(Int(Self.fullScaleTokens))
-        return "\(scale) tokens"
+        return codexBarLocalizedDisplayText("\(scale) tokens")
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Credits")
+            Text(L("Credits"))
                 .font(.body)
                 .fontWeight(.medium)
             if let percentLeft {
                 UsageProgressBar(
                     percent: percentLeft,
                     tint: self.progressColor,
-                    accessibilityLabel: "Credits remaining")
+                    accessibilityLabel: codexBarLocalizedDisplayText("Credits remaining"))
                 HStack(alignment: .firstTextBaseline) {
-                    Text(self.creditsText)
+                    Text(codexBarLocalizedDisplayText(self.creditsText))
                         .font(.caption)
                     Spacer()
                     Text(self.scaleText)
@@ -583,11 +583,11 @@ private struct CreditsBarContent: View {
                         .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                 }
             } else {
-                Text(self.creditsText)
+                Text(codexBarLocalizedDisplayText(self.creditsText))
                     .font(.caption)
             }
             if let hintText, !hintText.isEmpty {
-                Text(hintText)
+                Text(codexBarLocalizedDisplayText(hintText))
                     .font(.footnote)
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                     .lineLimit(4)
@@ -614,22 +614,22 @@ struct UsageMenuCardCostSectionView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     if let tokenUsage = self.model.tokenUsage {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("cost_header_estimated")
+                            Text(L("cost_header_estimated"))
                                 .font(.body)
                                 .fontWeight(.medium)
-                            Text(tokenUsage.sessionLine)
+                            Text(codexBarLocalizedDisplayText(tokenUsage.sessionLine))
                                 .font(.caption)
-                            Text(tokenUsage.monthLine)
+                            Text(codexBarLocalizedDisplayText(tokenUsage.monthLine))
                                 .font(.caption)
                             if let hint = tokenUsage.hintLine, !hint.isEmpty {
-                                Text(hint)
+                                Text(codexBarLocalizedDisplayText(hint))
                                     .font(.footnote)
                                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                                     .lineLimit(4)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             if let error = tokenUsage.errorLine, !error.isEmpty {
-                                Text(error)
+                                Text(codexBarLocalizedDisplayText(error))
                                     .font(.footnote)
                                     .foregroundStyle(MenuHighlightStyle.error(self.isHighlighted))
                                     .lineLimit(4)
@@ -1003,8 +1003,9 @@ extension UsageMenuCardView.Model {
                 account: input.account,
                 metadata: input.metadata),
             isEnabled: input.hidePersonalInfo)
-        let subtitleText = PersonalInfoRedactor.redactEmails(in: subtitle.text, isEnabled: input.hidePersonalInfo)
+        let rawSubtitleText = PersonalInfoRedactor.redactEmails(in: subtitle.text, isEnabled: input.hidePersonalInfo)
             ?? subtitle.text
+        let subtitleText = CodexBarDisplayBrand.userFacing(rawSubtitleText)
         let creditsHintText = PersonalInfoRedactor.redactEmails(
             in: Self.dashboardHint(error: input.dashboardError),
             isEnabled: input.hidePersonalInfo)

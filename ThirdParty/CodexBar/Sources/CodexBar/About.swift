@@ -1,4 +1,5 @@
 import AppKit
+import CodexBarCore
 
 @MainActor
 func showAbout() {
@@ -45,7 +46,7 @@ func showAbout() {
     }
 
     let options: [NSApplication.AboutPanelOptionKey: Any] = [
-        .applicationName: "CodexBar",
+        .applicationName: CodexBarDisplayBrand.productName,
         .applicationVersion: versionString,
         .version: versionString,
         .credits: credits,

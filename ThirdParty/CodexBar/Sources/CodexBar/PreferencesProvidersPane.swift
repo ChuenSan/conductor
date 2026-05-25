@@ -9,6 +9,8 @@ struct ProvidersPane: View {
     let managedCodexAccountCoordinator: ManagedCodexAccountCoordinator
     let codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator
     let codexAmbientLoginRunner: any CodexAmbientLoginRunning
+    let showsMenuBarMetricPicker: Bool
+    let hiddenProviderSettingIDs: Set<String>
     let runProviderLoginFlow: @MainActor (UsageProvider) async -> Void
     @State private var expandedErrors: Set<UsageProvider> = []
     @State private var settingsStatusTextByID: [String: String] = [:]
@@ -28,6 +30,8 @@ struct ProvidersPane: View {
         managedCodexAccountCoordinator: ManagedCodexAccountCoordinator = ManagedCodexAccountCoordinator(),
         codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator? = nil,
         codexAmbientLoginRunner: any CodexAmbientLoginRunning = DefaultCodexAmbientLoginRunner(),
+        showsMenuBarMetricPicker: Bool = true,
+        hiddenProviderSettingIDs: Set<String> = [],
         runProviderLoginFlow: @escaping @MainActor (UsageProvider) async -> Void = { _ in })
     {
         self.settings = settings
@@ -39,6 +43,8 @@ struct ProvidersPane: View {
                 usageStore: store,
                 managedAccountCoordinator: managedCodexAccountCoordinator)
         self.codexAmbientLoginRunner = codexAmbientLoginRunner
+        self.showsMenuBarMetricPicker = showsMenuBarMetricPicker
+        self.hiddenProviderSettingIDs = hiddenProviderSettingIDs
         self.runProviderLoginFlow = runProviderLoginFlow
     }
 
@@ -329,15 +335,17 @@ struct ProvidersPane: View {
         guard let impl = ProviderCatalog.implementation(for: provider) else { return [] }
         let context = self.makeSettingsContext(provider: provider)
         return impl.settingsToggles(context: context)
-            .filter { $0.isVisible?() ?? true }
+            .filter { self.isProviderSettingVisible(id: $0.id, isVisible: $0.isVisible) }
     }
 
     private func extraSettingsPickers(for provider: UsageProvider) -> [ProviderSettingsPickerDescriptor] {
         guard let impl = ProviderCatalog.implementation(for: provider) else { return [] }
         let context = self.makeSettingsContext(provider: provider)
         let providerPickers = impl.settingsPickers(context: context)
-            .filter { $0.isVisible?() ?? true }
-        if let menuBarPicker = self.menuBarMetricPicker(for: provider) {
+            .filter { self.isProviderSettingVisible(id: $0.id, isVisible: $0.isVisible) }
+        if self.showsMenuBarMetricPicker,
+           let menuBarPicker = self.menuBarMetricPicker(for: provider)
+        {
             return [menuBarPicker] + providerPickers
         }
         return providerPickers
@@ -347,14 +355,18 @@ struct ProvidersPane: View {
         guard let impl = ProviderCatalog.implementation(for: provider) else { return [] }
         let context = self.makeSettingsContext(provider: provider)
         return impl.settingsFields(context: context)
-            .filter { $0.isVisible?() ?? true }
+            .filter { self.isProviderSettingVisible(id: $0.id, isVisible: $0.isVisible) }
     }
 
     private func extraSettingsActions(for provider: UsageProvider) -> [ProviderSettingsActionsDescriptor] {
         guard let impl = ProviderCatalog.implementation(for: provider) else { return [] }
         let context = self.makeSettingsContext(provider: provider)
         return impl.settingsActions(context: context)
-            .filter { $0.isVisible?() ?? true }
+            .filter { self.isProviderSettingVisible(id: $0.id, isVisible: $0.isVisible) }
+    }
+
+    private func isProviderSettingVisible(id: String, isVisible: (() -> Bool)?) -> Bool {
+        !self.hiddenProviderSettingIDs.contains(id) && (isVisible?() ?? true)
     }
 
     private func extraSettingsOrganizations(
@@ -488,7 +500,7 @@ struct ProvidersPane: View {
             ]
         } else if SettingsStore.isBalanceOnlyProvider(provider) {
             options = [
-                ProviderSettingsPickerOption(id: MenuBarMetricPreference.automatic.rawValue, title: "Automatic"),
+                ProviderSettingsPickerOption(id: MenuBarMetricPreference.automatic.rawValue, title: L("automatic")),
             ]
         } else if provider == .abacus {
             let metadata = self.store.metadata(for: provider)

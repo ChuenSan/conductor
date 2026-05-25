@@ -32,45 +32,68 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 struct GeneralPane: View {
     @Bindable var settings: SettingsStore
     @Bindable var store: UsageStore
+    let showsLanguageControls: Bool
+    let showsStartupControls: Bool
+    let showsAppLifecycleControls: Bool
+
+    init(
+        settings: SettingsStore,
+        store: UsageStore,
+        showsLanguageControls: Bool = true,
+        showsStartupControls: Bool = true,
+        showsAppLifecycleControls: Bool = true)
+    {
+        self.settings = settings
+        self.store = store
+        self.showsLanguageControls = showsLanguageControls
+        self.showsStartupControls = showsStartupControls
+        self.showsAppLifecycleControls = showsAppLifecycleControls
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 16) {
-                SettingsSection(contentSpacing: 12) {
-                    Text(L("section_system"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
+                if self.showsSystemSection {
+                    SettingsSection(contentSpacing: 12) {
+                        Text(L("section_system"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(alignment: .top, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(L("language_title"))
-                                    .font(.body)
-                                Text(L("language_subtitle"))
-                                    .font(.footnote)
-                                    .foregroundStyle(.tertiary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer()
-                            Picker(L("language_title"), selection: self.$settings.appLanguage) {
-                                ForEach(AppLanguage.allCases) { option in
-                                    Text(option.label).tag(option.rawValue)
+                        if self.showsLanguageControls {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .top, spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(L("language_title"))
+                                            .font(.body)
+                                        Text(L("language_subtitle"))
+                                            .font(.footnote)
+                                            .foregroundStyle(.tertiary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    Spacer()
+                                    Picker(L("language_title"), selection: self.$settings.appLanguage) {
+                                        ForEach(AppLanguage.allCases) { option in
+                                            Text(option.label).tag(option.rawValue)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                    .frame(maxWidth: 200)
                                 }
                             }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(maxWidth: 200)
+                        }
+
+                        if self.showsStartupControls {
+                            PreferenceToggleRow(
+                                title: L("start_at_login_title"),
+                                subtitle: L("start_at_login_subtitle"),
+                                binding: self.$settings.launchAtLogin)
                         }
                     }
 
-                    PreferenceToggleRow(
-                        title: L("start_at_login_title"),
-                        subtitle: L("start_at_login_subtitle"),
-                        binding: self.$settings.launchAtLogin)
+                    Divider()
                 }
-
-                Divider()
 
                 SettingsSection(contentSpacing: 12) {
                     Text(L("section_usage"))
@@ -163,14 +186,16 @@ struct GeneralPane: View {
                     }
                 }
 
-                Divider()
+                if self.showsAppLifecycleControls {
+                    Divider()
 
-                SettingsSection(contentSpacing: 12) {
-                    HStack {
-                        Spacer()
-                        Button(L("quit_app")) { NSApp.terminate(nil) }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
+                    SettingsSection(contentSpacing: 12) {
+                        HStack {
+                            Spacer()
+                            Button(L("quit_app")) { NSApp.terminate(nil) }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.large)
+                        }
                     }
                 }
             }
@@ -178,6 +203,10 @@ struct GeneralPane: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
+    }
+
+    private var showsSystemSection: Bool {
+        self.showsLanguageControls || self.showsStartupControls
     }
 
     private func costStatusLine(provider: UsageProvider) -> some View {
