@@ -12,6 +12,24 @@ extension StatusItemController {
     @discardableResult
     func addUsageHistoryMenuItemIfNeeded(to menu: NSMenu, provider: UsageProvider, width: CGFloat) -> Bool {
         guard let submenu = self.makeUsageHistorySubmenu(provider: provider, width: width) else { return false }
+        if ConductorUsageMenuStyle.isEnabled {
+            let item = self.makeMenuCardItem(
+                ConductorUsageMenuActionRow(
+                    title: "Subscription Utilization",
+                    subtitle: nil,
+                    systemImageName: "waveform.path.ecg.rectangle",
+                    shortcutText: nil,
+                    showsChevron: true,
+                    isEnabled: true,
+                    width: width),
+                id: "usageHistorySubmenu",
+                width: width,
+                submenu: submenu,
+                submenuIndicatorAlignment: .trailing,
+                submenuIndicatorTopPadding: 0)
+            menu.addItem(item)
+            return true
+        }
         let item = self.makeMenuCardItem(
             HStack(spacing: 0) {
                 Text("Subscription Utilization")

@@ -93,7 +93,6 @@ struct SettingsSnapshot: Equatable {
         agentCLIStatuses: [AgentHookProvider: AgentCLIStatus],
         terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
     ) {
-        RenderCounter.increment("settings-snapshot")
         self.selectedSection = selectedSection
         self.theme = theme
         self.appearance = appearance

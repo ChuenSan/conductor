@@ -71,6 +71,11 @@ public enum ConductorUsageFeature {
         CodexBarEmbeddedRuntime.shared.applyHostLanguageOverride()
     }
 
+    public static func configureHostMenuStyle(_ style: ConductorUsagePanelStyle) {
+        ConductorUsageMenuStyle.configure(style)
+        CodexBarEmbeddedRuntime.shared.applyHostMenuStyleOverride()
+    }
+
     public static func openTokenRecords(
         style: ConductorUsagePanelStyle = .fallback,
         languageIdentifier: String? = nil)
@@ -123,6 +128,7 @@ struct ConductorTokenRecordsWindowView: View {
     let style: ConductorUsagePanelStyle
     let languageIdentifier: String?
     @State private var selectedProvider: UsageProvider = .codex
+    @State private var expandedCompanionPanelIDs: Set<String> = []
 
     private let tokenRecordProviders: [UsageProvider] = [.codex, .claude, .vertexai, .bedrock]
 
@@ -145,9 +151,12 @@ struct ConductorTokenRecordsWindowView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        if let model = statusController.menuCardModel(for: provider) {
+                        let overviewModel = statusController.menuCardModel(for: provider)
+                        if let model = overviewModel {
                             usageOverviewCard(model, provider: provider)
                         }
+                        usageActionDeck(provider: provider, model: overviewModel)
+                        usageCompanionPanels(provider: provider)
 
                         if shouldShowTokenHistory(provider: provider, snapshot: snapshot, error: error, isRefreshing: isRefreshing) {
                             if let snapshot, !snapshot.daily.isEmpty {
@@ -173,7 +182,7 @@ struct ConductorTokenRecordsWindowView: View {
         .background(Color.clear)
         .onAppear {
             normalizeSelection(providers)
-            CodexBarEmbeddedRuntime.shared.refreshTokenRecords()
+            CodexBarEmbeddedRuntime.shared.refreshTokenRecords(provider: provider)
         }
         .onChange(of: providerIDs(providers)) { _, _ in
             normalizeSelection(providers)
@@ -497,6 +506,313 @@ struct ConductorTokenRecordsWindowView: View {
             }
     }
 
+    private func usageActionDeck(provider: UsageProvider, model: UsageMenuCardView.Model?) -> some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 170), spacing: 8, alignment: .top)],
+            alignment: .leading,
+            spacing: 8)
+        {
+            ConductorUsageActionTile(
+                title: t("刷新当前", "Refresh current"),
+                subtitle: t("同步当前来源的记录和本地状态", "Sync records and local state for this source"),
+                systemName: "arrow.clockwise",
+                style: style)
+            {
+                CodexBarEmbeddedRuntime.shared.refreshTokenRecords(provider: provider)
+            }
+
+            if ProviderCatalog.implementation(for: provider)?.supportsLoginFlow == true {
+                ConductorUsageActionTile(
+                    title: accountActionTitle(provider: provider, model: model),
+                    subtitle: accountActionSubtitle(provider: provider),
+                    systemName: "person.crop.circle.badge.plus",
+                    style: style)
+                {
+                    runAccountAction(provider: provider)
+                }
+            }
+
+            if statusController.dashboardURL(for: provider) != nil {
+                ConductorUsageActionTile(
+                    title: t("用量后台", "Usage Dashboard"),
+                    subtitle: t("打开服务商控制台", "Open the provider dashboard"),
+                    systemName: "chart.bar.xaxis",
+                    style: style)
+                {
+                    openDashboard(provider: provider)
+                }
+            }
+
+            if hasStatusPage(provider: provider) {
+                ConductorUsageActionTile(
+                    title: t("状态页", "Status Page"),
+                    subtitle: t("查看服务可用性", "Check service availability"),
+                    systemName: "waveform.path.ecg",
+                    style: style)
+                {
+                    openStatusPage(provider: provider)
+                }
+            }
+
+            if provider == .codex, model?.creditsText != nil || store.openAIDashboard?.creditsPurchaseURL != nil {
+                ConductorUsageActionTile(
+                    title: t("购买额度", "Buy Credits"),
+                    subtitle: t("进入额度购买流程", "Open the credits purchase flow"),
+                    systemName: "plus.circle",
+                    style: style)
+                {
+                    openCredits(provider: provider)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func usageCompanionPanels(provider: UsageProvider) -> some View {
+        if shouldShowPlanUtilization(provider: provider) {
+            let panelID = companionPanelID("plan", provider: provider)
+            ConductorExpandableInsightPanel(
+                title: t("订阅使用趋势", "Subscription Utilization"),
+                subtitle: t("按小时记录的配额水位", "Hourly plan utilization samples"),
+                systemName: "waveform.path.ecg.rectangle",
+                style: style,
+                isExpanded: expansionBinding(for: panelID))
+            {
+                ConductorUsageSummaryChip(
+                    title: t("序列", "Series"),
+                    value: "\(store.planUtilizationHistory(for: provider).count)",
+                    style: style)
+                ConductorUsageSummaryChip(
+                    title: t("来源", "Source"),
+                    value: providerName(provider),
+                    style: style)
+            } content: {
+                ConductorEmbeddedChartPanel(
+                    title: t("订阅使用趋势", "Subscription Utilization"),
+                    subtitle: t("按小时记录的配额水位", "Hourly plan utilization samples"),
+                    systemName: "waveform.path.ecg.rectangle",
+                    style: style,
+                    minHeight: 220,
+                    showsHeader: false,
+                    usesChrome: false)
+                { width in
+                    PlanUtilizationHistoryChartMenuView(
+                        provider: provider,
+                        histories: store.planUtilizationHistory(for: provider),
+                        snapshot: store.snapshot(for: provider),
+                        width: width)
+                }
+            }
+        }
+
+        if let footprint = store.storageFootprint(for: provider) {
+            let panelID = companionPanelID("storage", provider: provider)
+            ConductorExpandableInsightPanel(
+                title: t("本地存储", "Storage"),
+                subtitle: t("本地数据、缓存和清理建议", "Local data, cache, and cleanup ideas"),
+                systemName: "externaldrive",
+                style: style,
+                isExpanded: expansionBinding(for: panelID))
+            {
+                ConductorUsageSummaryChip(
+                    title: t("总量", "Total"),
+                    value: UsageFormatter.byteCountString(footprint.totalBytes),
+                    style: style)
+                ConductorUsageSummaryChip(
+                    title: t("项目", "Items"),
+                    value: "\(footprint.components.count)",
+                    style: style)
+            } content: {
+                ConductorStorageFootprintPanel(
+                    footprint: footprint,
+                    style: style,
+                    showsHeader: false,
+                    usesChrome: false)
+            }
+        }
+
+        if provider == .codex, let breakdown = codexUsageBreakdown, !breakdown.isEmpty {
+            let panelID = companionPanelID("usageBreakdown", provider: provider)
+            ConductorExpandableInsightPanel(
+                title: t("用量构成", "Usage Breakdown"),
+                subtitle: t("按服务拆分的每日消耗", "Daily usage split by service"),
+                systemName: "square.stack.3d.up",
+                style: style,
+                isExpanded: expansionBinding(for: panelID))
+            {
+                ConductorUsageSummaryChip(
+                    title: t("天数", "Days"),
+                    value: "\(breakdown.count)",
+                    style: style)
+                ConductorUsageSummaryChip(
+                    title: t("服务", "Services"),
+                    value: "\(usageBreakdownServiceCount(breakdown))",
+                    style: style)
+            } content: {
+                ConductorEmbeddedChartPanel(
+                    title: t("用量构成", "Usage Breakdown"),
+                    subtitle: t("按服务拆分的每日消耗", "Daily usage split by service"),
+                    systemName: "square.stack.3d.up",
+                    style: style,
+                    minHeight: 190,
+                    showsHeader: false,
+                    usesChrome: false)
+                { width in
+                    UsageBreakdownChartMenuView(breakdown: breakdown, width: width)
+                }
+            }
+        }
+
+        if provider == .codex, let breakdown = store.openAIDashboard?.dailyBreakdown, !breakdown.isEmpty {
+            let panelID = companionPanelID("credits", provider: provider)
+            ConductorExpandableInsightPanel(
+                title: t("额度历史", "Credits History"),
+                subtitle: t("每日额度消耗轨迹", "Daily credits burn"),
+                systemName: "chart.bar.doc.horizontal",
+                style: style,
+                isExpanded: expansionBinding(for: panelID))
+            {
+                ConductorUsageSummaryChip(
+                    title: t("天数", "Days"),
+                    value: "\(breakdown.count)",
+                    style: style)
+                ConductorUsageSummaryChip(
+                    title: t("峰值", "Peak"),
+                    value: creditsPeakText(breakdown),
+                    style: style)
+            } content: {
+                ConductorEmbeddedChartPanel(
+                    title: t("额度历史", "Credits History"),
+                    subtitle: t("每日额度消耗轨迹", "Daily credits burn"),
+                    systemName: "chart.bar.doc.horizontal",
+                    style: style,
+                    minHeight: 190,
+                    showsHeader: false,
+                    usesChrome: false)
+                { width in
+                    CreditsHistoryChartMenuView(breakdown: breakdown, width: width)
+                }
+            }
+        }
+
+        if provider == .openai,
+           let snapshot = store.snapshot(for: provider)?.openAIAPIUsage,
+           !snapshot.daily.isEmpty
+        {
+            let panelID = companionPanelID("api", provider: provider)
+            ConductorExpandableInsightPanel(
+                title: t("API 用量", "API Usage"),
+                subtitle: t("费用、请求和 Token 趋势", "Spend, requests, and token trends"),
+                systemName: "server.rack",
+                style: style,
+                isExpanded: expansionBinding(for: panelID))
+            {
+                ConductorUsageSummaryChip(
+                    title: snapshot.historyWindowLabel,
+                    value: UsageFormatter.usdString(snapshot.last30Days.costUSD),
+                    style: style)
+                ConductorUsageSummaryChip(
+                    title: t("请求", "Requests"),
+                    value: UsageFormatter.tokenCountString(snapshot.last30Days.requests),
+                    style: style)
+            } content: {
+                ConductorEmbeddedChartPanel(
+                    title: t("API 用量", "API Usage"),
+                    subtitle: t("费用、请求和 Token 趋势", "Spend, requests, and token trends"),
+                    systemName: "server.rack",
+                    style: style,
+                    minHeight: 270,
+                    showsHeader: false,
+                    usesChrome: false)
+                { width in
+                    OpenAIAPIUsageChartMenuView(snapshot: snapshot, width: width)
+                }
+            }
+        }
+    }
+
+    private var codexUsageBreakdown: [OpenAIDashboardDailyBreakdown]? {
+        guard let breakdown = store.openAIDashboard?.usageBreakdown else { return nil }
+        return OpenAIDashboardDailyBreakdown.removingSkillUsageServices(from: breakdown)
+    }
+
+    private func shouldShowPlanUtilization(provider: UsageProvider) -> Bool {
+        store.supportsPlanUtilizationHistory(for: provider) &&
+            !store.shouldHidePlanUtilizationMenuItem(for: provider)
+    }
+
+    private func hasStatusPage(provider: UsageProvider) -> Bool {
+        let meta = store.metadata(for: provider)
+        return meta.statusPageURL != nil || meta.statusLinkURL != nil
+    }
+
+    private func companionPanelID(_ kind: String, provider: UsageProvider) -> String {
+        "\(provider.rawValue).\(kind)"
+    }
+
+    private func expansionBinding(for panelID: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedCompanionPanelIDs.contains(panelID) },
+            set: { isExpanded in
+                if isExpanded {
+                    expandedCompanionPanelIDs.insert(panelID)
+                } else {
+                    expandedCompanionPanelIDs.remove(panelID)
+                }
+            })
+    }
+
+    private func usageBreakdownServiceCount(_ breakdown: [OpenAIDashboardDailyBreakdown]) -> Int {
+        let services = breakdown.flatMap(\.services).map(\.service)
+        return Set(services).count
+    }
+
+    private func creditsPeakText(_ breakdown: [OpenAIDashboardDailyBreakdown]) -> String {
+        let peak = breakdown.map(\.totalCreditsUsed).max() ?? 0
+        return String(format: "%.1f", peak)
+    }
+
+    private func accountActionTitle(provider: UsageProvider, model: UsageMenuCardView.Model?) -> String {
+        if let model, !model.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return t("切换账户", "Switch Account")
+        }
+        if let email = store.snapshot(for: provider)?.accountEmail(for: provider),
+           !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return t("切换账户", "Switch Account")
+        }
+        return t("添加账户", "Add Account")
+    }
+
+    private func accountActionSubtitle(provider: UsageProvider) -> String {
+        if let subtitle = statusController.switchAccountSubtitle(for: provider) {
+            return localized(subtitle)
+        }
+        return t("连接或更换当前来源", "Connect or change this source")
+    }
+
+    private func runAccountAction(provider: UsageProvider) {
+        let item = NSMenuItem()
+        item.representedObject = provider.rawValue
+        statusController.lastMenuProvider = provider
+        statusController.runSwitchAccount(item)
+    }
+
+    private func openDashboard(provider: UsageProvider) {
+        statusController.lastMenuProvider = provider
+        statusController.openDashboard()
+    }
+
+    private func openStatusPage(provider: UsageProvider) {
+        statusController.lastMenuProvider = provider
+        statusController.openStatusPage()
+    }
+
+    private func openCredits(provider: UsageProvider) {
+        statusController.lastMenuProvider = provider
+        statusController.openCreditsPurchase()
+    }
+
     private func shouldShowTokenHistory(
         provider: UsageProvider,
         snapshot: CostUsageTokenSnapshot?,
@@ -557,7 +873,7 @@ struct ConductorTokenRecordsWindowView: View {
                 help: conductorTokenRecordsText("刷新", "Refresh"),
                 disabled: isRefreshing)
             {
-                CodexBarEmbeddedRuntime.shared.refreshTokenRecords()
+                CodexBarEmbeddedRuntime.shared.refreshTokenRecords(provider: provider)
             }
 
             panelIconButton(systemName: "gearshape", help: conductorTokenRecordsText("设置", "Settings")) {
@@ -575,6 +891,7 @@ struct ConductorTokenRecordsWindowView: View {
             ForEach(providers, id: \.self) { option in
                 Button(providerName(option)) {
                     selectedProvider = option
+                    CodexBarEmbeddedRuntime.shared.refreshTokenRecords(provider: option)
                 }
             }
         } label: {
@@ -733,7 +1050,7 @@ struct ConductorTokenRecordsWindowView: View {
 
             HStack(spacing: 8) {
                 filledPanelButton(title: conductorTokenRecordsText("刷新", "Refresh")) {
-                    CodexBarEmbeddedRuntime.shared.refreshTokenRecords()
+                    CodexBarEmbeddedRuntime.shared.refreshTokenRecords(provider: provider)
                 }
                 filledPanelButton(title: conductorTokenRecordsText("设置", "Settings")) {
                     CodexBarEmbeddedRuntime.shared.openTokenRecordSettings()
@@ -871,6 +1188,526 @@ private final class ConductorWindowDragNSView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         bounds.contains(point) ? self : nil
+    }
+}
+
+private struct ConductorUsageActionTile: View {
+    let title: String
+    let subtitle: String
+    let systemName: String
+    let style: ConductorUsagePanelStyle
+    let action: () -> Void
+    @State private var hovering = false
+    @State private var pressed = false
+
+    var body: some View {
+        Button {
+            ConductorUsageMotion.perform(ConductorUsageMotion.press) {
+                pressed = true
+            }
+            action()
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(120))
+                ConductorUsageMotion.perform {
+                    pressed = false
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(style.emphasis.opacity(hovering ? 0.22 : 0.14))
+                    Image(systemName: systemName)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(style.emphasis)
+                        .accessibilityHidden(true)
+                }
+                .frame(width: 34, height: 34)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(style.primaryText)
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.system(size: 10.2, weight: .medium))
+                        .foregroundStyle(style.tertiaryText)
+                        .lineLimit(2)
+                }
+                .layoutPriority(1)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(style.controlFill.opacity(hovering ? 0.66 : 0.48))
+                    .overlay(alignment: .bottomTrailing) {
+                        ConductorSignalCells(style: style, active: hovering)
+                            .opacity(hovering ? 0.46 : 0.18)
+                            .frame(width: 72, height: 24)
+                            .padding(8)
+                    }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(style.stroke.opacity(hovering ? 0.58 : 0.32), lineWidth: 0.7)
+            }
+            .scaleEffect(pressed ? 0.985 : 1)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            ConductorUsageMotion.perform(ConductorUsageMotion.hover) {
+                hovering = isHovering
+            }
+        }
+        .accessibilityLabel(title)
+        .accessibilityHint(subtitle)
+    }
+}
+
+private struct ConductorUsageSummaryChip: View {
+    let title: String
+    let value: String
+    let style: ConductorUsagePanelStyle
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(codexBarLocalizedDisplayText(title))
+                .font(.system(size: 9.5, weight: .bold))
+                .foregroundStyle(style.tertiaryText)
+                .lineLimit(1)
+            Text(codexBarLocalizedDisplayText(value))
+                .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                .foregroundStyle(style.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.76)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 22)
+        .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.50))
+        .clipShape(Capsule())
+    }
+}
+
+private struct ConductorExpandableInsightPanel<Summary: View, Content: View>: View {
+    let title: String
+    let subtitle: String
+    let systemName: String
+    let style: ConductorUsagePanelStyle
+    @Binding var isExpanded: Bool
+    private let summary: () -> Summary
+    private let content: () -> Content
+
+    @State private var hovering = false
+
+    init(
+        title: String,
+        subtitle: String,
+        systemName: String,
+        style: ConductorUsagePanelStyle,
+        isExpanded: Binding<Bool>,
+        @ViewBuilder summary: @escaping () -> Summary,
+        @ViewBuilder content: @escaping () -> Content)
+    {
+        self.title = title
+        self.subtitle = subtitle
+        self.systemName = systemName
+        self.style = style
+        self._isExpanded = isExpanded
+        self.summary = summary
+        self.content = content
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(style.emphasis.opacity(hovering || isExpanded ? 0.20 : 0.13))
+                            Image(systemName: systemName)
+                                .font(.system(size: 12.5, weight: .bold))
+                                .foregroundStyle(style.emphasis)
+                                .accessibilityHidden(true)
+                        }
+                        .frame(width: 34, height: 34)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(title)
+                                .font(.system(size: 12.4, weight: .bold))
+                                .foregroundStyle(style.primaryText)
+                                .lineLimit(1)
+                            Text(subtitle)
+                                .font(.system(size: 10.3, weight: .medium))
+                                .foregroundStyle(style.tertiaryText)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .layoutPriority(1)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(style.secondaryText)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                            .frame(width: 22, height: 22)
+                            .background(style.controlStrongFill.opacity(0.30))
+                            .clipShape(Circle())
+                            .accessibilityHidden(true)
+                    }
+
+                    HStack(spacing: 6) {
+                        summary()
+                    }
+                    .padding(.leading, 44)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(12)
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .onHover { isHovering in
+                withAnimation(.easeOut(duration: 0.16)) {
+                    hovering = isHovering
+                }
+            }
+            .accessibilityLabel(title)
+            .accessibilityValue(isExpanded
+                ? conductorTokenRecordsText("已展开", "Expanded")
+                : conductorTokenRecordsText("已收起", "Collapsed"))
+
+            if isExpanded {
+                Rectangle()
+                    .fill(style.separator.opacity(0.58))
+                    .frame(height: 1)
+                    .padding(.horizontal, 12)
+
+                content()
+                    .padding(12)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity))
+            }
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(style.controlFill.opacity(isExpanded ? 0.52 : 0.38))
+                .overlay(alignment: .topTrailing) {
+                    ConductorUsageCircuitOverlay(style: style)
+                        .opacity(isExpanded ? 0.16 : 0.10)
+                        .frame(width: 180, height: 86)
+                        .allowsHitTesting(false)
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(style.stroke.opacity(hovering || isExpanded ? 0.50 : 0.32), lineWidth: 0.7)
+        }
+    }
+}
+
+private struct ConductorEmbeddedChartPanel<Content: View>: View {
+    let title: String
+    let subtitle: String
+    let systemName: String
+    let style: ConductorUsagePanelStyle
+    let minHeight: CGFloat
+    let showsHeader: Bool
+    let usesChrome: Bool
+    private let content: (CGFloat) -> Content
+
+    init(
+        title: String,
+        subtitle: String,
+        systemName: String,
+        style: ConductorUsagePanelStyle,
+        minHeight: CGFloat,
+        showsHeader: Bool = true,
+        usesChrome: Bool = true,
+        @ViewBuilder content: @escaping (CGFloat) -> Content)
+    {
+        self.title = title
+        self.subtitle = subtitle
+        self.systemName = systemName
+        self.style = style
+        self.minHeight = minHeight
+        self.showsHeader = showsHeader
+        self.usesChrome = usesChrome
+        self.content = content
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if usesChrome {
+            panelContent
+                .padding(12)
+                .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
+                .background {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.38 : 0.56))
+                        .overlay(alignment: .topTrailing) {
+                            ConductorUsageCircuitOverlay(style: style)
+                                .opacity(style.usesDarkChrome ? 0.22 : 0.14)
+                                .frame(width: 190, height: 96)
+                        }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(style.stroke.opacity(0.34), lineWidth: 0.7)
+                }
+                .environment(\.colorScheme, style.colorScheme)
+                .tint(style.emphasis)
+        } else {
+            panelContent
+                .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
+                .environment(\.colorScheme, style.colorScheme)
+                .tint(style.emphasis)
+        }
+    }
+
+    private var panelContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if showsHeader {
+                panelHeader
+            }
+
+            GeometryReader { proxy in
+                content(max(280, proxy.size.width - 4))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: chartHeight)
+        }
+    }
+
+    private var panelHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemName)
+                .font(.system(size: 11.5, weight: .bold))
+                .foregroundStyle(style.emphasis)
+                .frame(width: 26, height: 26)
+                .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.46 : 0.66))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundStyle(style.primaryText)
+                Text(subtitle)
+                    .font(.system(size: 10.3, weight: .medium))
+                    .foregroundStyle(style.tertiaryText)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var chartHeight: CGFloat {
+        max(140, minHeight - (showsHeader ? 68 : 0))
+    }
+}
+
+private struct ConductorStorageFootprintPanel: View {
+    let footprint: ProviderStorageFootprint
+    let style: ConductorUsagePanelStyle
+    let showsHeader: Bool
+    let usesChrome: Bool
+    @State private var revealed = false
+
+    init(
+        footprint: ProviderStorageFootprint,
+        style: ConductorUsagePanelStyle,
+        showsHeader: Bool = true,
+        usesChrome: Bool = true)
+    {
+        self.footprint = footprint
+        self.style = style
+        self.showsHeader = showsHeader
+        self.usesChrome = usesChrome
+    }
+
+    private var visibleComponents: [ProviderStorageFootprint.Component] {
+        Array(footprint.components.prefix(6))
+    }
+
+    private var visibleRecommendations: [ProviderStorageRecommendation] {
+        Array(footprint.cleanupRecommendations.prefix(3))
+    }
+
+    private var maxBytes: Int64 {
+        max(visibleComponents.map(\.totalBytes).max() ?? 0, 1)
+    }
+
+    var body: some View {
+        if usesChrome {
+            content
+                .padding(12)
+                .background {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.38 : 0.56))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(style.stroke.opacity(0.34), lineWidth: 0.7)
+                }
+                .onAppear {
+                    withAnimation(.spring(response: 0.58, dampingFraction: 0.86)) {
+                        revealed = true
+                    }
+                }
+        } else {
+            content
+                .onAppear {
+                    withAnimation(.spring(response: 0.58, dampingFraction: 0.86)) {
+                        revealed = true
+                    }
+                }
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if showsHeader {
+                header
+            }
+
+            if visibleComponents.isEmpty {
+                Text(conductorTokenRecordsText("没有发现本地数据", "No local data found"))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(style.secondaryText)
+                    .padding(.vertical, 4)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(visibleComponents.enumerated()), id: \.element.id) { index, component in
+                        componentRow(component, index: index)
+                    }
+                }
+            }
+
+            if footprint.components.count > visibleComponents.count {
+                Text(conductorTokenRecordsText(
+                    "还有 \(footprint.components.count - visibleComponents.count) 项",
+                    "\(footprint.components.count - visibleComponents.count) more items"))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(style.tertiaryText)
+            }
+
+            if !visibleRecommendations.isEmpty {
+                Rectangle()
+                    .fill(style.separator.opacity(0.62))
+                    .frame(height: 1)
+                    .padding(.vertical, 2)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(conductorTokenRecordsText("清理建议", "Cleanup Ideas"))
+                        .font(.system(size: 11.2, weight: .bold))
+                        .foregroundStyle(style.secondaryText)
+                    ForEach(visibleRecommendations) { recommendation in
+                        recommendationRow(recommendation)
+                    }
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "externaldrive")
+                .font(.system(size: 11.5, weight: .bold))
+                .foregroundStyle(style.emphasis)
+                .frame(width: 26, height: 26)
+                .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.46 : 0.66))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(conductorTokenRecordsText("本地存储", "Storage"))
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundStyle(style.primaryText)
+                Text("\(ProviderDescriptorRegistry.descriptor(for: footprint.provider).metadata.displayName) · \(UsageFormatter.byteCountString(footprint.totalBytes))")
+                    .font(.system(size: 10.3, weight: .medium))
+                    .foregroundStyle(style.tertiaryText)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func componentRow(_ component: ProviderStorageFootprint.Component, index: Int) -> some View {
+        let fraction = CGFloat(max(0, min(1, Double(component.totalBytes) / Double(maxBytes))))
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Text(component.path)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(style.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(component.path)
+                    .layoutPriority(1)
+                StoragePathCopyButton(path: component.path)
+                Text(UsageFormatter.byteCountString(component.totalBytes))
+                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(style.primaryText)
+                    .lineLimit(1)
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(style.separator.opacity(style.usesDarkChrome ? 0.34 : 0.26))
+                    Capsule()
+                        .fill(storageFill(index: index))
+                        .frame(width: revealed ? max(3, proxy.size.width * fraction) : 3)
+                }
+            }
+            .frame(height: 5)
+        }
+    }
+
+    private func recommendationRow(_ recommendation: ProviderStorageRecommendation) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(style.emphasis)
+                .frame(width: 20, height: 20)
+                .background(style.controlStrongFill.opacity(0.54))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(codexBarLocalizedDisplayText(recommendation.title))
+                        .font(.system(size: 10.6, weight: .bold))
+                        .foregroundStyle(style.primaryText)
+                        .lineLimit(1)
+                    Spacer(minLength: 6)
+                    Text(UsageFormatter.byteCountString(recommendation.bytes))
+                        .font(.system(size: 10.2, weight: .semibold, design: .rounded))
+                        .foregroundStyle(style.secondaryText)
+                        .lineLimit(1)
+                }
+                Text(codexBarLocalizedDisplayText(recommendation.consequence))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(style.tertiaryText)
+                    .lineLimit(2)
+            }
+        }
+        .padding(8)
+        .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.30 : 0.42))
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    private func storageFill(index: Int) -> Color {
+        let accents = [
+            style.emphasis,
+            Color(nsColor: .systemTeal),
+            Color(nsColor: .systemIndigo),
+            Color(nsColor: .systemOrange),
+        ]
+        return accents[index % accents.count].opacity(style.usesDarkChrome ? 0.82 : 0.74)
     }
 }
 

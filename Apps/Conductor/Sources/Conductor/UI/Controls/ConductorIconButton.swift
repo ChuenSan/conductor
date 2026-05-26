@@ -63,9 +63,9 @@ struct ConductorIconButton: View {
             label
                 .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
-        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.97))
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
         .disabled(!state.isEnabled)
-        .help(state.tooltip)
+        .macNativeTooltip(state.tooltip)
         .accessibilityLabel(Text(state.accessibilityLabel))
         .opacity(opacity)
         .scaleEffect(hovering && state.isEnabled ? hoverScale : 1)
@@ -104,7 +104,7 @@ struct ConductorIconButton: View {
     private var iconFont: Font {
         switch variant {
         case .toolbar:
-            .conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale)
+            .conductorSystem(size: 11.4, weight: .semibold, family: fontFamily, scale: fontScale)
         case .sidebarDock:
             .conductorSystem(size: 12.5, weight: .semibold, scale: fontScale)
         case .sidebarRail:
@@ -186,7 +186,7 @@ struct ConductorIconButton: View {
     private var fixedWidth: CGFloat? {
         switch variant {
         case .toolbar:
-            state.title == nil ? 23 : nil
+            state.title == nil ? 26 : nil
         case .sidebarDock:
             28
         case .sidebarRail:
@@ -201,7 +201,7 @@ struct ConductorIconButton: View {
     private var height: CGFloat {
         switch variant {
         case .toolbar:
-            23
+            26
         case .sidebarDock:
             27
         case .sidebarRail:
@@ -249,9 +249,9 @@ struct ConductorIconButton: View {
     private var hoverScale: CGFloat {
         switch variant {
         case .toolbar:
-            1.004
+            1
         case .sidebarDock, .sidebarRail:
-            1.010
+            1.002
         case .settingsIcon, .fileManagerPanel:
             1
         }

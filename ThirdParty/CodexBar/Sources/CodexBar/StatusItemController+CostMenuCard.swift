@@ -1,9 +1,31 @@
 import AppKit
+import SwiftUI
 
 extension StatusItemController {
     static let costMenuTitle = "Cost"
 
-    func makeCostMenuCardItem(model: UsageMenuCardView.Model, submenu: NSMenu?) -> NSMenuItem {
+    func makeCostMenuCardItem(
+        model: UsageMenuCardView.Model,
+        submenu: NSMenu?,
+        width: CGFloat) -> NSMenuItem
+    {
+        if ConductorUsageMenuStyle.isEnabled {
+            let visibleDetailLines = Self.costMenuVisibleDetailLines(tokenUsage: model.tokenUsage)
+            return self.makeMenuCardItem(
+                ConductorUsageMenuActionRow(
+                    title: Self.costMenuTitle,
+                    subtitle: visibleDetailLines.first,
+                    systemImageName: "number",
+                    shortcutText: nil,
+                    showsChevron: submenu != nil,
+                    isEnabled: true,
+                    width: width),
+                id: "menuCardCost",
+                width: width,
+                submenu: submenu,
+                submenuIndicatorAlignment: .trailing,
+                submenuIndicatorTopPadding: 0)
+        }
         let tooltipLines = Self.costMenuTooltipLines(tokenUsage: model.tokenUsage)
         let visibleDetailLines = Self.costMenuVisibleDetailLines(tokenUsage: model.tokenUsage)
         let item = NSMenuItem(title: Self.costMenuTitle, action: nil, keyEquivalent: "")

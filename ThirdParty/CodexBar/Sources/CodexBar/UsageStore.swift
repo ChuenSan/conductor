@@ -681,6 +681,19 @@ final class UsageStore {
         await refreshTokenUsageSequenceNow(force: force)
     }
 
+    func refreshLocalTokenUsageNow(for providers: [UsageProvider], force: Bool = true) async {
+        if force, let existing = self.tokenRefreshSequenceTask {
+            existing.cancel()
+            await existing.value
+            self.tokenRefreshSequenceTask = nil
+        }
+
+        for provider in providers {
+            if Task.isCancelled { break }
+            await self.refreshTokenUsage(provider, force: force, requiresEnabledProvider: false)
+        }
+    }
+
     private func refreshTokenUsageSequenceNow(force: Bool) async {
         if force, let existing = self.tokenRefreshSequenceTask {
             existing.cancel()
@@ -1484,7 +1497,11 @@ extension UsageStore {
         return nil
     }
 
-    private func refreshTokenUsage(_ provider: UsageProvider, force: Bool) async {
+    private func refreshTokenUsage(
+        _ provider: UsageProvider,
+        force: Bool,
+        requiresEnabledProvider: Bool = true) async
+    {
         guard provider == .codex || provider == .claude || provider == .vertexai || provider == .bedrock else {
             self.tokenSnapshots.removeValue(forKey: provider)
             self.tokenErrors[provider] = nil
@@ -1508,7 +1525,7 @@ extension UsageStore {
             return
         }
 
-        guard self.isEnabled(provider) else {
+        guard !requiresEnabledProvider || self.isEnabled(provider) else {
             self.tokenSnapshots.removeValue(forKey: provider)
             self.tokenErrors[provider] = nil
             self.tokenFailureGates[provider]?.reset()

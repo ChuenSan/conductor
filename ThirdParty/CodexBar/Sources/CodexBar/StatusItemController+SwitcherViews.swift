@@ -638,9 +638,9 @@ final class ProviderSwitcherView: NSView {
         for button in self.buttons {
             let isSelected = button.state == .on
             let isHovered = self.hoveredButtonTag == button.tag
-            button.contentTintColor = isSelected ? self.selectedTextColor : self.unselectedTextColor
+            button.contentTintColor = isSelected ? self.selectedTitleColor() : self.unselectedTitleColor()
             button.layer?.backgroundColor = if isSelected {
-                self.selectedBackground
+                self.selectedPlateColor()
             } else if isHovered {
                 self.hoverPlateColor()
             } else {
@@ -692,6 +692,12 @@ final class ProviderSwitcherView: NSView {
     }
 
     private func updateLightModeStyling() {
+        if let style = ConductorUsageMenuStyle.current {
+            self.lightModeOverlayLayer.backgroundColor =
+                ConductorUsageMenuStyle.nsColor(style.controlFill.opacity(style.usesDarkChrome ? 0.20 : 0.32)).cgColor
+            self.layer?.cornerRadius = 9
+            return
+        }
         guard self.isLightMode() else {
             self.lightModeOverlayLayer.backgroundColor = nil
             return
@@ -701,10 +707,34 @@ final class ProviderSwitcherView: NSView {
     }
 
     private func hoverPlateColor() -> CGColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(ConductorUsageMenuStyle.hoverControlFill(style: style)).cgColor
+        }
         if self.isLightMode() {
             return NSColor.black.withAlphaComponent(0.095).cgColor
         }
         return NSColor.labelColor.withAlphaComponent(0.06).cgColor
+    }
+
+    private func selectedPlateColor() -> CGColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(ConductorUsageMenuStyle.selectedControlFill(style: style)).cgColor
+        }
+        return self.selectedBackground
+    }
+
+    private func selectedTitleColor() -> NSColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(style.primaryText)
+        }
+        return self.selectedTextColor
+    }
+
+    private func unselectedTitleColor() -> NSColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(style.secondaryText)
+        }
+        return self.unselectedTextColor
     }
 
     /// Cache for button width measurements to avoid repeated layout passes.
@@ -1116,9 +1146,30 @@ final class TokenAccountSwitcherView: NSView {
         for (index, button) in self.buttons.enumerated() {
             let selected = index == self.selectedIndex
             button.state = selected ? .on : .off
-            button.layer?.backgroundColor = selected ? self.selectedBackground : self.unselectedBackground
-            button.contentTintColor = selected ? self.selectedTextColor : self.unselectedTextColor
+            button.layer?.backgroundColor = selected ? self.selectedPlateColor() : self.unselectedBackground
+            button.contentTintColor = selected ? self.selectedTitleColor() : self.unselectedTitleColor()
         }
+    }
+
+    private func selectedPlateColor() -> CGColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(ConductorUsageMenuStyle.selectedControlFill(style: style)).cgColor
+        }
+        return self.selectedBackground
+    }
+
+    private func selectedTitleColor() -> NSColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(style.primaryText)
+        }
+        return self.selectedTextColor
+    }
+
+    private func unselectedTitleColor() -> NSColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(style.secondaryText)
+        }
+        return self.unselectedTextColor
     }
 
     @objc private func handleSelect(_ sender: NSButton) {
@@ -1387,9 +1438,30 @@ final class CodexAccountSwitcherView: NSView {
         for button in self.buttons {
             let selected = button.identifier?.rawValue == self.selectedAccountID
             button.state = selected ? .on : .off
-            button.layer?.backgroundColor = selected ? self.selectedBackground : self.unselectedBackground
-            button.contentTintColor = selected ? self.selectedTextColor : self.unselectedTextColor
+            button.layer?.backgroundColor = selected ? self.selectedPlateColor() : self.unselectedBackground
+            button.contentTintColor = selected ? self.selectedTitleColor() : self.unselectedTitleColor()
         }
+    }
+
+    private func selectedPlateColor() -> CGColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(ConductorUsageMenuStyle.selectedControlFill(style: style)).cgColor
+        }
+        return self.selectedBackground
+    }
+
+    private func selectedTitleColor() -> NSColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(style.primaryText)
+        }
+        return self.selectedTextColor
+    }
+
+    private func unselectedTitleColor() -> NSColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(style.secondaryText)
+        }
+        return self.unselectedTextColor
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {

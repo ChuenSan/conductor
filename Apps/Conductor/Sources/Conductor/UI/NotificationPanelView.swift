@@ -250,7 +250,7 @@ struct NotificationPanelView: View {
     }
 
     var body: some View {
-        ConductorGlassSurface(style: .panel, clarity: snapshot.chromeClarity, interactive: true) {
+        ConductorGlassSurface(style: .palette, clarity: snapshot.chromeClarity, interactive: true) {
             VStack(alignment: .leading, spacing: 0) {
                 notificationHeader
 
@@ -262,7 +262,7 @@ struct NotificationPanelView: View {
                     emptyNotifications
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 5) {
+                        LazyVStack(spacing: 3) {
                             ForEach(snapshot.rows) { row in
                                 NotificationRowView(
                                     row: row,
@@ -283,7 +283,7 @@ struct NotificationPanelView: View {
                                 )
                             }
                         }
-                        .padding(8)
+                        .padding(7)
                     }
                     .scrollIndicators(.visible)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -300,70 +300,122 @@ struct NotificationPanelView: View {
     }
 
     private var notificationHeader: some View {
-        FloatingPanelHeader(
-            systemImage: snapshot.headerSystemImage,
-            title: L("通知", "Notifications"),
-            subtitle: snapshot.subtitle,
-            closeHelp: L("关闭通知", "Close Notifications")
-        ) {
-            onClose()
-        } trailing: {
-            Button(L("跳转", "Jump")) {
+        HStack(spacing: 8) {
+            Image(systemName: snapshot.headerSystemImage)
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis.opacity(0.86))
+                .frame(width: 22, height: 22)
+                .background(theme.floatingControlFill.opacity(0.58))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(L("通知", "Notifications"))
+                    .font(.conductorSystem(size: 12.6, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
+                Text(snapshot.subtitle)
+                    .font(.conductorSystem(size: 9.8, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            NotificationPanelToolButton(
+                systemImage: "arrowshape.turn.up.right",
+                help: L("跳到最新未读", "Jump to Latest Unread"),
+                isEnabled: snapshot.canJumpToLatestUnread)
+            {
                 ConductorMotion.perform(ConductorMotion.selection) {
                     onJumpToLatestUnread()
                 }
             }
-            .buttonStyle(ConductorPressButtonStyle())
-            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-            .foregroundStyle(snapshot.canJumpToLatestUnread ? theme.floatingEmphasis : ConductorDesign.tertiaryText)
-            .disabled(!snapshot.canJumpToLatestUnread)
 
-            Button(L("清空", "Clear")) {
+            NotificationPanelToolButton(
+                systemImage: "trash",
+                help: L("清空通知", "Clear Notifications"),
+                isEnabled: snapshot.canClearNotifications)
+            {
                 ConductorMotion.perform(ConductorMotion.list) {
                     onClearAll()
                 }
             }
-            .buttonStyle(ConductorPressButtonStyle())
-            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-            .foregroundStyle(snapshot.canClearNotifications ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText)
-            .disabled(!snapshot.canClearNotifications)
+
+            NotificationPanelToolButton(
+                systemImage: "xmark",
+                help: L("关闭通知", "Close Notifications"),
+                isEnabled: true,
+                action: onClose)
         }
-        .padding(.top, 12)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 10)
+        .frame(height: 44)
     }
 
     private var emptyNotifications: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "bell.slash")
-                .font(.conductorSystem(size: 21, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-                .accessibilityHidden(true)
-            Text(L("暂无通知", "No notifications"))
-                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.secondaryText)
-            Text(L("终端通知、响铃和任务完成都会出现在这里", "Terminal notifications, bells, and task completions appear here"))
-                .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-                .multilineTextAlignment(.center)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "bell.slash")
+                    .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .frame(width: 22, height: 22)
+                    .background(theme.floatingControlFill.opacity(0.48))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("暂无通知", "No notifications"))
+                        .font(.conductorSystem(size: 11.8, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.secondaryText)
+                    Text(L("终端通知、响铃和任务完成会按时间出现在这里。", "Terminal notifications, bells, and task completions appear here in time order."))
+                        .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             Button {
                 ConductorMotion.perform(ConductorMotion.emphasized) {
                     onTestNotification()
                 }
             } label: {
                 Label(L("发送测试通知", "Send Test Notification"), systemImage: "bell.badge")
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .padding(.horizontal, 9)
-                    .frame(height: 23)
-                    .background(theme.floatingControlStrongFill)
-                    .clipShape(Capsule())
+                    .font(.conductorSystem(size: 10.2, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .background(theme.floatingControlFill.opacity(0.64))
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
             .buttonStyle(ConductorPressButtonStyle())
-            .padding(.top, 4)
         }
-        .frame(maxWidth: .infinity)
-        .frame(maxHeight: .infinity)
-        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .transition(.opacity)
+    }
+}
+
+private struct NotificationPanelToolButton: View {
+    let systemImage: String
+    let help: String
+    let isEnabled: Bool
+    let action: () -> Void
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 9.6, weight: .semibold, scale: fontScale))
+                .foregroundStyle(isEnabled ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText)
+                .frame(width: 23, height: 23)
+                .background(theme.floatingControlFill.opacity(isEnabled ? 0.58 : 0.28))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+        .disabled(!isEnabled)
+        .accessibilityLabel(help)
+        .macNativeTooltip(help)
     }
 }
 
@@ -381,23 +433,23 @@ private struct NotificationRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 7) {
+        HStack(alignment: .top, spacing: 6) {
             Button {
                 onOpen()
             } label: {
                 HStack(alignment: .top, spacing: 7) {
                     Image(systemName: iconName)
-                        .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                        .font(.conductorSystem(size: 9.8, weight: .semibold, scale: fontScale))
                         .foregroundStyle(iconColor)
-                        .frame(width: 22, height: 22)
+                        .frame(width: 20, height: 20)
                         .accessibilityHidden(true)
                         .background(
-                            RoundedRectangle(cornerRadius: 7)
-                                .fill(theme.floatingControlFill)
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(theme.floatingControlFill.opacity(0.54))
                         )
                         .overlay {
-                            RoundedRectangle(cornerRadius: 7)
-                                .stroke(theme.floatingStroke, lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(theme.floatingStroke.opacity(0.56), lineWidth: 0.8)
                         }
                         .overlay(alignment: .topTrailing) {
                             if row.unread {
@@ -424,27 +476,35 @@ private struct NotificationRowView: View {
                 ConductorMotion.perform(ConductorMotion.list, onClear)
             } label: {
                 Image(systemName: "xmark")
-                    .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
+                    .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(hovering ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText)
                     .frame(width: 18, height: 18)
-                    .background(hovering ? theme.floatingControlFill : theme.floatingControlFill.opacity(0.40))
-                    .clipShape(Circle())
+                    .background(hovering ? theme.floatingControlFill.opacity(0.70) : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             }
             .buttonStyle(ConductorPressButtonStyle())
             .accessibilityLabel(L("清除通知", "Clear Notification"))
             .macNativeTooltip(L("清除通知", "Clear Notification"))
         }
-        .padding(.leading, 9)
-        .padding(.trailing, 6)
-        .padding(.vertical, 7)
+        .padding(.leading, 8)
+        .padding(.trailing, 5)
+        .padding(.vertical, 6)
         .background(rowBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 11))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(
-                    row.unread ? theme.floatingSelectedStroke : theme.floatingStroke,
-                    lineWidth: 1
+                    row.unread ? theme.floatingSelectedStroke.opacity(0.58) : theme.floatingStroke.opacity(0.46),
+                    lineWidth: 0.8
                 )
+        }
+        .overlay(alignment: .leading) {
+            if row.unread {
+                Capsule()
+                    .fill(theme.floatingEmphasis.opacity(0.72))
+                    .frame(width: 2.5, height: 18)
+                    .padding(.leading, 3)
+            }
         }
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.attention, value: row.unread)
@@ -454,12 +514,12 @@ private struct NotificationRowView: View {
     private var rowTitle: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(notification.title)
-                .font(.conductorSystem(size: 11.5, weight: row.unread ? .semibold : .medium, scale: fontScale))
+                .font(.conductorSystem(size: 11.2, weight: row.unread ? .semibold : .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.primaryText)
                 .lineLimit(1)
             Spacer(minLength: 6)
             Text(notification.createdAt.formatted(date: .omitted, time: .shortened))
-                .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
+                .font(.conductorSystem(size: 9.2, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .monospacedDigit()
         }
@@ -469,7 +529,7 @@ private struct NotificationRowView: View {
     private var rowBody: some View {
         if !notification.body.isEmpty {
             Text(notification.body)
-                .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
+                .font(.conductorSystem(size: 10.1, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .lineSpacing(1)
                 .lineLimit(2)
@@ -480,38 +540,28 @@ private struct NotificationRowView: View {
     private var rowMetadata: some View {
         HStack(spacing: 5) {
             Label(kindLabel, systemImage: kindChipIcon)
-                .font(.conductorSystem(size: 9, weight: .medium, scale: fontScale))
+                .font(.conductorSystem(size: 8.8, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .labelStyle(.titleAndIcon)
-                .padding(.horizontal, 5)
-                .frame(height: 16)
-                .background(theme.floatingControlFill.opacity(0.58))
-                .clipShape(Capsule())
 
             Label(row.terminalTitle, systemImage: "terminal")
-                .font(.conductorSystem(size: 9, weight: .medium, scale: fontScale))
+                .font(.conductorSystem(size: 8.8, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .labelStyle(.titleAndIcon)
                 .lineLimit(1)
-                .padding(.horizontal, 5)
-                .frame(height: 16)
-                .background(theme.floatingControlFill)
-                .clipShape(Capsule())
 
             Spacer(minLength: 0)
         }
     }
 
-    private var rowBackground: some View {
-        LinearGradient(
-            colors: [
-                hovering ? theme.floatingControlStrongFill : (row.unread ? theme.floatingSelectedFill : theme.floatingControlFill),
-                row.unread ? theme.floatingHoverFill : theme.floatingControlFill.opacity(0.35),
-                Color.black.opacity(0.025)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+    private var rowBackground: Color {
+        if hovering {
+            return theme.floatingHoverFill.opacity(0.78)
+        }
+        if row.unread {
+            return theme.floatingSelectedFill.opacity(0.72)
+        }
+        return theme.floatingControlFill.opacity(0.34)
     }
 
     private var iconName: String {

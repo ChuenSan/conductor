@@ -52,7 +52,7 @@ struct ZaiHourlyUsageChartMenuView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 Button(
-                    action: { withAnimation(.easeInOut(duration: 0.2)) { self.isExpanded.toggle() } },
+                    action: { ConductorUsageMotion.perform(ConductorUsageMotion.contentSwap) { self.isExpanded.toggle() } },
                     label: {
                         Image(systemName: self.isExpanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: 8))
@@ -119,7 +119,7 @@ struct ZaiHourlyUsageChartMenuView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(minWidth: self.width, maxWidth: .infinity, alignment: .topLeading)
-        .animation(.easeInOut(duration: 0.2), value: self.isExpanded)
+        .animation(ConductorUsageMotion.contentSwap, value: self.isExpanded)
     }
 
     private var maxTotal: Int {

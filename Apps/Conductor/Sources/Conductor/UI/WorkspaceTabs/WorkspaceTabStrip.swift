@@ -14,6 +14,7 @@ private func L(_ zh: String, _ en: String) -> String {
 private enum WorkspaceTopTabScrollTarget: Hashable {
     case workspace(WorkspaceID)
     case file(String)
+    case web(WebTabID)
 }
 
 struct WorkspaceTabStrip: View {
@@ -74,6 +75,7 @@ struct WorkspaceTabStrip: View {
                                 }
                             }
                         )
+                        .id(WorkspaceTopTabScrollTarget.web(webTab.id))
                         .transition(ConductorMotion.tabTransition)
                     }
                 }
@@ -90,6 +92,9 @@ struct WorkspaceTabStrip: View {
             syncScrollTarget(animated: true)
         }
         .onChange(of: snapshot.selectedWorkspaceFileTabID) {
+            syncScrollTarget(animated: true)
+        }
+        .onChange(of: snapshot.selectedWorkspaceWebTabID) {
             syncScrollTarget(animated: true)
         }
         .onChange(of: snapshot.workspaceIDs) {
@@ -112,6 +117,9 @@ struct WorkspaceTabStrip: View {
         if let fileID = snapshot.selectedWorkspaceFileTabID,
                   snapshot.fileTabs.contains(where: { $0.id == fileID }) {
             nextTarget = .file(fileID)
+        } else if let webID = snapshot.selectedWorkspaceWebTabID,
+                  snapshot.webTabs.contains(where: { $0.id == webID }) {
+            nextTarget = .web(webID)
         } else if snapshot.workspaceIDs.contains(snapshot.selectedWorkspaceID) {
             nextTarget = .workspace(snapshot.selectedWorkspaceID)
         } else {
@@ -299,12 +307,13 @@ private struct WorkspaceFileTopTab: View {
                 Image(systemName: "xmark")
                     .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
                     .foregroundStyle(titleColor.opacity(selected || hovering ? 0.74 : 0.52))
-                    .frame(width: 13, height: 13)
+                    .frame(width: 16, height: 16)
+                    .background((selected || hovering) ? theme.shellHoverFill.opacity(0.52) : Color.clear)
                     .clipShape(Circle())
-                    .contentShape(Rectangle())
+                    .contentShape(Circle())
             }
-            .buttonStyle(ConductorPressButtonStyle())
-            .padding(.trailing, 6)
+            .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+            .padding(.trailing, 5)
             .accessibilityLabel(L("关闭文件", "Close File"))
             .macNativeTooltip(L("关闭文件", "Close File"))
         }
@@ -327,7 +336,7 @@ private struct WorkspaceFileTopTab: View {
             tabShape
                 .stroke(tabStroke, lineWidth: 1)
         }
-        .scaleEffect(hovering && !selected ? 1.006 : 1)
+        .scaleEffect(hovering && !selected ? 1.002 : 1)
         .animation(ConductorMotion.hover, value: hovering)
         .conductorHover($hovering)
         .contentShape(tabShape)
@@ -423,11 +432,21 @@ private struct WorkspaceWebTopTab: View {
         tab.errorMessage == nil ? "globe" : "globe.badge.chevron.backward"
     }
 
+    private var displayTitle: String {
+        let title = tab.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if tab.url == nil,
+           title?.isEmpty ?? true,
+           tab.pendingAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return L("新建网页", "New Tab")
+        }
+        return tab.displayTitle
+    }
+
     var body: some View {
         ZStack(alignment: .trailing) {
             Button(action: onSelect) {
                 WorkspaceWebTopTabContent(
-                    title: tab.displayTitle,
+                    title: displayTitle,
                     systemImage: webIcon,
                     selected: selected,
                     loading: tab.isLoading,
@@ -452,12 +471,13 @@ private struct WorkspaceWebTopTab: View {
                 Image(systemName: "xmark")
                     .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
                     .foregroundStyle(titleColor.opacity(selected || hovering ? 0.74 : 0.52))
-                    .frame(width: 13, height: 13)
+                    .frame(width: 16, height: 16)
+                    .background((selected || hovering) ? theme.shellHoverFill.opacity(0.52) : Color.clear)
                     .clipShape(Circle())
-                    .contentShape(Rectangle())
+                    .contentShape(Circle())
             }
-            .buttonStyle(ConductorPressButtonStyle())
-            .padding(.trailing, 6)
+            .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+            .padding(.trailing, 5)
             .macNativeTooltip(L("关闭网页", "Close Web Tab"))
         }
         .frame(
@@ -479,7 +499,7 @@ private struct WorkspaceWebTopTab: View {
             tabShape
                 .stroke(tabStroke, lineWidth: 1)
         }
-        .scaleEffect(hovering && !selected ? 1.006 : 1)
+        .scaleEffect(hovering && !selected ? 1.002 : 1)
         .animation(ConductorMotion.hover, value: hovering)
         .conductorHover($hovering)
         .contentShape(tabShape)
@@ -629,7 +649,7 @@ private struct WorkspaceTopTab: View {
             tabShape
                 .stroke(tabStroke, lineWidth: 1)
         }
-        .scaleEffect(hovering && !selected ? 1.006 : 1)
+        .scaleEffect(hovering && !selected ? 1.002 : 1)
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.selection, value: editing)
         .animation(ConductorMotion.attention, value: unreadCount)
@@ -719,13 +739,14 @@ private struct WorkspaceTopTab: View {
                 Image(systemName: "xmark")
                     .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
                     .foregroundStyle(canClose ? titleColor.opacity(selected || hovering ? 0.74 : 0.52) : Color.clear)
-                    .frame(width: 13, height: 13)
+                    .frame(width: 16, height: 16)
+                    .background(canClose && (selected || hovering) ? theme.shellHoverFill.opacity(0.52) : Color.clear)
                     .clipShape(Circle())
-                    .contentShape(Rectangle())
+                    .contentShape(Circle())
             }
-            .buttonStyle(ConductorPressButtonStyle())
+            .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
             .disabled(!canClose)
-            .padding(.trailing, 6)
+            .padding(.trailing, 5)
             .accessibilityLabel(L("关闭工作区", "Close Workspace"))
             .macNativeTooltip(L("关闭工作区", "Close Workspace"))
         }

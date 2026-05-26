@@ -71,10 +71,10 @@ final class ConductorWindow: NSWindow {
             return false
         }
 
-        if super.performKeyEquivalent(with: event) {
+        if routeAppShortcut?(event) == true {
             return true
         }
-        return routeAppShortcut?(event) == true
+        return super.performKeyEquivalent(with: event)
     }
 
     private func performTextEditingKeyEquivalent(with event: NSEvent) -> Bool {
@@ -362,7 +362,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu(title: "Conductor")
-        appMenu.addItem(menuItem(L("设置...", "Settings..."), ",", [], #selector(settingsPanelCommand)))
+        appMenu.addItem(menuItem(L("设置...", "Settings..."), command: .toggleSettings, #selector(settingsPanelCommand)))
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: L("退出 Conductor", "Quit Conductor"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appMenuItem.submenu = appMenu
@@ -371,53 +371,59 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let fileMenuItem = NSMenuItem()
         fileMenuItem.title = L("文件", "File")
         let fileMenu = NSMenu(title: L("文件", "File"))
-        fileMenu.addItem(menuItem(L("新建工作区", "New Workspace"), "n", [], #selector(newWorkspaceCommand)))
-        fileMenu.addItem(menuItem(L("新开终端", "New Terminal"), "t", [], #selector(newTerminalCommand)))
-        fileMenu.addItem(menuItem(L("新建网页标签", "New Web Tab"), "t", [.shift], #selector(newWebTabCommand)))
+        fileMenu.addItem(menuItem(L("新建工作区", "New Workspace"), command: .newWorkspace, #selector(newWorkspaceCommand)))
+        fileMenu.addItem(menuItem(L("新开终端", "New Terminal"), command: .newTerminal, #selector(newTerminalCommand)))
+        fileMenu.addItem(menuItem(L("新建网页标签", "New Web Tab"), command: .newWebTab, #selector(newWebTabCommand)))
         fileMenu.addItem(NSMenuItem.separator())
-        fileMenu.addItem(menuItem(L("关闭标签", "Close Tab"), "w", [], #selector(closeTabCommand)))
-        fileMenu.addItem(menuItem(L("关闭分屏", "Close Pane"), "w", [.shift], #selector(closePaneCommand)))
+        fileMenu.addItem(menuItem(L("关闭标签", "Close Tab"), command: .closeSelectedTab, #selector(closeTabCommand)))
+        fileMenu.addItem(menuItem(L("关闭分屏", "Close Pane"), command: .closeFocusedPane, #selector(closePaneCommand)))
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)
 
         let layoutMenuItem = NSMenuItem()
         layoutMenuItem.title = L("布局", "Layout")
         let layoutMenu = NSMenu(title: L("布局", "Layout"))
-        layoutMenu.addItem(menuItem(L("向右分屏", "Split Right"), "d", [], #selector(splitRightCommand)))
-        layoutMenu.addItem(menuItem(L("向下分屏", "Split Down"), "d", [.shift], #selector(splitDownCommand)))
+        layoutMenu.addItem(menuItem(L("向右分屏", "Split Right"), command: .splitRight, #selector(splitRightCommand)))
+        layoutMenu.addItem(menuItem(L("向下分屏", "Split Down"), command: .splitDown, #selector(splitDownCommand)))
         layoutMenu.addItem(NSMenuItem.separator())
-        layoutMenu.addItem(menuItem(L("下一个标签", "Next Tab"), "]", [], #selector(selectNextTabCommand)))
-        layoutMenu.addItem(menuItem(L("上一个标签", "Previous Tab"), "[", [], #selector(selectPreviousTabCommand)))
-        layoutMenu.addItem(menuItem(L("下一个分屏", "Next Pane"), "]", [.shift], #selector(focusNextPaneCommand)))
-        layoutMenu.addItem(menuItem(L("上一个分屏", "Previous Pane"), "[", [.shift], #selector(focusPreviousPaneCommand)))
+        layoutMenu.addItem(menuItem(L("下一个标签", "Next Tab"), command: .selectNextTab, #selector(selectNextTabCommand)))
+        layoutMenu.addItem(menuItem(L("上一个标签", "Previous Tab"), command: .selectPreviousTab, #selector(selectPreviousTabCommand)))
+        layoutMenu.addItem(menuItem(L("下一个分屏", "Next Pane"), command: .focusNextPane, #selector(focusNextPaneCommand)))
+        layoutMenu.addItem(menuItem(L("上一个分屏", "Previous Pane"), command: .focusPreviousPane, #selector(focusPreviousPaneCommand)))
         layoutMenu.addItem(NSMenuItem.separator())
-        layoutMenu.addItem(menuItem(L("均分分屏", "Equalize Splits"), "=", [.shift], #selector(equalizeSplitsCommand)))
-        layoutMenu.addItem(menuItem(L("切换分屏放大", "Toggle Pane Zoom"), "z", [.option], #selector(toggleZoomCommand)))
+        layoutMenu.addItem(menuItem(L("均分分屏", "Equalize Splits"), command: .equalizeSplits, #selector(equalizeSplitsCommand)))
+        layoutMenu.addItem(menuItem(L("切换分屏放大", "Toggle Pane Zoom"), command: .toggleZoom, #selector(toggleZoomCommand)))
         layoutMenu.addItem(NSMenuItem.separator())
-        layoutMenu.addItem(menuItem(L("标签左移", "Move Tab Left"), ",", [.shift], #selector(moveTabLeftCommand)))
-        layoutMenu.addItem(menuItem(L("标签右移", "Move Tab Right"), ".", [.shift], #selector(moveTabRightCommand)))
-        layoutMenu.addItem(menuItem(L("移动标签到下一个分屏", "Move Tab to Next Pane"), "m", [.option], #selector(moveTabToNextPaneCommand)))
-        layoutMenu.addItem(menuItem(L("移动标签到右侧新分屏", "Move Tab to New Right Split"), "m", [.option, .shift], #selector(moveTabToNewRightSplitCommand)))
+        layoutMenu.addItem(menuItem(L("标签左移", "Move Tab Left"), command: .moveTabLeft, #selector(moveTabLeftCommand)))
+        layoutMenu.addItem(menuItem(L("标签右移", "Move Tab Right"), command: .moveTabRight, #selector(moveTabRightCommand)))
+        layoutMenu.addItem(menuItem(L("移动标签到下一个分屏", "Move Tab to Next Pane"), command: .moveTabToNextPane, #selector(moveTabToNextPaneCommand)))
+        layoutMenu.addItem(menuItem(L("移动标签到右侧新分屏", "Move Tab to New Right Split"), command: .moveTabToNewRightSplit, #selector(moveTabToNewRightSplitCommand)))
         layoutMenuItem.submenu = layoutMenu
         mainMenu.addItem(layoutMenuItem)
 
         let viewMenuItem = NSMenuItem()
         viewMenuItem.title = L("视图", "View")
         let viewMenu = NSMenu(title: L("视图", "View"))
-        viewMenu.addItem(menuItem(L("工作区总览", "Workspace Overview"), "o", [], #selector(workspaceOverviewCommand)))
-        viewMenu.addItem(menuItem(L("命令面板", "Command Palette"), "k", [], #selector(commandPaletteCommand)))
-        viewMenu.addItem(menuItem(L("通知中心", "Notifications"), "n", [.option], #selector(notificationCenterCommand)))
-        viewMenu.addItem(menuItem(L("跳转到最新未读", "Jump to Latest Unread"), "j", [.option], #selector(jumpToLatestUnreadCommand)))
+        viewMenu.addItem(menuItem(L("工作区总览", "Workspace Overview"), command: .toggleWorkspaceOverview, #selector(workspaceOverviewCommand)))
+        viewMenu.addItem(menuItem(L("命令面板", "Command Palette"), command: .toggleCommandPalette, #selector(commandPaletteCommand)))
+        viewMenu.addItem(menuItem(L("通知中心", "Notifications"), command: .toggleNotifications, #selector(notificationCenterCommand)))
+        viewMenu.addItem(menuItem(L("跳转到最新未读", "Jump to Latest Unread"), command: .jumpToLatestUnread, #selector(jumpToLatestUnreadCommand)))
         viewMenu.addItem(NSMenuItem.separator())
-        viewMenu.addItem(menuItem(L("打开当前目录", "Open Current Directory"), "", [], #selector(openCurrentDirectoryCommand)))
-        viewMenu.addItem(menuItem(L("复制当前目录路径", "Copy Current Directory Path"), "", [], #selector(copyCurrentDirectoryCommand)))
+        viewMenu.addItem(menuItem(L("聚焦网页地址", "Focus Web Address"), command: .focusWebAddress, #selector(focusWebAddressCommand)))
+        viewMenu.addItem(menuItem(L("重新载入网页", "Reload Web Page"), command: .reloadSelectedWebTab, #selector(reloadSelectedWebTabCommand)))
+        viewMenu.addItem(menuItem(L("在浏览器中打开网页", "Open Web Page in Browser"), command: .openSelectedWebTabExternally, #selector(openSelectedWebTabExternallyCommand)))
+        viewMenu.addItem(menuItem(L("复制网页 URL", "Copy Web URL"), command: .copySelectedWebTabURL, #selector(copySelectedWebTabURLCommand)))
+        viewMenu.addItem(menuItem(L("复制网页引用", "Copy Web Reference"), command: .copySelectedWebTabReference, #selector(copySelectedWebTabReferenceCommand)))
         viewMenu.addItem(NSMenuItem.separator())
-        viewMenu.addItem(menuItem(L("上下文搜索", "Context Search"), "f", [], #selector(contextSearchCommand)))
-        viewMenu.addItem(menuItem(L("查找下一个", "Find Next"), "g", [], #selector(findNextCommand)))
-        viewMenu.addItem(menuItem(L("查找上一个", "Find Previous"), "G", [.shift], #selector(findPreviousCommand)))
+        viewMenu.addItem(menuItem(L("打开当前目录", "Open Current Directory"), command: .openFocusedDirectory, #selector(openCurrentDirectoryCommand)))
+        viewMenu.addItem(menuItem(L("复制当前目录路径", "Copy Current Directory Path"), command: .copyFocusedDirectory, #selector(copyCurrentDirectoryCommand)))
         viewMenu.addItem(NSMenuItem.separator())
-        viewMenu.addItem(menuItem(L("切换全屏", "Toggle Full Screen"), "f", [.control], #selector(toggleFullScreenCommand)))
-        viewMenu.addItem(menuItem(L("重置工作区", "Reset Workspace"), "", [], #selector(resetWorkspaceCommand)))
+        viewMenu.addItem(menuItem(L("上下文搜索", "Context Search"), command: .showTerminalSearch, #selector(contextSearchCommand)))
+        viewMenu.addItem(menuItem(L("查找下一个", "Find Next"), command: .findNext, #selector(findNextCommand)))
+        viewMenu.addItem(menuItem(L("查找上一个", "Find Previous"), command: .findPrevious, #selector(findPreviousCommand)))
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(menuItem(L("切换全屏", "Toggle Full Screen"), command: .toggleFullScreen, #selector(toggleFullScreenCommand)))
+        viewMenu.addItem(menuItem(L("重置工作区", "Reset Workspace"), command: .resetWorkspace, #selector(resetWorkspaceCommand)))
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
@@ -426,46 +432,98 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     private func menuItem(
         _ title: String,
-        _ key: String,
-        _ modifiers: NSEvent.ModifierFlags,
+        command: ConductorShellCommand,
         _ action: Selector
     ) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        let shortcut = model.appearance.keyboardShortcuts.shortcut(for: command)
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: shortcut?.menuKeyEquivalent ?? "")
         item.target = self
-        item.keyEquivalentModifierMask = NSEvent.ModifierFlags.command.union(modifiers)
+        item.keyEquivalentModifierMask = shortcut?.menuModifierFlags ?? []
         return item
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        switch menuItem.action {
+        guard let command = command(for: menuItem.action) else {
+            return true
+        }
+        if model.settingsPanelVisible, !command.allowsWhenSettingsPanelVisible {
+            return false
+        }
+        return model.canPerformCommand(command)
+    }
+
+    private func command(for action: Selector?) -> ConductorShellCommand? {
+        switch action {
+        case #selector(newWorkspaceCommand):
+            .newWorkspace
+        case #selector(newTerminalCommand):
+            .newTerminal
+        case #selector(newWebTabCommand):
+            .newWebTab
+        case #selector(closeTabCommand):
+            .closeSelectedTab
         case #selector(closePaneCommand):
-            model.canPerformCommand(.closeFocusedPane)
-        case #selector(splitRightCommand), #selector(splitDownCommand):
-            model.canPerformCommand(menuItem.action == #selector(splitRightCommand) ? .splitRight : .splitDown)
-        case #selector(equalizeSplitsCommand), #selector(toggleZoomCommand):
-            model.canPerformCommand(menuItem.action == #selector(equalizeSplitsCommand) ? .equalizeSplits : .toggleZoom)
+            .closeFocusedPane
+        case #selector(splitRightCommand):
+            .splitRight
+        case #selector(splitDownCommand):
+            .splitDown
+        case #selector(equalizeSplitsCommand):
+            .equalizeSplits
+        case #selector(toggleZoomCommand):
+            .toggleZoom
         case #selector(moveTabLeftCommand):
-            model.canPerformCommand(.moveTabLeft)
+            .moveTabLeft
         case #selector(moveTabRightCommand):
-            model.canPerformCommand(.moveTabRight)
+            .moveTabRight
         case #selector(moveTabToNextPaneCommand):
-            model.canPerformCommand(.moveTabToNextPane)
+            .moveTabToNextPane
         case #selector(moveTabToNewRightSplitCommand):
-            model.canPerformCommand(.moveTabToNewRightSplit)
+            .moveTabToNewRightSplit
+        case #selector(commandPaletteCommand):
+            .toggleCommandPalette
+        case #selector(workspaceOverviewCommand):
+            .toggleWorkspaceOverview
+        case #selector(settingsPanelCommand):
+            .toggleSettings
+        case #selector(notificationCenterCommand):
+            .toggleNotifications
         case #selector(jumpToLatestUnreadCommand):
-            model.canPerformCommand(.jumpToLatestUnread)
+            .jumpToLatestUnread
         case #selector(openCurrentDirectoryCommand):
-            model.canPerformCommand(.openFocusedDirectory)
+            .openFocusedDirectory
         case #selector(copyCurrentDirectoryCommand):
-            model.canPerformCommand(.copyFocusedDirectory)
+            .copyFocusedDirectory
+        case #selector(focusWebAddressCommand):
+            .focusWebAddress
+        case #selector(reloadSelectedWebTabCommand):
+            .reloadSelectedWebTab
+        case #selector(openSelectedWebTabExternallyCommand):
+            .openSelectedWebTabExternally
+        case #selector(copySelectedWebTabURLCommand):
+            .copySelectedWebTabURL
+        case #selector(copySelectedWebTabReferenceCommand):
+            .copySelectedWebTabReference
         case #selector(contextSearchCommand):
-            model.canPerformCommand(.showTerminalSearch)
+            .showTerminalSearch
         case #selector(findNextCommand):
-            model.canPerformCommand(.findNext)
+            .findNext
         case #selector(findPreviousCommand):
-            model.canPerformCommand(.findPrevious)
+            .findPrevious
+        case #selector(toggleFullScreenCommand):
+            .toggleFullScreen
+        case #selector(resetWorkspaceCommand):
+            .resetWorkspace
+        case #selector(selectNextTabCommand):
+            .selectNextTab
+        case #selector(selectPreviousTabCommand):
+            .selectPreviousTab
+        case #selector(focusNextPaneCommand):
+            .focusNextPane
+        case #selector(focusPreviousPaneCommand):
+            .focusPreviousPane
         default:
-            true
+            nil
         }
     }
 
@@ -504,134 +562,19 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         guard flags.contains(.command) else {
             return false
         }
-        if handleArrowCommand(event, flags: flags) {
-            return true
-        }
-        guard let characters = event.charactersIgnoringModifiers?.lowercased() else {
-            return false
-        }
-
-        switch (characters, flags.contains(.shift)) {
-        case ("f", _) where flags.contains(.control):
-            scheduleCommand(.toggleFullScreen)
-            return true
-        case ("f", _) where !flags.contains(.option):
-            scheduleCommand(.showTerminalSearch)
-            return true
-        case ("g", false) where !flags.contains(.option):
-            scheduleCommand(.findNext)
-            return true
-        case ("g", true) where !flags.contains(.option):
-            scheduleCommand(.findPrevious)
-            return true
-        case ("n", _) where flags.contains(.option):
-            scheduleCommand(.toggleNotifications)
-            return true
-        case ("n", _):
-            scheduleCommand(.newWorkspace)
-            return true
-        case ("t", true):
-            scheduleCommand(.newWebTab)
-            return true
-        case ("j", _) where flags.contains(.option):
-            scheduleCommand(.jumpToLatestUnread)
-            return true
-        case ("t", _):
-            scheduleCommand(.newTerminal)
-            return true
-        case ("k", _):
-            scheduleCommand(.toggleCommandPalette)
-            return true
-        case ("o", _):
-            scheduleCommand(.toggleWorkspaceOverview)
-            return true
-        case ("w", true):
-            scheduleCommand(.closeFocusedPane)
-            return true
-        case ("w", _):
-            scheduleCommand(.closeSelectedTab)
-            return true
-        case ("d", false):
-            scheduleCommand(.splitRight)
-            return true
-        case ("d", true):
-            scheduleCommand(.splitDown)
-            return true
-        case ("h", true):
-            scheduleCommand(.flashFocusedPane)
-            return true
-        case ("]", true):
-            scheduleCommand(.focusNextPane)
-            return true
-        case ("[", true):
-            scheduleCommand(.focusPreviousPane)
-            return true
-        case ("]", false):
-            scheduleCommand(.selectNextTab)
-            return true
-        case ("[", false):
-            scheduleCommand(.selectPreviousTab)
-            return true
-        case (",", true):
-            scheduleCommand(.moveTabLeft)
-            return true
-        case (".", true):
-            scheduleCommand(.moveTabRight)
-            return true
-        case ("m", false) where flags.contains(.option):
-            scheduleCommand(.moveTabToNextPane)
-            return true
-        case ("m", true) where flags.contains(.option):
-            scheduleCommand(.moveTabToNewRightSplit)
-            return true
-        case ("=", true):
-            scheduleCommand(.equalizeSplits)
-            return true
-        case ("z", _) where flags.contains(.option):
-            scheduleCommand(.toggleZoom)
-            return true
-        case ("}", _):
-            scheduleCommand(.focusNextPane)
-            return true
-        case ("{", _):
-            scheduleCommand(.focusPreviousPane)
-            return true
-        default:
-            return false
-        }
-    }
-
-    private func handleArrowCommand(_ event: NSEvent, flags: NSEvent.ModifierFlags) -> Bool {
-        guard flags.contains(.command), let direction = event.arrowDirection else { return false }
-
-        if flags.contains(.option) {
-            switch direction {
-            case .left:
-                scheduleCommand(.focusPaneLeft)
-            case .right:
-                scheduleCommand(.focusPaneRight)
-            case .up:
-                scheduleCommand(.focusPaneUp)
-            case .down:
-                scheduleCommand(.focusPaneDown)
+        if let command = model.appearance.keyboardShortcuts.command(matching: event) {
+            if model.settingsPanelVisible, !command.allowsWhenSettingsPanelVisible {
+                return true
             }
+            guard model.canPerformCommand(command) else { return false }
+            scheduleCommand(command)
             return true
         }
 
-        if flags.contains(.shift) {
-            switch direction {
-            case .left:
-                scheduleCommand(.resizePaneLeft)
-            case .right:
-                scheduleCommand(.resizePaneRight)
-            case .up:
-                scheduleCommand(.resizePaneUp)
-            case .down:
-                scheduleCommand(.resizePaneDown)
-            }
+        if model.settingsPanelVisible,
+           event.charactersIgnoringModifiers?.lowercased() != "q" {
             return true
         }
-
         return false
     }
 
@@ -745,6 +688,26 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         scheduleCommand(.copyFocusedDirectory)
     }
 
+    @objc private func focusWebAddressCommand() {
+        scheduleCommand(.focusWebAddress)
+    }
+
+    @objc private func reloadSelectedWebTabCommand() {
+        scheduleCommand(.reloadSelectedWebTab)
+    }
+
+    @objc private func openSelectedWebTabExternallyCommand() {
+        scheduleCommand(.openSelectedWebTabExternally)
+    }
+
+    @objc private func copySelectedWebTabURLCommand() {
+        scheduleCommand(.copySelectedWebTabURL)
+    }
+
+    @objc private func copySelectedWebTabReferenceCommand() {
+        scheduleCommand(.copySelectedWebTabReference)
+    }
+
     @objc private func contextSearchCommand() {
         scheduleCommand(.showTerminalSearch)
     }
@@ -784,6 +747,14 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
                 if let notificationWindow {
                     applyAppearance(for: theme, to: notificationWindow)
                 }
+            }
+            .store(in: &cancellables)
+
+        model.$appearance
+            .map(\.keyboardShortcuts)
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                self?.installMainMenu()
             }
             .store(in: &cancellables)
     }
@@ -1860,29 +1831,5 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         return model.workspace.focusedPaneID == pane.id &&
             model.workspace.focusedPane?.selectedTabID == tab.id &&
             window.firstResponder === surface.hostView
-    }
-}
-
-private enum ArrowDirection {
-    case left
-    case right
-    case up
-    case down
-}
-
-private extension NSEvent {
-    var arrowDirection: ArrowDirection? {
-        switch keyCode {
-        case 123:
-            .left
-        case 124:
-            .right
-        case 125:
-            .down
-        case 126:
-            .up
-        default:
-            nil
-        }
     }
 }

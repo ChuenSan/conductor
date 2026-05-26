@@ -20,6 +20,7 @@ struct ProviderDetailView<SupplementaryContent: View>: View {
     let onRefresh: () -> Void
     let supplementarySettingsContent: SupplementaryContent
     let showsSupplementarySettingsContent: Bool
+    let scrollsVertically: Bool
 
     init(
         provider: UsageProvider,
@@ -38,6 +39,7 @@ struct ProviderDetailView<SupplementaryContent: View>: View {
         onCopyError: @escaping (String) -> Void,
         onRefresh: @escaping () -> Void,
         showsSupplementarySettingsContent: Bool = false,
+        scrollsVertically: Bool = true,
         @ViewBuilder supplementarySettingsContent: () -> SupplementaryContent)
     {
         self.provider = provider
@@ -56,6 +58,7 @@ struct ProviderDetailView<SupplementaryContent: View>: View {
         self.onCopyError = onCopyError
         self.onRefresh = onRefresh
         self.showsSupplementarySettingsContent = showsSupplementarySettingsContent
+        self.scrollsVertically = scrollsVertically
         self.supplementarySettingsContent = supplementarySettingsContent()
     }
 
@@ -85,75 +88,85 @@ struct ProviderDetailView<SupplementaryContent: View>: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                let labelWidth = self.detailLabelWidth
-                ProviderDetailHeaderView(
-                    provider: self.provider,
-                    store: self.store,
-                    isEnabled: self.$isEnabled,
-                    subtitle: self.subtitle,
-                    model: self.model,
-                    labelWidth: labelWidth,
-                    onRefresh: self.onRefresh)
-
-                ProviderMetricsInlineView(
-                    provider: self.provider,
-                    model: self.model,
-                    isEnabled: self.isEnabled,
-                    labelWidth: labelWidth)
-
-                if let errorDisplay {
-                    ProviderErrorView(
-                        title: String(
-                            format: L("last_fetch_failed_with_provider"),
-                            self.store.metadata(for: self.provider).displayName),
-                        display: errorDisplay,
-                        isExpanded: self.$isErrorExpanded,
-                        onCopy: { self.onCopyError(errorDisplay.full) })
+        Group {
+            if scrollsVertically {
+                ScrollView {
+                    detailContent
                 }
+            } else {
+                detailContent
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-                if self.hasSettings {
-                    ProviderSettingsSection(title: L("Settings")) {
-                        ForEach(self.settingsPickers) { picker in
-                            ProviderSettingsPickerRowView(picker: picker)
-                        }
-                        if let tokenAccounts = self.settingsTokenAccounts,
-                           tokenAccounts.isVisible?() ?? true
-                        {
-                            ProviderSettingsTokenAccountsRowView(descriptor: tokenAccounts)
-                        }
-                        ForEach(self.settingsFields) { field in
-                            ProviderSettingsFieldRowView(field: field)
-                        }
-                        ForEach(self.settingsActions) { descriptor in
-                            ProviderSettingsActionsRowView(descriptor: descriptor)
-                        }
-                        if let organizations = self.settingsOrganizations {
-                            ProviderSettingsOrganizationsRowView(descriptor: organizations)
-                        }
+    private var detailContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            let labelWidth = self.detailLabelWidth
+            ProviderDetailHeaderView(
+                provider: self.provider,
+                store: self.store,
+                isEnabled: self.$isEnabled,
+                subtitle: self.subtitle,
+                model: self.model,
+                labelWidth: labelWidth,
+                onRefresh: self.onRefresh)
+
+            ProviderMetricsInlineView(
+                provider: self.provider,
+                model: self.model,
+                isEnabled: self.isEnabled,
+                labelWidth: labelWidth)
+
+            if let errorDisplay {
+                ProviderErrorView(
+                    title: String(
+                        format: L("last_fetch_failed_with_provider"),
+                        self.store.metadata(for: self.provider).displayName),
+                    display: errorDisplay,
+                    isExpanded: self.$isErrorExpanded,
+                    onCopy: { self.onCopyError(errorDisplay.full) })
+            }
+
+            if self.hasSettings {
+                ProviderSettingsSection(title: L("Settings")) {
+                    ForEach(self.settingsPickers) { picker in
+                        ProviderSettingsPickerRowView(picker: picker)
                     }
-                }
-
-                if self.showsSupplementarySettingsContent {
-                    self.supplementarySettingsContent
-                }
-
-                ProviderQuotaWarningSettingsView(provider: self.provider, settings: self.store.settings)
-
-                if !self.settingsToggles.isEmpty {
-                    ProviderSettingsSection(title: L("Options")) {
-                        ForEach(self.settingsToggles) { toggle in
-                            ProviderSettingsToggleRowView(toggle: toggle)
-                        }
+                    if let tokenAccounts = self.settingsTokenAccounts,
+                       tokenAccounts.isVisible?() ?? true
+                    {
+                        ProviderSettingsTokenAccountsRowView(descriptor: tokenAccounts)
+                    }
+                    ForEach(self.settingsFields) { field in
+                        ProviderSettingsFieldRowView(field: field)
+                    }
+                    ForEach(self.settingsActions) { descriptor in
+                        ProviderSettingsActionsRowView(descriptor: descriptor)
+                    }
+                    if let organizations = self.settingsOrganizations {
+                        ProviderSettingsOrganizationsRowView(descriptor: organizations)
                     }
                 }
             }
-            .frame(maxWidth: ProviderSettingsMetrics.detailMaxWidth, alignment: .leading)
-            .padding(.vertical, 12)
-            .padding(.horizontal, 8)
+
+            if self.showsSupplementarySettingsContent {
+                self.supplementarySettingsContent
+            }
+
+            ProviderQuotaWarningSettingsView(provider: self.provider, settings: self.store.settings)
+
+            if !self.settingsToggles.isEmpty {
+                ProviderSettingsSection(title: L("Options")) {
+                    ForEach(self.settingsToggles) { toggle in
+                        ProviderSettingsToggleRowView(toggle: toggle)
+                    }
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: ProviderSettingsMetrics.detailMaxWidth, alignment: .leading)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
     }
 
     private var hasSettings: Bool {

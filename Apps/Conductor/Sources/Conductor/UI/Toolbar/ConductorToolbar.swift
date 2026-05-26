@@ -57,33 +57,39 @@ struct ConductorToolbar: View {
                 .layoutPriority(0)
 
                 ConductorPillGroup {
-                    ConductorIconButton(state: toolbarControlState(id: "new-workspace", systemImage: "plus", tooltip: L("新建工作区 Cmd-N", "New Workspace Cmd-N"), title: L("工作区", "Workspace"))) {
-                        finishWorkspaceRenameIfNeeded()
-                        model.performCommand(.newWorkspace)
+                    ConductorToolbarMenuButton(
+                        state: toolbarControlState(
+                            id: "new-actions",
+                            systemImage: "plus",
+                            tooltip: L("新建工作区、终端或网页", "Create workspace, terminal, or web tab"),
+                            title: L("新建", "New")))
+                    {
+                        Button(L("新建工作区", "New Workspace"), systemImage: "plus") {
+                            finishWorkspaceRenameIfNeeded()
+                            model.performCommand(.newWorkspace)
+                        }
+
+                        Button(L("新开终端", "New Terminal"), systemImage: "plus.rectangle.on.rectangle") {
+                            finishWorkspaceRenameIfNeeded()
+                            model.performCommand(.newTerminal)
+                        }
+
+                        Button(L("新建网页标签", "New Web Tab"), systemImage: "globe") {
+                            finishWorkspaceRenameIfNeeded()
+                            model.performCommand(.newWebTab)
+                        }
                     }
                 }
 
                 ConductorPillGroup {
-                    ConductorIconButton(state: toolbarControlState(id: "new-terminal", systemImage: "plus.rectangle.on.rectangle", tooltip: L("新开终端 Cmd-T", "New Terminal Cmd-T"), title: L("终端", "Terminal"))) {
-                        finishWorkspaceRenameIfNeeded()
-                        model.performCommand(.newTerminal)
-                    }
-                    ConductorSegmentDivider()
-                    ConductorIconButton(state: toolbarControlState(id: "new-web-tab", systemImage: "globe", tooltip: L("新建网页标签 Cmd-Shift-T", "New Web Tab Cmd-Shift-T"), title: L("网页", "Web"))) {
-                        finishWorkspaceRenameIfNeeded()
-                        model.performCommand(.newWebTab)
-                    }
-                }
-
-                ConductorPillGroup {
-                    ConductorIconButton(state: toolbarControlState(id: "split-right", systemImage: "rectangle.split.2x1", tooltip: L("向右分屏 Cmd-D", "Split Right Cmd-D"), title: L("右分屏", "Right"), isEnabled: toolbarSnapshot.canSplitRight)) {
+                    ConductorIconButton(state: toolbarControlState(id: "split-right", systemImage: "rectangle.split.2x1", tooltip: commandTooltip(L("向右分屏", "Split Right"), command: .splitRight, fallback: "Cmd-D"), isEnabled: toolbarSnapshot.canSplitRight)) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {
                             model.performCommand(.splitRight)
                         }
                     }
                     ConductorSegmentDivider()
-                    ConductorIconButton(state: toolbarControlState(id: "split-down", systemImage: "rectangle.split.1x2", tooltip: L("向下分屏 Cmd-Shift-D", "Split Down Cmd-Shift-D"), title: L("下分屏", "Down"), isEnabled: toolbarSnapshot.canSplitDown)) {
+                    ConductorIconButton(state: toolbarControlState(id: "split-down", systemImage: "rectangle.split.1x2", tooltip: commandTooltip(L("向下分屏", "Split Down"), command: .splitDown, fallback: "Cmd-Shift-D"), isEnabled: toolbarSnapshot.canSplitDown)) {
                         finishWorkspaceRenameIfNeeded()
                         ConductorMotion.perform(ConductorMotion.layout) {
                             model.performCommand(.splitDown)
@@ -93,8 +99,7 @@ struct ConductorToolbar: View {
                     ConductorIconButton(state: toolbarControlState(
                         id: "toggle-zoom",
                         systemImage: "arrow.up.left.and.arrow.down.right",
-                        tooltip: toolbarSnapshot.isZoomed ? L("还原当前分屏 Cmd-Opt-Z", "Restore Current Pane Cmd-Opt-Z") : L("放大当前分屏 Cmd-Opt-Z", "Zoom Current Pane Cmd-Opt-Z"),
-                        title: toolbarSnapshot.isZoomed ? L("还原", "Restore") : L("放大", "Zoom"),
+                        tooltip: toolbarSnapshot.isZoomed ? commandTooltip(L("还原当前分屏", "Restore Current Pane"), command: .toggleZoom, fallback: "Cmd-Opt-Z") : commandTooltip(L("放大当前分屏", "Zoom Current Pane"), command: .toggleZoom, fallback: "Cmd-Opt-Z"),
                         isEnabled: toolbarSnapshot.canToggleZoom,
                         isActive: toolbarSnapshot.isZoomed
                     )) {
@@ -110,7 +115,6 @@ struct ConductorToolbar: View {
                         id: "toggle-file-manager",
                         systemImage: "folder",
                         tooltip: L("文件管理器", "File Manager"),
-                        title: L("文件", "Files"),
                         isEnabled: toolbarSnapshot.canToggleFileManager,
                         isActive: toolbarSnapshot.fileManagerActive
                     )) {
@@ -121,8 +125,7 @@ struct ConductorToolbar: View {
                     ConductorIconButton(state: toolbarControlState(
                         id: "toggle-workspace-overview",
                         systemImage: WorkspaceChromeGlyph.systemName(selected: false),
-                        tooltip: L("工作区总览 Cmd-O", "Workspace Overview Cmd-O"),
-                        title: L("总览", "Overview"),
+                        tooltip: commandTooltip(L("工作区总览", "Workspace Overview"), command: .toggleWorkspaceOverview, fallback: "Cmd-O"),
                         isActive: toolbarSnapshot.workspaceOverviewVisible
                     )) {
                         finishWorkspaceRenameIfNeeded()
@@ -132,8 +135,7 @@ struct ConductorToolbar: View {
                     ConductorIconButton(state: toolbarControlState(
                         id: "toggle-notifications",
                         systemImage: workspaceSnapshot.totalUnreadCount > 0 ? "bell.badge" : "bell",
-                        tooltip: L("通知中心 Cmd-Opt-N", "Notification Center Cmd-Opt-N"),
-                        title: workspaceSnapshot.totalUnreadCount > 0 ? L("通知 \(workspaceSnapshot.totalUnreadCount)", "Alerts \(workspaceSnapshot.totalUnreadCount)") : L("通知", "Alerts"),
+                        tooltip: commandTooltip(L("通知中心", "Notification Center"), command: .toggleNotifications, fallback: "Cmd-Opt-N"),
                         isActive: toolbarSnapshot.notificationPanelVisible
                     )) {
                         finishWorkspaceRenameIfNeeded()
@@ -142,9 +144,8 @@ struct ConductorToolbar: View {
                     ConductorSegmentDivider()
                     ConductorIconButton(state: toolbarControlState(
                         id: "toggle-command-palette",
-                        systemImage: "ellipsis",
-                        tooltip: L("命令面板 Cmd-K", "Command Center Cmd-K"),
-                        title: L("命令", "Command"),
+                        systemImage: "command",
+                        tooltip: commandTooltip(L("命令面板", "Command Center"), command: .toggleCommandPalette, fallback: "Cmd-K"),
                         isActive: toolbarSnapshot.commandPaletteVisible
                     )) {
                         finishWorkspaceRenameIfNeeded()
@@ -184,11 +185,15 @@ struct ConductorToolbar: View {
         editingWorkspaceID = nil
     }
 
+    private func commandTooltip(_ title: String, command: ConductorShellCommand, fallback: String) -> String {
+        "\(title) \(model.shortcutTitle(for: command, fallback: fallback))"
+    }
+
     private func toolbarControlState(
         id: String,
         systemImage: String,
         tooltip: String,
-        title: String,
+        title: String? = nil,
         isEnabled: Bool = true,
         isActive: Bool = false
     ) -> ConductorControlState {
@@ -203,4 +208,81 @@ struct ConductorToolbar: View {
         )
     }
 
+}
+
+private struct ConductorToolbarMenuButton<MenuContent: View>: View {
+    let state: ConductorControlState
+    @ViewBuilder let menuContent: MenuContent
+
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorFontFamily) private var fontFamily
+    @Environment(\.conductorTheme) private var theme
+
+    init(
+        state: ConductorControlState,
+        @ViewBuilder menuContent: () -> MenuContent
+    ) {
+        self.state = state
+        self.menuContent = menuContent()
+    }
+
+    var body: some View {
+        Menu {
+            menuContent
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: state.systemImage)
+                    .renderingMode(.template)
+                    .symbolRenderingMode(.monochrome)
+                    .font(.conductorSystem(size: 11.4, weight: .semibold, family: fontFamily, scale: fontScale))
+
+                if let title = state.title {
+                    Text(title)
+                        .font(.conductorSystem(size: 10.8, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                Image(systemName: "chevron.down")
+                    .font(.conductorSystem(size: 7.5, weight: .bold, family: fontFamily, scale: fontScale))
+                    .opacity(0.62)
+            }
+            .foregroundStyle(foreground)
+            .padding(.horizontal, state.title == nil ? 7 : 8)
+            .frame(height: 26)
+            .background(background)
+            .overlay {
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.control, style: .continuous)
+                    .stroke(buttonStroke, lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.control, style: .continuous))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .macNativeTooltip(state.tooltip)
+        .accessibilityLabel(Text(state.accessibilityLabel))
+        .conductorHover($hovering)
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(2)
+    }
+
+    private var foreground: Color {
+        state.isActive ? theme.shellChromeText : theme.shellChromeText.opacity(hovering ? 0.82 : 0.64)
+    }
+
+    private var background: Color {
+        if theme.usesDarkChrome {
+            return Color.white.opacity(state.isActive ? 0.060 : (hovering ? 0.040 : 0.008))
+        }
+        return state.isActive ? theme.shellSelectedFill.opacity(0.70) : (hovering ? theme.shellHoverFill.opacity(0.66) : theme.shellControlFill.opacity(0.48))
+    }
+
+    private var buttonStroke: Color {
+        if theme.usesDarkChrome {
+            return Color.white.opacity(state.isActive ? 0.105 : (hovering ? 0.075 : 0.034))
+        }
+        return theme.shellStroke.opacity(state.isActive ? 0.58 : (hovering ? 0.42 : 0.26))
+    }
 }

@@ -307,6 +307,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         self.lastSwitcherUsageBarsShowUsed = settings.usageBarsShowUsed
         self.statusBar = statusBar
         self.statusItem = Self.makeStatusItem(statusBar: statusBar, identity: .merged)
+        #if CONDUCTOR_EMBEDDED
+        self.statusItem.isVisible = false
+        #endif
         self.lastKnownScreenCount = NSScreen.screens.count
         // Status items for individual providers are now created lazily in updateVisibility()
         super.init()
@@ -625,6 +628,10 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         #if DEBUG
         guard !self.isReleasedForTesting else { return }
         #endif
+        #if CONDUCTOR_EMBEDDED
+        self.lastObservedStoreIconWorkSignature = self.storeIconObservationSignature()
+        self.hideEmbeddedStatusItems()
+        #else
         self.lastObservedStoreIconWorkSignature = self.storeIconObservationSignature()
         self.beginIconPerfUpdatePass()
         defer { self.endIconPerfUpdatePass() }
@@ -651,6 +658,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         }
         self.updateAnimationState()
         self.updateBlinkingState()
+        #endif
     }
 
     var isMergedMenuOpen: Bool {
@@ -672,6 +680,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         #if DEBUG
         guard !self.isReleasedForTesting else { return }
         #endif
+        #if CONDUCTOR_EMBEDDED
+        self.hideEmbeddedStatusItems()
+        #else
         self.statusItem.menu = nil
         self.statusBar.removeStatusItem(self.statusItem)
         self.statusItem = Self.makeStatusItem(statusBar: self.statusBar, identity: .merged)
@@ -682,12 +693,16 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         self.lastAppliedProviderIconRenderSignatures.removeAll()
         self.updateVisibility()
         self.updateIcons()
+        #endif
     }
 
     private func updateVisibility() {
         #if DEBUG
         guard !self.isReleasedForTesting else { return }
         #endif
+        #if CONDUCTOR_EMBEDDED
+        self.hideEmbeddedStatusItems()
+        #else
         let anyEnabled = !self.store.enabledProvidersForDisplay().isEmpty
         let force = self.store.debugForceAnimation
         let mergeIcons = self.shouldMergeIcons
@@ -714,7 +729,32 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         }
         self.updateAnimationState()
         self.updateBlinkingState()
+        #endif
     }
+
+    #if CONDUCTOR_EMBEDDED
+    private func hideEmbeddedStatusItems() {
+        self.blinkTask?.cancel()
+        self.blinkTask = nil
+        self.animationDriver?.stop()
+        self.animationDriver = nil
+        self.animationPhase = 0
+        self.statusItem.menu = nil
+        self.statusItem.isVisible = false
+        self.mergedMenu = nil
+        self.fallbackMenu = nil
+        self.openMenus.removeAll(keepingCapacity: false)
+        self.menuProviders.removeAll(keepingCapacity: false)
+        self.menuVersions.removeAll(keepingCapacity: false)
+        self.providerMenus.removeAll(keepingCapacity: false)
+        for item in self.statusItems.values {
+            item.menu = nil
+            self.statusBar.removeStatusItem(item)
+        }
+        self.statusItems.removeAll(keepingCapacity: false)
+        self.lastAppliedProviderIconRenderSignatures.removeAll(keepingCapacity: false)
+    }
+    #endif
 
     var fallbackProvider: UsageProvider? {
         // Intentionally uses availability-filtered list: fallback activates when no provider
@@ -740,15 +780,22 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     }
 
     private func attachMenus() {
+        #if CONDUCTOR_EMBEDDED
+        self.hideEmbeddedStatusItems()
+        #else
         if self.mergedMenu == nil {
             self.mergedMenu = self.makeMenu()
         }
         if self.statusItem.menu !== self.mergedMenu {
             self.statusItem.menu = self.mergedMenu
         }
+        #endif
     }
 
     private func attachMenus(fallback: UsageProvider? = nil) {
+        #if CONDUCTOR_EMBEDDED
+        self.hideEmbeddedStatusItems()
+        #else
         for provider in UsageProvider.allCases {
             // Only access/create the status item if it's actually needed
             let shouldHaveItem = self.isEnabled(provider) || fallback == provider
@@ -776,12 +823,16 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
                 item.menu = nil
             }
         }
+        #endif
     }
 
     private func rebuildProviderStatusItems() {
         #if DEBUG
         guard !self.isReleasedForTesting else { return }
         #endif
+        #if CONDUCTOR_EMBEDDED
+        self.hideEmbeddedStatusItems()
+        #else
         let ordered = self.settings.orderedProviders()
         let desired = Set(ordered)
         for provider in Array(self.statusItems.keys) where !desired.contains(provider) {
@@ -794,6 +845,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         for provider in ordered where self.isEnabled(provider) || fallback == provider || force {
             _ = self.lazyStatusItem(for: provider)
         }
+        #endif
     }
 
     private func removeProviderStatusItem(for provider: UsageProvider) {
@@ -891,6 +943,9 @@ extension StatusItemController {
         #if DEBUG
         guard !self.isReleasedForTesting else { return }
         #endif
+        #if CONDUCTOR_EMBEDDED
+        self.hideEmbeddedStatusItems()
+        #else
         let visibleItems = ([self.statusItem] + Array(self.statusItems.values)).filter(\.isVisible)
         for item in visibleItems {
             item.isVisible = false
@@ -900,5 +955,6 @@ extension StatusItemController {
         }
         self.updateVisibility()
         self.updateIcons()
+        #endif
     }
 }

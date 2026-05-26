@@ -10,36 +10,14 @@ private func L(_ zh: String, _ en: String) -> String {
 
 extension AppearanceSettingsPanel {
     func overviewSettings(snapshot: SettingsSnapshot) -> some View {
-        LazyVStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             SettingsPreferenceGroup(
-                title: L("当前状态", "Current State"),
-                subtitle: L("主题、终端字体、密度和工作流开关", "Theme, terminal font, density, and workflow toggles"),
-                systemImage: "rectangle.grid.2x2"
+                title: L("设置入口", "Settings"),
+                subtitle: L("选择要调整的部分", "Choose what to adjust"),
+                systemImage: "gearshape"
             ) {
-                VStack(alignment: .leading, spacing: 12) {
-                    SettingsOverviewGrid(snapshot: snapshot)
-
-                    VStack(spacing: 0) {
-                        SettingsQuickJumpButton(
-                            title: L("调整终端", "Tune Terminal"),
-                            subtitle: snapshot.appearance.terminalRenderer.selectedFontStatusTitle,
-                            systemImage: "terminal"
-                        ) {
-                            selectSection(.terminal)
-                        }
-
-                        SettingsControlDivider()
-
-                        SettingsQuickJumpButton(
-                            title: L("换主题", "Change Theme"),
-                            subtitle: snapshot.theme.title,
-                            systemImage: "swatchpalette"
-                        ) {
-                            selectSection(.themes)
-                        }
-                    }
-                    .background(theme.floatingControlFill.opacity(0.24))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                SettingsOverviewPath(snapshot: snapshot) { section in
+                    selectSection(section)
                 }
             }
         }
@@ -49,7 +27,7 @@ extension AppearanceSettingsPanel {
         ConductorUsageSettingsContent(
             style: usagePanelStyle,
             languageIdentifier: snapshot.appearance.language.usageFeatureLanguageIdentifier)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private var usagePanelStyle: ConductorUsagePanelStyle {
@@ -1259,8 +1237,84 @@ extension AppearanceSettingsPanel {
                 Spacer(minLength: 0)
             }
 
-            CommandShortcutGuide(rows: commandShortcutRows(), height: 320, style: .plain)
+            ZStack(alignment: .topTrailing) {
+                CommandShortcutGuide(
+                    rows: commandShortcutRows(),
+                    height: 320,
+                    style: .plain,
+                    editable: true,
+                    recordingCommand: recordingShortcutCommand,
+                    onRecord: { command in
+                        recordingShortcutCommand = command
+                    },
+                    onReset: { command in
+                        model.resetKeyboardShortcut(for: command)
+                    })
+
+                if let recordingShortcutCommand {
+                    shortcutRecorderOverlay(for: recordingShortcutCommand)
+                        .padding(10)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button(L("全部恢复默认", "Reset All")) {
+                    model.resetKeyboardShortcuts()
+                    recordingShortcutCommand = nil
+                }
+                .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+
+                Text(L("录制时按 Esc 取消；必须包含 Cmd，避免抢走正常输入。", "Press Esc to cancel while recording; shortcuts must include Cmd so normal typing stays safe."))
+                    .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(2)
+            }
         }
+    }
+
+    private func shortcutRecorderOverlay(for command: ConductorShellCommand) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "record.circle")
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis)
+            Text(L("按下新的快捷键", "Press a new shortcut"))
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
+            Text(command.rawValue)
+                .font(.conductorSystem(size: 9.2, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 30)
+        .background(theme.floatingPanelBase.opacity(theme.usesDarkChrome ? 0.96 : 0.92))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.42), lineWidth: 1)
+        }
+        .background {
+            ConductorKeyboardShortcutBridge(autofocus: true, forceAutofocus: true) { event in
+                handleShortcutRecording(event, for: command)
+            }
+        }
+    }
+
+    private func handleShortcutRecording(_ event: NSEvent, for command: ConductorShellCommand) -> Bool {
+        guard event.type == .keyDown else { return false }
+        if event.keyCode == 53 {
+            recordingShortcutCommand = nil
+            return true
+        }
+        guard let shortcut = KeyboardShortcutDefinition(event: event) else {
+            return true
+        }
+        guard !shortcut.isReservedSystemShortcut else {
+            return true
+        }
+        model.setKeyboardShortcut(shortcut, for: command)
+        recordingShortcutCommand = nil
+        return true
     }
 
     func themeSettings(snapshot: SettingsSnapshot) -> some View {
@@ -1387,66 +1441,20 @@ struct TerminalSettingsSectionRail: View {
     }
 }
 
-struct SettingsSidebarSummary: View {
-    let theme: TerminalTheme
-    let appearance: AppearancePreferences
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var activeTheme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Image(systemName: "gearshape")
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(activeTheme.floatingEmphasis)
-                    .frame(width: 16)
-                    .accessibilityHidden(true)
-
-                Text(L("设置", "Settings"))
-                    .font(.conductorSystem(size: 12.4, weight: .bold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
-            }
-
-            Text("\(theme.title) · \(appearance.density.title) · \(appearance.fontScale.title)")
-                .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 7)
-        .padding(.bottom, 2)
-    }
-}
-
 struct SettingsPaneHeading: View {
     let section: SettingsSectionID
     @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 9) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
-                    Image(systemName: section.systemImage)
-                        .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(theme.floatingEmphasis)
-                        .frame(width: 15)
-                        .accessibilityHidden(true)
-
-                    Text(section.title)
-                        .font(.conductorSystem(size: 18, weight: .bold, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.primaryText)
-                        .lineLimit(1)
-                }
-                Text(section.subtitle)
-                    .font(.conductorSystem(size: 11.2, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .lineLimit(2)
-            }
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(section.title)
+                .font(.conductorSystem(size: 13.2, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
+                .lineLimit(1)
 
             Spacer(minLength: 0)
         }
-        .padding(.bottom, 2)
+        .padding(.bottom, 0)
     }
 }
 
@@ -1554,9 +1562,10 @@ struct AgentCLIStatusRow: View {
     }
 }
 
-struct SettingsOverviewGrid: View {
+private struct SettingsOverviewPath: View {
     let snapshot: SettingsSnapshot
-    @Environment(\.conductorFontScale) private var fontScale
+    let action: (SettingsSectionID) -> Void
+    @Environment(\.conductorTheme) private var theme
 
     private var terminalSizeText: String {
         let rounded = (snapshot.appearance.terminalFontSize * 10).rounded() / 10
@@ -1566,83 +1575,58 @@ struct SettingsOverviewGrid: View {
         return String(format: "%.1f pt", Double(rounded))
     }
 
+    private var rows: [SettingsOverviewRoute] {
+        [
+            SettingsOverviewRoute(
+                section: .interface,
+                detail: "\(snapshot.appearance.language.title) · \(snapshot.appearance.density.title)"),
+            SettingsOverviewRoute(
+                section: .terminal,
+                detail: "\(snapshot.appearance.terminalRenderer.effectiveFontFamilyName) · \(terminalSizeText)"),
+            SettingsOverviewRoute(
+                section: .shell,
+                detail: snapshot.appearance.terminalRenderer.proxy.enabled ? L("代理开启", "Proxy On") : L("代理关闭", "Proxy Off")),
+            SettingsOverviewRoute(
+                section: .usage,
+                detail: L("本地记录", "Local Records")),
+            SettingsOverviewRoute(
+                section: .automation,
+                detail: snapshot.appearance.agentNotifications.codex || snapshot.appearance.agentNotifications.claudeCode
+                    ? L("通知开启", "Alerts On")
+                    : L("通知关闭", "Alerts Off")),
+            SettingsOverviewRoute(
+                section: .themes,
+                detail: snapshot.theme.title),
+        ]
+    }
+
     var body: some View {
-        SettingsFormSurface {
-            SettingsOverviewTile(
-                title: L("主题", "Theme"),
-                value: snapshot.theme.title,
-                systemImage: "swatchpalette"
-            )
-            SettingsControlDivider()
-            SettingsOverviewTile(
-                title: L("终端字体", "Terminal Font"),
-                value: snapshot.appearance.terminalRenderer.effectiveFontFamilyName,
-                systemImage: "textformat"
-            )
-            SettingsControlDivider()
-            SettingsOverviewTile(
-                title: L("字号", "Size"),
-                value: terminalSizeText,
-                systemImage: "textformat.size"
-            )
-            SettingsControlDivider()
-            SettingsOverviewTile(
-                title: L("密度", "Density"),
-                value: snapshot.appearance.density.title,
-                systemImage: "rectangle.compress.vertical"
-            )
-            SettingsControlDivider()
-            SettingsOverviewTile(
-                title: L("代理", "Proxy"),
-                value: snapshot.appearance.terminalRenderer.proxy.enabled ? L("开启", "On") : L("关闭", "Off"),
-                systemImage: "network"
-            )
-            SettingsControlDivider()
-            SettingsOverviewTile(
-                title: L("AI 通知", "AI Alerts"),
-                value: snapshot.appearance.agentNotifications.codex || snapshot.appearance.agentNotifications.claudeCode ? L("开启", "On") : L("关闭", "Off"),
-                systemImage: "sparkles"
-            )
+        VStack(spacing: 0) {
+            ForEach(rows, id: \.section) { row in
+                SettingsOverviewRouteCard(route: row) {
+                    action(row.section)
+                }
+            }
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.12 : 0.20))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.24), lineWidth: 0.7)
         }
     }
 }
 
-struct SettingsOverviewTile: View {
-    let title: String
-    let value: String
-    let systemImage: String
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.floatingEmphasis.opacity(0.84))
-                .frame(width: 18)
-                .accessibilityHidden(true)
-
-            Text(title)
-                .font(.conductorSystem(size: 12.2, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.primaryText)
-                .lineLimit(1)
-
-            Spacer(minLength: 12)
-
-            Text(value)
-                .font(.conductorSystem(size: 12.1, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.secondaryText)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
-    }
+private struct SettingsOverviewRoute: Hashable {
+    let section: SettingsSectionID
+    let detail: String
 }
 
-struct SettingsQuickJumpButton: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
+private struct SettingsOverviewRouteCard: View {
+    let route: SettingsOverviewRoute
     let action: () -> Void
     @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
@@ -1650,37 +1634,53 @@ struct SettingsQuickJumpButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: systemImage)
-                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis.opacity(0.86))
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: route.section.systemImage)
+                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
                     .frame(width: 18)
                     .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.conductorSystem(size: 12.3, weight: .bold, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.primaryText)
-                        .lineLimit(1)
-                    Text(subtitle)
-                        .font(.conductorSystem(size: 10.3, weight: .medium, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                        .lineLimit(1)
-                }
+                Text(route.section.title)
+                    .font(.conductorSystem(size: 11.4, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
+
+                Text(route.detail)
+                    .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(width: 128, alignment: .trailing)
 
                 Image(systemName: "chevron.right")
-                    .font(.conductorSystem(size: 10, weight: .bold, scale: fontScale))
+                    .font(.conductorSystem(size: 8.8, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.tertiaryText)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .background(hovering ? theme.floatingHoverFill.opacity(0.70) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .padding(.horizontal, 9)
+            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+            .background(cardFill)
         }
-        .buttonStyle(ConductorPressButtonStyle())
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.992, pressedOpacity: 0.96))
         .conductorHover($hovering)
+        .animation(ConductorMotion.hover, value: hovering)
+        .accessibilityLabel(route.section.title)
+        .accessibilityValue(route.detail)
+    }
+
+    private var cardFill: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(hovering
+                ? theme.floatingHoverFill.opacity(theme.usesDarkChrome ? 0.16 : 0.22)
+                : Color.clear)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(theme.floatingEmphasis.opacity(hovering ? 0.34 : 0))
+                    .frame(width: 2)
+                    .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+            }
     }
 }

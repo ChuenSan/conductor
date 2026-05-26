@@ -121,7 +121,7 @@ enum ConductorTokens {
         static let glassTintOnDark = Color.white.opacity(0.035)
         static let glassStroke = Color.white.opacity(0.60)
         static let glassStrokeSubtle = Color.white.opacity(0.34)
-        static let glassShadow = Color.clear
+        static let glassShadow = Color.black.opacity(0.105)
         static let terminalRaised = Color(red: 0.024, green: 0.035, blue: 0.052)
         static let terminalChrome = Color(red: 0.047, green: 0.071, blue: 0.106)
         static let terminalChromeSelected = Color.clear
@@ -145,16 +145,16 @@ enum ConductorTokens {
     }
 
     enum Radius {
-        static let sidebar: CGFloat = 20
-        static let panel: CGFloat = 26
-        static let commandPalette: CGFloat = 24
-        static let card: CGFloat = 16
-        static let controlGroup: CGFloat = 14
-        static let control: CGFloat = 9
-        static let workspaceTab: CGFloat = 12
-        static let terminalPane: CGFloat = 12
+        static let sidebar: CGFloat = 18
+        static let panel: CGFloat = 18
+        static let commandPalette: CGFloat = 18
+        static let card: CGFloat = 10
+        static let controlGroup: CGFloat = 10
+        static let control: CGFloat = 7
+        static let workspaceTab: CGFloat = 8
+        static let terminalPane: CGFloat = 10
         static let terminalTab: CGFloat = 7
-        static let row: CGFloat = 10
+        static let row: CGFloat = 8
     }
 
     enum Space {
@@ -179,9 +179,9 @@ enum ConductorTokens {
         static let paneTabWidth: CGFloat = 118
         static let statusHeight: CGFloat = 18
         static let notificationPanelWidth: CGFloat = 300
-        static let notificationPanelHeight: CGFloat = 360
+        static let notificationPanelHeight: CGFloat = 308
         static let notificationPanelMinWidth: CGFloat = 280
-        static let notificationPanelMinHeight: CGFloat = 300
+        static let notificationPanelMinHeight: CGFloat = 260
     }
 
     enum Typography {
@@ -199,15 +199,15 @@ enum ConductorTokens {
     }
 
     enum Shadow {
-        static let panelOpacity = 0.0
-        static let panelRadius: CGFloat = 0
-        static let panelY: CGFloat = 0
-        static let controlOpacity = 0.0
-        static let controlRadius: CGFloat = 0
+        static let panelOpacity = 0.105
+        static let panelRadius: CGFloat = 24
+        static let panelY: CGFloat = 10
+        static let controlOpacity = 0.035
+        static let controlRadius: CGFloat = 7
         static let controlY: CGFloat = 2
-        static let selectedOpacity = 0.0
-        static let selectedRadius: CGFloat = 0
-        static let selectedY: CGFloat = 0
+        static let selectedOpacity = 0.050
+        static let selectedRadius: CGFloat = 9
+        static let selectedY: CGFloat = 2
     }
 }
 
@@ -343,6 +343,7 @@ struct ConductorGlassSurface<Content: View>: View {
                     .allowsHitTesting(false)
                 }
             }
+            .shadow(color: style.shadow, radius: style.shadowRadius, x: 0, y: style.shadowY)
     }
 
     private var surfaceShape: RoundedRectangle {
@@ -537,6 +538,37 @@ private struct ConductorBackdropMotif: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
+            case .white:
+                VStack(spacing: 34) {
+                    ForEach(0..<18, id: \.self) { _ in
+                        Rectangle()
+                            .fill(theme.shellStroke.opacity(0.16))
+                            .frame(height: 1)
+                    }
+                }
+                .padding(.top, 28)
+            case .gradient:
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            theme.accent.opacity(0.075),
+                            Color.white.opacity(theme.usesDarkChrome ? 0.025 : 0.20),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    Path { path in
+                        let step: CGFloat = 58
+                        var x = -proxy.size.height
+                        while x < proxy.size.width {
+                            path.move(to: CGPoint(x: x, y: proxy.size.height))
+                            path.addLine(to: CGPoint(x: x + proxy.size.height, y: 0))
+                            x += step
+                        }
+                    }
+                    .stroke(theme.accent.opacity(0.050), lineWidth: 1)
+                }
             case .studio, .minimal, .system:
                 EmptyView()
             }
@@ -596,35 +628,52 @@ enum ConductorDesign {
 enum ConductorMotion {
     nonisolated(unsafe) private static var reducedMotion = false
 
+    enum Timing {
+        static let tap: Double = 0.065
+        static let feedback: Double = 0.08
+        static let hover: Double = 0.075
+        static let list: Double = 0.105
+        static let standard: Double = 0.13
+        static let search: Double = 0.135
+        static let navigation: Double = 0.145
+        static let reveal: Double = 0.15
+        static let panelDrawer: Double = 0.155
+        static let contentSwap: Double = 0.145
+        static let spatial: Double = 0.165
+        static let panel: Double = 0.17
+        static let emphasized: Double = 0.18
+        static let dragPreview: Double = 0.06
+    }
+
     // Motion is part of the interaction model: feedback is local, navigation
     // preserves continuity, spatial motion changes layout, and reveal motion
     // introduces transient panels. Terminal surfaces opt out of all of these.
     static var micro: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.060)
+        reducedMotion ? nil : .easeOut(duration: Timing.feedback)
     }
 
     static var hover: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.070)
+        reducedMotion ? nil : .easeOut(duration: Timing.hover)
     }
 
     static var feedback: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.065)
+        reducedMotion ? nil : .easeOut(duration: Timing.feedback)
     }
 
     static var press: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.050)
+        reducedMotion ? nil : .easeOut(duration: Timing.tap)
     }
 
     static var reveal: Animation? {
-        cssEaseOut(duration: 0.16)
+        cssEaseOut(duration: Timing.reveal)
     }
 
     static var search: Animation? {
-        cssEaseOut(duration: 0.13)
+        cssEaseOut(duration: Timing.search)
     }
 
     static var scroll: Animation? {
-        reducedMotion ? nil : .smooth(duration: 0.145, extraBounce: 0.0)
+        reducedMotion ? nil : .smooth(duration: Timing.standard, extraBounce: 0.0)
     }
 
     static var selection: Animation? {
@@ -632,23 +681,23 @@ enum ConductorMotion {
     }
 
     static var selectionGlide: Animation? {
-        magnetic(duration: 0.150, bounce: 0.004)
+        magnetic(duration: Timing.navigation, bounce: 0.001)
     }
 
     static var navigation: Animation? {
-        magnetic(duration: 0.140, bounce: 0.006)
+        magnetic(duration: Timing.navigation, bounce: 0.002)
     }
 
     static var standard: Animation? {
-        cssEaseOut(duration: 0.125)
+        cssEaseOut(duration: Timing.standard)
     }
 
     static var panel: Animation? {
-        cssEaseOut(duration: 0.19)
+        cssEaseOut(duration: Timing.panel)
     }
 
     static var list: Animation? {
-        magnetic(duration: 0.120, bounce: 0.004)
+        magnetic(duration: Timing.list, bounce: 0.002)
     }
 
     static var layout: Animation? {
@@ -656,47 +705,51 @@ enum ConductorMotion {
     }
 
     static var spatial: Animation? {
-        magnetic(duration: 0.18, bounce: 0.020)
+        magnetic(duration: Timing.spatial, bounce: 0.006)
     }
 
     static var emphasized: Animation? {
-        magnetic(duration: 0.19, bounce: 0.026)
+        magnetic(duration: Timing.emphasized, bounce: 0.008)
     }
 
     static var attention: Animation? {
-        reducedMotion ? nil : .smooth(duration: 0.165, extraBounce: 0.024)
+        reducedMotion ? nil : .smooth(duration: Timing.reveal, extraBounce: 0.006)
     }
 
     static var delivery: Animation? {
-        reducedMotion ? nil : .timingCurve(0.18, 1.15, 0.28, 1.0, duration: 0.22)
+        reducedMotion ? nil : .timingCurve(0.18, 1.0, 0.28, 1.0, duration: Timing.emphasized)
     }
 
     static var cascade: Animation? {
-        reducedMotion ? nil : .timingCurve(0.16, 1.0, 0.26, 1.0, duration: 0.20)
+        reducedMotion ? nil : .timingCurve(0.16, 1.0, 0.26, 1.0, duration: Timing.spatial)
     }
 
     static var contentSwap: Animation? {
-        reducedMotion ? nil : .timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.17)
+        reducedMotion ? nil : .timingCurve(0.22, 1.0, 0.36, 1.0, duration: Timing.contentSwap)
     }
 
     static var dragPreview: Animation? {
-        reducedMotion ? nil : .easeOut(duration: 0.075)
+        reducedMotion ? nil : .easeOut(duration: Timing.dragPreview)
+    }
+
+    static var panelDrawer: Animation? {
+        reducedMotion ? nil : .timingCurve(0.18, 0.86, 0.18, 1.0, duration: Timing.panelDrawer)
     }
 
     static var panelTransition: AnyTransition {
-        floatingPanelTransition(edge: .top, distance: 18)
+        floatingPanelTransition(edge: .top, distance: 12)
     }
 
     static var settingsPanelTransition: AnyTransition {
-        floatingPanelTransition(edge: .trailing, distance: 24)
+        floatingPanelTransition(edge: .trailing, distance: 16)
     }
 
     static var sidebarContentTransition: AnyTransition {
-        floatingPanelTransition(edge: .leading, distance: 12, scale: 1)
+        floatingPanelTransition(edge: .leading, distance: 8, scale: 1)
     }
 
     static var searchTransition: AnyTransition {
-        floatingPanelTransition(edge: .top, distance: 10, scale: 0.998)
+        floatingPanelTransition(edge: .top, distance: 8, scale: 0.998)
     }
 
     static func contentSwapTransition(edge: Edge) -> AnyTransition {
@@ -705,8 +758,8 @@ enum ConductorMotion {
             insertion: .modifier(
                 active: ConductorPanelRevealModifier(
                     opacity: 0,
-                    x: transitionOffset(edge: edge, distance: 18).x,
-                    y: transitionOffset(edge: edge, distance: 18).y,
+                    x: transitionOffset(edge: edge, distance: 12).x,
+                    y: transitionOffset(edge: edge, distance: 12).y,
                     scale: 0.992
                 ),
                 identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
@@ -714,8 +767,8 @@ enum ConductorMotion {
             removal: .modifier(
                 active: ConductorPanelRevealModifier(
                     opacity: 0,
-                    x: transitionOffset(edge: opposite(edge), distance: 10).x,
-                    y: transitionOffset(edge: opposite(edge), distance: 10).y,
+                    x: transitionOffset(edge: opposite(edge), distance: 7).x,
+                    y: transitionOffset(edge: opposite(edge), distance: 7).y,
                     scale: 0.996
                 ),
                 identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
@@ -784,7 +837,7 @@ enum ConductorMotion {
         return TimeInterval(min(index, 10)) * 0.014
     }
 
-    static func magnetic(duration: Double = 0.18, bounce: Double = 0.045) -> Animation? {
+    static func magnetic(duration: Double = 0.18, bounce: Double = 0.018) -> Animation? {
         reducedMotion ? nil : .smooth(duration: duration, extraBounce: bounce)
     }
 
@@ -1175,17 +1228,22 @@ private struct ConductorFocusRingOverlay: View {
 }
 
 struct ConductorPressButtonStyle: ButtonStyle {
-    var pressedScale: CGFloat = 0.985
-    var pressedOpacity: Double = 0.92
+    var pressedScale: CGFloat = 0.992
+    var pressedOpacity: Double = 0.98
 
     private var effectivePressedScale: CGFloat {
-        max(pressedScale, 0.94)
+        max(pressedScale, 0.97)
+    }
+
+    private var effectivePressedOpacity: Double {
+        max(pressedOpacity, 0.94)
     }
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? effectivePressedScale : 1)
-            .opacity(configuration.isPressed ? pressedOpacity : 1)
+            .opacity(configuration.isPressed ? effectivePressedOpacity : 1)
+            .animation(ConductorMotion.press, value: configuration.isPressed)
             .transaction { transaction in
                 transaction.animation = ConductorMotion.press
                 transaction.disablesAnimations = ConductorMotion.press == nil
@@ -1313,7 +1371,7 @@ private final class MacNativeTooltipView: NSView {
         }
         let localPoint = convert(window.mouseLocationOutsideOfEventStream, from: nil)
         let nowHovering = bounds.contains(localPoint)
-        if nowHovering {
+        if nowHovering && !isHovering {
             isHovering = true
             showTooltip()
         } else if isHovering {
@@ -1374,12 +1432,39 @@ private final class ConductorTooltipPanelManager {
     private weak var sourceView: NSView?
     private var panel: ConductorTooltipPanel?
     private var eventMonitor: Any?
+    private var pendingShowWorkItem: DispatchWorkItem?
+    private let initialTooltipDelay: TimeInterval = 0.34
+    private let followUpTooltipDelay: TimeInterval = 0.09
 
     func show(text: String, relativeTo view: NSView) {
+        pendingShowWorkItem?.cancel()
+        guard !text.isEmpty, !view.bounds.isEmpty, view.window != nil else {
+            hide()
+            return
+        }
+
+        let delay = panel?.isVisible == true ? followUpTooltipDelay : initialTooltipDelay
+        let workItem = DispatchWorkItem { [weak self, weak view] in
+            Task { @MainActor in
+                guard let self, let view else { return }
+                self.showImmediately(text: text, relativeTo: view)
+            }
+        }
+        pendingShowWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func showImmediately(text: String, relativeTo view: NSView) {
+        pendingShowWorkItem = nil
         guard !text.isEmpty,
               !view.bounds.isEmpty,
               let sourceWindow = view.window,
               let screen = sourceWindow.screen ?? NSScreen.main else {
+            hide()
+            return
+        }
+        let localMousePoint = view.convert(sourceWindow.mouseLocationOutsideOfEventStream, from: nil)
+        guard view.bounds.contains(localMousePoint) else {
             hide()
             return
         }
@@ -1424,6 +1509,8 @@ private final class ConductorTooltipPanelManager {
     }
 
     func hide() {
+        pendingShowWorkItem?.cancel()
+        pendingShowWorkItem = nil
         panel?.orderOut(nil)
         sourceView = nil
         uninstallEventMonitor()
@@ -1593,7 +1680,7 @@ struct ConductorSegmentDivider: View {
     var body: some View {
         Rectangle()
             .fill(theme.usesDarkChrome ? Color.white.opacity(0.032) : theme.shellStroke.opacity(0.34))
-            .frame(width: 1, height: 14)
+            .frame(width: 1, height: 16)
     }
 }
 

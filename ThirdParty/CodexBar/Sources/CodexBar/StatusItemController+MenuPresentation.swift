@@ -150,7 +150,29 @@ struct MenuCardSectionContainerView<Content: View>: View {
             .environment(\.menuItemHighlighted, self.highlightState.isHighlighted)
             .foregroundStyle(MenuHighlightStyle.primary(self.highlightState.isHighlighted))
             .background(alignment: .topLeading) {
-                if self.highlightState.isHighlighted {
+                if let style = ConductorUsageMenuStyle.current {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    style.controlStrongFill.opacity(style.usesDarkChrome ? 0.38 : 0.56),
+                                    style.controlFill.opacity(style.usesDarkChrome ? 0.24 : 0.34),
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(style.stroke.opacity(0.46), lineWidth: 0.8)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                    if self.highlightState.isHighlighted {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(MenuHighlightStyle.selectionBackground(true))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                    }
+                } else if self.highlightState.isHighlighted {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(MenuHighlightStyle.selectionBackground(true))
                         .padding(.horizontal, 6)
@@ -221,17 +243,34 @@ final class PersistentMenuActionItemView: NSView, MenuCardHighlighting {
     }
 
     func setHighlighted(_ highlighted: Bool) {
-        let primaryColor = highlighted ? NSColor.selectedMenuItemTextColor : NSColor.controlTextColor
-        let secondaryColor = highlighted ? NSColor.selectedMenuItemTextColor : NSColor.secondaryLabelColor
-        self.backgroundView.isHidden = !highlighted
+        let primaryColor: NSColor
+        let secondaryColor: NSColor
+        let iconColor: NSColor
+        if let style = ConductorUsageMenuStyle.current {
+            primaryColor = ConductorUsageMenuStyle.nsColor(style.primaryText)
+            secondaryColor = ConductorUsageMenuStyle.nsColor(style.secondaryText)
+            iconColor = highlighted
+                ? ConductorUsageMenuStyle.nsColor(style.primaryText)
+                : ConductorUsageMenuStyle.nsColor(style.emphasis)
+            self.backgroundView.layer?.backgroundColor =
+                ConductorUsageMenuStyle.nsColor(ConductorUsageMenuStyle.plateFill(highlighted: highlighted, style: style))
+                    .cgColor
+            self.backgroundView.isHidden = false
+        } else {
+            primaryColor = highlighted ? NSColor.selectedMenuItemTextColor : NSColor.controlTextColor
+            secondaryColor = highlighted ? NSColor.selectedMenuItemTextColor : NSColor.secondaryLabelColor
+            iconColor = primaryColor
+            self.backgroundView.layer?.backgroundColor = NSColor.selectedContentBackgroundColor.cgColor
+            self.backgroundView.isHidden = !highlighted
+        }
         self.titleField.textColor = primaryColor
         self.shortcutField.textColor = secondaryColor
-        self.imageView.contentTintColor = primaryColor
+        self.imageView.contentTintColor = iconColor
     }
 
     private func setupView(systemImageName: String?) {
         self.backgroundView.wantsLayer = true
-        self.backgroundView.layer?.cornerRadius = 6
+        self.backgroundView.layer?.cornerRadius = ConductorUsageMenuStyle.isEnabled ? 8 : 6
         self.backgroundView.layer?.backgroundColor = NSColor.selectedContentBackgroundColor.cgColor
         self.backgroundView.translatesAutoresizingMaskIntoConstraints = false
         self.addSubview(self.backgroundView)

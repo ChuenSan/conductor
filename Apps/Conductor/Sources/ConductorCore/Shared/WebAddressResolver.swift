@@ -21,6 +21,10 @@ public struct WebAddressResolver: Sendable {
             return url
         }
 
+        if let localhostURL = localhostURL(fromPortShorthand: trimmed) {
+            return localhostURL
+        }
+
         if looksLikeDomain(trimmed), let url = URL(string: "https://\(trimmed)") {
             return url
         }
@@ -34,10 +38,25 @@ public struct WebAddressResolver: Sendable {
         let lowercased = value.lowercased()
         return lowercased == "localhost" ||
             lowercased.hasPrefix("localhost:") ||
+            lowercased.hasPrefix("localhost/") ||
             lowercased == "127.0.0.1" ||
             lowercased.hasPrefix("127.0.0.1:") ||
+            lowercased.hasPrefix("127.0.0.1/") ||
             lowercased == "::1" ||
             lowercased.hasPrefix("[::1]:")
+    }
+
+    private func localhostURL(fromPortShorthand value: String) -> URL? {
+        let rawPort = value.hasPrefix(":") ? String(value.dropFirst()) : value
+        guard rawPort.count >= 2,
+              rawPort.count <= 5,
+              rawPort.allSatisfy(\.isNumber),
+              let port = Int(rawPort),
+              (1...65535).contains(port)
+        else {
+            return nil
+        }
+        return URL(string: "http://localhost:\(port)")
     }
 
     private func looksLikeDomain(_ value: String) -> Bool {

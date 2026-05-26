@@ -126,7 +126,20 @@ struct UsageMenuCardView: View {
         return metric.title
     }
 
+    @ViewBuilder
     var body: some View {
+        if let style = ConductorUsageMenuStyle.current {
+            ConductorUsageMenuCardView(
+                model: self.model,
+                width: self.width,
+                style: style,
+                isHighlighted: self.isHighlighted)
+        } else {
+            self.defaultBody
+        }
+    }
+
+    private var defaultBody: some View {
         VStack(alignment: .leading, spacing: 6) {
             UsageMenuCardHeaderView(model: self.model)
 
@@ -233,6 +246,374 @@ struct UsageMenuCardView: View {
     }
 }
 
+private struct ConductorUsageMenuCardView: View {
+    let model: UsageMenuCardView.Model
+    let width: CGFloat
+    let style: ConductorUsagePanelStyle
+    let isHighlighted: Bool
+
+    private var detailBlocks: [ConductorUsageDetailBlock] {
+        var blocks: [ConductorUsageDetailBlock] = []
+        if let credits = model.creditsText {
+            blocks.append(.init(
+                title: L("Credits"),
+                value: credits,
+                detail: model.creditsHintText,
+                percent: model.creditsRemaining.map { min(100, max(0, ($0 / 1000) * 100)) },
+                icon: "creditcard"))
+        }
+        if let providerCost = model.providerCost {
+            blocks.append(.init(
+                title: providerCost.title,
+                value: providerCost.spendLine,
+                detail: providerCost.percentLine,
+                percent: providerCost.percentUsed,
+                icon: "chart.line.uptrend.xyaxis"))
+        }
+        if let tokenUsage = model.tokenUsage {
+            blocks.append(.init(
+                title: L("cost_header_estimated"),
+                value: tokenUsage.sessionLine,
+                detail: tokenUsage.monthLine,
+                percent: nil,
+                icon: "number"))
+        }
+        return blocks
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header
+
+            if !model.metrics.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(model.metrics, id: \.id) { metric in
+                        ConductorUsageMetricTile(
+                            metric: metric,
+                            title: UsageMenuCardView.popupMetricTitle(provider: model.provider, metric: metric),
+                            progressColor: model.progressColor,
+                            style: style,
+                            isHighlighted: isHighlighted)
+                    }
+                }
+            } else if let dashboard = model.inlineUsageDashboard {
+                InlineUsageDashboardContent(model: dashboard)
+                    .padding(10)
+                    .background(detailSurface)
+            } else if !model.usageNotes.isEmpty {
+                UsageNotesContent(notes: model.usageNotes)
+                    .padding(10)
+                    .background(detailSurface)
+            } else if let placeholder = model.placeholder {
+                Text(codexBarLocalizedDisplayText(placeholder))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(style.secondaryText)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(detailSurface)
+            }
+
+            if !detailBlocks.isEmpty {
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
+                    spacing: 8)
+                {
+                    ForEach(detailBlocks) { block in
+                        ConductorUsageDetailTile(
+                            block: block,
+                            progressColor: model.progressColor,
+                            style: style)
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .frame(width: width, alignment: .leading)
+        .overlay(alignment: .topTrailing) {
+            ConductorUsageMenuCircuitOverlay(style: style)
+                .frame(width: 150, height: 86)
+                .opacity(style.usesDarkChrome ? 0.24 : 0.18)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 9) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(style.emphasis.opacity(style.usesDarkChrome ? 0.20 : 0.14))
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(style.emphasis)
+            }
+            .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(model.providerName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(style.primaryText)
+                        .lineLimit(1)
+                    if let plan = model.planText {
+                        Text(codexBarLocalizedDisplayText(plan))
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundStyle(style.secondaryText)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.56))
+                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    }
+                }
+
+                Text(codexBarLocalizedDisplayText(model.subtitleText))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(subtitleColor)
+                    .lineLimit(model.subtitleStyle == .error ? 3 : 1)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .layoutPriority(1)
+
+            Spacer(minLength: 8)
+
+            if !model.email.isEmpty {
+                Text(model.email)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(style.tertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 118, alignment: .trailing)
+            }
+        }
+    }
+
+    private var subtitleColor: Color {
+        switch model.subtitleStyle {
+        case .error:
+            Color(nsColor: .systemRed)
+        case .loading:
+            style.secondaryText
+        case .info:
+            style.secondaryText
+        }
+    }
+
+    private var detailSurface: some View {
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.28 : 0.34))
+            .overlay {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(style.stroke.opacity(0.34), lineWidth: 0.7)
+            }
+    }
+}
+
+private struct ConductorUsageMetricTile: View {
+    let metric: UsageMenuCardView.Model.Metric
+    let title: String
+    let progressColor: Color
+    let style: ConductorUsagePanelStyle
+    let isHighlighted: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(codexBarLocalizedDisplayText(title))
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(style.primaryText)
+                    .lineLimit(1)
+                Spacer()
+                if let resetText = metric.resetText {
+                    Text(codexBarLocalizedDisplayText(resetText))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(style.tertiaryText)
+                        .lineLimit(1)
+                }
+            }
+
+            if let statusText = metric.statusText {
+                Text(codexBarLocalizedDisplayText(statusText))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(style.secondaryText)
+                    .lineLimit(1)
+            } else {
+                ConductorUsageMiniProgress(
+                    percent: metric.percent,
+                    pacePercent: metric.pacePercent,
+                    warningMarkerPercents: metric.warningMarkerPercents,
+                    tint: isHighlighted ? style.emphasis : progressColor,
+                    style: style)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(metric.percentLabel)
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(style.primaryText)
+                    Spacer()
+                    if let detailRight = metric.detailRightText {
+                        Text(codexBarLocalizedDisplayText(detailRight))
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(style.tertiaryText)
+                            .lineLimit(1)
+                    } else if let detail = metric.detailText {
+                        Text(codexBarLocalizedDisplayText(detail))
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(style.tertiaryText)
+                            .lineLimit(1)
+                    }
+                }
+                if let detailLeft = metric.detailLeftText {
+                    Text(codexBarLocalizedDisplayText(detailLeft))
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(style.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(9)
+        .background {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.30 : 0.38))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(style.stroke.opacity(0.36), lineWidth: 0.7)
+        }
+    }
+}
+
+private struct ConductorUsageDetailBlock: Identifiable {
+    let id = UUID()
+    let title: String
+    let value: String
+    let detail: String?
+    let percent: Double?
+    let icon: String
+}
+
+private struct ConductorUsageDetailTile: View {
+    let block: ConductorUsageDetailBlock
+    let progressColor: Color
+    let style: ConductorUsagePanelStyle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Image(systemName: block.icon)
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(style.emphasis)
+                    .frame(width: 12)
+                Text(codexBarLocalizedDisplayText(block.title))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(style.secondaryText)
+                    .lineLimit(1)
+            }
+            Text(codexBarLocalizedDisplayText(block.value))
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(style.primaryText)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            if let percent = block.percent {
+                ConductorUsageMiniProgress(percent: percent, tint: progressColor, style: style)
+                    .frame(height: 4)
+            }
+            if let detail = block.detail, !detail.isEmpty {
+                Text(codexBarLocalizedDisplayText(detail))
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(style.tertiaryText)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.24 : 0.42))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(style.stroke.opacity(0.28), lineWidth: 0.7)
+        }
+    }
+}
+
+private struct ConductorUsageMiniProgress: View {
+    let percent: Double
+    var pacePercent: Double?
+    var warningMarkerPercents: [Double]
+    let tint: Color
+    let style: ConductorUsagePanelStyle
+
+    init(
+        percent: Double,
+        pacePercent: Double? = nil,
+        warningMarkerPercents: [Double] = [],
+        tint: Color,
+        style: ConductorUsagePanelStyle)
+    {
+        self.percent = percent
+        self.pacePercent = pacePercent
+        self.warningMarkerPercents = warningMarkerPercents
+        self.tint = tint
+        self.style = style
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.54 : 0.64))
+                Capsule()
+                    .fill(tint.opacity(style.usesDarkChrome ? 0.78 : 0.68))
+                    .frame(width: width * clamped(percent) / 100)
+                ForEach(Array(warningMarkerPercents.enumerated()), id: \.offset) { _, marker in
+                    Rectangle()
+                        .fill(style.primaryText.opacity(0.62))
+                        .frame(width: 1, height: height)
+                        .offset(x: max(0, min(width - 1, width * clamped(marker) / 100)))
+                }
+                if let pacePercent {
+                    Circle()
+                        .fill(style.primaryText.opacity(0.85))
+                        .frame(width: 5, height: 5)
+                        .offset(x: max(0, min(width - 5, width * clamped(pacePercent) / 100 - 2.5)))
+                }
+            }
+        }
+        .frame(height: 6)
+    }
+
+    private func clamped(_ value: Double) -> CGFloat {
+        CGFloat(min(100, max(0, value)))
+    }
+}
+
+private struct ConductorUsageMenuCircuitOverlay: View {
+    let style: ConductorUsagePanelStyle
+
+    var body: some View {
+        Canvas { context, size in
+            let color = style.emphasis.opacity(style.usesDarkChrome ? 0.22 : 0.20)
+            var path = Path()
+            path.move(to: CGPoint(x: size.width * 0.08, y: size.height * 0.30))
+            path.addLine(to: CGPoint(x: size.width * 0.46, y: size.height * 0.30))
+            path.addLine(to: CGPoint(x: size.width * 0.62, y: size.height * 0.52))
+            path.addLine(to: CGPoint(x: size.width * 0.92, y: size.height * 0.52))
+            context.stroke(path, with: .color(color), lineWidth: 1)
+            for point in [
+                CGPoint(x: size.width * 0.08, y: size.height * 0.30),
+                CGPoint(x: size.width * 0.46, y: size.height * 0.30),
+                CGPoint(x: size.width * 0.62, y: size.height * 0.52),
+                CGPoint(x: size.width * 0.92, y: size.height * 0.52),
+            ] {
+                context.fill(
+                    Path(ellipseIn: CGRect(x: point.x - 2, y: point.y - 2, width: 4, height: 4)),
+                    with: .color(color))
+            }
+        }
+    }
+}
+
 private struct UsageMenuCardHeaderView: View {
     let model: UsageMenuCardView.Model
     @Environment(\.menuItemHighlighted) private var isHighlighted
@@ -292,7 +673,7 @@ private struct CopyIconButtonStyle: ButtonStyle {
                     .fill(MenuHighlightStyle.secondary(self.isHighlighted).opacity(configuration.isPressed ? 0.18 : 0))
             }
             .scaleEffect(configuration.isPressed ? 0.94 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(ConductorUsageMotion.press, value: configuration.isPressed)
     }
 }
 
@@ -306,13 +687,13 @@ private struct CopyIconButton: View {
     var body: some View {
         Button {
             self.copyToPasteboard()
-            withAnimation(.easeOut(duration: 0.12)) {
+            ConductorUsageMotion.perform(ConductorUsageMotion.press) {
                 self.didCopy = true
             }
             self.resetTask?.cancel()
             self.resetTask = Task { @MainActor in
                 try? await Task.sleep(for: .seconds(0.9))
-                withAnimation(.easeOut(duration: 0.2)) {
+                ConductorUsageMotion.perform(ConductorUsageMotion.contentSwap) {
                     self.didCopy = false
                 }
             }

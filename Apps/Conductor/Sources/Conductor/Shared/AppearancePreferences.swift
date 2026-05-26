@@ -360,6 +360,7 @@ struct AppearancePreferences: Codable, Equatable {
     var terminalRenderer: TerminalRendererPreferences
     var reducedMotion: Bool
     var agentNotifications: AgentNotificationPreferences
+    var keyboardShortcuts: KeyboardShortcutPreferences
 
     init(
         density: AppearanceDensity = .standard,
@@ -370,7 +371,8 @@ struct AppearancePreferences: Codable, Equatable {
         terminalFontSize: CGFloat = Self.defaultTerminalFontSize,
         terminalRenderer: TerminalRendererPreferences = TerminalRendererPreferences(),
         reducedMotion: Bool = false,
-        agentNotifications: AgentNotificationPreferences = AgentNotificationPreferences()
+        agentNotifications: AgentNotificationPreferences = AgentNotificationPreferences(),
+        keyboardShortcuts: KeyboardShortcutPreferences = KeyboardShortcutPreferences()
     ) {
         self.density = density
         self.chromeClarity = chromeClarity
@@ -381,6 +383,7 @@ struct AppearancePreferences: Codable, Equatable {
         self.terminalRenderer = terminalRenderer
         self.reducedMotion = reducedMotion
         self.agentNotifications = agentNotifications
+        self.keyboardShortcuts = keyboardShortcuts
     }
 
     init(from decoder: Decoder) throws {
@@ -395,6 +398,7 @@ struct AppearancePreferences: Codable, Equatable {
         self.terminalRenderer = try container.decodeIfPresent(TerminalRendererPreferences.self, forKey: .terminalRenderer) ?? TerminalRendererPreferences()
         self.reducedMotion = try container.decodeIfPresent(Bool.self, forKey: .reducedMotion) ?? false
         self.agentNotifications = try container.decodeIfPresent(AgentNotificationPreferences.self, forKey: .agentNotifications) ?? AgentNotificationPreferences()
+        self.keyboardShortcuts = try container.decodeIfPresent(KeyboardShortcutPreferences.self, forKey: .keyboardShortcuts) ?? KeyboardShortcutPreferences()
     }
 
     static func clampedTerminalFontSize(_ value: CGFloat) -> CGFloat {
@@ -411,6 +415,7 @@ struct AppearancePreferences: Codable, Equatable {
         case terminalRenderer
         case reducedMotion
         case agentNotifications
+        case keyboardShortcuts
     }
 }
 

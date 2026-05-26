@@ -44,6 +44,47 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         self.errorMessage = errorMessage
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case url
+        case pendingAddress
+        case title
+        case faviconURL
+        case isLoading
+        case estimatedProgress
+        case canGoBack
+        case canGoForward
+        case errorMessage
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(WebTabID.self, forKey: .id)
+        url = try container.decodeIfPresent(URL.self, forKey: .url)
+        pendingAddress = try container.decodeIfPresent(String.self, forKey: .pendingAddress) ?? ""
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        faviconURL = try container.decodeIfPresent(URL.self, forKey: .faviconURL)
+        isLoading = try container.decodeIfPresent(Bool.self, forKey: .isLoading) ?? false
+        estimatedProgress = try container.decodeIfPresent(Double.self, forKey: .estimatedProgress) ?? 0
+        canGoBack = try container.decodeIfPresent(Bool.self, forKey: .canGoBack) ?? false
+        canGoForward = try container.decodeIfPresent(Bool.self, forKey: .canGoForward) ?? false
+        errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(url, forKey: .url)
+        try container.encode(pendingAddress, forKey: .pendingAddress)
+        try container.encodeIfPresent(title, forKey: .title)
+        try container.encodeIfPresent(faviconURL, forKey: .faviconURL)
+        try container.encode(isLoading, forKey: .isLoading)
+        try container.encode(estimatedProgress, forKey: .estimatedProgress)
+        try container.encode(canGoBack, forKey: .canGoBack)
+        try container.encode(canGoForward, forKey: .canGoForward)
+        try container.encodeIfPresent(errorMessage, forKey: .errorMessage)
+    }
+
     public var displayTitle: String {
         if let title = title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
             return title
@@ -92,7 +133,11 @@ public struct WorkspaceWebTabList: Equatable, Sendable {
     }
 
     @discardableResult
-    public mutating func append(url: URL?, title: String? = nil, pendingAddress: String = "") -> WebTabID {
+    public mutating func append(
+        url: URL?,
+        title: String? = nil,
+        pendingAddress: String = ""
+    ) -> WebTabID {
         let tab = WorkspaceWebTabState(url: url, pendingAddress: pendingAddress, title: title)
         tabs.append(tab)
         selectedTabID = tab.id

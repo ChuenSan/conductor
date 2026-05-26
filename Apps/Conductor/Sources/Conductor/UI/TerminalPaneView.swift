@@ -172,7 +172,7 @@ struct TerminalPaneView: View {
                 title: L("关闭", "Close"),
                 showsTitle: false,
                 disabled: !snapshot.canClosePane,
-                help: L("关闭这个分屏 Cmd-Shift-W", "Close this pane Cmd-Shift-W")
+                help: "\(L("关闭这个分屏", "Close this pane")) \(model.shortcutTitle(for: .closeFocusedPane, fallback: "Cmd-Shift-W"))"
             ) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     model.closePane(pane.id)
@@ -247,11 +247,11 @@ struct TerminalPaneView: View {
     }
 
     private func triggerFocusFlash() {
-        withAnimation(ConductorMotion.emphasized) {
+        ConductorMotion.perform(ConductorMotion.emphasized) {
             flashVisible = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            withAnimation(ConductorMotion.standard) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + ConductorMotion.Timing.reveal) {
+            ConductorMotion.perform(ConductorMotion.standard) {
                 flashVisible = false
             }
         }
@@ -429,12 +429,10 @@ private struct StableTerminalTabStrip: View {
 
     private func performShellMotion(_ animation: Animation? = ConductorMotion.standard, _ action: () -> Void) {
         guard !snapshot.appearance.reducedMotion else {
-            var transaction = Transaction(animation: nil)
-            transaction.disablesAnimations = true
-            withTransaction(transaction, action)
+            ConductorMotion.withoutAnimation(action)
             return
         }
-        withAnimation(animation, action)
+        ConductorMotion.perform(animation, action)
     }
 }
 

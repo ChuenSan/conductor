@@ -179,6 +179,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published var theme: TerminalTheme {
         didSet {
             surfaceCoordinator.applyAppearance(theme: theme, terminalFontSize: appearance.terminalFontSize)
+            ConductorUsageFeature.configureHostMenuStyle(Self.usageMenuStyle(for: theme))
             persist()
         }
     }
@@ -230,6 +231,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var workspaceWebTabStopGenerationByID: [WebTabID: Int] = [:]
     @Published private(set) var workspaceWebTabBackGenerationByID: [WebTabID: Int] = [:]
     @Published private(set) var workspaceWebTabForwardGenerationByID: [WebTabID: Int] = [:]
+    @Published private(set) var workspaceWebAddressFocusGenerationByID: [WebTabID: Int] = [:]
+    @Published private(set) var workspaceWebFindFocusGenerationByID: [WebTabID: Int] = [:]
+    @Published private(set) var workspaceWebFindNextGenerationByID: [WebTabID: Int] = [:]
+    @Published private(set) var workspaceWebFindPreviousGenerationByID: [WebTabID: Int] = [:]
     @Published private(set) var selectedWorkspaceContentTabID: ConductorWorkspaceContentTabID?
     @Published var terminalSearchQuery = ""
     @Published private(set) var agentHookSettingsMessage: String?
@@ -326,6 +331,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         syncFileWorkspaceCoordinatorFromPublished()
         ConductorAppearanceRuntime.apply(self.appearance)
         ConductorUsageFeature.configureHostLanguageIdentifier(self.appearance.language.usageFeatureLanguageIdentifier)
+        ConductorUsageFeature.configureHostMenuStyle(Self.usageMenuStyle(for: self.theme))
         TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
     }
@@ -363,10 +369,26 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         syncFileWorkspaceCoordinatorFromPublished()
         ConductorAppearanceRuntime.apply(self.appearance)
         ConductorUsageFeature.configureHostLanguageIdentifier(self.appearance.language.usageFeatureLanguageIdentifier)
+        ConductorUsageFeature.configureHostMenuStyle(Self.usageMenuStyle(for: self.theme))
         TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
     }
     #endif
+
+    private static func usageMenuStyle(for theme: TerminalTheme) -> ConductorUsagePanelStyle {
+        ConductorUsagePanelStyle(
+            panelBase: theme.floatingPanelBase,
+            panelWash: theme.floatingPanelWash,
+            controlFill: theme.floatingControlFill,
+            controlStrongFill: theme.floatingControlStrongFill,
+            stroke: theme.floatingStroke,
+            separator: theme.floatingSeparator,
+            emphasis: theme.floatingEmphasis,
+            primaryText: theme.shellChromeText,
+            secondaryText: theme.shellChromeTextMuted.opacity(0.86),
+            tertiaryText: theme.shellChromeTextMuted.opacity(0.64),
+            usesDarkChrome: theme.usesDarkChrome)
+    }
 
     private func syncPanelCoordinatorFromPublished() {
         panelCoordinator.commandPaletteVisible = commandPaletteVisible
@@ -875,6 +897,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     @discardableResult
     func performCommand(_ command: ConductorShellCommand, window: NSWindow? = nil) -> Bool {
+        guard !settingsPanelVisible || command.allowsWhenSettingsPanelVisible else {
+            ConductorDiagnostics.record(
+                "shell-command-blocked-by-settings",
+                fields: ["name": command.rawValue]
+            )
+            return false
+        }
         ConductorLog.performance.debug("shell command \(command.rawValue, privacy: .public)")
         ConductorDiagnostics.record(
             "shell-command",
@@ -900,6 +929,22 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             ]
         )
         return performed
+    }
+
+    func setKeyboardShortcut(_ shortcut: KeyboardShortcutDefinition, for command: ConductorShellCommand) {
+        appearance.keyboardShortcuts.set(shortcut, for: command)
+    }
+
+    func resetKeyboardShortcut(for command: ConductorShellCommand) {
+        appearance.keyboardShortcuts.reset(command)
+    }
+
+    func resetKeyboardShortcuts() {
+        appearance.keyboardShortcuts.resetAll()
+    }
+
+    func shortcutTitle(for command: ConductorShellCommand, fallback: String = "") -> String {
+        appearance.keyboardShortcuts.displayShortcut(for: command, fallback: fallback)
     }
 
     var runtimeSurfaceCount: Int {
@@ -1108,6 +1153,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         )
         workspaceWebTabs = list.tabs
         applyWorkspaceContentSelection(result.nextContentSelection)
+        if let closedTabID = result.closedTabID {
+            ConductorWebKitSurfaceStore.shared.remove(closedTabID)
+        }
         pruneWorkspaceWebTabCommands(keeping: Set(workspaceWebTabs.map(\.id)))
         persist()
     }
@@ -1130,6 +1178,15 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspaceWebTabReloadGenerationByID[tabID, default: 0] += 1
     }
 
+    func reloadOrStopSelectedWorkspaceWebTab() {
+        guard let tab = selectedWorkspaceWebTab else { return }
+        if tab.isLoading {
+            stopWorkspaceWebTab(tab.id)
+        } else {
+            reloadWorkspaceWebTab(tab.id)
+        }
+    }
+
     func stopWorkspaceWebTab(_ tabID: WebTabID) {
         guard workspaceWebTabs.contains(where: { $0.id == tabID }) else { return }
         workspaceWebTabStopGenerationByID[tabID, default: 0] += 1
@@ -1148,6 +1205,42 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func openWorkspaceWebTabExternally(_ tabID: WebTabID) {
         guard let url = workspaceWebTabs.first(where: { $0.id == tabID })?.url else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    func openSelectedWorkspaceWebTabExternally() {
+        guard let tabID = selectedWorkspaceWebTabID else { return }
+        openWorkspaceWebTabExternally(tabID)
+    }
+
+    func focusSelectedWorkspaceWebAddress() {
+        guard let tabID = selectedWorkspaceWebTabID else { return }
+        workspaceWebAddressFocusGenerationByID[tabID, default: 0] += 1
+    }
+
+    func focusSelectedWorkspaceWebFind() {
+        guard let tabID = selectedWorkspaceWebTabID else { return }
+        workspaceWebFindFocusGenerationByID[tabID, default: 0] += 1
+    }
+
+    func navigateSelectedWorkspaceWebFind(previous: Bool) {
+        guard let tabID = selectedWorkspaceWebTabID else { return }
+        if previous {
+            workspaceWebFindPreviousGenerationByID[tabID, default: 0] += 1
+        } else {
+            workspaceWebFindNextGenerationByID[tabID, default: 0] += 1
+        }
+    }
+
+    func copySelectedWorkspaceWebTabURL() {
+        guard let url = selectedWorkspaceWebTab?.url else { return }
+        copyTextToPasteboard(url.absoluteString)
+    }
+
+    func copySelectedWorkspaceWebTabReference() {
+        guard let tab = selectedWorkspaceWebTab,
+              let url = tab.url else { return }
+        let title = tab.displayTitle.replacingOccurrences(of: "]", with: "\\]")
+        copyTextToPasteboard("[\(title)](\(url.absoluteString))")
     }
 
     func updateWorkspaceWebTab(_ tabID: WebTabID, mutate: (inout WorkspaceWebTabState) -> Void) {
@@ -1372,11 +1465,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func pruneWorkspaceWebTabCommands(keeping retainedIDs: Set<WebTabID>) {
+        ConductorWebKitSurfaceStore.shared.keepOnly(retainedIDs)
         workspaceWebTabNavigationGenerationByID = workspaceWebTabNavigationGenerationByID.filter { retainedIDs.contains($0.key) }
         workspaceWebTabReloadGenerationByID = workspaceWebTabReloadGenerationByID.filter { retainedIDs.contains($0.key) }
         workspaceWebTabStopGenerationByID = workspaceWebTabStopGenerationByID.filter { retainedIDs.contains($0.key) }
         workspaceWebTabBackGenerationByID = workspaceWebTabBackGenerationByID.filter { retainedIDs.contains($0.key) }
         workspaceWebTabForwardGenerationByID = workspaceWebTabForwardGenerationByID.filter { retainedIDs.contains($0.key) }
+        workspaceWebAddressFocusGenerationByID = workspaceWebAddressFocusGenerationByID.filter { retainedIDs.contains($0.key) }
+        workspaceWebFindFocusGenerationByID = workspaceWebFindFocusGenerationByID.filter { retainedIDs.contains($0.key) }
+        workspaceWebFindNextGenerationByID = workspaceWebFindNextGenerationByID.filter { retainedIDs.contains($0.key) }
+        workspaceWebFindPreviousGenerationByID = workspaceWebFindPreviousGenerationByID.filter { retainedIDs.contains($0.key) }
     }
 
     private func movedRootURL(for rootURL: URL, oldPath: String, newPath: String, isDirectory: Bool) -> URL {
@@ -1484,14 +1582,17 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func copyFocusedDirectory() {
         guard let path = focusedWorkingDirectoryURL?.path else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(path, forType: .string)
+        copyTextToPasteboard(path)
     }
 
     private func copyWorkingDirectory(for terminalID: TerminalID) {
         guard let path = workingDirectoryURL(for: terminalID)?.path else { return }
+        copyTextToPasteboard(path)
+    }
+
+    private func copyTextToPasteboard(_ text: String) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(path, forType: .string)
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     func ghosttyRuntimeDidRequestOpenURL(terminalID: TerminalID?, url: URL) -> Bool {
@@ -1768,7 +1869,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func showTerminalSearch() {
-        if selectedWorkspaceWebTab != nil {
+        if let webTab = selectedWorkspaceWebTab {
+            if webTab.url == nil {
+                focusSelectedWorkspaceWebAddress()
+            } else {
+                focusSelectedWorkspaceWebFind()
+            }
             return
         }
         if fileManagerPanelRequest != nil, fileManagerKeyboardFocused {
@@ -1850,6 +1956,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func routeContextualSearchNavigation(previous: Bool) -> Bool {
+        if selectedWorkspaceWebTab?.url != nil {
+            navigateSelectedWorkspaceWebFind(previous: previous)
+            return true
+        }
         if selectedWorkspaceFileTab != nil {
             if previous {
                 workspaceFileSearchPreviousGeneration &+= 1
@@ -2293,6 +2403,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func duplicateSelectedTab() {
+        if let tab = selectedWorkspaceWebTab {
+            newWorkspaceWebTab(initialInput: tab.url?.absoluteString ?? tab.pendingAddress)
+            return
+        }
         guard let pane = workspace.focusedPane else { return }
         duplicateTab(pane.selectedTabID, in: pane.id)
     }

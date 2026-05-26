@@ -7,6 +7,11 @@ enum ConductorShellCommand: String, CaseIterable {
     case newWorkspace
     case newTerminal
     case newWebTab
+    case focusWebAddress
+    case reloadSelectedWebTab
+    case openSelectedWebTabExternally
+    case copySelectedWebTabURL
+    case copySelectedWebTabReference
     case closeSelectedTab
     case closeOtherTabs
     case closeTabsToRight
@@ -53,6 +58,15 @@ enum ConductorShellCommand: String, CaseIterable {
     case clearNotifications
     case testNotification
 
+    var allowsWhenSettingsPanelVisible: Bool {
+        switch self {
+        case .toggleSettings:
+            true
+        default:
+            false
+        }
+    }
+
     var signpostName: StaticString {
         switch self {
         case .newWorkspace:
@@ -61,6 +75,8 @@ enum ConductorShellCommand: String, CaseIterable {
             return "command-new-terminal"
         case .newWebTab:
             return "command-new-web-tab"
+        case .focusWebAddress, .reloadSelectedWebTab, .openSelectedWebTabExternally, .copySelectedWebTabURL, .copySelectedWebTabReference:
+            return "command-web-tab"
         case .closeSelectedTab, .closeOtherTabs, .closeTabsToRight:
             return "command-close-tab"
         case .closeFocusedPane:
@@ -137,10 +153,16 @@ enum ConductorShellCommand: String, CaseIterable {
             model.canMoveSelectedTabToNewSplit
         case .jumpToLatestUnread:
             model.notifications.snapshot.latestUnread != nil
+        case .focusWebAddress:
+            model.selectedWorkspaceWebTab != nil
+        case .reloadSelectedWebTab:
+            model.selectedWorkspaceWebTab?.url != nil
+        case .openSelectedWebTabExternally, .copySelectedWebTabURL, .copySelectedWebTabReference:
+            model.selectedWorkspaceWebTab?.url != nil
         case .showTerminalSearch:
-            model.selectedWorkspaceWebTab == nil && (model.selectedWorkspaceFileTab != nil || model.fileManagerPanelRequest != nil || model.focusedTerminalID != nil)
+            model.selectedWorkspaceWebTab != nil || model.selectedWorkspaceFileTab != nil || model.fileManagerPanelRequest != nil || model.focusedTerminalID != nil
         case .findNext, .findPrevious:
-            model.terminalSearchVisible || model.selectedWorkspaceFileTab != nil || model.fileManagerPanelRequest != nil
+            model.selectedWorkspaceWebTab?.url != nil || model.terminalSearchVisible || model.selectedWorkspaceFileTab != nil || model.fileManagerPanelRequest != nil
         case .toggleFileManager:
             model.fileManagerPanelRequest != nil || model.focusedWorkingDirectoryURL != nil
         case .clearNotifications:
@@ -164,6 +186,16 @@ enum ConductorShellCommand: String, CaseIterable {
             model.newTerminal()
         case .newWebTab:
             model.newWorkspaceWebTab()
+        case .focusWebAddress:
+            model.focusSelectedWorkspaceWebAddress()
+        case .reloadSelectedWebTab:
+            model.reloadOrStopSelectedWorkspaceWebTab()
+        case .openSelectedWebTabExternally:
+            model.openSelectedWorkspaceWebTabExternally()
+        case .copySelectedWebTabURL:
+            model.copySelectedWorkspaceWebTabURL()
+        case .copySelectedWebTabReference:
+            model.copySelectedWorkspaceWebTabReference()
         case .closeSelectedTab:
             model.closeSelectedTab()
         case .closeOtherTabs:

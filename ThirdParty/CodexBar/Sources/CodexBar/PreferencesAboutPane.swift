@@ -43,7 +43,7 @@ struct AboutPane: View {
                 }
                 .buttonStyle(.plain)
                 .onHover { hovering in
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                    ConductorUsageMotion.perform(ConductorUsageMotion.hover) {
                         self.iconHover = hovering
                     }
                 }

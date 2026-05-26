@@ -576,11 +576,7 @@ struct MenuDescriptor {
         entries.append(.action("Refresh", .refresh))
         #if !CONDUCTOR_EMBEDDED
         entries.append(.action("Settings...", .settings))
-        #endif
         entries.append(.action("About \(CodexBarDisplayBrand.productName)", .about))
-        #if CONDUCTOR_EMBEDDED
-        entries.append(.action("Hide \(CodexBarDisplayBrand.productName)", .quit))
-        #else
         entries.append(.action("Quit", .quit))
         #endif
         return Section(entries: entries)

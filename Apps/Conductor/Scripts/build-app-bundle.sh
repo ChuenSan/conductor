@@ -26,6 +26,7 @@ APP="$ROOT/.build/Conductor.app"
 CONTENTS="$APP/Contents"
 MACOS="$CONTENTS/MacOS"
 RESOURCES="$CONTENTS/Resources"
+FRAMEWORKS="$CONTENTS/Frameworks"
 EXECUTABLE="$MACOS/Conductor"
 PRODUCT_EXECUTABLE=""
 PRODUCT_BIN_DIR=""
@@ -67,7 +68,7 @@ copy_swiftpm_resources() {
 
 create_app_layout() {
   rm -rf "$APP"
-  mkdir -p "$MACOS" "$RESOURCES"
+  mkdir -p "$MACOS" "$RESOURCES" "$FRAMEWORKS"
   cp "$PRODUCT_EXECUTABLE" "$EXECUTABLE"
   swift "$ROOT/Scripts/generate-app-icon.swift" "$RESOURCES/AppIcon.icns"
 }

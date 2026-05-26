@@ -82,9 +82,6 @@ struct FileManagerPanel: View {
         .focusable(canReceiveKeyboardFocus)
         .focused($keyboardFocused)
         .focusEffectDisabled()
-        .onTapGesture {
-            focusKeyboardIfBrowsing()
-        }
         .simultaneousGesture(TapGesture().onEnded {
             focusKeyboardIfBrowsing()
         })

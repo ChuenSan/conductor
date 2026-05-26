@@ -688,7 +688,6 @@ struct SettingsPreferenceGroup<Content: View>: View {
     let systemImage: String
     let content: Content
     @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
 
     init(
         title: String,
@@ -703,31 +702,15 @@ struct SettingsPreferenceGroup<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
-                Image(systemName: systemImage)
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis.opacity(0.82))
-                    .frame(width: 14)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.conductorSystem(size: 11.5, weight: .bold, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.primaryText)
-                        .lineLimit(1)
-                    Text(subtitle)
-                        .font(.conductorSystem(size: 10.1, weight: .medium, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                        .lineLimit(2)
-                }
-
-                Spacer(minLength: 0)
-            }
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.conductorSystem(size: 10.2, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .lineLimit(1)
 
             content
         }
-        .padding(.top, 2)
+        .padding(.top, 1)
     }
 }
 
@@ -740,14 +723,17 @@ struct SettingsFormSurface<Content: View>: View {
     }
 
     var body: some View {
-        LazyVStack(spacing: 0) {
+        VStack(spacing: 0) {
             content
         }
-        .background(theme.floatingControlFill.opacity(0.28))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.12 : 0.20))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.48), lineWidth: 0.8)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.24), lineWidth: 0.7)
         }
     }
 }
@@ -757,6 +743,7 @@ struct SettingsControlRow<Trailing: View>: View {
     let subtitle: String
     let systemImage: String
     let trailing: Trailing
+    @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -774,29 +761,27 @@ struct SettingsControlRow<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.floatingEmphasis.opacity(0.84))
-                .frame(width: 18)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                    .font(.conductorSystem(size: 11.4, weight: .medium, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .lineLimit(2)
+                    .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText.opacity(0.86))
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 12)
 
             trailing
         }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 52)
+        .padding(.horizontal, 9)
+        .frame(minHeight: 40)
+        .background(hovering ? theme.floatingHoverFill.opacity(0.16) : Color.clear)
+        .contentShape(Rectangle())
+        .conductorHover($hovering)
+        .animation(ConductorMotion.hover, value: hovering)
     }
 }
 
@@ -883,9 +868,9 @@ struct SettingsControlDivider: View {
 
     var body: some View {
         Rectangle()
-            .fill(theme.floatingSeparator.opacity(0.70))
+            .fill(theme.floatingSeparator.opacity(0.56))
             .frame(height: 1)
-            .padding(.leading, 50)
+            .padding(.leading, 56)
     }
 }
 
@@ -975,47 +960,62 @@ struct SettingsSidebarItem: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 Image(systemName: section.systemImage)
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
-                    .frame(width: 14)
-                    .padding(.top, 2)
+                    .font(.conductorSystem(size: 9.8, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText.opacity(0.86))
+                    .frame(width: 17, height: 17)
                     .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(section.title)
-                        .font(.conductorSystem(size: 11.6, weight: selected ? .semibold : .medium, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.primaryText)
-                        .lineLimit(1)
-                    Text(section.subtitle)
-                        .font(.conductorSystem(size: 9.4, weight: .medium, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                        .lineLimit(1)
-                }
+                Text(section.title)
+                    .font(.conductorSystem(size: 10.8, weight: selected ? .semibold : .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
 
                 Spacer(minLength: 0)
+
+                if selected {
+                    Image(systemName: "chevron.right")
+                        .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
+                        .foregroundStyle(theme.floatingEmphasis.opacity(0.84))
+                        .accessibilityHidden(true)
+                }
             }
-            .padding(.horizontal, 7)
-            .frame(height: 44, alignment: .center)
+            .padding(.horizontal, 8)
+            .frame(height: 28, alignment: .center)
             .background(rowBackground)
-            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(alignment: .leading) {
+                if selected {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(theme.floatingEmphasis.opacity(0.74))
+                        .frame(width: 2.5, height: 16)
+                        .padding(.leading, 1)
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(
+                        theme.floatingStroke.opacity(selected || hovering ? 0.26 : 0),
+                        lineWidth: 0.7)
+                    .allowsHitTesting(false)
+            }
         }
-        .buttonStyle(ConductorPressButtonStyle())
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
         .conductorHover($hovering)
         .animation(ConductorMotion.selectionGlide, value: selected)
         .animation(ConductorMotion.hover, value: hovering)
     }
 
     private var rowBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
         return ZStack {
             shape
-                .fill(hovering ? theme.floatingHoverFill : Color.clear)
+                .fill(hovering ? theme.floatingHoverFill.opacity(0.18) : Color.clear)
             if selected {
                 shape
-                    .fill(theme.floatingSelectedFill)
+                    .fill(theme.floatingSelectedFill.opacity(0.56))
                     .matchedGeometryEffect(id: "settings-section-selection", in: selectionNamespace)
             }
         }
@@ -1031,6 +1031,10 @@ struct CommandShortcutGuide: View {
     let rows: [CommandShortcutGuideRowModel]
     var height: CGFloat = 178
     var style: CommandShortcutGuideStyle = .card
+    var editable = false
+    var recordingCommand: ConductorShellCommand?
+    var onRecord: (ConductorShellCommand) -> Void = { _ in }
+    var onReset: (ConductorShellCommand) -> Void = { _ in }
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -1042,7 +1046,13 @@ struct CommandShortcutGuide: View {
                     if row.showsSectionTitle {
                         CommandShortcutSectionDivider(title: row.item.section, isFirst: row.isFirst)
                     }
-                    CommandShortcutGuideRow(item: row.item, style: style)
+                    CommandShortcutGuideRow(
+                        item: row.item,
+                        style: style,
+                        editable: editable,
+                        isRecording: recordingCommand == row.item.command,
+                        onRecord: { onRecord(row.item.command) },
+                        onReset: { onReset(row.item.command) })
                 }
             }
             .padding(.vertical, style == .plain ? 4 : 2)
@@ -1100,6 +1110,10 @@ struct CommandShortcutSectionDivider: View {
 struct CommandShortcutGuideRow: View {
     let item: CommandShortcutGuideItem
     var style: CommandShortcutGuideStyle = .card
+    var editable = false
+    var isRecording = false
+    var onRecord: () -> Void = {}
+    var onReset: () -> Void = {}
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -1120,14 +1134,31 @@ struct CommandShortcutGuideRow: View {
 
             Text(item.shortcut)
                 .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.secondaryText)
+                .foregroundStyle(isRecording ? theme.floatingEmphasis : ConductorDesign.secondaryText)
                 .padding(.horizontal, style == .plain ? 5 : 6)
                 .frame(height: style == .plain ? 16 : 17)
                 .background(shortcutBackground)
                 .clipShape(RoundedRectangle(cornerRadius: style == .plain ? 4 : 8, style: .continuous))
+
+            if editable {
+                ShortcutGuideInlineButton(
+                    title: isRecording ? L("按键", "Press") : L("更改", "Change"),
+                    systemImage: isRecording ? "record.circle.fill" : "keyboard",
+                    emphasized: isRecording,
+                    tooltip: L("录制新的快捷键", "Record a new shortcut"),
+                    action: onRecord
+                )
+
+                ShortcutGuideInlineButton(
+                    title: L("默认", "Default"),
+                    systemImage: "arrow.counterclockwise",
+                    tooltip: L("恢复默认快捷键", "Restore default shortcut"),
+                    action: onReset
+                )
+            }
         }
         .padding(.horizontal, style == .plain ? 6 : 8)
-        .frame(height: style == .plain ? 27 : 26)
+        .frame(height: style == .plain ? 30 : 28)
         .overlay(alignment: .bottom) {
             if style == .plain {
                 Rectangle()
@@ -1145,6 +1176,65 @@ struct CommandShortcutGuideRow: View {
         case .plain:
             return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.46 : 0.54)
         }
+    }
+}
+
+private struct ShortcutGuideInlineButton: View {
+    let title: String
+    let systemImage: String
+    var emphasized = false
+    let tooltip: String
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 7)
+            .frame(height: 21)
+            .background(background)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(stroke, lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.99, pressedOpacity: 0.97))
+        .conductorHover($hovering)
+        .macNativeTooltip(tooltip)
+        .accessibilityLabel(Text(tooltip))
+    }
+
+    private var foreground: Color {
+        if emphasized {
+            return theme.floatingEmphasis
+        }
+        return hovering ? ConductorDesign.primaryText : ConductorDesign.secondaryText
+    }
+
+    private var background: Color {
+        if emphasized {
+            return theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.16 : 0.10)
+        }
+        return hovering ? theme.floatingHoverFill.opacity(0.72) : theme.floatingControlFill.opacity(0.28)
+    }
+
+    private var stroke: Color {
+        if emphasized {
+            return theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.34 : 0.26)
+        }
+        return theme.floatingStroke.opacity(hovering ? 0.40 : 0.18)
     }
 }
 
@@ -1422,6 +1512,38 @@ struct ThemePreviewMotif: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
+            case .white:
+                VStack(spacing: 12) {
+                    ForEach(0..<9, id: \.self) { _ in
+                        Rectangle()
+                            .fill(theme.shellStroke.opacity(0.26))
+                            .frame(height: 1)
+                    }
+                }
+                .padding(.top, 14)
+                .padding(.horizontal, 14)
+            case .gradient:
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            theme.accent.opacity(0.18),
+                            Color.white.opacity(theme.usesDarkChrome ? 0.04 : 0.28),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    Path { path in
+                        let step: CGFloat = 22
+                        var x = -proxy.size.height
+                        while x < proxy.size.width {
+                            path.move(to: CGPoint(x: x, y: proxy.size.height))
+                            path.addLine(to: CGPoint(x: x + proxy.size.height, y: 0))
+                            x += step
+                        }
+                    }
+                    .stroke(theme.accent.opacity(0.18), lineWidth: 0.8)
+                }
             case .studio, .minimal, .system:
                 Rectangle()
                     .fill(

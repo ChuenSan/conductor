@@ -18,7 +18,7 @@ struct ShellRootView: View {
     @FocusState private var terminalSearchFocused: Bool
 
     private let fileManagerTargetWidth: CGFloat = 468
-    private let fileManagerAnimationDuration: TimeInterval = 0.18
+    private let fileManagerAnimationDuration: TimeInterval = ConductorMotion.Timing.panelDrawer
 
     var body: some View {
         let shellSnapshot = ShellChromeSnapshot(model: model)
@@ -173,7 +173,7 @@ struct ShellRootView: View {
 
     private var fileManagerTrayAnimation: Animation? {
         guard !model.appearance.reducedMotion else { return nil }
-        return .timingCurve(0.18, 0.86, 0.18, 1.0, duration: fileManagerAnimationDuration)
+        return ConductorMotion.panelDrawer
     }
 
     private func synchronizeFileManagerPresentation(animated: Bool) {
@@ -441,7 +441,8 @@ struct FloatingPanelHeader<Trailing: View>: View {
                     .background(theme.floatingControlFill)
                     .clipShape(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+            .keyboardShortcut(.cancelAction)
             .accessibilityLabel(closeHelp)
             .macNativeTooltip(closeHelp)
         }
@@ -514,15 +515,15 @@ private struct CommandPaletteView: View {
 
     var body: some View {
         ZStack {
-            ConductorGlassSurface(style: .panel, clarity: snapshot.chromeClarity, interactive: true) {
-                VStack(alignment: .leading, spacing: 8) {
+            ConductorGlassSurface(style: .palette, clarity: snapshot.chromeClarity, interactive: true) {
+                VStack(alignment: .leading, spacing: 6) {
                     commandHeader
                     commandSearchField
                     commandResults
                 }
-                .padding(10)
+                .padding(8)
             }
-            .frame(width: 660, height: 430)
+            .frame(width: 604, height: 372)
             .onAppear {
                 refreshFilteredCommands()
                 focusSearchField()
@@ -564,26 +565,26 @@ private struct CommandPaletteView: View {
     }
 
     private var commandSearchField: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .accessibilityHidden(true)
             TextField(L("搜索命令", "Search commands"), text: $query)
                 .textFieldStyle(.plain)
-                .font(.conductorSystem(size: 13, weight: .medium, scale: fontScale))
+                .font(.conductorSystem(size: 12.4, weight: .medium, scale: fontScale))
                 .focused($searchFocused)
             Text("↵")
-                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
         }
-        .padding(.horizontal, 10)
-        .frame(height: 32)
-        .background(theme.floatingControlStrongFill)
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup))
+        .padding(.horizontal, 9)
+        .frame(height: 30)
+        .background(theme.floatingControlFill.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup)
-                .stroke(theme.floatingStroke, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.72), lineWidth: 0.8)
         }
     }
 
@@ -602,7 +603,7 @@ private struct CommandPaletteView: View {
                 .frame(height: 190)
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 3) {
+                    LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(filteredResult.rows) { row in
                             if row.showsSectionTitle {
                                 CommandSectionTitle(row.command.section, compact: true)
@@ -790,6 +791,21 @@ private struct CommandPaletteItem: Identifiable, Equatable {
         )
     }
 
+    func resolvingShortcut(using preferences: KeyboardShortcutPreferences) -> CommandPaletteItem {
+        let resolvedShortcut = preferences.displayShortcut(for: command, fallback: shortcut)
+        guard resolvedShortcut != shortcut else { return self }
+        return CommandPaletteItem(
+            id: id,
+            command: command,
+            section: section,
+            title: title,
+            shortcut: resolvedShortcut,
+            disabled: disabled,
+            disabledReason: disabledReason,
+            keywords: keywords
+        )
+    }
+
     var systemImage: String {
         switch id {
         case "new-workspace":
@@ -798,6 +814,16 @@ private struct CommandPaletteItem: Identifiable, Equatable {
             "plus.rectangle.on.rectangle"
         case "new-web-tab":
             "globe"
+        case "web-address":
+            "link"
+        case "web-reload":
+            "arrow.clockwise"
+        case "web-open-external":
+            "arrow.up.right.square"
+        case "web-copy-url":
+            "link.badge.plus"
+        case "web-copy-reference":
+            "doc.on.clipboard"
         case "new-terminal-current-directory":
             "arrow.turn.down.right"
         case "open-current-directory":
@@ -860,7 +886,7 @@ private struct CommandPaletteItem: Identifiable, Equatable {
     }
 
     var discoveryShortcut: String {
-        if shortcut.hasPrefix("Cmd") {
+        if shortcut.contains("Cmd") {
             return shortcut
         }
         switch id {
@@ -879,10 +905,60 @@ private enum ConductorCommandCatalog {
             model.canPerformCommand(command)
         }
 
-        return [
+        let items = [
             CommandPaletteItem(id: "new-workspace", command: .newWorkspace, section: L("创建", "Create"), title: L("新建工作区", "New Workspace"), shortcut: "Cmd-N", keywords: "workspace new"),
             CommandPaletteItem(id: "new-terminal", command: .newTerminal, section: L("创建", "Create"), title: L("新开终端", "New Terminal"), shortcut: "Cmd-T", keywords: "terminal pane shell"),
             CommandPaletteItem(id: "new-web-tab", command: .newWebTab, section: L("创建", "Create"), title: L("新建网页标签", "New Web Tab"), shortcut: "Cmd-Shift-T", keywords: "web browser tab url docs preview localhost"),
+            CommandPaletteItem(
+                id: "web-address",
+                command: .focusWebAddress,
+                section: L("网页", "Web"),
+                title: L("聚焦网页地址栏", "Focus Web Address"),
+                shortcut: "Cmd-L",
+                disabled: !canPerform(.focusWebAddress),
+                disabledReason: L("当前没有网页标签", "No web tab is selected"),
+                keywords: "web url address location search"
+            ),
+            CommandPaletteItem(
+                id: "web-reload",
+                command: .reloadSelectedWebTab,
+                section: L("网页", "Web"),
+                title: model.selectedWorkspaceWebTab?.isLoading == true ? L("停止载入网页", "Stop Loading Web Page") : L("重新载入网页", "Reload Web Page"),
+                shortcut: "Cmd-R",
+                disabled: !canPerform(.reloadSelectedWebTab),
+                disabledReason: L("当前网页还没有地址", "Current web tab has no address"),
+                keywords: "web reload refresh stop"
+            ),
+            CommandPaletteItem(
+                id: "web-open-external",
+                command: .openSelectedWebTabExternally,
+                section: L("网页", "Web"),
+                title: L("在浏览器中打开当前网页", "Open Current Web Page in Browser"),
+                shortcut: "Browser",
+                disabled: !canPerform(.openSelectedWebTabExternally),
+                disabledReason: L("当前网页还没有地址", "Current web tab has no address"),
+                keywords: "web external browser open"
+            ),
+            CommandPaletteItem(
+                id: "web-copy-url",
+                command: .copySelectedWebTabURL,
+                section: L("网页", "Web"),
+                title: L("复制当前网页链接", "Copy Current Web URL"),
+                shortcut: "Copy",
+                disabled: !canPerform(.copySelectedWebTabURL),
+                disabledReason: L("当前网页还没有地址", "Current web tab has no address"),
+                keywords: "web url copy link"
+            ),
+            CommandPaletteItem(
+                id: "web-copy-reference",
+                command: .copySelectedWebTabReference,
+                section: L("网页", "Web"),
+                title: L("复制当前网页引用", "Copy Current Web Reference"),
+                shortcut: "Markdown",
+                disabled: !canPerform(.copySelectedWebTabReference),
+                disabledReason: L("当前网页还没有地址", "Current web tab has no address"),
+                keywords: "web markdown reference copy link"
+            ),
             CommandPaletteItem(
                 id: "new-terminal-current-directory",
                 command: .newTerminalAtFocusedDirectory,
@@ -1005,6 +1081,7 @@ private enum ConductorCommandCatalog {
             CommandPaletteItem(id: "clear-notifications", command: .clearNotifications, section: L("整理", "Organize"), title: L("清空通知", "Clear Notifications"), shortcut: "Clear", disabled: !canPerform(.clearNotifications), disabledReason: L("通知中心为空", "Notification Center is empty"), keywords: "notification clear"),
             CommandPaletteItem(id: "debug-notification", command: .testNotification, section: L("通知", "Notifications"), title: L("发送测试通知", "Send Test Notification"), shortcut: "Test", keywords: "notification test")
         ]
+        return items.map { $0.resolvingShortcut(using: model.appearance.keyboardShortcuts) }
     }
 
     @MainActor
@@ -1014,6 +1091,7 @@ private enum ConductorCommandCatalog {
             .map { command in
                 CommandShortcutGuideItem(
                     id: command.id,
+                    command: command.command,
                     section: command.section,
                     title: command.title,
                     shortcut: command.discoveryShortcut,
@@ -1039,6 +1117,7 @@ private enum ConductorCommandCatalog {
 
 struct CommandShortcutGuideItem: Identifiable, Equatable {
     let id: String
+    let command: ConductorShellCommand
     let section: String
     let title: String
     let shortcut: String
@@ -1062,18 +1141,18 @@ private struct CommandPaletteHeader: View {
     var body: some View {
         HStack(spacing: 7) {
             Image(systemName: "command")
-                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
-                .frame(width: 18, height: 18)
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis.opacity(0.82))
+                .frame(width: 16, height: 18)
                 .accessibilityHidden(true)
 
             Text(L("命令", "Commands"))
-                .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.primaryText)
                 .lineLimit(1)
 
             Text(subtitle)
-                .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                .font(.conductorSystem(size: 9.8, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -1084,17 +1163,17 @@ private struct CommandPaletteHeader: View {
                 onClose()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.secondaryText)
-                    .frame(width: 22, height: 22)
-                    .background(theme.floatingControlFill.opacity(0.82))
+                    .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .frame(width: 20, height: 20)
+                    .background(theme.floatingControlFill.opacity(0.58))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(closeHelp)
             .macNativeTooltip(closeHelp)
         }
-        .frame(height: 24)
+        .frame(height: 22)
     }
 }
 
@@ -1112,14 +1191,14 @@ private struct CommandSectionTitle: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(title)
-                .font(.conductorSystem(size: compact ? 9.8 : 10.5, weight: .semibold, scale: fontScale))
+                .font(.conductorSystem(size: compact ? 9.2 : 10.2, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
             Rectangle()
-                .fill(theme.floatingSeparator)
+                .fill(theme.floatingSeparator.opacity(0.72))
                 .frame(height: 1)
         }
-        .padding(.top, compact ? 3 : 5)
-        .padding(.horizontal, 4)
+        .padding(.top, compact ? 4 : 5)
+        .padding(.horizontal, 3)
     }
 }
 
@@ -1135,22 +1214,22 @@ private struct CommandButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 9) {
+            HStack(spacing: 7) {
                 Image(systemName: command.systemImage)
-                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
+                    .font(.conductorSystem(size: 10.4, weight: .semibold, scale: fontScale))
                     .foregroundStyle(iconColor)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 20, height: 20)
                     .background(iconFill)
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(command.title)
-                        .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                        .font(.conductorSystem(size: 11.8, weight: selected ? .semibold : .medium, scale: fontScale))
                         .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.primaryText)
                         .lineLimit(1)
                     if let disabledReason = command.disabledReason, command.disabled {
                         Text(disabledReason)
-                            .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                            .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
                             .foregroundStyle(ConductorDesign.tertiaryText)
                             .lineLimit(1)
                     }
@@ -1159,21 +1238,29 @@ private struct CommandButton: View {
                 Spacer(minLength: 8)
 
                 Text(command.shortcut)
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                    .font(.conductorSystem(size: 9.8, weight: .medium, scale: fontScale))
                     .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
-                    .padding(.horizontal, 7)
-                    .frame(height: 19)
-                    .background(command.disabled ? theme.floatingControlFill.opacity(0.50) : theme.floatingControlFill)
+                    .padding(.horizontal, 6)
+                    .frame(height: 17)
+                    .background(command.disabled ? theme.floatingControlFill.opacity(0.34) : theme.floatingControlFill.opacity(0.56))
                     .clipShape(Capsule())
             }
-            .padding(.horizontal, 8)
-            .frame(height: command.disabledReason != nil && command.disabled ? 42 : 36)
+            .padding(.horizontal, 7)
+            .frame(height: command.disabledReason != nil && command.disabled ? 38 : 30)
             .background(rowBackground)
-            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
-            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: ConductorTokens.Radius.row)
-                    .stroke(selected ? theme.floatingSelectedStroke : Color.clear, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(selected ? theme.floatingSelectedStroke.opacity(0.55) : Color.clear, lineWidth: 0.8)
+            }
+            .overlay(alignment: .leading) {
+                if selected {
+                    Capsule()
+                        .fill(theme.floatingEmphasis.opacity(0.70))
+                        .frame(width: 2.5, height: 14)
+                        .padding(.leading, 3)
+                }
             }
         }
         .buttonStyle(.plain)
@@ -1193,13 +1280,13 @@ private struct CommandButton: View {
     }
 
     private var rowBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
         return ZStack {
             shape
-                .fill(hovering ? theme.floatingHoverFill : theme.floatingControlFill.opacity(0.50))
+                .fill(hovering ? theme.floatingHoverFill.opacity(0.82) : theme.floatingControlFill.opacity(0.28))
             if selected {
                 shape
-                    .fill(theme.floatingSelectedFill)
+                    .fill(theme.floatingSelectedFill.opacity(0.82))
                     .matchedGeometryEffect(id: "command-selection", in: selectionNamespace)
             }
         }
@@ -1214,9 +1301,9 @@ private struct CommandButton: View {
 
     private var iconFill: Color {
         if selected {
-            return theme.floatingSelectedFill
+            return theme.floatingControlFill.opacity(0.76)
         }
-        return command.disabled ? theme.floatingControlFill.opacity(0.45) : theme.floatingControlFill
+        return command.disabled ? theme.floatingControlFill.opacity(0.24) : theme.floatingControlFill.opacity(0.42)
     }
 }
 

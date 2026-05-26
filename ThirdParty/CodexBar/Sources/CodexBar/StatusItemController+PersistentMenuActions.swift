@@ -2,18 +2,23 @@ import AppKit
 
 extension StatusItemController {
     func usesPersistentMenuActionItem(for action: MenuDescriptor.MenuAction) -> Bool {
+        #if CONDUCTOR_EMBEDDED
+        switch action {
+        case .settings, .about, .quit:
+            false
+        default:
+            true
+        }
+        #else
         switch action {
         case .settings:
-            #if CONDUCTOR_EMBEDDED
-            false
-            #else
             true
-            #endif
         case .installUpdate, .refresh, .about, .quit:
             true
         default:
             false
         }
+        #endif
     }
 
     func persistentMenuActionSystemImageName(for action: MenuDescriptor.MenuAction) -> String? {
@@ -37,9 +42,43 @@ extension StatusItemController {
         switch action {
         case .refresh:
             self.refreshNow()
+        case .refreshAugmentSession:
+            self.refreshAugmentSession()
         case .installUpdate:
             self.closeMenuForPersistentAction(menu)
             self.installUpdate()
+        case .dashboard:
+            self.closeMenuForPersistentAction(menu)
+            self.openDashboard()
+        case .statusPage:
+            self.closeMenuForPersistentAction(menu)
+            self.openStatusPage()
+        case .changelog:
+            self.closeMenuForPersistentAction(menu)
+            self.openChangelog()
+        case .addCodexAccount:
+            self.closeMenuForPersistentAction(menu)
+            self.addManagedCodexAccountFromMenu(NSMenuItem())
+        case let .addProviderAccount(provider), let .switchAccount(provider):
+            self.closeMenuForPersistentAction(menu)
+            let item = NSMenuItem()
+            item.representedObject = provider.rawValue
+            self.runSwitchAccount(item)
+        case let .requestCodexSystemPromotion(managedAccountID):
+            self.closeMenuForPersistentAction(menu)
+            let item = NSMenuItem()
+            item.representedObject = managedAccountID.uuidString
+            self.requestCodexSystemPromotionFromMenu(item)
+        case let .openTerminal(command):
+            self.closeMenuForPersistentAction(menu)
+            let item = NSMenuItem()
+            item.representedObject = command
+            self.openTerminalCommand(item)
+        case let .loginToProvider(url):
+            self.closeMenuForPersistentAction(menu)
+            let item = NSMenuItem()
+            item.representedObject = url
+            self.openLoginToProvider(item)
         case .settings:
             self.closeMenuForPersistentAction(menu)
             self.showSettingsGeneral()
@@ -49,8 +88,10 @@ extension StatusItemController {
         case .quit:
             self.closeMenuForPersistentAction(menu)
             self.quit()
-        default:
-            break
+        case let .copyError(message):
+            let item = NSMenuItem()
+            item.representedObject = message
+            self.copyError(item)
         }
     }
 

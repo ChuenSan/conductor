@@ -10,47 +10,71 @@ struct ProviderSidebarListView: View {
     let subtitle: (UsageProvider) -> String
     @Binding var selection: UsageProvider?
     let moveProviders: (IndexSet, Int) -> Void
+    var scrollsVertically = true
     @State private var draggingProvider: UsageProvider?
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                ForEach(self.providers, id: \.self) { provider in
-                    ProviderSidebarRowView(
-                        provider: provider,
-                        store: self.store,
-                        isEnabled: self.isEnabled(provider),
-                        subtitle: self.subtitle(provider),
-                        draggingProvider: self.$draggingProvider)
-                        .padding(.horizontal, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(
-                                    self.selection == provider
-                                        ? Color(nsColor: .selectedContentBackgroundColor)
-                                        : Color.clear)
-                                .padding(.horizontal, 4))
-                        .contentShape(Rectangle())
-                        .onTapGesture { self.selection = provider }
-                        .onDrop(
-                            of: [UTType.plainText],
-                            delegate: ProviderSidebarDropDelegate(
-                                item: provider,
-                                providers: self.providers,
-                                dragging: self.$draggingProvider,
-                                moveProviders: self.moveProviders))
+        let style = ConductorUsageMenuStyle.current ?? .fallback
+        Group {
+            if scrollsVertically {
+                ScrollView {
+                    providerRows(style: style)
                 }
+            } else {
+                providerRows(style: style)
             }
-            .padding(.vertical, 4)
         }
         .background(
             RoundedRectangle(cornerRadius: ProviderSettingsMetrics.sidebarCornerRadius, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.8)))
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.32 : 0.44)))
         .overlay(
             RoundedRectangle(cornerRadius: ProviderSettingsMetrics.sidebarCornerRadius, style: .continuous)
-                .stroke(Color(nsColor: .separatorColor).opacity(0.7), lineWidth: 1))
+                .stroke(style.stroke.opacity(0.30), lineWidth: 0.8))
         .clipShape(RoundedRectangle(cornerRadius: ProviderSettingsMetrics.sidebarCornerRadius, style: .continuous))
         .frame(minWidth: ProviderSettingsMetrics.sidebarWidth, maxWidth: ProviderSettingsMetrics.sidebarWidth)
+    }
+
+    private func providerRows(style: ConductorUsagePanelStyle) -> some View {
+        VStack(spacing: 0) {
+            ForEach(self.providers, id: \.self) { provider in
+                let isSelected = self.selection == provider
+                ProviderSidebarRowView(
+                    provider: provider,
+                    store: self.store,
+                    isEnabled: self.isEnabled(provider),
+                    subtitle: self.subtitle(provider),
+                    isSelected: isSelected,
+                    style: style,
+                    draggingProvider: self.$draggingProvider)
+                    .padding(.horizontal, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(
+                                isSelected
+                                    ? style.emphasis.opacity(style.usesDarkChrome ? 0.18 : 0.10)
+                                    : Color.clear)
+                            .padding(.horizontal, 4))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(
+                                isSelected
+                                    ? style.emphasis.opacity(style.usesDarkChrome ? 0.32 : 0.22)
+                                    : Color.clear,
+                                lineWidth: 0.8)
+                            .padding(.horizontal, 4)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { self.selection = provider }
+                    .onDrop(
+                        of: [UTType.plainText],
+                        delegate: ProviderSidebarDropDelegate(
+                            item: provider,
+                            providers: self.providers,
+                            dragging: self.$draggingProvider,
+                            moveProviders: self.moveProviders))
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -60,6 +84,8 @@ private struct ProviderSidebarRowView: View {
     @Bindable var store: UsageStore
     @Binding var isEnabled: Bool
     let subtitle: String
+    let isSelected: Bool
+    let style: ConductorUsagePanelStyle
     @Binding var draggingProvider: UsageProvider?
 
     var body: some View {
@@ -84,7 +110,7 @@ private struct ProviderSidebarRowView: View {
                 HStack(spacing: 6) {
                     Text(self.store.metadata(for: self.provider).displayName)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(self.isSelected ? self.style.primaryText : self.style.primaryText.opacity(0.90))
 
                     if showStatus {
                         ProviderStatusDot(indicator: self.store.statusIndicator(for: self.provider))
@@ -97,7 +123,7 @@ private struct ProviderSidebarRowView: View {
                 }
                 Text(statusText)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(self.style.secondaryText)
                     .lineLimit(2)
                     .frame(height: ProviderSettingsMetrics.sidebarSubtitleHeight, alignment: .topLeading)
             }

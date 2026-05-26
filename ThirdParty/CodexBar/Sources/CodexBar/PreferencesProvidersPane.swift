@@ -11,6 +11,7 @@ struct ProvidersPane: View {
     let codexAmbientLoginRunner: any CodexAmbientLoginRunning
     let showsMenuBarMetricPicker: Bool
     let hiddenProviderSettingIDs: Set<String>
+    let allowsNestedScrolling: Bool
     let runProviderLoginFlow: @MainActor (UsageProvider) async -> Void
     @State private var expandedErrors: Set<UsageProvider> = []
     @State private var settingsStatusTextByID: [String: String] = [:]
@@ -32,6 +33,7 @@ struct ProvidersPane: View {
         codexAmbientLoginRunner: any CodexAmbientLoginRunning = DefaultCodexAmbientLoginRunner(),
         showsMenuBarMetricPicker: Bool = true,
         hiddenProviderSettingIDs: Set<String> = [],
+        allowsNestedScrolling: Bool = true,
         runProviderLoginFlow: @escaping @MainActor (UsageProvider) async -> Void = { _ in })
     {
         self.settings = settings
@@ -45,6 +47,7 @@ struct ProvidersPane: View {
         self.codexAmbientLoginRunner = codexAmbientLoginRunner
         self.showsMenuBarMetricPicker = showsMenuBarMetricPicker
         self.hiddenProviderSettingIDs = hiddenProviderSettingIDs
+        self.allowsNestedScrolling = allowsNestedScrolling
         self.runProviderLoginFlow = runProviderLoginFlow
     }
 
@@ -58,7 +61,8 @@ struct ProvidersPane: View {
                 selection: self.$selectedProvider,
                 moveProviders: { fromOffsets, toOffset in
                     self.settings.moveProvider(fromOffsets: fromOffsets, toOffset: toOffset)
-                })
+                },
+                scrollsVertically: self.allowsNestedScrolling)
 
             if let provider = self.selectedProvider ?? self.providers.first {
                 ProviderDetailView(
@@ -80,6 +84,7 @@ struct ProvidersPane: View {
                         self.triggerRefresh(for: provider)
                     },
                     showsSupplementarySettingsContent: self.codexAccountsSectionState(for: provider) != nil,
+                    scrollsVertically: self.allowsNestedScrolling,
                     supplementarySettingsContent: {
                         if let state = self.codexAccountsSectionState(for: provider) {
                             CodexAccountsSectionView(
@@ -115,7 +120,10 @@ struct ProvidersPane: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: self.allowsNestedScrolling ? .infinity : nil,
+            alignment: .leading)
         .onAppear {
             self.ensureSelection()
         }

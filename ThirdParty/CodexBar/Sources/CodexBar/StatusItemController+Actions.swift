@@ -250,6 +250,11 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
     }
 
     func openMenuFromShortcut() {
+        #if CONDUCTOR_EMBEDDED
+        ConductorUsageFeature.openTokenRecords(
+            style: ConductorUsageMenuStyle.current ?? .fallback,
+            languageIdentifier: ConductorUsageFeature.currentHostLanguageIdentifier)
+        #else
         if self.closeOpenMenusFromShortcutIfNeeded() {
             return
         }
@@ -263,6 +268,7 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
         // Use the lazy accessor to ensure the item exists
         let item = self.lazyStatusItem(for: provider)
         item.button?.performClick(nil)
+        #endif
     }
 
     @discardableResult

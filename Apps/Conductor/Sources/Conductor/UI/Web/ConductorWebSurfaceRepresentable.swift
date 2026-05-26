@@ -6,13 +6,16 @@ private func L(_ zh: String, _ en: String) -> String {
     ConductorLocalization.text(zh: zh, en: en)
 }
 
-struct ConductorWebSurfaceRepresentable: NSViewRepresentable {
+struct ConductorWebKitSurfaceRepresentable: NSViewRepresentable {
     let tab: WorkspaceWebTabState
     let navigationGeneration: Int
     let reloadGeneration: Int
     let stopGeneration: Int
     let backGeneration: Int
     let forwardGeneration: Int
+    let findQuery: String
+    let findGeneration: Int
+    let findBackwards: Bool
     let model: ConductorWindowModel
 
     func makeCoordinator() -> Coordinator {
@@ -30,7 +33,10 @@ struct ConductorWebSurfaceRepresentable: NSViewRepresentable {
             reloadGeneration: reloadGeneration,
             stopGeneration: stopGeneration,
             backGeneration: backGeneration,
-            forwardGeneration: forwardGeneration
+            forwardGeneration: forwardGeneration,
+            findQuery: findQuery,
+            findGeneration: findGeneration,
+            findBackwards: findBackwards
         )
     }
 
@@ -45,21 +51,18 @@ struct ConductorWebSurfaceRepresentable: NSViewRepresentable {
         private var lastStopGeneration = -1
         private var lastBackGeneration = -1
         private var lastForwardGeneration = -1
+        private var lastFindGeneration = -1
+        private var lastRequestedURL: URL?
 
         init(model: ConductorWindowModel, tabID: WebTabID) {
             self.model = model
             self.tabID = tabID
-
-            let configuration = WKWebViewConfiguration()
-            configuration.websiteDataStore = .default()
-            configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
-            self.webView = WKWebView(frame: .zero, configuration: configuration)
+            self.webView = ConductorWebKitSurfaceStore.shared.webView(for: tabID)
 
             super.init()
 
             webView.navigationDelegate = self
             webView.uiDelegate = self
-            webView.allowsBackForwardNavigationGestures = true
             installObservers()
         }
 
@@ -73,22 +76,24 @@ struct ConductorWebSurfaceRepresentable: NSViewRepresentable {
             reloadGeneration: Int,
             stopGeneration: Int,
             backGeneration: Int,
-            forwardGeneration: Int
+            forwardGeneration: Int,
+            findQuery: String,
+            findGeneration: Int,
+            findBackwards: Bool
         ) {
             tabID = tab.id
 
             if navigationGeneration != lastNavigationGeneration {
+                let firstUpdate = lastNavigationGeneration == -1
                 lastNavigationGeneration = navigationGeneration
-                load(tab.url)
-            } else if let url = tab.url, webView.url?.absoluteString != url.absoluteString {
-                load(url)
+                load(tab.url, force: !firstUpdate)
             }
 
             if lastReloadGeneration == -1 {
                 lastReloadGeneration = reloadGeneration
             } else if reloadGeneration != lastReloadGeneration {
                 lastReloadGeneration = reloadGeneration
-                webView.reload()
+                reload(tab.url)
             }
             if lastStopGeneration == -1 {
                 lastStopGeneration = stopGeneration
@@ -113,11 +118,36 @@ struct ConductorWebSurfaceRepresentable: NSViewRepresentable {
                     webView.goForward()
                 }
             }
+            if lastFindGeneration == -1 {
+                lastFindGeneration = findGeneration
+            } else if findGeneration != lastFindGeneration {
+                lastFindGeneration = findGeneration
+                find(findQuery, backwards: findBackwards)
+            }
         }
 
-        private func load(_ url: URL?) {
+        private func load(_ url: URL?, force: Bool) {
             guard let url else { return }
+            guard force || webView.url?.absoluteString != url.absoluteString else { return }
+            lastRequestedURL = url
             webView.load(URLRequest(url: url))
+        }
+
+        private func reload(_ fallbackURL: URL?) {
+            if webView.url != nil {
+                webView.reload()
+            } else {
+                load(fallbackURL, force: true)
+            }
+        }
+
+        private func find(_ query: String, backwards: Bool) {
+            let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            let configuration = WKFindConfiguration()
+            configuration.backwards = backwards
+            configuration.wraps = true
+            webView.find(trimmed, configuration: configuration) { _ in }
         }
 
         private func installObservers() {
@@ -180,6 +210,7 @@ struct ConductorWebSurfaceRepresentable: NSViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            lastRequestedURL = webView.url
             publishState()
             model?.persistWorkspaceWebTabs()
         }
@@ -195,7 +226,11 @@ struct ConductorWebSurfaceRepresentable: NSViewRepresentable {
         private func fail(_ error: Error) {
             let nsError = error as NSError
             guard nsError.code != NSURLErrorCancelled else { return }
-            model?.failWorkspaceWebTab(tabID, url: webView.url, message: error.localizedDescription)
+            guard nsError.domain != WKError.errorDomain || nsError.code != WKError.webContentProcessTerminated.rawValue else {
+                model?.reloadWorkspaceWebTab(tabID)
+                return
+            }
+            model?.failWorkspaceWebTab(tabID, url: lastRequestedURL ?? webView.url, message: error.localizedDescription)
         }
 
         func webView(

@@ -123,7 +123,7 @@ struct PreferencesView: View {
             self.contentHeight = tab.preferredHeight
         }
         if animate {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) { change() }
+            ConductorUsageMotion.perform(ConductorUsageMotion.panel) { change() }
         } else {
             change()
         }

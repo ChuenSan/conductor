@@ -168,16 +168,16 @@ struct ConductorSidebar: View {
     private var expandedSidebarDock: some View {
         SidebarDockSurface {
             HStack(spacing: 6) {
-                SidebarDockButton(id: "sidebar-dock.new-terminal", icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
+                SidebarDockButton(id: "sidebar-dock.new-terminal", icon: "plus.rectangle.on.rectangle", help: commandTooltip(L("新开终端", "New Terminal"), command: .newTerminal, fallback: "Cmd-T")) {
                     finishWorkspaceRenameIfNeeded()
                     model.performCommand(.newTerminal)
                 }
-                SidebarDockButton(id: "sidebar-dock.command-center", icon: "command", help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
+                SidebarDockButton(id: "sidebar-dock.command-center", icon: "command", help: commandTooltip(L("打开命令面板", "Open Command Center"), command: .toggleCommandPalette, fallback: "Cmd-K")) {
                     finishWorkspaceRenameIfNeeded()
                     model.performCommand(.toggleCommandPalette)
                 }
                 Spacer(minLength: 0)
-                SidebarDockButton(id: "sidebar-dock.settings", icon: "gearshape", help: L("设置", "Settings")) {
+                SidebarDockButton(id: "sidebar-dock.settings", icon: "gearshape", help: commandTooltip(L("设置", "Settings"), command: .toggleSettings, fallback: "Cmd-,")) {
                     finishWorkspaceRenameIfNeeded()
                     ConductorMotion.perform(ConductorMotion.panel) {
                         model.performCommand(.toggleSettings)
@@ -217,6 +217,10 @@ struct ConductorSidebar: View {
             usesDarkChrome: theme.usesDarkChrome)
     }
 
+    private func commandTooltip(_ title: String, command: ConductorShellCommand, fallback: String) -> String {
+        "\(title) \(model.shortcutTitle(for: command, fallback: fallback))"
+    }
+
     private var workspaceSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -240,8 +244,8 @@ struct ConductorSidebar: View {
                         .contentShape(RoundedRectangle(cornerRadius: 5))
                 }
                 .buttonStyle(ConductorPressButtonStyle())
-                .accessibilityLabel(L("新建工作区 Cmd-N", "New Workspace Cmd-N"))
-                .macNativeTooltip(L("新建工作区 Cmd-N", "New Workspace Cmd-N"))
+                .accessibilityLabel(commandTooltip(L("新建工作区", "New Workspace"), command: .newWorkspace, fallback: "Cmd-N"))
+                .macNativeTooltip(commandTooltip(L("新建工作区", "New Workspace"), command: .newWorkspace, fallback: "Cmd-N"))
             }
             .padding(.trailing, 5)
 
@@ -300,11 +304,11 @@ struct ConductorSidebar: View {
 
     private var collapsedSidebarActions: some View {
         VStack(spacing: 6) {
-            SidebarRailButton(id: "sidebar-rail.new-terminal", icon: "plus.rectangle.on.rectangle", help: L("新开终端 Cmd-T", "New Terminal Cmd-T")) {
+            SidebarRailButton(id: "sidebar-rail.new-terminal", icon: "plus.rectangle.on.rectangle", help: commandTooltip(L("新开终端", "New Terminal"), command: .newTerminal, fallback: "Cmd-T")) {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.newTerminal)
             }
-            SidebarRailButton(id: "sidebar-rail.command-center", icon: "command", help: L("打开命令面板 Cmd-K", "Open Command Center Cmd-K")) {
+            SidebarRailButton(id: "sidebar-rail.command-center", icon: "command", help: commandTooltip(L("打开命令面板", "Open Command Center"), command: .toggleCommandPalette, fallback: "Cmd-K")) {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.toggleCommandPalette)
             }
@@ -319,7 +323,7 @@ struct ConductorSidebar: View {
 
     private var collapsedSidebarFooter: some View {
         VStack(spacing: 0) {
-            SidebarRailButton(id: "sidebar-rail.settings", icon: "gearshape", help: L("设置", "Settings")) {
+            SidebarRailButton(id: "sidebar-rail.settings", icon: "gearshape", help: commandTooltip(L("设置", "Settings"), command: .toggleSettings, fallback: "Cmd-,")) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.panel) {
                     model.performCommand(.toggleSettings)

@@ -474,20 +474,25 @@ extension StatusItemController {
             menu: menu,
             width: width)
         menu.addItem(switcherItem)
-        menu.addItem(.separator())
+        self.addNativeSeparatorIfNeeded(to: menu)
     }
 
     private func addTokenAccountSwitcherIfNeeded(to menu: NSMenu, display: TokenAccountMenuDisplay?, width: CGFloat) {
         guard let display, display.showSwitcher else { return }
         let switcherItem = self.makeTokenAccountSwitcherItem(display: display, menu: menu, width: width)
         menu.addItem(switcherItem)
-        menu.addItem(.separator())
+        self.addNativeSeparatorIfNeeded(to: menu)
     }
 
     private func addCodexAccountSwitcherIfNeeded(to menu: NSMenu, display: CodexAccountMenuDisplay?, width: CGFloat) {
         guard let display, display.showSwitcher else { return }
         let switcherItem = self.makeCodexAccountSwitcherItem(display: display, menu: menu, width: width)
         menu.addItem(switcherItem)
+        self.addNativeSeparatorIfNeeded(to: menu)
+    }
+
+    private func addNativeSeparatorIfNeeded(to menu: NSMenu) {
+        guard !ConductorUsageMenuStyle.isEnabled else { return }
         menu.addItem(.separator())
     }
 
@@ -528,7 +533,7 @@ extension StatusItemController {
             item.action = #selector(self.selectOverviewProvider(_:))
             menu.addItem(item)
             if index < rows.count - 1 {
-                menu.addItem(.separator())
+                self.addNativeSeparatorIfNeeded(to: menu)
             }
         }
         return true
@@ -600,12 +605,12 @@ extension StatusItemController {
             id: "menuCard",
             width: context.menuWidth))
         if self.addStorageMenuCardSection(to: menu, provider: context.currentProvider, width: context.menuWidth) {
-            menu.addItem(.separator())
+            self.addNativeSeparatorIfNeeded(to: menu)
         }
         if context.openAIContext.canShowBuyCredits {
-            menu.addItem(self.makeBuyCreditsItem())
+            menu.addItem(self.makeBuyCreditsItem(width: context.menuWidth))
         }
-        menu.addItem(.separator())
+        self.addNativeSeparatorIfNeeded(to: menu)
         return false
     }
 
@@ -619,23 +624,23 @@ extension StatusItemController {
                 UsageMenuCardView(model: model, width: context.menuWidth),
                 id: "menuCard",
                 width: context.menuWidth))
-            menu.addItem(.separator())
+            self.addNativeSeparatorIfNeeded(to: menu)
         } else {
             for (index, model) in cards.enumerated() {
                 menu.addItem(self.makeMenuCardItem(
-                    UsageMenuCardView(model: model, width: context.menuWidth),
-                    id: "menuCard-\(index)",
-                    width: context.menuWidth))
+                UsageMenuCardView(model: model, width: context.menuWidth),
+                id: "menuCard-\(index)",
+                width: context.menuWidth))
                 if index < cards.count - 1 {
-                    menu.addItem(.separator())
+                    self.addNativeSeparatorIfNeeded(to: menu)
                 }
             }
             if !cards.isEmpty {
-                menu.addItem(.separator())
+                self.addNativeSeparatorIfNeeded(to: menu)
             }
         }
         if self.addStorageMenuCardSection(to: menu, provider: context.currentProvider, width: context.menuWidth) {
-            menu.addItem(.separator())
+            self.addNativeSeparatorIfNeeded(to: menu)
         }
     }
 
@@ -658,7 +663,7 @@ extension StatusItemController {
                 _ = self.addCostHistorySubmenu(to: menu, provider: currentProvider)
             }
         }
-        menu.addItem(.separator())
+        self.addNativeSeparatorIfNeeded(to: menu)
     }
 
     private func addPrimaryMenuContent(
@@ -674,10 +679,10 @@ extension StatusItemController {
                 enabledProviders: enabledProviders,
                 menuWidth: context.menuWidth)
             {
-                menu.addItem(.separator())
+                self.addNativeSeparatorIfNeeded(to: menu)
             } else {
                 self.addOverviewEmptyState(to: menu, enabledProviders: enabledProviders)
-                menu.addItem(.separator())
+                self.addNativeSeparatorIfNeeded(to: menu)
             }
         } else {
             let addedOpenAIWebItems = self.addMenuCards(to: menu, context: context)
@@ -691,14 +696,14 @@ extension StatusItemController {
                 provider: context.currentProvider,
                 width: context.menuWidth)
             {
-                menu.addItem(.separator())
+                self.addNativeSeparatorIfNeeded(to: menu)
             }
             if self.addZaiHourlyUsageMenuItemIfNeeded(
                 to: menu,
                 provider: context.currentProvider,
                 width: context.menuWidth)
             {
-                menu.addItem(.separator())
+                self.addNativeSeparatorIfNeeded(to: menu)
             }
         }
     }
@@ -732,6 +737,30 @@ extension StatusItemController {
                     }
                     menu.addItem(item)
                 case let .action(title, action):
+                    var subtitle: String?
+                    var isEnabled = true
+                    if case let .switchAccount(targetProvider) = action,
+                       let switchSubtitle = self.switchAccountSubtitle(for: targetProvider)
+                    {
+                        subtitle = switchSubtitle
+                        isEnabled = false
+                    } else if case .addCodexAccount = action,
+                              let addSubtitle = self.codexAddAccountSubtitle()
+                    {
+                        subtitle = addSubtitle
+                        isEnabled = false
+                    }
+                    if ConductorUsageMenuStyle.isEnabled {
+                        menu.addItem(self.makeConductorMenuActionItem(
+                            title: title,
+                            action: action,
+                            menu: menu,
+                            width: width,
+                            subtitle: subtitle,
+                            isEnabled: isEnabled))
+                        continue
+                    }
+
                     if self.usesPersistentMenuActionItem(for: action) {
                         menu.addItem(self.makePersistentMenuActionItem(
                             title: title,
@@ -756,14 +785,7 @@ extension StatusItemController {
                         image.size = NSSize(width: 16, height: 16)
                         item.image = image
                     }
-                    if case let .switchAccount(targetProvider) = action,
-                       let subtitle = self.switchAccountSubtitle(for: targetProvider)
-                    {
-                        item.isEnabled = false
-                        self.applySubtitle(subtitle, to: item, title: title)
-                    } else if case .addCodexAccount = action,
-                              let subtitle = self.codexAddAccountSubtitle()
-                    {
+                    if let subtitle {
                         item.isEnabled = false
                         self.applySubtitle(subtitle, to: item, title: title)
                     }
@@ -791,14 +813,22 @@ extension StatusItemController {
                         }
                         submenu.addItem(child)
                     }
+                    if ConductorUsageMenuStyle.isEnabled {
+                        menu.addItem(self.makeConductorMenuSubmenuItem(
+                            title: title,
+                            systemImageName: systemImageName,
+                            submenu: submenu,
+                            width: width))
+                        continue
+                    }
                     item.submenu = submenu
                     menu.addItem(item)
                 case .divider:
-                    menu.addItem(.separator())
+                    self.addNativeSeparatorIfNeeded(to: menu)
                 }
             }
             if index < actionableSections.count - 1 {
-                menu.addItem(.separator())
+                self.addNativeSeparatorIfNeeded(to: menu)
             }
         }
     }
@@ -830,6 +860,64 @@ extension StatusItemController {
             item.target = self
             item.representedObject = represented
         }
+        return item
+    }
+
+    private func makeConductorMenuActionItem(
+        title: String,
+        action: MenuDescriptor.MenuAction,
+        menu: NSMenu,
+        width: CGFloat,
+        subtitle: String? = nil,
+        isEnabled: Bool = true) -> NSMenuItem
+    {
+        let shortcut = self.shortcut(for: action)
+        let item = self.makeMenuCardItem(
+            ConductorUsageMenuActionRow(
+                title: title,
+                subtitle: subtitle,
+                systemImageName: self.persistentMenuActionSystemImageName(for: action) ?? action.systemImageName,
+                shortcutText: shortcut.map { self.shortcutLabel(for: $0) },
+                showsChevron: false,
+                isEnabled: isEnabled,
+                width: width),
+            id: "conductorAction-\(title)",
+            width: width,
+            onClick: isEnabled ? { [weak self, weak menu] in
+                self?.performPersistentMenuAction(action, in: menu)
+            } : nil)
+        item.keyEquivalent = shortcut?.key ?? ""
+        item.keyEquivalentModifierMask = shortcut?.modifiers ?? NSEvent.ModifierFlags()
+        item.isEnabled = isEnabled
+        item.toolTip = subtitle.map { "\(title)\n\($0)" } ?? title
+        let (selector, represented) = self.selector(for: action)
+        item.action = selector
+        item.target = self
+        item.representedObject = represented
+        return item
+    }
+
+    private func makeConductorMenuSubmenuItem(
+        title: String,
+        systemImageName: String?,
+        submenu: NSMenu,
+        width: CGFloat) -> NSMenuItem
+    {
+        let item = self.makeMenuCardItem(
+            ConductorUsageMenuActionRow(
+                title: title,
+                subtitle: nil,
+                systemImageName: systemImageName,
+                shortcutText: nil,
+                showsChevron: true,
+                isEnabled: true,
+                width: width),
+            id: "conductorSubmenu-\(title)",
+            width: width,
+            submenu: submenu,
+            submenuIndicatorAlignment: .trailing,
+            submenuIndicatorTopPadding: 0)
+        item.toolTip = title
         return item
     }
 
@@ -1258,6 +1346,67 @@ extension StatusItemController {
         let hasExtraUsage = model.providerCost != nil
         let hasCost = model.tokenUsage != nil
         let hasStorage = self.store.storageFootprintText(for: provider) != nil
+        if ConductorUsageMenuStyle.isEnabled {
+            menu.addItem(self.makeMenuCardItem(
+                UsageMenuCardView(model: model, width: width),
+                id: "menuCard",
+                width: width))
+
+            if let usageSubmenu = self.makeUsageSubmenu(
+                provider: provider,
+                snapshot: self.store.snapshot(for: provider),
+                webItems: webItems,
+                width: width)
+            {
+                menu.addItem(self.makeConductorMenuSubmenuItem(
+                    title: webItems.hasUsageBreakdown ? "Usage breakdown" : "Usage details",
+                    systemImageName: "waveform.path.ecg",
+                    submenu: usageSubmenu,
+                    width: width))
+            }
+            if hasStorage,
+               let storageSubmenu = self.makeStorageBreakdownSubmenu(provider: provider, width: width)
+            {
+                menu.addItem(self.makeConductorMenuSubmenuItem(
+                    title: "Storage",
+                    systemImageName: "externaldrive",
+                    submenu: storageSubmenu,
+                    width: width))
+            }
+            if webItems.hasCreditsHistory,
+               let creditsSubmenu = self.makeCreditsHistorySubmenu(width: width)
+            {
+                menu.addItem(self.makeConductorMenuSubmenuItem(
+                    title: "Credits history",
+                    systemImageName: "chart.bar.xaxis",
+                    submenu: creditsSubmenu,
+                    width: width))
+            }
+            if hasExtraUsage,
+               let extraUsageSubmenu = self.makeOpenAIAPIUsageSubmenu(provider: provider, width: width)
+            {
+                menu.addItem(self.makeConductorMenuSubmenuItem(
+                    title: "API usage",
+                    systemImageName: "server.rack",
+                    submenu: extraUsageSubmenu,
+                    width: width))
+            }
+            if webItems.hasCostHistory,
+               let costSubmenu = self.makeCostHistorySubmenu(provider: provider, width: width)
+            {
+                let days = self.store.settings.costUsageHistoryDays
+                let title = days == 1 ? "Usage history (today)" : "Usage history (\(days) days)"
+                menu.addItem(self.makeConductorMenuSubmenuItem(
+                    title: title,
+                    systemImageName: "clock.arrow.circlepath",
+                    submenu: costSubmenu,
+                    width: width))
+            }
+            if webItems.canShowBuyCredits {
+                menu.addItem(self.makeBuyCreditsItem(width: width))
+            }
+            return
+        }
         let bottomPadding = CGFloat(hasCredits ? 4 : 6)
         let sectionSpacing = CGFloat(6)
         let usageBottomPadding = bottomPadding
@@ -1313,7 +1462,7 @@ extension StatusItemController {
                 width: width,
                 submenu: creditsSubmenu))
             if webItems.canShowBuyCredits {
-                menu.addItem(self.makeBuyCreditsItem())
+                menu.addItem(self.makeBuyCreditsItem(width: width))
             }
         }
         if hasExtraUsage {
@@ -1338,7 +1487,7 @@ extension StatusItemController {
             }
             let costSubmenu = webItems.hasCostHistory ? self
                 .makeCostHistorySubmenu(provider: provider, width: width) : nil
-            menu.addItem(self.makeCostMenuCardItem(model: model, submenu: costSubmenu))
+            menu.addItem(self.makeCostMenuCardItem(model: model, submenu: costSubmenu, width: width))
         }
     }
 
@@ -1419,7 +1568,27 @@ extension StatusItemController {
         return image
     }
 
-    private func makeBuyCreditsItem() -> NSMenuItem {
+    private func makeBuyCreditsItem(width: CGFloat) -> NSMenuItem {
+        if ConductorUsageMenuStyle.isEnabled {
+            let item = self.makeMenuCardItem(
+                ConductorUsageMenuActionRow(
+                    title: "Buy Credits...",
+                    subtitle: nil,
+                    systemImageName: "plus.circle",
+                    shortcutText: nil,
+                    showsChevron: false,
+                    isEnabled: true,
+                    width: width),
+                id: "conductorBuyCredits",
+                width: width,
+                onClick: { [weak self] in
+                    self?.openCreditsPurchase()
+                })
+            item.action = #selector(self.openCreditsPurchase)
+            item.target = self
+            item.toolTip = "Buy Credits..."
+            return item
+        }
         let item = NSMenuItem(title: "Buy Credits...", action: #selector(self.openCreditsPurchase), keyEquivalent: "")
         item.target = self
         if let image = NSImage(systemSymbolName: "plus.circle", accessibilityDescription: nil) {
@@ -1434,6 +1603,14 @@ extension StatusItemController {
     private func addCreditsHistorySubmenu(to menu: NSMenu) -> Bool {
         guard let submenu = self.makeCreditsHistorySubmenu(width: self.renderedMenuWidth(for: menu))
         else { return false }
+        if ConductorUsageMenuStyle.isEnabled {
+            menu.addItem(self.makeConductorMenuSubmenuItem(
+                title: "Credits history",
+                systemImageName: "chart.bar.xaxis",
+                submenu: submenu,
+                width: self.renderedMenuWidth(for: menu)))
+            return true
+        }
         let item = NSMenuItem(title: "Credits history", action: nil, keyEquivalent: "")
         item.isEnabled = true
         item.submenu = submenu
@@ -1445,6 +1622,14 @@ extension StatusItemController {
     private func addUsageBreakdownSubmenu(to menu: NSMenu) -> Bool {
         guard let submenu = self.makeUsageBreakdownSubmenu(width: self.renderedMenuWidth(for: menu))
         else { return false }
+        if ConductorUsageMenuStyle.isEnabled {
+            menu.addItem(self.makeConductorMenuSubmenuItem(
+                title: "Usage breakdown",
+                systemImageName: "waveform.path.ecg",
+                submenu: submenu,
+                width: self.renderedMenuWidth(for: menu)))
+            return true
+        }
         let item = NSMenuItem(title: "Usage breakdown", action: nil, keyEquivalent: "")
         item.isEnabled = true
         item.submenu = submenu
@@ -1458,6 +1643,14 @@ extension StatusItemController {
         else { return false }
         let days = self.store.settings.costUsageHistoryDays
         let title = days == 1 ? "Usage history (today)" : "Usage history (\(days) days)"
+        if ConductorUsageMenuStyle.isEnabled {
+            menu.addItem(self.makeConductorMenuSubmenuItem(
+                title: title,
+                systemImageName: "clock.arrow.circlepath",
+                submenu: submenu,
+                width: self.renderedMenuWidth(for: menu)))
+            return true
+        }
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = true
         item.submenu = submenu

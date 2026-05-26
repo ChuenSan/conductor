@@ -246,12 +246,35 @@ public final class CodexBarEmbeddedRuntime: NSObject {
         tokenRecordsWindow?.close()
     }
 
-    func refreshTokenRecords() {
+    func refreshTokenRecords(provider: UsageProvider? = nil) {
         guard let settings, let store else { return }
         settings.costUsageEnabled = true
+        store.scheduleStorageFootprintRefreshForOverview(force: true)
+        let providers = tokenRecordRefreshProviders(preferredProvider: provider)
         Task { @MainActor in
-            await store.refreshTokenUsageNow(force: true)
+            await store.refreshLocalTokenUsageNow(for: providers, force: true)
         }
+    }
+
+    private func tokenRecordRefreshProviders(preferredProvider: UsageProvider?) -> [UsageProvider] {
+        let supportedProviders: [UsageProvider] = [.codex, .claude, .vertexai, .bedrock]
+        if let preferredProvider, supportedProviders.contains(preferredProvider) {
+            return [preferredProvider]
+        }
+
+        guard let store else { return [.codex] }
+        var providers: [UsageProvider] = [.codex]
+        for provider in store.enabledProvidersForDisplay()
+            where supportedProviders.contains(provider) && !providers.contains(provider)
+        {
+            providers.append(provider)
+        }
+        return providers
+    }
+
+    func applyHostMenuStyleOverride() {
+        // The embedded integration no longer exposes a menu-bar panel. The style is applied
+        // when Conductor opens the in-app usage windows.
     }
 
     func openTokenRecordSettings() {
