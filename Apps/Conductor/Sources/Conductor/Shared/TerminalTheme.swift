@@ -13,8 +13,6 @@ enum TerminalThemeDesignLanguage: String {
     case frost
     case sunlit
     case botanical
-    case white
-    case gradient
 
     var title: String {
         switch self {
@@ -42,375 +40,10 @@ enum TerminalThemeDesignLanguage: String {
             "Sunlit"
         case .botanical:
             "Botanical"
-        case .white:
-            "White"
-        case .gradient:
-            "Gradient"
         }
     }
 }
 
-private struct TerminalThemeExtendedPalette {
-    let isDark: Bool
-    let terminalRaisedBackground: Color
-    let terminalChrome: Color
-    let terminalBackground: Color
-    let ghosttyTerminalBackgroundHex: String
-    let windowBackdropStops: [Color]
-    let windowBackdropWash: Color
-    let accent: Color
-    let accentHex: String
-    let strokeTint: Color
-    let shellChromeText: Color
-    let ghosttyForegroundHex: String
-    let ghosttyCursorTextHex: String
-    let ghosttySelectionBackgroundHex: String
-    let ghosttySelectionForegroundHex: String
-    let ansiPalette: [String]
-
-    var shellPanelBackground: Color {
-        terminalChrome.opacity(isDark ? 0.960 : 0.900)
-    }
-
-    var shellPanelStrong: Color {
-        terminalRaisedBackground.opacity(isDark ? 0.955 : 0.930)
-    }
-
-    var floatingPanelBase: Color {
-        terminalChrome.opacity(isDark ? 0.982 : 0.966)
-    }
-
-    var floatingPanelWash: Color {
-        windowBackdropWash.opacity(isDark ? 0.48 : 0.38)
-    }
-
-    var floatingStroke: Color {
-        strokeTint.opacity(isDark ? 0.165 : 0.145)
-    }
-
-    var floatingEmphasis: Color {
-        accent.opacity(isDark ? 0.90 : 0.84)
-    }
-
-    var shellStroke: Color {
-        strokeTint.opacity(isDark ? 0.150 : 0.155)
-    }
-
-    var shellChromeTextMuted: Color {
-        shellChromeText.opacity(isDark ? 0.62 : 0.56)
-    }
-
-    var terminalOuterStroke: Color {
-        strokeTint.opacity(isDark ? 0.245 : 0.180)
-    }
-
-    var ghosttyConfig: String {
-        let paletteLines = ansiPalette.enumerated()
-            .map { "palette = \($0.offset)=\($0.element)" }
-            .joined(separator: "\n")
-        return """
-        \(paletteLines)
-        background = \(ghosttyTerminalBackgroundHex)
-        foreground = \(ghosttyForegroundHex)
-        cursor-color = \(accentHex)
-        cursor-text = \(ghosttyCursorTextHex)
-        selection-background = \(ghosttySelectionBackgroundHex)
-        selection-foreground = \(ghosttySelectionForegroundHex)
-        """
-    }
-
-    private static let cleanLightANSI = [
-        "#1e232b", "#d75662", "#3d8b65", "#b77a18",
-        "#2f7de1", "#8762ca", "#1f8f99", "#e1e5ec",
-        "#8a929e", "#e36672", "#54a77a", "#ca922a",
-        "#4f9af0", "#9b7edc", "#36aab5", "#ffffff"
-    ]
-
-    private static let vividLightANSI = [
-        "#24222a", "#e45f75", "#30a982", "#d1922d",
-        "#3d86f5", "#9a6df1", "#1fb3c2", "#ece8f3",
-        "#8b849a", "#f2778a", "#4fc49d", "#e7aa45",
-        "#67a2ff", "#b08bff", "#44ccd8", "#ffffff"
-    ]
-
-    private static let warmLightANSI = [
-        "#281c17", "#d65a42", "#6f9147", "#b97623",
-        "#557fba", "#a05f8e", "#3f918b", "#ead8c5",
-        "#927463", "#e67259", "#86a95b", "#d19437",
-        "#719bd0", "#b77ca4", "#58aaa1", "#fff7ee"
-    ]
-
-    private static let darkGlassANSI = [
-        "#0b1020", "#ff6b7a", "#78dcca", "#f6d365",
-        "#7fb5ff", "#b7a8ff", "#69e0f4", "#dce7ff",
-        "#58637a", "#ff8793", "#98ecc6", "#ffe08c",
-        "#9ec7ff", "#c9bcff", "#91f0ff", "#f6f9ff"
-    ]
-
-    static let porcelainWhite = TerminalThemeExtendedPalette(
-        isDark: false,
-        terminalRaisedBackground: Color(red: 0.956, green: 0.966, blue: 0.980),
-        terminalChrome: Color(red: 0.988, green: 0.992, blue: 0.998),
-        terminalBackground: Color(red: 1.000, green: 1.000, blue: 1.000),
-        ghosttyTerminalBackgroundHex: "#ffffff",
-        windowBackdropStops: [
-            Color(red: 1.000, green: 1.000, blue: 1.000),
-            Color(red: 0.954, green: 0.966, blue: 0.982),
-            Color(red: 0.905, green: 0.924, blue: 0.950)
-        ],
-        windowBackdropWash: Color(red: 0.34, green: 0.58, blue: 0.96).opacity(0.10),
-        accent: Color(red: 0.185, green: 0.490, blue: 0.882),
-        accentHex: "#2f7de1",
-        strokeTint: Color(red: 0.16, green: 0.22, blue: 0.32),
-        shellChromeText: Color(red: 0.080, green: 0.095, blue: 0.125),
-        ghosttyForegroundHex: "#141820",
-        ghosttyCursorTextHex: "#ffffff",
-        ghosttySelectionBackgroundHex: "#dbeafe",
-        ghosttySelectionForegroundHex: "#141820",
-        ansiPalette: cleanLightANSI)
-
-    static let cloudGlass = TerminalThemeExtendedPalette(
-        isDark: false,
-        terminalRaisedBackground: Color(red: 0.918, green: 0.956, blue: 0.990),
-        terminalChrome: Color(red: 0.960, green: 0.984, blue: 0.998),
-        terminalBackground: Color(red: 0.988, green: 0.996, blue: 1.000),
-        ghosttyTerminalBackgroundHex: "#fbfdff",
-        windowBackdropStops: [
-            Color(red: 0.990, green: 0.998, blue: 1.000),
-            Color(red: 0.875, green: 0.940, blue: 0.990),
-            Color(red: 0.722, green: 0.825, blue: 0.944)
-        ],
-        windowBackdropWash: Color(red: 0.24, green: 0.56, blue: 0.96).opacity(0.16),
-        accent: Color(red: 0.230, green: 0.556, blue: 0.954),
-        accentHex: "#3b8ef3",
-        strokeTint: Color(red: 0.12, green: 0.32, blue: 0.52),
-        shellChromeText: Color(red: 0.055, green: 0.145, blue: 0.230),
-        ghosttyForegroundHex: "#102437",
-        ghosttyCursorTextHex: "#fbfdff",
-        ghosttySelectionBackgroundHex: "#d7ecff",
-        ghosttySelectionForegroundHex: "#102437",
-        ansiPalette: cleanLightANSI)
-
-    static let milkGlass = TerminalThemeExtendedPalette(
-        isDark: false,
-        terminalRaisedBackground: Color(red: 0.960, green: 0.944, blue: 0.916),
-        terminalChrome: Color(red: 0.994, green: 0.980, blue: 0.952),
-        terminalBackground: Color(red: 1.000, green: 0.990, blue: 0.970),
-        ghosttyTerminalBackgroundHex: "#fffaf3",
-        windowBackdropStops: [
-            Color(red: 1.000, green: 0.996, blue: 0.982),
-            Color(red: 0.956, green: 0.926, blue: 0.874),
-            Color(red: 0.884, green: 0.834, blue: 0.760)
-        ],
-        windowBackdropWash: Color(red: 0.88, green: 0.58, blue: 0.28).opacity(0.14),
-        accent: Color(red: 0.788, green: 0.474, blue: 0.196),
-        accentHex: "#c97932",
-        strokeTint: Color(red: 0.38, green: 0.26, blue: 0.15),
-        shellChromeText: Color(red: 0.165, green: 0.112, blue: 0.070),
-        ghosttyForegroundHex: "#2a1c12",
-        ghosttyCursorTextHex: "#fffaf3",
-        ghosttySelectionBackgroundHex: "#f2ddc0",
-        ghosttySelectionForegroundHex: "#2a1c12",
-        ansiPalette: warmLightANSI)
-
-    static let pearlStudio = TerminalThemeExtendedPalette(
-        isDark: false,
-        terminalRaisedBackground: Color(red: 0.918, green: 0.924, blue: 0.934),
-        terminalChrome: Color(red: 0.968, green: 0.972, blue: 0.980),
-        terminalBackground: Color(red: 0.994, green: 0.995, blue: 0.998),
-        ghosttyTerminalBackgroundHex: "#fdfdfe",
-        windowBackdropStops: [
-            Color(red: 0.994, green: 0.995, blue: 0.998),
-            Color(red: 0.914, green: 0.922, blue: 0.936),
-            Color(red: 0.790, green: 0.808, blue: 0.832)
-        ],
-        windowBackdropWash: Color(red: 0.54, green: 0.58, blue: 0.66).opacity(0.13),
-        accent: Color(red: 0.350, green: 0.385, blue: 0.450),
-        accentHex: "#596273",
-        strokeTint: Color(red: 0.18, green: 0.20, blue: 0.24),
-        shellChromeText: Color(red: 0.100, green: 0.112, blue: 0.135),
-        ghosttyForegroundHex: "#191d23",
-        ghosttyCursorTextHex: "#fdfdfe",
-        ghosttySelectionBackgroundHex: "#e2e7ef",
-        ghosttySelectionForegroundHex: "#191d23",
-        ansiPalette: cleanLightANSI)
-
-    static let opalGlass = TerminalThemeExtendedPalette(
-        isDark: false,
-        terminalRaisedBackground: Color(red: 0.908, green: 0.960, blue: 0.966),
-        terminalChrome: Color(red: 0.952, green: 0.988, blue: 0.990),
-        terminalBackground: Color(red: 0.988, green: 1.000, blue: 0.998),
-        ghosttyTerminalBackgroundHex: "#fbfffe",
-        windowBackdropStops: [
-            Color(red: 0.980, green: 1.000, blue: 0.996),
-            Color(red: 0.825, green: 0.940, blue: 0.950),
-            Color(red: 0.878, green: 0.838, blue: 0.970)
-        ],
-        windowBackdropWash: Color(red: 0.24, green: 0.72, blue: 0.78).opacity(0.16),
-        accent: Color(red: 0.133, green: 0.654, blue: 0.720),
-        accentHex: "#22a7b8",
-        strokeTint: Color(red: 0.10, green: 0.36, blue: 0.42),
-        shellChromeText: Color(red: 0.055, green: 0.165, blue: 0.185),
-        ghosttyForegroundHex: "#0e2a2f",
-        ghosttyCursorTextHex: "#fbfffe",
-        ghosttySelectionBackgroundHex: "#cceff2",
-        ghosttySelectionForegroundHex: "#0e2a2f",
-        ansiPalette: vividLightANSI)
-
-    static let prismAir = TerminalThemeExtendedPalette(
-        isDark: false,
-        terminalRaisedBackground: Color(red: 0.930, green: 0.936, blue: 0.990),
-        terminalChrome: Color(red: 0.978, green: 0.980, blue: 1.000),
-        terminalBackground: Color(red: 0.998, green: 0.998, blue: 1.000),
-        ghosttyTerminalBackgroundHex: "#ffffff",
-        windowBackdropStops: [
-            Color(red: 0.992, green: 0.996, blue: 1.000),
-            Color(red: 0.838, green: 0.898, blue: 1.000),
-            Color(red: 0.980, green: 0.780, blue: 0.930)
-        ],
-        windowBackdropWash: Color(red: 0.48, green: 0.36, blue: 1.00).opacity(0.17),
-        accent: Color(red: 0.486, green: 0.360, blue: 1.000),
-        accentHex: "#7c5cff",
-        strokeTint: Color(red: 0.28, green: 0.20, blue: 0.54),
-        shellChromeText: Color(red: 0.110, green: 0.095, blue: 0.190),
-        ghosttyForegroundHex: "#1c1830",
-        ghosttyCursorTextHex: "#ffffff",
-        ghosttySelectionBackgroundHex: "#e4ddff",
-        ghosttySelectionForegroundHex: "#1c1830",
-        ansiPalette: vividLightANSI)
-
-    static let lavenderFlux = TerminalThemeExtendedPalette(
-        isDark: false,
-        terminalRaisedBackground: Color(red: 0.934, green: 0.920, blue: 0.990),
-        terminalChrome: Color(red: 0.980, green: 0.972, blue: 1.000),
-        terminalBackground: Color(red: 0.998, green: 0.994, blue: 1.000),
-        ghosttyTerminalBackgroundHex: "#fffefe",
-        windowBackdropStops: [
-            Color(red: 0.998, green: 0.994, blue: 1.000),
-            Color(red: 0.900, green: 0.852, blue: 0.990),
-            Color(red: 0.760, green: 0.858, blue: 0.990)
-        ],
-        windowBackdropWash: Color(red: 0.56, green: 0.42, blue: 0.88).opacity(0.16),
-        accent: Color(red: 0.502, green: 0.404, blue: 0.846),
-        accentHex: "#8067d8",
-        strokeTint: Color(red: 0.30, green: 0.23, blue: 0.48),
-        shellChromeText: Color(red: 0.135, green: 0.105, blue: 0.205),
-        ghosttyForegroundHex: "#221a34",
-        ghosttyCursorTextHex: "#fffefe",
-        ghosttySelectionBackgroundHex: "#e8ddfb",
-        ghosttySelectionForegroundHex: "#221a34",
-        ansiPalette: vividLightANSI)
-
-    static let mintGlass = TerminalThemeExtendedPalette(
-        isDark: false,
-        terminalRaisedBackground: Color(red: 0.902, green: 0.970, blue: 0.944),
-        terminalChrome: Color(red: 0.950, green: 0.994, blue: 0.978),
-        terminalBackground: Color(red: 0.990, green: 1.000, blue: 0.996),
-        ghosttyTerminalBackgroundHex: "#fbfffd",
-        windowBackdropStops: [
-            Color(red: 0.990, green: 1.000, blue: 0.996),
-            Color(red: 0.820, green: 0.946, blue: 0.900),
-            Color(red: 0.700, green: 0.880, blue: 0.936)
-        ],
-        windowBackdropWash: Color(red: 0.12, green: 0.72, blue: 0.56).opacity(0.16),
-        accent: Color(red: 0.067, green: 0.654, blue: 0.514),
-        accentHex: "#11a783",
-        strokeTint: Color(red: 0.08, green: 0.36, blue: 0.30),
-        shellChromeText: Color(red: 0.040, green: 0.160, blue: 0.130),
-        ghosttyForegroundHex: "#0a2921",
-        ghosttyCursorTextHex: "#fbfffd",
-        ghosttySelectionBackgroundHex: "#c9f3e6",
-        ghosttySelectionForegroundHex: "#0a2921",
-        ansiPalette: vividLightANSI)
-
-    static let sunriseGradient = TerminalThemeExtendedPalette(
-        isDark: false,
-        terminalRaisedBackground: Color(red: 0.982, green: 0.914, blue: 0.844),
-        terminalChrome: Color(red: 1.000, green: 0.954, blue: 0.910),
-        terminalBackground: Color(red: 1.000, green: 0.982, blue: 0.960),
-        ghosttyTerminalBackgroundHex: "#fff8f0",
-        windowBackdropStops: [
-            Color(red: 1.000, green: 0.982, blue: 0.930),
-            Color(red: 1.000, green: 0.730, blue: 0.550),
-            Color(red: 0.910, green: 0.560, blue: 0.780)
-        ],
-        windowBackdropWash: Color(red: 1.00, green: 0.42, blue: 0.18).opacity(0.18),
-        accent: Color(red: 0.914, green: 0.435, blue: 0.184),
-        accentHex: "#e96f2f",
-        strokeTint: Color(red: 0.48, green: 0.20, blue: 0.12),
-        shellChromeText: Color(red: 0.210, green: 0.090, blue: 0.055),
-        ghosttyForegroundHex: "#35170e",
-        ghosttyCursorTextHex: "#fff8f0",
-        ghosttySelectionBackgroundHex: "#ffd9c7",
-        ghosttySelectionForegroundHex: "#35170e",
-        ansiPalette: warmLightANSI)
-
-    static let skyGradient = TerminalThemeExtendedPalette(
-        isDark: false,
-        terminalRaisedBackground: Color(red: 0.896, green: 0.946, blue: 0.990),
-        terminalChrome: Color(red: 0.950, green: 0.982, blue: 1.000),
-        terminalBackground: Color(red: 0.990, green: 0.998, blue: 1.000),
-        ghosttyTerminalBackgroundHex: "#fbfeff",
-        windowBackdropStops: [
-            Color(red: 0.990, green: 0.998, blue: 1.000),
-            Color(red: 0.706, green: 0.860, blue: 0.990),
-            Color(red: 0.604, green: 0.750, blue: 0.950)
-        ],
-        windowBackdropWash: Color(red: 0.18, green: 0.52, blue: 0.91).opacity(0.17),
-        accent: Color(red: 0.137, green: 0.525, blue: 0.910),
-        accentHex: "#2386e8",
-        strokeTint: Color(red: 0.10, green: 0.28, blue: 0.48),
-        shellChromeText: Color(red: 0.050, green: 0.125, blue: 0.220),
-        ghosttyForegroundHex: "#0d2038",
-        ghosttyCursorTextHex: "#fbfeff",
-        ghosttySelectionBackgroundHex: "#d2e9ff",
-        ghosttySelectionForegroundHex: "#0d2038",
-        ansiPalette: cleanLightANSI)
-
-    static let roseQuartz = TerminalThemeExtendedPalette(
-        isDark: false,
-        terminalRaisedBackground: Color(red: 0.982, green: 0.918, blue: 0.940),
-        terminalChrome: Color(red: 1.000, green: 0.960, blue: 0.976),
-        terminalBackground: Color(red: 1.000, green: 0.988, blue: 0.994),
-        ghosttyTerminalBackgroundHex: "#fffafd",
-        windowBackdropStops: [
-            Color(red: 1.000, green: 0.988, blue: 0.994),
-            Color(red: 0.956, green: 0.786, blue: 0.858),
-            Color(red: 0.856, green: 0.756, blue: 0.942)
-        ],
-        windowBackdropWash: Color(red: 0.86, green: 0.30, blue: 0.52).opacity(0.15),
-        accent: Color(red: 0.827, green: 0.365, blue: 0.529),
-        accentHex: "#d35d87",
-        strokeTint: Color(red: 0.44, green: 0.18, blue: 0.28),
-        shellChromeText: Color(red: 0.200, green: 0.075, blue: 0.125),
-        ghosttyForegroundHex: "#331320",
-        ghosttyCursorTextHex: "#fffafd",
-        ghosttySelectionBackgroundHex: "#f7d7e4",
-        ghosttySelectionForegroundHex: "#331320",
-        ansiPalette: vividLightANSI)
-
-    static let obsidianGlass = TerminalThemeExtendedPalette(
-        isDark: true,
-        terminalRaisedBackground: Color(red: 0.034, green: 0.044, blue: 0.064),
-        terminalChrome: Color(red: 0.050, green: 0.064, blue: 0.092),
-        terminalBackground: Color(red: 0.018, green: 0.024, blue: 0.036),
-        ghosttyTerminalBackgroundHex: "#05070c",
-        windowBackdropStops: [
-            Color(red: 0.080, green: 0.102, blue: 0.145),
-            Color(red: 0.034, green: 0.046, blue: 0.070),
-            Color(red: 0.006, green: 0.010, blue: 0.018)
-        ],
-        windowBackdropWash: Color(red: 0.28, green: 0.56, blue: 1.00).opacity(0.16),
-        accent: Color(red: 0.498, green: 0.710, blue: 1.000),
-        accentHex: "#7fb5ff",
-        strokeTint: Color(red: 0.70, green: 0.82, blue: 1.00),
-        shellChromeText: Color(red: 0.914, green: 0.956, blue: 1.000),
-        ghosttyForegroundHex: "#eaf4ff",
-        ghosttyCursorTextHex: "#05070c",
-        ghosttySelectionBackgroundHex: "#1d3558",
-        ghosttySelectionForegroundHex: "#f6fbff",
-        ansiPalette: darkGlassANSI)
-}
 
 enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     case macOSDark
@@ -433,20 +66,34 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     case nordicFrost
     case solarDune
     case forestLab
-    case porcelainWhite
-    case cloudGlass
-    case milkGlass
-    case pearlStudio
-    case opalGlass
-    case prismAir
-    case lavenderFlux
-    case mintGlass
-    case sunriseGradient
-    case skyGradient
-    case roseQuartz
-    case obsidianGlass
 
     var id: String { rawValue }
+
+    private static let deprecatedRawValueMap: [String: TerminalTheme] = [
+        "porcelainWhite": .paperCanvas,
+        "cloudGlass": .graphite,
+        "milkGlass": .graphite,
+        "pearlStudio": .graphite,
+        "opalGlass": .aurora,
+        "prismAir": .graphite,
+        "lavenderFlux": .graphite,
+        "mintGlass": .aurora,
+        "sunriseGradient": .ember,
+        "skyGradient": .nordicFrost,
+        "roseQuartz": .graphite,
+        "obsidianGlass": .midnightGlass,
+    ]
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        if let value = TerminalTheme(rawValue: raw) {
+            self = value
+        } else if let migrated = TerminalTheme.deprecatedRawValueMap[raw] {
+            self = migrated
+        } else {
+            self = .codexDark
+        }
+    }
 
     var title: String {
         switch self {
@@ -490,30 +137,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             "Solar Dune"
         case .forestLab:
             "Forest Lab"
-        case .porcelainWhite:
-            "Porcelain White"
-        case .cloudGlass:
-            "Cloud Glass"
-        case .milkGlass:
-            "Milk Glass"
-        case .pearlStudio:
-            "Pearl Studio"
-        case .opalGlass:
-            "Opal Glass"
-        case .prismAir:
-            "Prism Air"
-        case .lavenderFlux:
-            "Lavender Flux"
-        case .mintGlass:
-            "Mint Glass"
-        case .sunriseGradient:
-            "Sunrise Gradient"
-        case .skyGradient:
-            "Sky Gradient"
-        case .roseQuartz:
-            "Rose Quartz"
-        case .obsidianGlass:
-            "Obsidian Glass"
         }
     }
 
@@ -559,12 +182,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             .sunlit
         case .forestLab:
             .botanical
-        case .porcelainWhite, .pearlStudio:
-            .white
-        case .cloudGlass, .milkGlass, .opalGlass, .mintGlass, .obsidianGlass:
-            .glass
-        case .prismAir, .lavenderFlux, .sunriseGradient, .skyGradient, .roseQuartz:
-            .gradient
         }
     }
 
@@ -610,30 +227,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             "Sunlit sand panels with broad, calm terminal surfaces."
         case .forestLab:
             "Dark botanical workspace with green lab instrumentation."
-        case .porcelainWhite:
-            "Pure white surfaces, faint chrome, and blue-black typography."
-        case .cloudGlass:
-            "White glass panels over a pale sky gradient."
-        case .milkGlass:
-            "Soft translucent chrome with warm milk-white surfaces."
-        case .pearlStudio:
-            "Neutral white studio chrome with graphite details."
-        case .opalGlass:
-            "Pearly glass layers with aqua and violet refractions."
-        case .prismAir:
-            "Airy prism gradient with crisp white work surfaces."
-        case .lavenderFlux:
-            "Lavender-to-blue gradient chrome with calm contrast."
-        case .mintGlass:
-            "Fresh mint glass with clean green-blue focus."
-        case .sunriseGradient:
-            "Warm sunrise gradient with bright paper panels."
-        case .skyGradient:
-            "Open blue gradient with cloud-white surfaces."
-        case .roseQuartz:
-            "Rose-tinted glass with soft quartz highlights."
-        case .obsidianGlass:
-            "Deep black glass with icy blue edges and high contrast."
         }
     }
 
@@ -645,9 +238,9 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var usesDarkChrome: Bool {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab, .obsidianGlass:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             true
-        case .flexoki, .aurora, .graphite, .paperCanvas, .ember, .paperTrail, .nordicFrost, .solarDune, .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz:
+        case .flexoki, .aurora, .graphite, .paperCanvas, .ember, .paperTrail, .nordicFrost, .solarDune:
             false
         }
     }
@@ -656,48 +249,9 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         usesDarkChrome ? .dark : .light
     }
 
-    private var extendedPalette: TerminalThemeExtendedPalette? {
-        switch self {
-        case .porcelainWhite:
-            .porcelainWhite
-        case .cloudGlass:
-            .cloudGlass
-        case .milkGlass:
-            .milkGlass
-        case .pearlStudio:
-            .pearlStudio
-        case .opalGlass:
-            .opalGlass
-        case .prismAir:
-            .prismAir
-        case .lavenderFlux:
-            .lavenderFlux
-        case .mintGlass:
-            .mintGlass
-        case .sunriseGradient:
-            .sunriseGradient
-        case .skyGradient:
-            .skyGradient
-        case .roseQuartz:
-            .roseQuartz
-        case .obsidianGlass:
-            .obsidianGlass
-        default:
-            nil
-        }
-    }
-
-    private var requiredExtendedPalette: TerminalThemeExtendedPalette {
-        guard let extendedPalette else {
-            preconditionFailure("Extended theme palette requested for a built-in theme.")
-        }
-        return extendedPalette
-    }
 
     var terminalRaisedBackground: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.terminalRaisedBackground
         case .macOSDark:
             Color(red: 0.045, green: 0.047, blue: 0.052)
         case .codexDark:
@@ -743,8 +297,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var terminalChrome: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.terminalChrome
         case .macOSDark:
             Color(red: 0.074, green: 0.076, blue: 0.084)
         case .codexDark:
@@ -790,8 +342,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var terminalBackground: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.terminalBackground
         case .macOSDark:
             Color(red: 0.055, green: 0.057, blue: 0.063)
         case .codexDark:
@@ -837,8 +387,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var ghosttyTerminalBackgroundHex: String {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.ghosttyTerminalBackgroundHex
         case .macOSDark:
             "#0e0f10"
         case .codexDark:
@@ -884,8 +432,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var windowBackdropStops: [Color] {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.windowBackdropStops
         case .macOSDark:
             [
                 Color(red: 0.102, green: 0.106, blue: 0.116),
@@ -1011,8 +557,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var windowBackdropWash: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.windowBackdropWash
         case .macOSDark:
             Color(red: 0.10, green: 0.32, blue: 0.58).opacity(0.08)
         case .codexDark:
@@ -1058,8 +602,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellPanelBackground: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.shellPanelBackground
         case .macOSDark:
             Color(red: 0.082, green: 0.084, blue: 0.092).opacity(0.98)
         case .codexDark:
@@ -1105,8 +647,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellPanelStrong: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.shellPanelStrong
         case .macOSDark:
             Color(red: 0.112, green: 0.116, blue: 0.126).opacity(0.96)
         case .codexDark:
@@ -1168,8 +708,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingPanelBase: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.floatingPanelBase
         case .macOSDark:
             Color(red: 0.118, green: 0.121, blue: 0.130).opacity(0.985)
         case .codexDark:
@@ -1215,8 +753,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingPanelWash: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.floatingPanelWash
         case .macOSDark:
             Color(red: 0.22, green: 0.25, blue: 0.30).opacity(0.035)
         case .codexDark:
@@ -1262,7 +798,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingControlFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab, .obsidianGlass:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.075)
         case .paperCanvas:
             Color.white.opacity(0.78)
@@ -1273,7 +809,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingControlStrongFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab, .obsidianGlass:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.115)
         case .paperCanvas:
             Color.white.opacity(0.92)
@@ -1284,8 +820,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingStroke: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.floatingStroke
         case .macOSDark:
             Color.white.opacity(0.105)
         case .codexDark:
@@ -1335,8 +869,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingEmphasis: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.floatingEmphasis
         case .macOSDark:
             Color(red: 0.48, green: 0.62, blue: 0.84)
         case .codexDark:
@@ -1382,7 +914,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingSelectedFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab, .obsidianGlass:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.090)
         case .paperCanvas:
             Color(red: 0.300, green: 0.600, blue: 0.920).opacity(0.105)
@@ -1393,7 +925,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingHoverFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab, .obsidianGlass:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.055)
         case .paperCanvas:
             Color.black.opacity(0.032)
@@ -1404,7 +936,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingSelectedStroke: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab, .obsidianGlass:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.145)
         case .paperCanvas:
             Color(red: 0.390, green: 0.680, blue: 0.940).opacity(0.58)
@@ -1415,8 +947,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellStroke: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.shellStroke
         case .macOSDark:
             Color.white.opacity(0.082)
         case .codexDark:
@@ -1462,7 +992,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellSelectedFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab, .obsidianGlass:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.085)
         case .paperCanvas:
             Color(red: 0.300, green: 0.600, blue: 0.920).opacity(0.105)
@@ -1473,7 +1003,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellHoverFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab, .obsidianGlass:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.055)
         case .paperCanvas:
             Color.black.opacity(0.035)
@@ -1484,7 +1014,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellControlFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab, .obsidianGlass:
+        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.052)
         case .paperCanvas:
             Color.white.opacity(0.58)
@@ -1499,8 +1029,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellChromeText: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.shellChromeText
         case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color(red: 0.894, green: 0.918, blue: 0.953)
         case .flexoki:
@@ -1524,8 +1052,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellChromeTextMuted: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.shellChromeTextMuted
         case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color(red: 0.494, green: 0.537, blue: 0.612)
         default:
@@ -1535,8 +1061,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var terminalOuterStroke: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.terminalOuterStroke
         case .macOSDark:
             Color.white.opacity(0.120)
         case .codexDark:
@@ -1582,8 +1106,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var accent: Color {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.accent
         case .macOSDark:
             Color(red: 0.240, green: 0.520, blue: 0.940)
         case .codexDark:
@@ -1629,8 +1151,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var ghosttyConfig: String {
         switch self {
-        case .porcelainWhite, .cloudGlass, .milkGlass, .pearlStudio, .opalGlass, .prismAir, .lavenderFlux, .mintGlass, .sunriseGradient, .skyGradient, .roseQuartz, .obsidianGlass:
-            requiredExtendedPalette.ghosttyConfig
         case .macOSDark:
             """
             palette = 0=#1d1d1f

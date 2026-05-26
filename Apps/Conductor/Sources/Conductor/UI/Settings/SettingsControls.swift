@@ -1238,47 +1238,31 @@ struct SelectedThemeShowcase: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            ThemePreviewArtwork(theme: theme, height: 62)
-                .frame(width: 116)
+            ThemePreviewArtwork(theme: theme, height: 52)
+                .frame(width: 96)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(L("当前主题", "Current Theme"))
-                    .font(.conductorSystem(size: 9.8, weight: .semibold, scale: fontScale))
+                    .font(.conductorSystem(size: 9.6, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.tertiaryText)
                     .textCase(.uppercase)
 
                 Text(theme.title)
-                    .font(.conductorSystem(size: 14.8, weight: .semibold, scale: fontScale))
+                    .font(.conductorSystem(size: 13.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
                     .lineLimit(1)
-
-                Text(theme.themeDescription)
-                    .font(.conductorSystem(size: 10.8, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.secondaryText)
-                    .lineLimit(2)
             }
 
             Spacer(minLength: 8)
 
-            VStack(alignment: .trailing, spacing: 7) {
-                HStack(spacing: 4) {
-                    ThemeSwatch(color: theme.accent, width: 22)
-                    ThemeSwatch(color: theme.floatingPanelBase, width: 22)
-                    ThemeSwatch(color: theme.terminalChrome, width: 22)
-                    ThemeSwatch(color: theme.terminalBackground, width: 22)
-                }
-
-                Text(theme.designLanguage.title)
-                    .font(.conductorSystem(size: 10.2, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis)
-                    .padding(.horizontal, 7)
-                    .frame(height: 20)
-                    .background(theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.56 : 0.7))
-                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            HStack(spacing: 4) {
+                ThemeSwatch(color: theme.accent, width: 18)
+                ThemeSwatch(color: theme.terminalChrome, width: 18)
+                ThemeSwatch(color: theme.terminalBackground, width: 18)
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 9)
+        .padding(.vertical, 8)
         .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.18 : 0.24))
         .overlay(alignment: .bottom) {
             Rectangle()
@@ -1298,46 +1282,28 @@ struct ThemeOptionRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .font(.conductorSystem(size: 13, weight: .semibold, scale: fontScale))
+                    .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                     .foregroundStyle(selected ? activeTheme.floatingEmphasis : ConductorDesign.tertiaryText.opacity(0.62))
-                    .frame(width: 18)
+                    .frame(width: 16)
                     .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 7) {
-                        Text(theme.title)
-                            .font(.conductorSystem(size: 12.4, weight: .semibold, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.primaryText)
-                            .lineLimit(1)
+                Text(theme.title)
+                    .font(.conductorSystem(size: 12.0, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
 
-                        Text(theme.designLanguage.title)
-                            .font(.conductorSystem(size: 9.3, weight: .bold, scale: fontScale))
-                            .foregroundStyle(activeTheme.floatingEmphasis.opacity(0.9))
-                            .padding(.horizontal, 6)
-                            .frame(height: 17)
-                            .background(activeTheme.floatingControlFill.opacity(0.58))
-                            .clipShape(Capsule())
-                    }
-
-                    Text(theme.themeDescription)
-                        .font(.conductorSystem(size: 10.1, weight: .medium, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 12)
+                Spacer(minLength: 8)
 
                 HStack(spacing: 4) {
-                    ThemeSwatch(color: theme.accent, width: 22)
-                    ThemeSwatch(color: theme.floatingPanelBase, width: 22)
-                    ThemeSwatch(color: theme.terminalChrome, width: 22)
-                    ThemeSwatch(color: theme.terminalBackground, width: 22)
+                    ThemeSwatch(color: theme.accent, width: 16)
+                    ThemeSwatch(color: theme.terminalChrome, width: 16)
+                    ThemeSwatch(color: theme.terminalBackground, width: 16)
                 }
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 52)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 32)
             .background(rowFill)
             .contentShape(Rectangle())
         }
@@ -1506,38 +1472,6 @@ struct ThemePreviewMotif: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-            case .white:
-                VStack(spacing: 12) {
-                    ForEach(0..<9, id: \.self) { _ in
-                        Rectangle()
-                            .fill(theme.shellStroke.opacity(0.26))
-                            .frame(height: 1)
-                    }
-                }
-                .padding(.top, 14)
-                .padding(.horizontal, 14)
-            case .gradient:
-                ZStack {
-                    LinearGradient(
-                        colors: [
-                            theme.accent.opacity(0.18),
-                            Color.white.opacity(theme.usesDarkChrome ? 0.04 : 0.28),
-                            Color.clear
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    Path { path in
-                        let step: CGFloat = 22
-                        var x = -proxy.size.height
-                        while x < proxy.size.width {
-                            path.move(to: CGPoint(x: x, y: proxy.size.height))
-                            path.addLine(to: CGPoint(x: x + proxy.size.height, y: 0))
-                            x += step
-                        }
-                    }
-                    .stroke(theme.accent.opacity(0.18), lineWidth: 0.8)
-                }
             case .studio, .minimal, .system:
                 Rectangle()
                     .fill(
