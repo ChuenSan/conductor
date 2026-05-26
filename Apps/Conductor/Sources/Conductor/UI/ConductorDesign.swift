@@ -165,7 +165,9 @@ enum ConductorTokens {
         static let shellGap: CGFloat = 0
         static let shellJoinerWidth: CGFloat = 0
         static let sidebarWidth: CGFloat = 230
-        static let sidebarCollapsedWidth: CGFloat = 88
+        static let sidebarCollapsedWidth: CGFloat = 60
+        static let sidebarCollapsedBodyWidth: CGFloat = 60
+        static let sidebarCollapsedCapHeight: CGFloat = 50
         static let sidebarX: CGFloat = 8
         static let sidebarTop: CGFloat = 0
         static let sidebarBottom: CGFloat = 0
@@ -467,6 +469,8 @@ enum ConductorDesign {
     static let shellJoinerWidth = ConductorTokens.Space.shellJoinerWidth
     static let sidebarWidth = ConductorTokens.Space.sidebarWidth
     static let sidebarCollapsedWidth = ConductorTokens.Space.sidebarCollapsedWidth
+    static let sidebarCollapsedBodyWidth = ConductorTokens.Space.sidebarCollapsedBodyWidth
+    static let sidebarCollapsedCapHeight = ConductorTokens.Space.sidebarCollapsedCapHeight
     static let sidebarCornerRadius = ConductorTokens.Radius.sidebar
     static let toolbarHeight = ConductorTokens.Space.toolbarHeight
     static let statusBarHeight = ConductorTokens.Space.statusHeight
@@ -489,51 +493,51 @@ enum ConductorMotion {
     nonisolated(unsafe) private static var reducedMotion = false
 
     enum Timing {
-        static let tap: Double = 0.065
-        static let feedback: Double = 0.08
-        static let hover: Double = 0.075
-        static let list: Double = 0.105
-        static let standard: Double = 0.13
-        static let search: Double = 0.135
-        static let navigation: Double = 0.145
-        static let reveal: Double = 0.15
-        static let panelDrawer: Double = 0.155
-        static let contentSwap: Double = 0.145
-        static let spatial: Double = 0.165
-        static let panel: Double = 0.17
-        static let emphasized: Double = 0.18
-        static let dragPreview: Double = 0.06
+        static let tap: Double = 0.12
+        static let feedback: Double = 0.16
+        static let hover: Double = 0.22
+        static let list: Double = 0.30
+        static let standard: Double = 0.28
+        static let search: Double = 0.36
+        static let navigation: Double = 0.36
+        static let reveal: Double = 0.36
+        static let panelDrawer: Double = 0.38
+        static let contentSwap: Double = 0.32
+        static let spatial: Double = 0.38
+        static let panel: Double = 0.36
+        static let emphasized: Double = 0.40
+        static let dragPreview: Double = 0.10
     }
 
     // Motion is part of the interaction model: feedback is local, navigation
     // preserves continuity, spatial motion changes layout, and reveal motion
     // introduces transient panels. Terminal surfaces opt out of all of these.
     static var micro: Animation? {
-        reducedMotion ? nil : .easeOut(duration: Timing.feedback)
+        reducedMotion ? nil : .spring(response: Timing.feedback, dampingFraction: 0.85)
     }
 
     static var hover: Animation? {
-        reducedMotion ? nil : .easeOut(duration: Timing.hover)
+        reducedMotion ? nil : .spring(response: Timing.hover, dampingFraction: 0.80)
     }
 
     static var feedback: Animation? {
-        reducedMotion ? nil : .easeOut(duration: Timing.feedback)
+        reducedMotion ? nil : .spring(response: Timing.feedback, dampingFraction: 0.78)
     }
 
     static var press: Animation? {
-        reducedMotion ? nil : .easeOut(duration: Timing.tap)
+        reducedMotion ? nil : .spring(response: Timing.tap, dampingFraction: 0.85)
     }
 
     static var reveal: Animation? {
-        cssEaseOut(duration: Timing.reveal)
+        reducedMotion ? nil : .spring(response: Timing.reveal, dampingFraction: 0.80)
     }
 
     static var search: Animation? {
-        cssEaseOut(duration: Timing.search)
+        reducedMotion ? nil : .spring(response: Timing.search, dampingFraction: 0.82)
     }
 
     static var scroll: Animation? {
-        reducedMotion ? nil : .smooth(duration: Timing.standard, extraBounce: 0.0)
+        reducedMotion ? nil : .spring(response: Timing.standard, dampingFraction: 0.90)
     }
 
     static var selection: Animation? {
@@ -541,23 +545,23 @@ enum ConductorMotion {
     }
 
     static var selectionGlide: Animation? {
-        magnetic(duration: Timing.navigation, bounce: 0.001)
+        reducedMotion ? nil : .spring(response: Timing.navigation, dampingFraction: 0.74)
     }
 
     static var navigation: Animation? {
-        magnetic(duration: Timing.navigation, bounce: 0.002)
+        reducedMotion ? nil : .spring(response: Timing.navigation, dampingFraction: 0.78)
     }
 
     static var standard: Animation? {
-        cssEaseOut(duration: Timing.standard)
+        reducedMotion ? nil : .spring(response: Timing.standard, dampingFraction: 0.85)
     }
 
     static var panel: Animation? {
-        cssEaseOut(duration: Timing.panel)
+        reducedMotion ? nil : .spring(response: Timing.panel, dampingFraction: 0.80)
     }
 
     static var list: Animation? {
-        magnetic(duration: Timing.list, bounce: 0.002)
+        reducedMotion ? nil : .spring(response: Timing.list, dampingFraction: 0.76)
     }
 
     static var layout: Animation? {
@@ -565,35 +569,35 @@ enum ConductorMotion {
     }
 
     static var spatial: Animation? {
-        magnetic(duration: Timing.spatial, bounce: 0.006)
+        reducedMotion ? nil : .spring(response: Timing.spatial, dampingFraction: 0.82)
     }
 
     static var emphasized: Animation? {
-        magnetic(duration: Timing.emphasized, bounce: 0.008)
+        reducedMotion ? nil : .spring(response: Timing.emphasized, dampingFraction: 0.65)
     }
 
     static var attention: Animation? {
-        reducedMotion ? nil : .smooth(duration: Timing.reveal, extraBounce: 0.006)
+        reducedMotion ? nil : .spring(response: Timing.reveal, dampingFraction: 0.60)
     }
 
     static var delivery: Animation? {
-        reducedMotion ? nil : .timingCurve(0.18, 1.0, 0.28, 1.0, duration: Timing.emphasized)
+        reducedMotion ? nil : .spring(response: Timing.emphasized, dampingFraction: 0.72)
     }
 
     static var cascade: Animation? {
-        reducedMotion ? nil : .timingCurve(0.16, 1.0, 0.26, 1.0, duration: Timing.spatial)
+        reducedMotion ? nil : .spring(response: Timing.spatial, dampingFraction: 0.75)
     }
 
     static var contentSwap: Animation? {
-        reducedMotion ? nil : .timingCurve(0.22, 1.0, 0.36, 1.0, duration: Timing.contentSwap)
+        reducedMotion ? nil : .spring(response: Timing.contentSwap, dampingFraction: 0.82)
     }
 
     static var dragPreview: Animation? {
-        reducedMotion ? nil : .easeOut(duration: Timing.dragPreview)
+        reducedMotion ? nil : .spring(response: Timing.dragPreview, dampingFraction: 0.88)
     }
 
     static var panelDrawer: Animation? {
-        reducedMotion ? nil : .timingCurve(0.18, 0.86, 0.18, 1.0, duration: Timing.panelDrawer)
+        reducedMotion ? nil : .spring(response: Timing.panelDrawer, dampingFraction: 0.84)
     }
 
     static var panelTransition: AnyTransition {
@@ -637,11 +641,17 @@ enum ConductorMotion {
     }
 
     static var tabTransition: AnyTransition {
-        reducedMotion ? .identity : .opacity
+        reducedMotion ? .identity : .asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.985, anchor: .center)),
+            removal: .opacity
+        )
     }
 
     static var rowTransition: AnyTransition {
-        reducedMotion ? .identity : .opacity
+        reducedMotion ? .identity : .asymmetric(
+            insertion: .opacity.combined(with: .offset(y: 4)),
+            removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .center))
+        )
     }
 
     static var notificationRowTransition: AnyTransition {

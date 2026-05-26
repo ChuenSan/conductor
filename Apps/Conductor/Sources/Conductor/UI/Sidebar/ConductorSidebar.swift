@@ -12,6 +12,12 @@ private func L(_ zh: String, _ en: String) -> String {
 }
 
 private struct WindowControlButtons: View {
+    let spacing: CGFloat
+
+    init(spacing: CGFloat = 6) {
+        self.spacing = spacing
+    }
+
     private let controls: [WindowControl] = [
         WindowControl(id: "close", color: Color(red: 1.0, green: 0.33, blue: 0.32), accessibilityLabel: L("关闭窗口", "Close Window")) {
             NSApp.keyWindow?.performClose(nil)
@@ -25,7 +31,7 @@ private struct WindowControlButtons: View {
     ]
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: spacing) {
             ForEach(controls) { control in
                 Button(action: control.action) {
                     Circle()
@@ -34,14 +40,15 @@ private struct WindowControlButtons: View {
                             Circle()
                                 .stroke(Color.black.opacity(0.12), lineWidth: 0.7)
                         }
-                        .frame(width: 13, height: 13)
+                        .frame(width: 12, height: 12)
                 }
                 .buttonStyle(.plain)
+                .frame(width: 12, height: 12)
                 .accessibilityLabel(control.accessibilityLabel)
                 .macNativeTooltip(control.accessibilityLabel)
             }
         }
-        .frame(height: 20)
+        .frame(height: 16)
     }
 }
 
@@ -62,10 +69,11 @@ struct ConductorSidebar: View {
     @State private var workspaceTitleDraft = ""
     @State private var sidebarToggleHovering = false
     @Namespace private var sidebarSelectionNamespace
+    @Namespace private var railSelectionNamespace
     @Environment(\.conductorFontScale) private var fontScale
 
     private var sidebarHeaderHeight: CGFloat {
-        sidebarVisible ? 54 : 82
+        sidebarVisible ? 50 : ConductorDesign.sidebarCollapsedCapHeight
     }
 
     var body: some View {
@@ -74,19 +82,20 @@ struct ConductorSidebar: View {
 
             if sidebarVisible {
                 expandedSidebar
+                    .padding(.horizontal, ConductorTokens.Space.sidebarX)
                     .transition(ConductorMotion.sidebarContentTransition)
             } else {
                 collapsedSidebar
+                    .frame(width: ConductorDesign.sidebarCollapsedBodyWidth, alignment: .center)
                     .transition(ConductorMotion.sidebarContentTransition)
             }
         }
-        .padding(.horizontal, sidebarVisible ? ConductorTokens.Space.sidebarX : 6)
         .padding(.top, ConductorTokens.Space.sidebarTop)
         .padding(.bottom, ConductorTokens.Space.sidebarBottom)
-        .frame(width: sidebarVisible ? ConductorDesign.sidebarWidth(for: appearance) : ConductorDesign.sidebarCollapsedWidth)
+        .frame(width: sidebarVisible ? ConductorDesign.sidebarWidth(for: appearance) : ConductorDesign.sidebarCollapsedWidth, alignment: .topLeading)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background {
-            SidebarRailSurface(theme: theme, clarity: appearance.chromeClarity)
+            SidebarRailSurface(theme: theme, clarity: appearance.chromeClarity, isCollapsed: !sidebarVisible)
         }
         .overlay {
             SidebarBookSpineChrome(
@@ -106,21 +115,23 @@ struct ConductorSidebar: View {
         if sidebarVisible {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    WindowControlButtons()
+                    WindowControlButtons(spacing: 6)
                     Spacer(minLength: 8)
                     sidebarToggleButton
                 }
-                .padding(.top, 11)
+                .padding(.horizontal, ConductorTokens.Space.sidebarX)
+                .padding(.top, 10)
             }
             .frame(height: sidebarHeaderHeight, alignment: .top)
         } else {
             VStack(spacing: 0) {
-                WindowControlButtons()
-                    .padding(.top, 11)
-                Spacer(minLength: 0)
-                sidebarToggleButton
+                HStack(spacing: 0) {
+                    Spacer()
+                    WindowControlButtons(spacing: 6)
+                    Spacer()
+                }
+                .padding(.top, 12)
             }
-            .frame(maxWidth: .infinity)
             .frame(height: sidebarHeaderHeight, alignment: .top)
         }
     }
@@ -269,14 +280,30 @@ struct ConductorSidebar: View {
 
     private var collapsedSidebar: some View {
         VStack(spacing: 6) {
+            SidebarRailButton(
+                id: "sidebar-rail.toggle-sidebar",
+                icon: "sidebar.left",
+                help: L("展开侧边栏", "Expand Sidebar"),
+                namespace: railSelectionNamespace
+            ) {
+                finishWorkspaceRenameIfNeeded()
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.sidebarVisible.toggle()
+                }
+            }
+            .padding(.top, 4)
+
+            CollapsedRailSeparator()
+
             ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 6) {
+                LazyVStack(spacing: 8) {
                     ForEach(snapshot.rows) { row in
                         SidebarRailButton(
                             id: "sidebar-rail.workspace.\(row.id)",
                             icon: WorkspaceChromeGlyph.systemName(selected: row.selected),
                             selected: row.selected,
-                            help: row.title
+                            help: row.title,
+                            namespace: railSelectionNamespace
                         ) {
                             withoutShellAnimation {
                                 model.activateWorkspace(row.id, source: .sidebar)
@@ -291,8 +318,7 @@ struct ConductorSidebar: View {
             .mask(ConductorVerticalFadeMask(fadesTop: false))
             .frame(maxHeight: .infinity)
 
-            SidebarSeparator()
-                .padding(.horizontal, -1)
+            CollapsedRailSeparator()
 
             collapsedSidebarActions
 
@@ -303,16 +329,31 @@ struct ConductorSidebar: View {
     }
 
     private var collapsedSidebarActions: some View {
-        VStack(spacing: 6) {
-            SidebarRailButton(id: "sidebar-rail.new-terminal", icon: "plus.rectangle.on.rectangle", help: commandTooltip(L("新开终端", "New Terminal"), command: .newTerminal, fallback: "Cmd-T")) {
+        VStack(spacing: 8) {
+            SidebarRailButton(
+                id: "sidebar-rail.new-terminal",
+                icon: "plus.rectangle.on.rectangle",
+                help: commandTooltip(L("新开终端", "New Terminal"), command: .newTerminal, fallback: "Cmd-T"),
+                namespace: railSelectionNamespace
+            ) {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.newTerminal)
             }
-            SidebarRailButton(id: "sidebar-rail.command-palette", icon: "command", help: commandTooltip(L("打开命令面板", "Open Command Palette"), command: .toggleCommandPalette, fallback: "Cmd-K")) {
+            SidebarRailButton(
+                id: "sidebar-rail.command-palette",
+                icon: "command",
+                help: commandTooltip(L("打开命令面板", "Open Command Palette"), command: .toggleCommandPalette, fallback: "Cmd-K"),
+                namespace: railSelectionNamespace
+            ) {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.toggleCommandPalette)
             }
-            SidebarRailButton(id: "sidebar-rail.token-records", icon: "chart.bar.fill", help: L("Token 记录", "Token Records")) {
+            SidebarRailButton(
+                id: "sidebar-rail.token-records",
+                icon: "chart.bar.fill",
+                help: L("Token 记录", "Token Records"),
+                namespace: railSelectionNamespace
+            ) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorUsageFeature.openTokenRecords(
                     style: tokenRecordsPanelStyle,
@@ -323,7 +364,12 @@ struct ConductorSidebar: View {
 
     private var collapsedSidebarFooter: some View {
         VStack(spacing: 0) {
-            SidebarRailButton(id: "sidebar-rail.settings", icon: "gearshape", help: commandTooltip(L("设置", "Settings"), command: .toggleSettings, fallback: "Cmd-,")) {
+            SidebarRailButton(
+                id: "sidebar-rail.settings",
+                icon: "gearshape",
+                help: commandTooltip(L("设置", "Settings"), command: .toggleSettings, fallback: "Cmd-,"),
+                namespace: railSelectionNamespace
+            ) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.panel) {
                     model.performCommand(.toggleSettings)
@@ -443,24 +489,30 @@ private struct SidebarRailShape: InsettableShape {
     var insetAmount: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
-        let rect = rect.insetBy(dx: insetAmount, dy: insetAmount)
-        let leading = min(bottomLeadingRadius, rect.width / 2, rect.height / 2)
-        let trailing = min(bottomTrailingRadius, rect.width / 2, rect.height / 2)
+        let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        return uniformPath(in: r)
+    }
+
+    private func uniformPath(in r: CGRect) -> Path {
+        let leading = min(bottomLeadingRadius, r.width / 2, r.height / 2)
+        let trailing = min(bottomTrailingRadius, r.width / 2, r.height / 2)
 
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - trailing))
+        path.move(to: CGPoint(x: r.minX, y: r.minY))
+        path.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+        path.addLine(to: CGPoint(x: r.maxX, y: r.maxY - trailing))
+        if trailing > 0 {
+            path.addQuadCurve(
+                to: CGPoint(x: r.maxX - trailing, y: r.maxY),
+                control: CGPoint(x: r.maxX, y: r.maxY)
+            )
+        }
+        path.addLine(to: CGPoint(x: r.minX + leading, y: r.maxY))
         path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - trailing, y: rect.maxY),
-            control: CGPoint(x: rect.maxX, y: rect.maxY)
+            to: CGPoint(x: r.minX, y: r.maxY - leading),
+            control: CGPoint(x: r.minX, y: r.maxY)
         )
-        path.addLine(to: CGPoint(x: rect.minX + leading, y: rect.maxY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.maxY - leading),
-            control: CGPoint(x: rect.minX, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: r.minX, y: r.minY))
         path.closeSubpath()
         return path
     }
@@ -475,15 +527,73 @@ private struct SidebarRailShape: InsettableShape {
 private struct SidebarRailSurface: View {
     let theme: TerminalTheme
     let clarity: ChromeClarity
+    let isCollapsed: Bool
 
     var body: some View {
         let shape = SidebarRailShape()
-        shape
-            .fill(theme.shellPanelBackground)
-            .overlay {
+        
+        ZStack {
+            if isCollapsed {
                 shape
-                    .strokeBorder(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.15 : 0.070), lineWidth: 0.6)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.08 : 0.05),
+                                Color.clear,
+                                theme.accent.opacity(theme.usesDarkChrome ? 0.05 : 0.02)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .blur(radius: 6)
+                    .offset(x: 2)
             }
+
+            shape
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            theme.shellPanelBackground,
+                            theme.shellPanelBackground.opacity(0.95),
+                            theme.shellPanelStrong.opacity(0.98)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            if isCollapsed {
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(theme.usesDarkChrome ? 0.04 : 0.08),
+                                Color.clear,
+                                Color.black.opacity(theme.usesDarkChrome ? 0.04 : 0.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .blendMode(.overlay)
+            }
+        }
+        .overlay {
+            shape
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(theme.usesDarkChrome ? 0.12 : 0.36),
+                            theme.shellStroke.opacity(theme.usesDarkChrome ? 0.18 : 0.10),
+                            Color.black.opacity(0.12)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.6
+                )
+        }
     }
 }
 
@@ -764,6 +874,25 @@ private struct SidebarSeparator: View {
     }
 }
 
+private struct CollapsedRailSeparator: View {
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color.clear,
+                theme.shellStroke.opacity(theme.usesDarkChrome ? 0.38 : 0.22),
+                Color.clear
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .frame(height: 1)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+    }
+}
+
 private struct SidebarDockSurface<Content: View>: View {
     var horizontalPadding: CGFloat = 2
     @ViewBuilder var content: Content
@@ -795,25 +924,125 @@ private struct SidebarRailButton: View {
     var selected = false
     var disabled = false
     let help: String
+    let namespace: Namespace.ID
     let action: () -> Void
 
+    @State private var hovering = false
+    @State private var pulseActive = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
     var body: some View {
-        ConductorIconButton(
-            state: ConductorControlState(
-                id: id,
-                systemImage: icon,
-                isEnabled: !disabled,
-                isActive: selected,
-                tooltip: help,
-                accessibilityLabel: help
-            ),
-            variant: .sidebarRail,
-            action: action
-        )
-        .overlay {
-            ConductorMagneticGlow(cornerRadius: 11, active: selected, lineWidth: 0.8)
-                .opacity(selected ? 0.75 : 0)
-                .allowsHitTesting(false)
+        Button(action: {
+            guard !disabled else { return }
+            action()
+        }) {
+            ZStack {
+                // Shared matched geometry background bubble for active selection (fluid liquid selection)
+                if selected {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.28 : 0.18),
+                                    theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.08 : 0.04)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .matchedGeometryEffect(id: "rail-selection-bubble", in: namespace)
+                }
+
+                // Hover highlight overlay background
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(hovering ? theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.65 : 0.45) : Color.clear)
+                    .animation(ConductorMotion.hover, value: hovering)
+
+                // High-precision specular inner glow
+                if selected {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(theme.usesDarkChrome ? 0.12 : 0.22),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .blendMode(.screen)
+                }
+
+                // Icon inside with creative styling & animations
+                Image(systemName: icon)
+                    .font(.conductorSystem(size: 13, weight: selected ? .bold : .semibold, scale: fontScale))
+                    .foregroundStyle(
+                        selected ? theme.floatingEmphasis : (hovering ? theme.shellChromeText.opacity(0.92) : ConductorDesign.secondaryText)
+                    )
+                    .scaleEffect(hovering ? 1.14 : 1.0)
+                    .rotationEffect(.degrees(hovering && !selected ? -4 : 0)) // Elegant tilt on hover
+                    .offset(y: hovering ? -0.5 : 0)
+                    .shadow(color: selected ? theme.floatingEmphasis.opacity(pulseActive ? 0.50 : 0.25) : Color.clear, radius: hovering ? 4 : 2)
+                    .animation(ConductorMotion.hover, value: hovering)
+            }
+            .frame(width: 34, height: 34)
+            .background {
+                // Glass-orb bounding ring
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(theme.usesDarkChrome ? 0.14 : 0.42),
+                                Color.white.opacity(theme.usesDarkChrome ? 0.03 : 0.10),
+                                theme.floatingEmphasis.opacity(selected ? 0.42 : 0.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: selected ? 1.0 : 0.7
+                    )
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .shadow(
+                color: selected ? theme.floatingEmphasis.opacity(pulseActive ? 0.32 : 0.16) : Color.black.opacity(hovering ? 0.08 : 0.03),
+                radius: selected ? (pulseActive ? 8 : 4) : (hovering ? 4 : 2),
+                x: 0,
+                y: selected ? 2 : 1
+            )
+            .overlay(alignment: .leading) {
+                // Elegant fluid liquid edge indicator on the left side
+                if selected {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(theme.floatingEmphasis)
+                        .frame(width: 3, height: 14)
+                        .matchedGeometryEffect(id: "rail-selection-edge-indicator", in: namespace)
+                        .padding(.leading, 1.5)
+                }
+            }
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.94, pressedOpacity: 0.95))
+        .disabled(disabled)
+        .opacity(disabled ? 0.35 : 1.0)
+        .macNativeTooltip(help)
+        .accessibilityLabel(help)
+        .conductorHover($hovering)
+        .onAppear {
+            if selected {
+                withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                    pulseActive = true
+                }
+            }
+        }
+        .onChange(of: selected) { _, newValue in
+            if newValue {
+                withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                    pulseActive = true
+                }
+            } else {
+                pulseActive = false
+            }
         }
     }
 }
