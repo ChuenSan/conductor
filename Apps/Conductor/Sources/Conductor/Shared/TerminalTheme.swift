@@ -13,35 +13,6 @@ enum TerminalThemeDesignLanguage: String {
     case frost
     case sunlit
     case botanical
-
-    var title: String {
-        switch self {
-        case .system:
-            "System"
-        case .minimal:
-            "Minimal"
-        case .paper:
-            "Paper"
-        case .fluid:
-            "Fluid"
-        case .studio:
-            "Studio"
-        case .warm:
-            "Warm"
-        case .glass:
-            "Glass"
-        case .neon:
-            "Neon"
-        case .editorial:
-            "Editorial"
-        case .frost:
-            "Frost"
-        case .sunlit:
-            "Sunlit"
-        case .botanical:
-            "Botanical"
-        }
-    }
 }
 
 
@@ -182,51 +153,6 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             .sunlit
         case .forestLab:
             .botanical
-        }
-    }
-
-    var themeDescription: String {
-        switch self {
-        case .macOSDark:
-            "System dark chrome with familiar Mac contrast."
-        case .codexDark:
-            "Muted dark shell for long agent sessions."
-        case .slateDusk:
-            "Raised slate surfaces: dark, but not black."
-        case .carbonMist:
-            "Soft charcoal chrome with warmer mid-dark panels."
-        case .blueHour:
-            "Blue-gray evening shell with calmer terminal contrast."
-        case .stoneVeil:
-            "Soft mineral gray surfaces for a lighter dark workspace."
-        case .harborFog:
-            "Blue fog chrome with lifted panels and quiet waterline focus."
-        case .clayAsh:
-            "Warm ash panels with earthy contrast and a softer terminal bed."
-        case .lichenMist:
-            "Moss-gray shell with muted green instrumentation."
-        case .flexoki:
-            "Ink-and-paper warmth with restrained terminal contrast."
-        case .aurora:
-            "Airy glass, cool panels, and soft cyan motion."
-        case .graphite:
-            "Neutral studio controls with precise gray layering."
-        case .paperCanvas:
-            "White document workspace with pale sidebars and blue focus."
-        case .ember:
-            "Warm command-room surfaces with orange focus."
-        case .midnightGlass:
-            "Deep translucent panes, glossy rails, and quiet blue focus."
-        case .tokyoNight:
-            "Dense night-mode chrome with neon status energy."
-        case .paperTrail:
-            "Editorial paper surface with ruled controls and ink accents."
-        case .nordicFrost:
-            "Frosted utility panels with crisp polar contrast."
-        case .solarDune:
-            "Sunlit sand panels with broad, calm terminal surfaces."
-        case .forestLab:
-            "Dark botanical workspace with green lab instrumentation."
         }
     }
 
@@ -1109,7 +1035,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         case .macOSDark:
             Color(red: 0.240, green: 0.520, blue: 0.940)
         case .codexDark:
-            Color(red: 0.43, green: 0.35, blue: 0.86)
+            Color(red: 0.42, green: 0.56, blue: 0.74)
         case .slateDusk:
             Color(red: 0.56, green: 0.65, blue: 0.78)
         case .carbonMist:

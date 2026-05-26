@@ -13,8 +13,6 @@ extension AppearanceSettingsPanel {
         VStack(alignment: .leading, spacing: 12) {
             SettingsPreferenceGroup(
                 title: L("设置入口", "Settings"),
-                subtitle: L("选择要调整的部分", "Choose what to adjust"),
-                systemImage: "gearshape"
             ) {
                 SettingsOverviewPath(snapshot: snapshot) { section in
                     selectSection(section)
@@ -50,14 +48,11 @@ extension AppearanceSettingsPanel {
         return LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("外观控制", "Appearance Controls"),
-                subtitle: L("像系统偏好设置一样直接调整，不用在卡片海里找选项", "Direct controls, tuned like a native settings inspector"),
-                systemImage: "slider.horizontal.3"
             ) {
                 SettingsFormSurface {
                     SettingsControlRow(
                         title: L("窗口密度", "Window Density"),
                         subtitle: appearance.density.subtitle,
-                        systemImage: "rectangle.compress.vertical"
                     ) {
                         SettingsSegmentedPicker(
                             options: AppearanceDensity.allCases,
@@ -75,7 +70,6 @@ extension AppearanceSettingsPanel {
                     SettingsControlRow(
                         title: L("浮层清晰度", "Layer Clarity"),
                         subtitle: appearance.chromeClarity.subtitle,
-                        systemImage: "square.stack.3d.up"
                     ) {
                         SettingsSegmentedPicker(
                             options: ChromeClarity.allCases,
@@ -92,14 +86,11 @@ extension AppearanceSettingsPanel {
 
             SettingsPreferenceGroup(
                 title: L("文字", "Text"),
-                subtitle: L("这些只影响应用壳层文字，不会触碰终端渲染", "Shell text only; terminal rendering stays separate"),
-                systemImage: "textformat"
             ) {
                 SettingsFormSurface {
                     SettingsControlRow(
                         title: L("语言", "Language"),
                         subtitle: appearance.language.subtitle,
-                        systemImage: "character.bubble"
                     ) {
                         SettingsSegmentedPicker(
                             options: AppearanceLanguage.allCases,
@@ -117,7 +108,6 @@ extension AppearanceSettingsPanel {
                     SettingsControlRow(
                         title: L("字体", "Font"),
                         subtitle: appearance.fontFamily.subtitle,
-                        systemImage: appearance.fontFamily.systemImage
                     ) {
                         SettingsSegmentedPicker(
                             options: AppearanceFontFamily.allCases,
@@ -135,7 +125,6 @@ extension AppearanceSettingsPanel {
                     SettingsControlRow(
                         title: L("字号", "Font Size"),
                         subtitle: appearance.fontScale.subtitle,
-                        systemImage: "textformat.size"
                     ) {
                         SettingsSegmentedPicker(
                             options: AppearanceFontScale.allCases,
@@ -250,14 +239,11 @@ extension AppearanceSettingsPanel {
 
         SettingsPreferenceGroup(
             title: L("Shell 与启动", "Shell and Startup"),
-            subtitle: L("启动命令、默认目录和滚屏历史，按终端用户真正会设置的方式呈现", "Startup command, default directory, and scrollback history presented as product settings"),
-            systemImage: "terminal"
         ) {
             SettingsFormSurface {
                 SettingsControlRow(
                     title: L("Shell 集成", "Shell Integration"),
                     subtitle: L("已启用 detect，并保留 no-cursor；这里不需要手动配置", "Enabled with detect and no-cursor; no manual setup needed"),
-                    systemImage: "point.3.connected.trianglepath.dotted"
                 ) {
                     SettingsStatusPill(title: L("自动管理", "Managed"), systemImage: "lock.fill")
                 }
@@ -267,7 +253,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("启动命令", "Startup Command"),
                     subtitle: L("留空时打开默认登录 shell；适合进入 tmux、ssh 或固定开发环境", "Leave empty for the default login shell; useful for tmux, ssh, or a fixed dev environment"),
-                    systemImage: "terminal"
                 ) {
                     ShellCommandSettingControl(
                         value: commandOverride.normalizedValue,
@@ -281,7 +266,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("默认工作目录", "Default Working Directory"),
                     subtitle: L("留空时继承工作区或新建终端时的目录", "Leave empty to inherit the workspace or new-terminal directory"),
-                    systemImage: "folder"
                 ) {
                     WorkingDirectorySettingControl(
                         value: directoryOverride.normalizedValue,
@@ -295,7 +279,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("滚屏历史", "Scrollback History"),
                     subtitle: L("控制终端保留多少历史输出；越大越占内存", "Controls how much terminal history is retained; larger values use more memory"),
-                    systemImage: "scroll"
                 ) {
                     ScrollbackPresetPicker(
                         value: scrollbackOverride.normalizedValue,
@@ -319,14 +302,11 @@ extension AppearanceSettingsPanel {
 
         return SettingsPreferenceGroup(
             title: L("背景与颜色", "Background and Colors"),
-            subtitle: L("终端画布、背景图、选区和搜索高亮；整套主题仍在主题页管理", "Terminal canvas, background image, selection, and search highlight; full themes stay in Themes"),
-            systemImage: "paintpalette"
         ) {
             SettingsFormSurface {
                 SettingsSliderRow(
                     title: L("背景不透明度", "Background Opacity"),
                     subtitle: L("降低后可以透出窗口材质，100% 最清晰", "Lower values show the window material; 100% is clearest"),
-                    systemImage: "circle.lefthalf.filled",
                     value: renderer.backgroundOpacity,
                     range: 0.35...1,
                     step: 0.01,
@@ -340,7 +320,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("背景模糊", "Background Blur"),
                     subtitle: L("透明背景下柔化后方内容，默认跟随内置策略", "Softens content behind transparent terminals; default follows the built-in policy"),
-                    systemImage: "water.waves"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: blurOverride),
@@ -353,7 +332,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("背景图片", "Background Image"),
                     subtitle: L("选择一张图片作为终端背景，留空时使用主题背景", "Choose an image for the terminal background, or leave empty to use the theme"),
-                    systemImage: "photo"
                 ) {
                     GhosttyFileOverrideControl(
                         key: "background-image",
@@ -368,7 +346,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("图片显示方式", "Image Fit"),
                     subtitle: L("控制背景图片如何填充终端区域", "Controls how the background image fills the terminal area"),
-                    systemImage: "rectangle.resize"
                 ) {
                     GhosttyPresetOverrideMenu(
                         value: imageFitOverride.normalizedValue,
@@ -388,7 +365,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("图片透明度", "Image Opacity"),
                     subtitle: L("让背景图片更轻，避免干扰终端文字", "Makes the image quieter so terminal text stays readable"),
-                    systemImage: "slider.horizontal.3"
                 ) {
                     GhosttySliderOverrideControl(
                         key: "background-image-opacity",
@@ -407,7 +383,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("选区文字", "Selection Text"),
                     subtitle: L("选中内容时的文字颜色，默认跟随主题", "Text color for selected content; defaults to the theme"),
-                    systemImage: "text.cursor"
                 ) {
                     GhosttyColorOverrideControl(
                         key: "selection-foreground",
@@ -422,7 +397,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("选区背景", "Selection Background"),
                     subtitle: L("拖选文本时的高亮颜色", "Highlight color used while selecting text"),
-                    systemImage: "selection.pin.in.out"
                 ) {
                     GhosttyColorOverrideControl(
                         key: "selection-background",
@@ -437,7 +411,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("搜索高亮", "Search Highlight"),
                     subtitle: L("搜索命中结果的背景色", "Background color for search matches"),
-                    systemImage: "magnifyingglass"
                 ) {
                     GhosttyColorOverrideControl(
                         key: "search-background",
@@ -463,14 +436,11 @@ extension AppearanceSettingsPanel {
 
         return SettingsPreferenceGroup(
             title: L("选择、鼠标与链接", "Selection, Mouse, and Links"),
-            subtitle: L("日常复制、鼠标交互和链接识别，不展示底层配置细节", "Daily copy, mouse interaction, and link detection without raw config details"),
-            systemImage: "cursorarrow.click"
         ) {
             SettingsFormSurface {
                 SettingsControlRow(
                     title: L("输入时清除选区", "Clear Selection While Typing"),
                     subtitle: L("开始输入后自动取消当前选区", "Automatically clears the current selection when typing starts"),
-                    systemImage: "keyboard"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: clearTypingOverride),
@@ -483,7 +453,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("复制后清除选区", "Clear Selection After Copy"),
                     subtitle: L("复制完成后收起高亮，适合连续操作", "Clears the highlight after copying"),
-                    systemImage: "doc.on.doc"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: clearCopyOverride),
@@ -496,7 +465,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("选中即复制", "Copy On Select"),
                     subtitle: L("像 X11 终端一样，选中文本后立即写入剪贴板", "Copies selected text immediately, similar to X11 terminals"),
-                    systemImage: "doc.on.clipboard"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: copyOverride),
@@ -509,7 +477,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("输入时隐藏鼠标", "Hide Mouse While Typing"),
                     subtitle: L("减少鼠标指针挡住终端文本的情况", "Keeps the pointer from covering terminal text while typing"),
-                    systemImage: "cursorarrow.slash"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: hideMouseOverride),
@@ -522,7 +489,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("应用鼠标上报", "App Mouse Reporting"),
                     subtitle: L("允许 vim、tmux、less 等终端应用接收鼠标事件", "Lets terminal apps such as vim, tmux, and less receive mouse events"),
-                    systemImage: "point.topleft.down.curvedto.point.bottomright.up"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: reportingOverride),
@@ -535,7 +501,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("滚轮速度", "Scroll Speed"),
                     subtitle: L("调整鼠标或触控板滚动终端历史的速度", "Adjusts mouse or trackpad scroll speed through terminal history"),
-                    systemImage: "scroll"
                 ) {
                     GhosttyPresetOverrideMenu(
                         value: scrollOverride.normalizedValue,
@@ -555,7 +520,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("链接识别", "Link Detection"),
                     subtitle: L("识别终端输出里的 URL，方便点击打开", "Detects URLs in terminal output so they can be opened"),
-                    systemImage: "link"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: linkOverride),
@@ -568,7 +532,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("链接预览", "Link Previews"),
                     subtitle: L("悬停链接时显示预览能力，默认跟随内置支持", "Shows link preview behavior on hover when supported"),
-                    systemImage: "rectangle.on.rectangle"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: previewOverride),
@@ -589,14 +552,11 @@ extension AppearanceSettingsPanel {
 
         return SettingsPreferenceGroup(
             title: L("剪贴板与粘贴安全", "Clipboard and Paste Safety"),
-            subtitle: L("把安全相关行为说成人话：读写、清理空格、粘贴保护", "Human-facing controls for clipboard access, trimming, and paste protection"),
-            systemImage: "doc.on.clipboard"
         ) {
             SettingsFormSurface {
                 SettingsControlRow(
                     title: L("允许读取剪贴板", "Allow Clipboard Read"),
                     subtitle: L("终端应用可以从系统剪贴板读取内容", "Terminal apps may read from the system clipboard"),
-                    systemImage: "arrow.down.doc"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: readOverride),
@@ -609,7 +569,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("允许写入剪贴板", "Allow Clipboard Write"),
                     subtitle: L("终端应用可以把内容写入系统剪贴板", "Terminal apps may write to the system clipboard"),
-                    systemImage: "arrow.up.doc"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: writeOverride),
@@ -622,7 +581,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("复制时清理尾随空格", "Trim Trailing Spaces"),
                     subtitle: L("复制多行输出时去掉行尾多余空格", "Removes extra spaces at line endings when copying output"),
-                    systemImage: "text.alignleft"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: trimOverride),
@@ -635,7 +593,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("危险粘贴保护", "Paste Protection"),
                     subtitle: L("粘贴疑似多行命令或危险内容时保留确认保护", "Keeps confirmation protection for suspicious multi-line or risky pastes"),
-                    systemImage: "exclamationmark.shield"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: protectionOverride),
@@ -648,7 +605,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("Bracketed Paste 安全模式", "Bracketed Paste Safety"),
                     subtitle: L("让支持的 shell 和编辑器更准确地区分键入与粘贴", "Helps supported shells and editors distinguish typed input from pasted text"),
-                    systemImage: "brackets.curly"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: bracketedOverride),
@@ -669,14 +625,11 @@ extension AppearanceSettingsPanel {
 
         return SettingsPreferenceGroup(
             title: L("通知与铃声", "Notifications and Bell"),
-            subtitle: L("命令结束提醒和终端铃声；AI Agent 通知仍在 AI 页管理", "Command-finish alerts and terminal bell; AI agent notifications stay in AI"),
-            systemImage: "bell.badge"
         ) {
             SettingsFormSurface {
                 SettingsControlRow(
                     title: L("命令完成通知", "Command Finish Notification"),
                     subtitle: L("长命令结束后提醒你回来处理", "Alerts you when a long-running command finishes"),
-                    systemImage: "checkmark.circle"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: finishOverride),
@@ -689,7 +642,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("通知方式", "Notification Action"),
                     subtitle: L("选择只发系统通知，还是同时吸引注意", "Choose whether to only notify or also request attention"),
-                    systemImage: "app.badge"
                 ) {
                     GhosttyPresetOverrideMenu(
                         value: actionOverride.normalizedValue,
@@ -708,7 +660,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("超过多久提醒", "Notify After"),
                     subtitle: L("只有运行时间超过这个阈值的命令才提醒", "Only commands longer than this threshold will alert"),
-                    systemImage: "timer"
                 ) {
                     GhosttyPresetOverrideMenu(
                         value: afterOverride.normalizedValue,
@@ -728,7 +679,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("铃声音频", "Bell Sound"),
                     subtitle: L("选择自定义铃声文件，留空时使用默认反馈", "Choose a custom bell sound file, or leave empty for the default feedback"),
-                    systemImage: "speaker.wave.2"
                 ) {
                     GhosttyFileOverrideControl(
                         key: "bell-audio-path",
@@ -743,7 +693,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("铃声音量", "Bell Volume"),
                     subtitle: L("调低可以保留提示但不打断工作", "Lower volume keeps feedback without interrupting work"),
-                    systemImage: "speaker.wave.1"
                 ) {
                     GhosttySliderOverrideControl(
                         key: "bell-audio-volume",
@@ -767,14 +716,11 @@ extension AppearanceSettingsPanel {
 
         return SettingsPreferenceGroup(
             title: L("键盘", "Keyboard"),
-            subtitle: L("这里放终端输入层设置；应用级快捷键仍在命令页管理", "Terminal input settings live here; app shortcuts stay in Commands"),
-            systemImage: "keyboard"
         ) {
             SettingsFormSurface {
                 SettingsControlRow(
                     title: L("Option 作为 Alt", "Option As Alt"),
                     subtitle: L("给 vim、emacs、tmux 等终端程序发送 Alt/Meta 组合键", "Sends Alt/Meta key combinations to terminal apps such as vim, emacs, and tmux"),
-                    systemImage: "option"
                 ) {
                     GhosttyPresetOverrideMenu(
                         value: optionOverride.normalizedValue,
@@ -794,7 +740,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("高级键位映射", "Advanced Key Remap"),
                     subtitle: L("只在需要兼容特殊终端工作流时填写；常用快捷键请去命令页", "Use only for special terminal workflows; common shortcuts belong in Commands"),
-                    systemImage: "keyboard.badge.ellipsis"
                 ) {
                     GhosttyInlineTextOverrideControl(
                         key: "key-remap",
@@ -818,14 +763,11 @@ extension AppearanceSettingsPanel {
 
             SettingsPreferenceGroup(
                 title: L("字体与字格", "Typography"),
-                subtitle: L("管理终端实际使用的字体、字号、行高和字格密度", "Controls the terminal font, size, line height, and cell density"),
-                systemImage: "textformat.size"
             ) {
                 SettingsFormSurface {
                     SettingsControlRow(
                         title: L("终端字体", "Terminal Font"),
                         subtitle: renderer.selectedFontStatusTitle,
-                        systemImage: "textformat"
                     ) {
                         HStack(spacing: 8) {
                             TerminalFontPickerMenu(
@@ -868,7 +810,6 @@ extension AppearanceSettingsPanel {
                     SettingsControlRow(
                         title: L("自定义字体", "Custom Font"),
                         subtitle: customTerminalFontSubtitle(for: appearance),
-                        systemImage: "square.and.arrow.down"
                     ) {
                         HStack(spacing: 8) {
                             Toggle("", isOn: Binding(
@@ -890,7 +831,6 @@ extension AppearanceSettingsPanel {
                     SettingsSliderRow(
                         title: L("终端字号", "Terminal Font Size"),
                         subtitle: L("调大更清晰，调小能显示更多行列", "Larger is easier to read; smaller fits more rows and columns"),
-                        systemImage: "textformat.size",
                         value: appearance.terminalFontSize,
                         range: AppearancePreferences.minTerminalFontSize...AppearancePreferences.maxTerminalFontSize,
                         step: 0.5,
@@ -904,7 +844,6 @@ extension AppearanceSettingsPanel {
                     SettingsSliderRow(
                         title: L("行高", "Line Height"),
                         subtitle: L("让输出更紧凑或更舒展", "Makes terminal output tighter or more relaxed"),
-                        systemImage: "arrow.up.and.down.text.horizontal",
                         value: renderer.lineHeight,
                         range: 0.80...1.50,
                         step: 0.01,
@@ -926,14 +865,11 @@ extension AppearanceSettingsPanel {
 
         return SettingsPreferenceGroup(
             title: L("光标", "Cursor"),
-            subtitle: L("光标形状、颜色、闪烁和点击移动，都是日常输入会感知到的项", "Cursor shape, color, blink, and click-to-move are visible during daily typing"),
-            systemImage: "cursorarrow"
         ) {
             SettingsFormSurface {
                 SettingsControlRow(
                     title: L("光标样式", "Cursor Style"),
                     subtitle: L("选择块、空心块、竖线或下划线光标", "Choose block, hollow block, bar, or underline"),
-                    systemImage: "cursorarrow"
                     ) {
                         SettingsSegmentedPicker(
                             options: TerminalCursorStyle.allCases,
@@ -949,7 +885,6 @@ extension AppearanceSettingsPanel {
                 SettingsToggleRow(
                     title: L("光标闪烁", "Cursor Blink"),
                     subtitle: L("关闭后光标保持常亮，适合减少视觉干扰", "Keeps the cursor steady when disabled"),
-                    systemImage: "cursorarrow.motionlines",
                     isOn: Binding(
                         get: { renderer.cursorBlink },
                         set: { model.setTerminalCursorBlink($0) }
@@ -961,7 +896,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("光标颜色", "Cursor Color"),
                     subtitle: L("默认跟随主题，也可以指定一个固定颜色", "Follows the theme by default, or use a fixed color"),
-                    systemImage: "paintpalette"
                 ) {
                     GhosttyColorOverrideControl(
                         key: "cursor-color",
@@ -976,7 +910,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("光标透明度", "Cursor Opacity"),
                     subtitle: L("降低后光标更轻，保持 100% 最醒目", "Lower values make the cursor quieter; 100% is most visible"),
-                    systemImage: "slider.horizontal.3"
                 ) {
                     GhosttySliderOverrideControl(
                         key: "cursor-opacity",
@@ -995,7 +928,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("光标内文字颜色", "Cursor Text Color"),
                     subtitle: L("光标覆盖字符时使用的文字颜色", "Text color used when the cursor covers a character"),
-                    systemImage: "character.cursor.ibeam"
                 ) {
                     GhosttyColorOverrideControl(
                         key: "cursor-text",
@@ -1010,7 +942,6 @@ extension AppearanceSettingsPanel {
                 SettingsControlRow(
                     title: L("点击移动光标", "Click To Move Cursor"),
                     subtitle: L("允许鼠标点击把光标移动到目标位置", "Allows mouse clicks to move the cursor position"),
-                    systemImage: "cursorarrow.click"
                 ) {
                     GhosttyBooleanOverridePicker(
                         state: booleanState(for: clickOverride),
@@ -1051,14 +982,11 @@ extension AppearanceSettingsPanel {
         return VStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("终端代理", "Terminal Proxy"),
-                subtitle: proxy.statusTitle,
-                systemImage: "network"
             ) {
                 SettingsFormSurface {
                     SettingsToggleRow(
                         title: L("启用代理", "Enable Proxy"),
                         subtitle: L("写入新终端进程的 HTTP(S)/ALL_PROXY 环境变量", "Writes HTTP(S)/ALL_PROXY env vars for new terminal processes"),
-                        systemImage: "switch.2",
                         isOn: Binding(
                             get: { proxy.enabled },
                             set: { model.setTerminalProxyEnabled($0) }
@@ -1070,7 +998,6 @@ extension AppearanceSettingsPanel {
                     SettingsTextFieldRow(
                         title: "HTTP_PROXY",
                         subtitle: "http://127.0.0.1:7890",
-                        systemImage: "globe",
                         text: Binding(
                             get: { proxy.httpProxy },
                             set: { model.setTerminalProxyHTTP($0) }
@@ -1082,7 +1009,6 @@ extension AppearanceSettingsPanel {
                     SettingsTextFieldRow(
                         title: "HTTPS_PROXY",
                         subtitle: "http://127.0.0.1:7890",
-                        systemImage: "lock.globe",
                         text: Binding(
                             get: { proxy.httpsProxy },
                             set: { model.setTerminalProxyHTTPS($0) }
@@ -1094,7 +1020,6 @@ extension AppearanceSettingsPanel {
                     SettingsTextFieldRow(
                         title: "ALL_PROXY",
                         subtitle: "socks5://127.0.0.1:7890",
-                        systemImage: "point.3.connected.trianglepath.dotted",
                         text: Binding(
                             get: { proxy.allProxy },
                             set: { model.setTerminalProxyAll($0) }
@@ -1106,7 +1031,6 @@ extension AppearanceSettingsPanel {
                     SettingsTextFieldRow(
                         title: "NO_PROXY",
                         subtitle: "localhost,127.0.0.1,::1",
-                        systemImage: "nosign",
                         text: Binding(
                             get: { proxy.noProxy },
                             set: { model.setTerminalProxyNoProxy($0) }
@@ -1123,8 +1047,6 @@ extension AppearanceSettingsPanel {
         return VStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("AI 安装检测", "AI Installation Check"),
-                subtitle: L("检测本机可用的 AI CLI，并给未安装的代理提供官方安装入口", "Detects local AI CLIs and provides official install pages for missing agents"),
-                systemImage: "magnifyingglass"
             ) {
                 VStack(alignment: .leading, spacing: 10) {
                     SettingsFormSurface {
@@ -1160,15 +1082,12 @@ extension AppearanceSettingsPanel {
 
             SettingsPreferenceGroup(
                 title: L("Agent 通知", "Agent Notifications"),
-                subtitle: L("Codex、Claude Code 等本地 agent hook", "Local agent hooks for Codex, Claude Code, and others"),
-                systemImage: "bell.badge"
             ) {
                 SettingsFormSurface {
                     ForEach(AgentHookProvider.allCases) { provider in
                         SettingsToggleRow(
                             title: provider.title,
                             subtitle: appearance.agentNotifications.isEnabled(for: provider) ? L("通知桥接已开启", "Notification bridge enabled") : L("不会安装或触发通知桥接", "Notification bridge disabled"),
-                            systemImage: provider.systemImage,
                             isOn: Binding(
                                 get: { appearance.agentNotifications.isEnabled(for: provider) },
                                 set: { enabled in
@@ -1322,16 +1241,12 @@ extension AppearanceSettingsPanel {
         return LazyVStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
                 title: L("当前主题", "Current Theme"),
-                subtitle: L("主题会同时影响窗口、终端和强调色", "Themes affect the window, terminal, and accent colors together"),
-                systemImage: "swatchpalette"
             ) {
                 SelectedThemeShowcase(theme: activeTheme)
             }
 
             SettingsPreferenceGroup(
                 title: L("选择主题", "Choose Theme"),
-                subtitle: L("选择后立即应用到当前窗口", "Selection applies immediately to the current window"),
-                systemImage: "list.bullet"
             ) {
                 SettingsFormSurface {
                     ForEach(TerminalTheme.allCases) { theme in
@@ -1534,7 +1449,6 @@ struct AgentCLIStatusRow: View {
         SettingsControlRow(
             title: provider.title,
             subtitle: subtitle,
-            systemImage: provider.systemImage
         ) {
             trailing
         }
