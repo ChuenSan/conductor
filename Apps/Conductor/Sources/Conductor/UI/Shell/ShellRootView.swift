@@ -558,7 +558,7 @@ private struct CommandPaletteView: View {
     private var commandHeader: some View {
         CommandPaletteHeader(
             subtitle: snapshot.subtitle,
-            closeHelp: L("关闭命令中心", "Close Command Center")
+            closeHelp: L("关闭命令面板", "Close Command Palette")
         ) {
             model.hideCommandPalette()
         }
@@ -893,7 +893,7 @@ private struct CommandPaletteItem: Identifiable, Equatable {
         case "notifications":
             return L("工具栏", "Toolbar")
         default:
-            return "Command Center"
+            return L("命令面板", "Command Palette")
         }
     }
 }
@@ -1036,7 +1036,7 @@ private enum ConductorCommandCatalog {
             CommandPaletteItem(id: "previous-tab", command: .selectPreviousTab, section: L("导航", "Navigate"), title: L("上一个标签", "Previous Tab"), shortcut: "Cmd-[", keywords: "previous tab"),
             CommandPaletteItem(id: "next-pane", command: .focusNextPane, section: L("导航", "Navigate"), title: L("下一个分屏", "Next Pane"), shortcut: "Cmd-Shift-]", keywords: "next pane focus"),
             CommandPaletteItem(id: "previous-pane", command: .focusPreviousPane, section: L("导航", "Navigate"), title: L("上一个分屏", "Previous Pane"), shortcut: "Cmd-Shift-[", keywords: "previous pane focus"),
-            CommandPaletteItem(id: "notifications", command: .toggleNotifications, section: L("导航", "Navigate"), title: L("通知中心", "Notification Center"), shortcut: "Cmd-Opt-N", keywords: "notification unread agent"),
+            CommandPaletteItem(id: "notifications", command: .toggleNotifications, section: L("导航", "Navigate"), title: L("通知", "Notifications"), shortcut: "Cmd-Opt-N", keywords: "notification unread agent"),
             CommandPaletteItem(
                 id: "jump-unread",
                 command: .jumpToLatestUnread,
@@ -1078,7 +1078,7 @@ private enum ConductorCommandCatalog {
             CommandPaletteItem(id: "appearance-settings", command: .toggleSettings, section: L("视图", "View"), title: L("外观设置", "Appearance Settings"), shortcut: "Cmd-,", keywords: "appearance theme settings"),
             CommandPaletteItem(id: "duplicate-workspace", command: .duplicateWorkspace, section: L("视图", "View"), title: L("复制工作区", "Duplicate Workspace"), shortcut: "Duplicate", keywords: "workspace duplicate"),
             CommandPaletteItem(id: "reset-workspace", command: .resetWorkspace, section: L("视图", "View"), title: L("重置工作区", "Reset Workspace"), shortcut: "Reset", keywords: "workspace reset"),
-            CommandPaletteItem(id: "clear-notifications", command: .clearNotifications, section: L("整理", "Organize"), title: L("清空通知", "Clear Notifications"), shortcut: "Clear", disabled: !canPerform(.clearNotifications), disabledReason: L("通知中心为空", "Notification Center is empty"), keywords: "notification clear"),
+            CommandPaletteItem(id: "clear-notifications", command: .clearNotifications, section: L("整理", "Organize"), title: L("清空通知", "Clear Notifications"), shortcut: "Clear", disabled: !canPerform(.clearNotifications), disabledReason: L("没有未读通知", "No notifications to clear"), keywords: "notification clear"),
             CommandPaletteItem(id: "debug-notification", command: .testNotification, section: L("通知", "Notifications"), title: L("发送测试通知", "Send Test Notification"), shortcut: "Test", keywords: "notification test")
         ]
         return items.map { $0.resolvingShortcut(using: model.appearance.keyboardShortcuts) }
@@ -1680,13 +1680,6 @@ private struct WorkspaceOverviewCard: View {
                 onHover()
             }
         }
-        .scaleEffect(hovering ? 1.006 : 1)
-        .shadow(
-            color: Color.black.opacity(hovering ? (theme.usesDarkChrome ? 0.16 : 0.08) : 0),
-            radius: hovering ? 10 : 0,
-            x: 0,
-            y: hovering ? 5 : 0
-        )
         .animation(ConductorMotion.standard, value: selected)
         .animation(ConductorMotion.feedback, value: highlighted)
         .animation(ConductorMotion.hover, value: hovering)

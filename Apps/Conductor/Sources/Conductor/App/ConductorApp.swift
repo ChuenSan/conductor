@@ -406,7 +406,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let viewMenu = NSMenu(title: L("视图", "View"))
         viewMenu.addItem(menuItem(L("工作区总览", "Workspace Overview"), command: .toggleWorkspaceOverview, #selector(workspaceOverviewCommand)))
         viewMenu.addItem(menuItem(L("命令面板", "Command Palette"), command: .toggleCommandPalette, #selector(commandPaletteCommand)))
-        viewMenu.addItem(menuItem(L("通知中心", "Notifications"), command: .toggleNotifications, #selector(notificationCenterCommand)))
+        viewMenu.addItem(menuItem(L("通知", "Notifications"), command: .toggleNotifications, #selector(notificationCenterCommand)))
         viewMenu.addItem(menuItem(L("跳转到最新未读", "Jump to Latest Unread"), command: .jumpToLatestUnread, #selector(jumpToLatestUnreadCommand)))
         viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(menuItem(L("聚焦网页地址", "Focus Web Address"), command: .focusWebAddress, #selector(focusWebAddressCommand)))

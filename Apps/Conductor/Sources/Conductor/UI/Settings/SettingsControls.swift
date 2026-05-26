@@ -684,20 +684,18 @@ struct SettingsStatusPill: View {
 
 struct SettingsPreferenceGroup<Content: View>: View {
     let title: String
-    let subtitle: String
-    let systemImage: String
     let content: Content
     @Environment(\.conductorFontScale) private var fontScale
 
     init(
         title: String,
-        subtitle: String,
-        systemImage: String,
+        subtitle: String = "",
+        systemImage: String = "",
         @ViewBuilder content: () -> Content
     ) {
+        _ = subtitle
+        _ = systemImage
         self.title = title
-        self.subtitle = subtitle
-        self.systemImage = systemImage
         self.content = content()
     }
 
@@ -741,7 +739,6 @@ struct SettingsFormSurface<Content: View>: View {
 struct SettingsControlRow<Trailing: View>: View {
     let title: String
     let subtitle: String
-    let systemImage: String
     let trailing: Trailing
     @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
@@ -750,12 +747,12 @@ struct SettingsControlRow<Trailing: View>: View {
     init(
         title: String,
         subtitle: String,
-        systemImage: String,
+        systemImage: String = "",
         @ViewBuilder trailing: () -> Trailing
     ) {
+        _ = systemImage
         self.title = title
         self.subtitle = subtitle
-        self.systemImage = systemImage
         self.trailing = trailing()
     }
 
@@ -788,14 +785,13 @@ struct SettingsControlRow<Trailing: View>: View {
 struct SettingsToggleRow: View {
     let title: String
     let subtitle: String
-    let systemImage: String
+    var systemImage: String = ""
     let isOn: Binding<Bool>
 
     var body: some View {
         SettingsControlRow(
             title: title,
-            subtitle: subtitle,
-            systemImage: systemImage
+            subtitle: subtitle
         ) {
             Toggle("", isOn: isOn)
                 .toggleStyle(.switch)
@@ -807,14 +803,13 @@ struct SettingsToggleRow: View {
 struct SettingsTextFieldRow: View {
     let title: String
     let subtitle: String
-    let systemImage: String
+    var systemImage: String = ""
     let text: Binding<String>
 
     var body: some View {
         SettingsControlRow(
             title: title,
-            subtitle: subtitle,
-            systemImage: systemImage
+            subtitle: subtitle
         ) {
             TextField("", text: text)
                 .textFieldStyle(.roundedBorder)
@@ -827,7 +822,7 @@ struct SettingsTextFieldRow: View {
 struct SettingsSliderRow: View {
     let title: String
     let subtitle: String
-    let systemImage: String
+    var systemImage: String = ""
     let value: CGFloat
     let range: ClosedRange<CGFloat>
     let step: CGFloat
@@ -839,8 +834,7 @@ struct SettingsSliderRow: View {
     var body: some View {
         SettingsControlRow(
             title: title,
-            subtitle: subtitle,
-            systemImage: systemImage
+            subtitle: subtitle
         ) {
             HStack(spacing: 10) {
                 Slider(
@@ -870,7 +864,7 @@ struct SettingsControlDivider: View {
         Rectangle()
             .fill(theme.floatingSeparator.opacity(0.56))
             .frame(height: 1)
-            .padding(.leading, 56)
+            .padding(.leading, 9)
     }
 }
 

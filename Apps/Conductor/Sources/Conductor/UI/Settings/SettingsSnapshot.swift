@@ -68,7 +68,7 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
         case .usage:
             "chart.bar"
         case .automation:
-            "sparkles"
+            "bolt.horizontal"
         case .commands:
             "command"
         case .themes:

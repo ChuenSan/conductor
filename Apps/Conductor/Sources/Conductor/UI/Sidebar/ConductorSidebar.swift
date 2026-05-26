@@ -172,7 +172,7 @@ struct ConductorSidebar: View {
                     finishWorkspaceRenameIfNeeded()
                     model.performCommand(.newTerminal)
                 }
-                SidebarDockButton(id: "sidebar-dock.command-center", icon: "command", help: commandTooltip(L("打开命令面板", "Open Command Center"), command: .toggleCommandPalette, fallback: "Cmd-K")) {
+                SidebarDockButton(id: "sidebar-dock.command-palette", icon: "command", help: commandTooltip(L("打开命令面板", "Open Command Palette"), command: .toggleCommandPalette, fallback: "Cmd-K")) {
                     finishWorkspaceRenameIfNeeded()
                     model.performCommand(.toggleCommandPalette)
                 }
@@ -308,7 +308,7 @@ struct ConductorSidebar: View {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.newTerminal)
             }
-            SidebarRailButton(id: "sidebar-rail.command-center", icon: "command", help: commandTooltip(L("打开命令面板", "Open Command Center"), command: .toggleCommandPalette, fallback: "Cmd-K")) {
+            SidebarRailButton(id: "sidebar-rail.command-palette", icon: "command", help: commandTooltip(L("打开命令面板", "Open Command Palette"), command: .toggleCommandPalette, fallback: "Cmd-K")) {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.toggleCommandPalette)
             }
@@ -482,37 +482,6 @@ private struct SidebarRailSurface: View {
             .fill(theme.shellPanelBackground)
             .overlay {
                 shape
-                    .fill(theme.shellPanelBackground.opacity(clarity.glassTintMultiplier))
-            }
-            .overlay {
-                shape
-                    .fill(theme.usesDarkChrome ? theme.terminalBackground.opacity(0.18) : Color.white.opacity(0.16))
-            }
-            .overlay {
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(theme.usesDarkChrome ? 0.018 : 0.18),
-                        Color.clear,
-                        theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.16 : 0.030)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .clipShape(shape)
-            }
-            .overlay(alignment: .trailing) {
-                LinearGradient(
-                    colors: [
-                        Color.clear,
-                        theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.16 : 0.055)
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(width: 16)
-            }
-            .overlay {
-                shape
                     .strokeBorder(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.15 : 0.070), lineWidth: 0.6)
             }
     }
@@ -524,45 +493,7 @@ private struct SidebarBookSpineChrome: View {
     let clarity: ChromeClarity
 
     var body: some View {
-        ZStack {
-            if collapsed {
-                collapsedSpine
-            } else {
-                expandedSpine
-            }
-        }
-    }
-
-    private var collapsedSpine: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(theme.usesDarkChrome ? 0.012 : 0.026),
-                    Color.clear,
-                    Color.black.opacity(theme.usesDarkChrome ? 0.034 : 0.012)
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .opacity(0.46)
-        }
-    }
-
-    private var expandedSpine: some View {
-        HStack(spacing: 0) {
-            Spacer(minLength: 0)
-            LinearGradient(
-                colors: [
-                    Color.clear,
-                    theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.075 : 0.032),
-                    theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.080 : 0.022)
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .frame(width: 16)
-        }
-        .opacity(0.46)
+        Color.clear
     }
 }
 

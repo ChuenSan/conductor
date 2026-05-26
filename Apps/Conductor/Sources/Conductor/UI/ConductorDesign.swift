@@ -145,16 +145,16 @@ enum ConductorTokens {
     }
 
     enum Radius {
-        static let sidebar: CGFloat = 18
-        static let panel: CGFloat = 18
-        static let commandPalette: CGFloat = 18
-        static let card: CGFloat = 10
-        static let controlGroup: CGFloat = 10
-        static let control: CGFloat = 7
-        static let workspaceTab: CGFloat = 8
-        static let terminalPane: CGFloat = 10
-        static let terminalTab: CGFloat = 7
-        static let row: CGFloat = 8
+        static let sidebar: CGFloat = 12
+        static let panel: CGFloat = 12
+        static let commandPalette: CGFloat = 12
+        static let card: CGFloat = 8
+        static let controlGroup: CGFloat = 8
+        static let control: CGFloat = 6
+        static let workspaceTab: CGFloat = 7
+        static let terminalPane: CGFloat = 8
+        static let terminalTab: CGFloat = 6
+        static let row: CGFloat = 7
     }
 
     enum Space {
@@ -404,24 +404,19 @@ struct ConductorGlassSurface<Content: View>: View {
 
     @ViewBuilder
     private var surfaceFill: some View {
-        if style == .settings || style == .palette || style == .panel {
+        if style == .palette {
             surfaceShape
                 .fill(theme.floatingPanelBase)
                 .overlay {
                     surfaceShape
                         .fill(resolvedTint)
                 }
+        } else if style == .settings || style == .panel {
+            surfaceShape
+                .fill(theme.floatingPanelBase)
         } else if style == .sidebar {
             surfaceShape
                 .fill(theme.shellPanelBackground)
-                .overlay {
-                    surfaceShape
-                        .fill(resolvedTint)
-                }
-                .overlay {
-                    surfaceShape
-                        .fill(theme.usesDarkChrome ? theme.terminalBackground.opacity(0.18) : Color.white.opacity(0.16))
-                }
         } else {
             surfaceShape
                 .fill(style.fallbackMaterial)
@@ -437,143 +432,8 @@ struct ConductorWindowBackdrop: View {
     let theme: TerminalTheme
 
     var body: some View {
-        ZStack {
-            Rectangle()
-                .fill(.regularMaterial)
-            theme.windowBackdropStops[1]
-                .opacity(theme.usesDarkChrome ? 0.82 : 0.42)
-            LinearGradient(
-                colors: theme.windowBackdropStops.map { $0.opacity(theme.usesDarkChrome ? 0.90 : 0.58) },
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            RadialGradient(
-                colors: [
-                    theme.windowBackdropWash,
-                    Color.clear
-                ],
-                center: .topTrailing,
-                startRadius: 40,
-                endRadius: 620
-            )
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(theme.usesDarkChrome ? 0.045 : 0.26),
-                    Color.clear,
-                    Color.black.opacity(theme.usesDarkChrome ? 0.18 : 0.035)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            ConductorBackdropMotif(theme: theme)
-        }
-    }
-}
-
-private struct ConductorBackdropMotif: View {
-    let theme: TerminalTheme
-
-    var body: some View {
-        GeometryReader { proxy in
-            switch theme.designLanguage {
-            case .neon:
-                Path { path in
-                    let step: CGFloat = 42
-                    var x: CGFloat = 0
-                    while x <= proxy.size.width {
-                        path.move(to: CGPoint(x: x, y: 0))
-                        path.addLine(to: CGPoint(x: x, y: proxy.size.height))
-                        x += step
-                    }
-                    var y: CGFloat = 0
-                    while y <= proxy.size.height {
-                        path.move(to: CGPoint(x: 0, y: y))
-                        path.addLine(to: CGPoint(x: proxy.size.width, y: y))
-                        y += step
-                    }
-                }
-                .stroke(theme.accent.opacity(0.045), lineWidth: 0.8)
-            case .paper, .editorial:
-                VStack(spacing: 26) {
-                    ForEach(0..<28, id: \.self) { _ in
-                        Rectangle()
-                            .fill(theme.shellStroke.opacity(0.18))
-                            .frame(height: 1)
-                    }
-                }
-                .padding(.top, 20)
-            case .glass, .fluid, .frost:
-                ZStack {
-                    RadialGradient(
-                        colors: [
-                            theme.accent.opacity(theme.usesDarkChrome ? 0.10 : 0.14),
-                            Color.clear
-                        ],
-                        center: .topTrailing,
-                        startRadius: 0,
-                        endRadius: max(proxy.size.width, proxy.size.height) * 0.34
-                    )
-                    RoundedRectangle(cornerRadius: 36, style: .continuous)
-                        .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.040 : 0.13), lineWidth: 1)
-                        .frame(width: proxy.size.width * 0.34, height: proxy.size.height * 0.48)
-                        .offset(x: proxy.size.width * 0.25, y: proxy.size.height * 0.08)
-                }
-            case .botanical:
-                HStack(alignment: .bottom, spacing: 22) {
-                    ForEach(0..<14, id: \.self) { index in
-                        Capsule()
-                            .fill(theme.accent.opacity(index.isMultiple(of: 2) ? 0.050 : 0.026))
-                            .frame(width: 8, height: CGFloat(80 + index * 12))
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(.trailing, 42)
-            case .sunlit, .warm:
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.18),
-                        theme.accent.opacity(0.050),
-                        Color.clear
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            case .white:
-                VStack(spacing: 34) {
-                    ForEach(0..<18, id: \.self) { _ in
-                        Rectangle()
-                            .fill(theme.shellStroke.opacity(0.16))
-                            .frame(height: 1)
-                    }
-                }
-                .padding(.top, 28)
-            case .gradient:
-                ZStack {
-                    LinearGradient(
-                        colors: [
-                            theme.accent.opacity(0.075),
-                            Color.white.opacity(theme.usesDarkChrome ? 0.025 : 0.20),
-                            Color.clear
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    Path { path in
-                        let step: CGFloat = 58
-                        var x = -proxy.size.height
-                        while x < proxy.size.width {
-                            path.move(to: CGPoint(x: x, y: proxy.size.height))
-                            path.addLine(to: CGPoint(x: x + proxy.size.height, y: 0))
-                            x += step
-                        }
-                    }
-                    .stroke(theme.accent.opacity(0.050), lineWidth: 1)
-                }
-            case .studio, .minimal, .system:
-                EmptyView()
-            }
-        }
-        .allowsHitTesting(false)
+        Rectangle()
+            .fill(theme.windowBackdropStops[1])
     }
 }
 
@@ -937,22 +797,16 @@ extension View {
         distance: CGFloat = 10,
         scale: CGFloat = 0.988
     ) -> some View {
-        modifier(
-            ConductorCascadeModifier(
-                index: index,
-                itemCount: itemCount,
-                edge: edge,
-                distance: distance,
-                scale: scale
-            )
-        )
+        _ = (index, itemCount, edge, distance, scale)
+        return self
     }
 
     func conductorSignalPulse<Value: Equatable>(
         active: Bool,
         trigger: Value
     ) -> some View {
-        modifier(ConductorSignalPulseModifier(active: active, trigger: trigger))
+        _ = (active, trigger)
+        return self
     }
 
     func conductorFocusRing<Value: Equatable>(

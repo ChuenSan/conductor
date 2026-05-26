@@ -135,7 +135,7 @@ struct ConductorToolbar: View {
                     ConductorIconButton(state: toolbarControlState(
                         id: "toggle-notifications",
                         systemImage: workspaceSnapshot.totalUnreadCount > 0 ? "bell.badge" : "bell",
-                        tooltip: commandTooltip(L("通知中心", "Notification Center"), command: .toggleNotifications, fallback: "Cmd-Opt-N"),
+                        tooltip: commandTooltip(L("通知", "Notifications"), command: .toggleNotifications, fallback: "Cmd-Opt-N"),
                         isActive: toolbarSnapshot.notificationPanelVisible
                     )) {
                         finishWorkspaceRenameIfNeeded()
@@ -145,7 +145,7 @@ struct ConductorToolbar: View {
                     ConductorIconButton(state: toolbarControlState(
                         id: "toggle-command-palette",
                         systemImage: "command",
-                        tooltip: commandTooltip(L("命令面板", "Command Center"), command: .toggleCommandPalette, fallback: "Cmd-K"),
+                        tooltip: commandTooltip(L("命令面板", "Command Palette"), command: .toggleCommandPalette, fallback: "Cmd-K"),
                         isActive: toolbarSnapshot.commandPaletteVisible
                     )) {
                         finishWorkspaceRenameIfNeeded()

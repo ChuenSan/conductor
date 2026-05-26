@@ -40,7 +40,7 @@ enum ConductorPreviewFixtures {
         let logsPaneID = build.splitWorkspaceEdge(.down, title: "long-output stress", workingDirectory: "Apps/Conductor/Scripts")
         let logsTerminalID = logsPaneID.flatMap { build.panes[$0]?.selectedTabID } ?? serverTerminalID
 
-        var design = WorkspaceState(title: "Glass Lab")
+        var design = WorkspaceState(title: "Design Tokens")
         _ = design.newTerminal(title: "preview fixtures", workingDirectory: "Apps/Conductor/Sources")
         _ = design.splitWorkspaceEdge(.right, title: "visual tokens", workingDirectory: ".trellis/spec/frontend")
 
@@ -92,23 +92,23 @@ struct ConductorGlassShellPreviews: PreviewProvider {
         Group {
             ConductorRootView(model: ConductorPreviewFixtures.glassShellModel())
                 .frame(width: 1320, height: 860)
-                .previewDisplayName("Conductor Glass Shell")
+                .previewDisplayName("Conductor Shell")
 
             ConductorRootView(model: ConductorPreviewFixtures.glassShellModel(commandPaletteVisible: true))
                 .frame(width: 1320, height: 860)
-                .previewDisplayName("Command Center Glass")
+                .previewDisplayName("Command Palette")
 
             ConductorRootView(model: ConductorPreviewFixtures.glassShellModel(settingsPanelVisible: true))
                 .frame(width: 1320, height: 860)
-                .previewDisplayName("Appearance Center Glass")
+                .previewDisplayName("Appearance Settings")
 
             ConductorRootView(model: ConductorPreviewFixtures.glassShellModel(workspaceOverviewVisible: true))
                 .frame(width: 1320, height: 860)
-                .previewDisplayName("Workspace Overview Glass")
+                .previewDisplayName("Workspace Overview")
 
             ConductorRootView(model: ConductorPreviewFixtures.glassShellModel(sidebarVisible: false))
                 .frame(width: 1120, height: 760)
-                .previewDisplayName("Collapsed Sidebar Glass")
+                .previewDisplayName("Collapsed Sidebar")
 
             NotificationPanelView(model: ConductorPreviewFixtures.glassShellModel(notificationPanelVisible: true))
                 .frame(width: 390, height: 520)

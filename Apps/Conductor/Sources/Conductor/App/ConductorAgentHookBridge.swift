@@ -47,7 +47,7 @@ enum AgentHookProvider: String, CaseIterable, Codable, Identifiable {
     var systemImage: String {
         switch self {
         case .codex:
-            "sparkles"
+            "terminal.fill"
         case .claudeCode:
             "text.bubble"
         }
