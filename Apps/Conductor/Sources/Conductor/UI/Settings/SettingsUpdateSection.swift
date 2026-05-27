@@ -17,51 +17,23 @@ struct SettingsUpdateSection: View {
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 14) {
-            UpdateStatusCard(state: state)
+            UpdateStatusCard(
+                preferences: preferences,
+                state: state,
+                checkForUpdates: checkForUpdates,
+                downloadUpdate: downloadUpdate,
+                installUpdate: installUpdate
+            )
 
-            SettingsPreferenceGroup(title: L("更新源", "Update Source")) {
+            SettingsPreferenceGroup(title: L("偏好", "Preferences")) {
                 SettingsFormSurface {
-                    SettingsTextFieldRow(
-                        title: L("清单地址", "Manifest URL"),
-                        subtitle: L("支持 https 和本地 file 路径；发布脚本生成的 JSON 可直接使用", "Supports https and local file paths from the release script"),
-                        text: Binding(
-                            get: { preferences.manifestURLString },
-                            set: { value in setManifestURL(value) }
-                        )
-                    )
-
-                    SettingsControlDivider()
-
                     SettingsToggleRow(
-                        title: L("自动检查", "Automatic Checks"),
-                        subtitle: L("启动后静默检查；没有更新时不打扰", "Checks quietly after launch and stays silent when current"),
+                        title: L("自动检查更新", "Automatically Check for Updates"),
+                        subtitle: L("启动后在后台检查；没有更新时不打扰", "Checks quietly after launch and stays silent when current"),
                         isOn: Binding(
                             get: { preferences.automaticChecksEnabled },
                             set: { value in setAutomaticChecksEnabled(value) }
                         )
-                    )
-
-                    SettingsControlDivider()
-
-                    SettingsToggleRow(
-                        title: L("优先增量包", "Prefer Delta"),
-                        subtitle: L("清单包含 delta 时先下载小包；缺失时自动回退全量包", "Uses delta packages when present, otherwise falls back to full packages"),
-                        isOn: Binding(
-                            get: { preferences.prefersDeltaUpdates },
-                            set: { value in setPrefersDeltaUpdates(value) }
-                        )
-                    )
-                }
-            }
-
-            SettingsPreferenceGroup(title: L("运行时更新", "Runtime Update")) {
-                SettingsFormSurface {
-                    UpdateActionRow(
-                        state: state,
-                        hasManifestURL: preferences.manifestURL != nil,
-                        checkForUpdates: checkForUpdates,
-                        downloadUpdate: downloadUpdate,
-                        installUpdate: installUpdate
                     )
                 }
             }
@@ -70,13 +42,17 @@ struct SettingsUpdateSection: View {
 }
 
 private struct UpdateStatusCard: View {
+    let preferences: ConductorUpdatePreferences
     let state: ConductorUpdateState
+    let checkForUpdates: @MainActor () -> Void
+    let downloadUpdate: @MainActor () -> Void
+    let installUpdate: @MainActor () -> Void
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
                 Image(systemName: state.phase.systemImage)
                     .font(.conductorSystem(size: 16, weight: .semibold, scale: fontScale))
                     .foregroundStyle(theme.floatingEmphasis)
@@ -86,17 +62,10 @@ private struct UpdateStatusCard: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text(state.phase.statusTitle)
-                            .font(.conductorSystem(size: 15, weight: .bold, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.primaryText)
-                            .lineLimit(1)
-
-                        SettingsStatusPill(
-                            title: packageTitle,
-                            systemImage: state.selectedPackageKind == .delta ? "shippingbox.and.arrow.backward" : "shippingbox"
-                        )
-                    }
+                    Text(state.phase.statusTitle)
+                        .font(.conductorSystem(size: 15, weight: .bold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.primaryText)
+                        .lineLimit(1)
 
                     Text(statusDetail)
                         .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
@@ -113,23 +82,33 @@ private struct UpdateStatusCard: View {
                 }
             }
 
-            HStack(spacing: 8) {
-                UpdateMetricTile(
-                    title: L("当前", "Current"),
-                    value: state.currentVersion.displayText,
-                    systemImage: "app.badge"
-                )
-                UpdateMetricTile(
-                    title: L("可用", "Available"),
-                    value: state.availableVersion?.displayText ?? L("暂无", "None"),
-                    systemImage: "sparkle.magnifyingglass"
-                )
-                UpdateMetricTile(
-                    title: L("包大小", "Package"),
-                    value: packageSizeText,
-                    systemImage: "arrow.down.to.line.compact"
-                )
+            HStack(spacing: 10) {
+                Text(L("当前版本", "Current Version"))
+                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+
+                Text(state.currentVersion.displayText)
+                    .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+
+                if let lastCheckedAt = state.lastCheckedAt {
+                    Text("·")
+                        .foregroundStyle(ConductorDesign.tertiaryText.opacity(0.7))
+                    Text(lastCheckedAt, style: .relative)
+                        .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                }
+
+                Spacer(minLength: 0)
             }
+
+            UpdateActionRow(
+                state: state,
+                hasManifestURL: preferences.manifestURL != nil,
+                checkForUpdates: checkForUpdates,
+                downloadUpdate: downloadUpdate,
+                installUpdate: installUpdate
+            )
         }
         .padding(12)
         .background {
@@ -142,80 +121,27 @@ private struct UpdateStatusCard: View {
         }
     }
 
-    private var packageTitle: String {
-        switch state.selectedPackageKind {
-        case .delta:
-            L("增量", "Delta")
-        case .full:
-            L("全量", "Full")
-        case .none:
-            L("运行时", "Runtime")
-        }
-    }
-
-    private var packageSizeText: String {
-        guard let size = state.selectedArtifact?.size else { return L("待检查", "Pending") }
-        return ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
-    }
-
     private var statusDetail: String {
         switch state.phase {
         case .idle:
-            return L("填写清单地址后即可检查。下载包会先做 SHA-256 校验，再进入替换流程。", "Enter a manifest URL to check. Packages are verified before replacement.")
+            return preferences.manifestURL == nil
+                ? L("暂时无法连接更新服务。", "The update service is currently unavailable.")
+                : L("可以手动检查新版本。", "You can check for a new version.")
         case .checking:
-            return L("正在读取发布清单并和当前版本比较。", "Reading the release manifest and comparing versions.")
+            return L("正在联系更新服务。", "Contacting the update service.")
         case .upToDate:
-            return L("当前版本不低于清单中的版本。", "Current build is not older than the manifest build.")
+            return L("你正在使用最新版本。", "You are using the latest version.")
         case .available:
-            return L("可以下载更新；安装时会退出 App，替换完成后自动重新打开。", "Download is available. Installing quits the app, replaces it, then reopens it.")
+            return L("新版本已准备好，可以下载并安装。", "A new version is ready to download and install.")
         case .downloading:
-            return L("正在下载并准备校验更新包。", "Downloading and preparing to verify the package.")
+            return L("正在下载更新。", "Downloading the update.")
         case .downloaded:
-            return L("更新包已校验完成，可以安装并重启。", "The package has been verified and is ready to install.")
+            return L("更新已下载，安装后会自动重新打开。", "The update is downloaded and will reopen after installation.")
         case .installing:
-            return L("安装器已准备接管，当前 App 会退出。", "The installer is taking over and the app will quit.")
-        case .failed(let message):
-            return message
+            return L("正在安装更新。", "Installing the update.")
+        case .failed:
+            return L("无法完成更新检查，请稍后再试。", "Could not complete the update check. Please try again later.")
         }
-    }
-}
-
-private struct UpdateMetricTile: View {
-    let title: String
-    let value: String
-    let systemImage: String
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.floatingEmphasis.opacity(0.90))
-                .frame(width: 22, height: 22)
-                .background(theme.floatingControlStrongFill.opacity(0.92))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .lineLimit(1)
-                Text(value)
-                    .font(.conductorSystem(size: 10.4, weight: .bold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.74)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 9)
-        .frame(maxWidth: .infinity)
-        .frame(height: 42)
-        .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.16 : 0.25))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
 
@@ -229,31 +155,80 @@ private struct UpdateActionRow: View {
     var body: some View {
         HStack(spacing: 8) {
             UpdateActionButton(
-                title: L("检查", "Check"),
-                systemImage: "arrow.clockwise",
-                tooltip: L("读取清单并比较版本", "Read the manifest and compare versions"),
-                disabled: !hasManifestURL || !state.canCheck,
-                action: checkForUpdates
-            )
-
-            UpdateActionButton(
-                title: L("下载", "Download"),
-                systemImage: "arrow.down.circle",
-                tooltip: L("下载所选更新包并校验 SHA-256", "Download the selected package and verify SHA-256"),
-                disabled: !state.canDownload,
-                action: downloadUpdate
-            )
-
-            UpdateActionButton(
-                title: L("安装并重启", "Install and Relaunch"),
-                systemImage: "arrow.triangle.2.circlepath.circle",
-                tooltip: L("退出 App，替换运行时，然后重新打开", "Quit, replace the runtime, then reopen"),
-                disabled: !state.canInstall,
-                action: installUpdate
+                title: primaryTitle,
+                systemImage: primarySystemImage,
+                tooltip: primaryTooltip,
+                prominent: state.phase == .available || state.phase == .downloaded,
+                disabled: primaryDisabled,
+                action: primaryAction
             )
         }
-        .padding(.horizontal, 9)
-        .frame(height: 48)
+        .frame(height: 36)
+    }
+
+    private var primaryTitle: String {
+        switch state.phase {
+        case .available:
+            L("下载更新", "Download Update")
+        case .downloaded:
+            L("安装并重新打开", "Install and Reopen")
+        case .downloading:
+            L("正在下载", "Downloading")
+        case .installing:
+            L("正在安装", "Installing")
+        default:
+            L("检查更新", "Check for Updates")
+        }
+    }
+
+    private var primarySystemImage: String {
+        switch state.phase {
+        case .available:
+            "arrow.down.circle"
+        case .downloaded:
+            "arrow.triangle.2.circlepath.circle"
+        case .downloading:
+            "icloud.and.arrow.down"
+        case .installing:
+            "arrow.clockwise.circle"
+        default:
+            "arrow.clockwise"
+        }
+    }
+
+    private var primaryTooltip: String {
+        switch state.phase {
+        case .available:
+            L("下载并准备新版本", "Download and prepare the new version")
+        case .downloaded:
+            L("安装更新并重新打开 App", "Install the update and reopen the app")
+        default:
+            L("检查是否有新版本", "Check whether a new version is available")
+        }
+    }
+
+    private var primaryDisabled: Bool {
+        if !hasManifestURL { return true }
+        switch state.phase {
+        case .available:
+            return !state.canDownload
+        case .downloaded:
+            return !state.canInstall
+        default:
+            return !state.canCheck
+        }
+    }
+
+    @MainActor
+    private func primaryAction() {
+        switch state.phase {
+        case .available:
+            downloadUpdate()
+        case .downloaded:
+            installUpdate()
+        default:
+            checkForUpdates()
+        }
     }
 }
 
@@ -261,6 +236,7 @@ private struct UpdateActionButton: View {
     let title: String
     let systemImage: String
     let tooltip: String
+    var prominent = false
     let disabled: Bool
     let action: @MainActor () -> Void
     @State private var hovering = false
@@ -276,7 +252,7 @@ private struct UpdateActionButton: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
                 .frame(maxWidth: .infinity)
-                .frame(height: 30)
+                .frame(height: 32)
                 .background(buttonFill)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .overlay {
@@ -294,6 +270,9 @@ private struct UpdateActionButton: View {
     private var buttonFill: Color {
         guard !disabled else {
             return theme.floatingControlFill.opacity(0.18)
+        }
+        if prominent {
+            return hovering ? theme.accent.opacity(0.88) : theme.accent.opacity(0.76)
         }
         return hovering ? theme.floatingHoverFill.opacity(0.32) : theme.floatingControlStrongFill.opacity(0.92)
     }
