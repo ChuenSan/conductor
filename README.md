@@ -1,25 +1,42 @@
 # Conductor
 
-Native macOS workspace for terminals, web tabs, files, usage insight, and self-updating releases.
+Native macOS workspace for terminals, web tabs, files, usage insight, and GitHub Release powered runtime updates.
+
+> Status: private release candidate. Default branch: [`main`](https://github.com/zhengzizhe/conductor/tree/main).
+
+[Pulse](https://github.com/zhengzizhe/conductor/pulse) ·
+[Commit activity](https://github.com/zhengzizhe/conductor/graphs/commit-activity) ·
+[Contributors](https://github.com/zhengzizhe/conductor/graphs/contributors) ·
+[Network](https://github.com/zhengzizhe/conductor/network) ·
+[Releases](https://github.com/zhengzizhe/conductor/releases)
 
 ![Conductor workbench](docs/media/conductor-workbench.svg)
 
-## What It Is
+## Features
 
-Conductor is a focused desktop workbench for development sessions. It keeps terminal panes, browser tabs, file context, command actions, usage records, and runtime updates in one native macOS shell.
-
-The current build is optimized for a release-ready feel: compact chrome, draggable floating panels, custom themes, editable shortcuts, polished settings, and a GitHub Release powered updater.
-
-## Highlights
-
-- Native multi-terminal workspace with panes, tabs, drag/drop tab movement, zoom, file manager, and command palette.
-- Web tabs for quick authenticated research and reference pages without leaving the workspace.
+- Native multi-terminal workspaces with panes, tabs, drag/drop movement, zoom, file manager, and command palette.
+- Web tabs for quick research and reference pages without leaving the app.
 - Usage workbench with local records, service health, storage cleanup hints, cost summaries, and quick actions.
-- Settings system for appearance, terminal behavior, startup/proxy, notifications, shortcuts, themes, and updates.
-- In-app runtime updater that reads a GitHub Release manifest, downloads full or incremental packages, verifies SHA-256, replaces the app, and relaunches.
+- Settings for appearance, terminal behavior, startup/proxy, notifications, shortcuts, themes, and updates.
+- Runtime updater that reads a GitHub Release manifest, downloads full or delta packages, verifies SHA-256, replaces the app, and relaunches.
 - Release tooling for version bumps, full packages, file-level delta packages, latest manifests, and GitHub Release publishing.
 
-## Demo Loop
+## GitHub Activity
+
+![GitHub activity](docs/media/github-activity.svg)
+
+For the live GitHub charts, use:
+
+- [Pulse](https://github.com/zhengzizhe/conductor/pulse) for recent merged work and issue activity.
+- [Commit Activity](https://github.com/zhengzizhe/conductor/graphs/commit-activity) for weekly commit trends.
+- [Contributors](https://github.com/zhengzizhe/conductor/graphs/contributors) for contribution distribution.
+- [Network](https://github.com/zhengzizhe/conductor/network) for branch/fork topology.
+
+## Screenshots
+
+![Updater settings](docs/media/conductor-updater.svg)
+
+## Demo
 
 ![Conductor demo loop](docs/media/conductor-demo.svg)
 
@@ -38,12 +55,6 @@ https://github.com/owner/repo/releases/latest/download/latest-stable-macos-arm64
 ```
 
 Then it compares versions, downloads the preferred package, verifies the checksum, and runs a small external installer so the app can replace itself safely after quitting.
-
-![Updater settings](docs/media/conductor-updater.svg)
-
-## Usage Trend
-
-![Usage trend](docs/media/conductor-trend.svg)
 
 ## Build
 
