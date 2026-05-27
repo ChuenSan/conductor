@@ -70,6 +70,7 @@ struct ConductorUpdateState: Equatable, Sendable {
     var manifest: ConductorUpdateManifest?
     var selectedPackageKind: ConductorUpdatePackageKind?
     var selectedArtifact: ConductorUpdateArtifact?
+    var downloadProgress: ConductorDownloadProgress?
     var downloadedPackageURL: URL?
     var lastCheckedAt: Date?
 
@@ -83,6 +84,16 @@ struct ConductorUpdateState: Equatable, Sendable {
 
     var canInstall: Bool {
         phase == .downloaded && downloadedPackageURL != nil && selectedPackageKind != nil
+    }
+}
+
+struct ConductorDownloadProgress: Equatable, Sendable {
+    var bytesWritten: Int64
+    var expectedBytes: Int64
+
+    var fraction: Double {
+        guard expectedBytes > 0 else { return 0 }
+        return min(max(Double(bytesWritten) / Double(expectedBytes), 0), 1)
     }
 }
 

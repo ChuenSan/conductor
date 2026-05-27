@@ -853,6 +853,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         updateTask?.cancel()
         var downloadingState = updateState
         downloadingState.phase = .downloading
+        downloadingState.downloadProgress = ConductorDownloadProgress(
+            bytesWritten: 0,
+            expectedBytes: selectedArtifact.size
+        )
         updateState = downloadingState
         updateTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -861,7 +865,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                     manifest: manifest,
                     manifestURL: manifestURL,
                     kind: selectedKind,
-                    artifact: selectedArtifact
+                    artifact: selectedArtifact,
+                    progress: { progress in
+                        await MainActor.run { [weak self] in
+                            guard let self else { return }
+                            guard self.updateState.phase == .downloading else { return }
+                            var nextState = self.updateState
+                            nextState.downloadProgress = progress
+                            self.updateState = nextState
+                        }
+                    }
                 )
                 try Task.checkCancellation()
                 updateState = ConductorUpdateState(
@@ -878,6 +891,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             } catch {
                 var failedState = updateState
                 failedState.phase = .failed(localizedUpdateError(error))
+                failedState.downloadProgress = nil
                 updateState = failedState
             }
         }

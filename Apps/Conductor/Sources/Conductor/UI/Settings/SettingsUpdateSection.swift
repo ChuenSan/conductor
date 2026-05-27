@@ -102,6 +102,10 @@ private struct UpdateStatusCard: View {
                 Spacer(minLength: 0)
             }
 
+            if state.phase == .downloading, let progress = state.downloadProgress {
+                UpdateDownloadProgressView(progress: progress)
+            }
+
             UpdateActionRow(
                 state: state,
                 hasManifestURL: preferences.manifestURL != nil,
@@ -134,7 +138,7 @@ private struct UpdateStatusCard: View {
         case .available:
             return L("新版本已准备好，可以下载并安装。", "A new version is ready to download and install.")
         case .downloading:
-            return L("正在下载更新。", "Downloading the update.")
+            return L("正在下载更新，请保持应用打开。", "Downloading the update. Keep the app open.")
         case .downloaded:
             return L("更新已下载，安装后会自动重新打开。", "The update is downloaded and will reopen after installation.")
         case .installing:
@@ -230,6 +234,68 @@ private struct UpdateActionRow: View {
             checkForUpdates()
         }
     }
+}
+
+private struct UpdateDownloadProgressView: View {
+    let progress: ConductorDownloadProgress
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(percentText)
+                    .font(.conductorSystem(size: 12, weight: .bold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .monospacedDigit()
+
+                Text(sizeText)
+                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(theme.floatingControlStrongFill.opacity(theme.usesDarkChrome ? 0.45 : 0.62))
+
+                    Capsule()
+                        .fill(theme.accent.opacity(theme.usesDarkChrome ? 0.78 : 0.7))
+                        .frame(width: max(8, proxy.size.width * progress.fraction))
+                }
+            }
+            .frame(height: 6)
+            .clipShape(Capsule())
+            .accessibilityLabel(L("下载进度", "Download Progress"))
+            .accessibilityValue(percentText)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.16 : 0.22))
+        }
+    }
+
+    private var percentText: String {
+        "\(Int((progress.fraction * 100).rounded()))%"
+    }
+
+    private var sizeText: String {
+        let written = Self.byteFormatter.string(fromByteCount: max(progress.bytesWritten, 0))
+        guard progress.expectedBytes > 0 else { return written }
+        return "\(written) / \(Self.byteFormatter.string(fromByteCount: progress.expectedBytes))"
+    }
+
+    private static let byteFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        return formatter
+    }()
 }
 
 private struct UpdateActionButton: View {

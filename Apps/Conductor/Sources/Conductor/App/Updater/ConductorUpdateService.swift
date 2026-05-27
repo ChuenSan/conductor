@@ -31,6 +31,55 @@ enum ConductorUpdateError: LocalizedError {
     }
 }
 
+private final class ConductorUpdateDownloadProgressDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    private let fallbackSize: Int64
+    private let progress: (@Sendable (ConductorDownloadProgress) async -> Void)?
+    private let lock = NSLock()
+    private var lastProgressDate = Date.distantPast
+
+    init(
+        fallbackSize: Int64,
+        progress: (@Sendable (ConductorDownloadProgress) async -> Void)?
+    ) {
+        self.fallbackSize = fallbackSize
+        self.progress = progress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        let expectedBytes = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : fallbackSize
+        let currentProgress = ConductorDownloadProgress(
+            bytesWritten: totalBytesWritten,
+            expectedBytes: expectedBytes
+        )
+        guard shouldSendProgress(currentProgress) else { return }
+        Task { await progress?(currentProgress) }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didFinishDownloadingTo location: URL
+    ) {}
+
+    private func shouldSendProgress(_ currentProgress: ConductorDownloadProgress) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+
+        let now = Date()
+        if currentProgress.fraction >= 1 || now.timeIntervalSince(lastProgressDate) > 0.08 {
+            lastProgressDate = now
+            return true
+        }
+        return false
+    }
+}
+
 actor ConductorUpdateService {
     private let fileManager: FileManager
 
@@ -51,7 +100,8 @@ actor ConductorUpdateService {
         manifest: ConductorUpdateManifest,
         manifestURL: URL,
         kind: ConductorUpdatePackageKind,
-        artifact: ConductorUpdateArtifact
+        artifact: ConductorUpdateArtifact,
+        progress: (@Sendable (ConductorDownloadProgress) async -> Void)? = nil
     ) async throws -> ConductorDownloadedUpdate {
         let artifactURL = resolvedArtifactURL(artifact.filename, relativeTo: manifestURL)
         let destinationDirectory = try updateDirectory()
@@ -64,6 +114,9 @@ actor ConductorUpdateService {
         )
         if fileManager.fileExists(atPath: destinationURL.path),
            try sha256Hex(for: destinationURL).caseInsensitiveCompare(artifact.sha256) == .orderedSame {
+            await progress?(
+                ConductorDownloadProgress(bytesWritten: artifact.size, expectedBytes: artifact.size)
+            )
             return ConductorDownloadedUpdate(
                 packageURL: destinationURL,
                 artifactURL: artifactURL,
@@ -77,13 +130,18 @@ actor ConductorUpdateService {
         try? fileManager.removeItem(at: temporaryURL)
         if artifactURL.isFileURL {
             try fileManager.copyItem(at: artifactURL, to: temporaryURL)
+            let fileSize = try? temporaryURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
+            let bytesWritten = Int64(fileSize ?? Int(artifact.size))
+            await progress?(
+                ConductorDownloadProgress(bytesWritten: bytesWritten, expectedBytes: artifact.size)
+            )
         } else {
-            let (downloadedURL, response) = try await URLSession.shared.download(from: artifactURL)
-            if let httpResponse = response as? HTTPURLResponse,
-               !(200...299).contains(httpResponse.statusCode) {
-                throw ConductorUpdateError.invalidHTTPStatus(httpResponse.statusCode)
-            }
-            try fileManager.moveItem(at: downloadedURL, to: temporaryURL)
+            try await downloadRemoteArtifact(
+                from: artifactURL,
+                to: temporaryURL,
+                fallbackSize: artifact.size,
+                progress: progress
+            )
         }
 
         let actualSHA = try sha256Hex(for: temporaryURL)
@@ -150,6 +208,37 @@ actor ConductorUpdateService {
             throw ConductorUpdateError.invalidHTTPStatus(httpResponse.statusCode)
         }
         return data
+    }
+
+    private func downloadRemoteArtifact(
+        from url: URL,
+        to temporaryURL: URL,
+        fallbackSize: Int64,
+        progress: (@Sendable (ConductorDownloadProgress) async -> Void)?
+    ) async throws {
+        let delegate = ConductorUpdateDownloadProgressDelegate(
+            fallbackSize: fallbackSize,
+            progress: progress
+        )
+        let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+        defer { session.invalidateAndCancel() }
+
+        await progress?(ConductorDownloadProgress(bytesWritten: 0, expectedBytes: fallbackSize))
+        let (downloadedURL, response) = try await session.download(from: url)
+        if let httpResponse = response as? HTTPURLResponse,
+           !(200...299).contains(httpResponse.statusCode) {
+            throw ConductorUpdateError.invalidHTTPStatus(httpResponse.statusCode)
+        }
+
+        try? fileManager.removeItem(at: temporaryURL)
+        try fileManager.moveItem(at: downloadedURL, to: temporaryURL)
+        let downloadedSize = try? temporaryURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        await progress?(
+            ConductorDownloadProgress(
+                bytesWritten: Int64(downloadedSize ?? Int(fallbackSize)),
+                expectedBytes: response.expectedContentLength > 0 ? response.expectedContentLength : fallbackSize
+            )
+        )
     }
 
     private func resolvedArtifactURL(_ filename: String, relativeTo manifestURL: URL) -> URL {
