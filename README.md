@@ -1,49 +1,55 @@
 # Conductor
 
-Native macOS workbench for terminal-heavy development sessions.
+Native macOS workbench for terminal-heavy development.
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-111827)
 ![SwiftPM](https://img.shields.io/badge/build-SwiftPM-F05138)
-![Private RC](https://img.shields.io/badge/status-private%20RC-6E7681)
+![Public Preview](https://img.shields.io/badge/status-public%20preview-2DA44E)
 ![GitHub Releases](https://img.shields.io/badge/updates-GitHub%20Releases-2F81F7)
 
-Conductor brings terminals, web tabs, files, command actions, usage insight, and GitHub Release powered runtime updates into one compact desktop workspace.
-
-> Private release candidate. Default branch: [`main`](https://github.com/zhengzizhe/conductor/tree/main).
+Conductor brings terminals, web tabs, files, command actions, notifications, usage insight, and runtime updates into one compact desktop workspace.
 
 [Install](#install) ·
 [Quick start](#quick-start) ·
 [Screenshots](#screenshots) ·
+[Features](#features) ·
 [Docs by goal](#docs-by-goal) ·
-[Updating](#runtime-updates) ·
-[GitHub activity](#github-activity) ·
+[Contributing](#contributing) ·
 [Releases](https://github.com/zhengzizhe/conductor/releases)
 
 ![Conductor workbench](docs/media/conductor-screenshot-workbench.png)
 
-## Why Conductor
+## Features
 
-Conductor is for local development sessions where terminal panes, browser references, files, notifications, and release tooling need to stay close without turning the whole screen into a dashboard.
+Conductor is for local development sessions where terminal panes, browser references, files, notifications, and update tooling need to stay close without turning the whole screen into a dashboard.
 
-- **Native workspace:** terminal panes, tabs, split movement, zoom, command palette, file manager, and notifications.
-- **Web where it belongs:** lightweight web tabs for docs, dashboards, and quick authenticated references.
-- **Usage workbench:** local records, service health, storage cleanup hints, token/cost summaries, and quick actions.
-- **Polished settings:** appearance, terminal behavior, startup/proxy, notifications, shortcuts, themes, and updates.
-- **Self-updating runtime:** GitHub Release manifest, full/delta packages, SHA-256 verification, app replacement, and relaunch.
+- Native terminal workspaces with tabs, splits, pane movement, zoom, and command actions.
+- Lightweight web tabs for docs, dashboards, and quick references.
+- File manager and preview surfaces for staying close to the current project.
+- Notification and command panels for common workspace actions.
+- Usage records, local storage insight, service status, and quick maintenance controls.
+- Polished settings for appearance, terminal behavior, startup/proxy, notifications, shortcuts, themes, and updates.
+- GitHub Release powered runtime updates with checksum verification.
 
 ## Install
 
-Release builds are distributed through GitHub Releases.
+Download the latest release, unzip it, and move `Conductor.app` to `/Applications`.
 
 ```text
 https://github.com/zhengzizhe/conductor/releases/latest
 ```
 
-Download the latest `Conductor-<version>-<build>-macos-<arch>.zip`, unzip it, and move `Conductor.app` to `/Applications`.
+The app checks the public GitHub Release manifest for updates:
 
-> The repo is private during the release-candidate phase, so releases require repository access.
+```text
+https://github.com/zhengzizhe/conductor/releases/latest/download/latest-stable-macos-arm64.json
+```
+
+> Conductor is currently a public preview. Builds are ad-hoc signed unless a release explicitly says otherwise, so macOS may ask you to confirm the first launch.
 
 ## Quick Start
+
+Build and run from source:
 
 ```bash
 git clone https://github.com/zhengzizhe/conductor.git
@@ -60,6 +66,16 @@ Build a clickable app bundle:
 cd Apps/Conductor
 ./Scripts/build-app-bundle.sh
 open .build/Conductor.app
+```
+
+## Project Layout
+
+```text
+Apps/Conductor/           macOS application, scripts, updater, and UI
+Apps/Conductor/Sources/   Swift source modules
+Apps/Conductor/Scripts/   build, validation, release, and updater packaging scripts
+docs/                     architecture, update, security, and planning notes
+ThirdParty/               imported third-party source used by app features
 ```
 
 ## Screenshots
@@ -87,19 +103,13 @@ Captured from the current macOS build.
 
 ## Runtime Updates
 
-Conductor can check GitHub Releases directly. A release publishes:
+Conductor checks a public GitHub Release manifest and compares it with the local app version. A release publishes:
 
 - `Conductor-<version>-<build>-macos-<arch>.zip`
 - optional `Conductor-<version>-<build>-from-previous-macos-<arch>.delta.zip`
 - `latest-stable-macos-<arch>.json`
 
-The app reads the stable latest manifest:
-
-```text
-https://github.com/owner/repo/releases/latest/download/latest-stable-macos-arm64.json
-```
-
-Then it compares versions, downloads the preferred package, verifies the checksum, and runs an external installer so the app can replace itself safely after quitting.
+The app downloads the selected package, verifies its SHA-256 checksum, stages the update, then lets an external installer replace the app after Conductor exits.
 
 ## Security Defaults
 
@@ -107,35 +117,22 @@ Then it compares versions, downloads the preferred package, verifies the checksu
 - The staged app must match the expected bundle identifier.
 - The staged app must pass `codesign --verify --deep --strict`.
 - Runtime replacement happens from an external installer after Conductor exits.
-- Repository write access should stay limited to the owner account.
-
-## GitHub Activity
-
-[![Star History Chart](https://api.star-history.com/svg?repos=zhengzizhe/conductor&type=Date)](https://www.star-history.com/#zhengzizhe/conductor&Date)
-
-> Star History appears once the repository is visible to the chart service. For private development, use GitHub Insights directly.
-
-![GitHub commit activity](docs/media/github-activity.svg)
-
-- [Pulse](https://github.com/zhengzizhe/conductor/pulse) for recent merged work and issue activity.
-- [Commit Activity](https://github.com/zhengzizhe/conductor/graphs/commit-activity) for weekly commit trends.
-- [Contributors](https://github.com/zhengzizhe/conductor/graphs/contributors) for contribution distribution.
-- [Network](https://github.com/zhengzizhe/conductor/network) for branch/fork topology.
 
 ## Release
 
-Create versioned full/delta artifacts and GitHub updater manifests:
+Create versioned full/delta artifacts and GitHub updater manifests from `Apps/Conductor`:
 
 ```bash
 CONDUCTOR_GITHUB_REPO=owner/repo \
-Apps/Conductor/Scripts/package-release.sh 2026052701
+./Scripts/package-release.sh 0.0.3 3
 ```
 
 Publish the generated assets:
 
 ```bash
-Apps/Conductor/Scripts/publish-github-release.sh \
-Artifacts/releases/0.1.1-2026052701-macos-arm64
+CONDUCTOR_GITHUB_REPO=owner/repo \
+./Scripts/publish-github-release.sh \
+../../Artifacts/releases/0.0.3-3-macos-arm64 v0.0.3
 ```
 
 For signed production builds:
@@ -144,7 +141,7 @@ For signed production builds:
 CONDUCTOR_BUNDLE_IDENTIFIER=com.example.conductor \
 CONDUCTOR_CODE_SIGN_IDENTITY="Developer ID Application: Example" \
 CONDUCTOR_GITHUB_REPO=owner/repo \
-Apps/Conductor/Scripts/package-release.sh 2026052701
+./Scripts/package-release.sh 0.0.3 3
 ```
 
 ## Validation
@@ -157,6 +154,22 @@ swift run ConductorModelCheck
 
 The automated gate verifies core workspace invariants and smoke-runs the app without touching persisted user state.
 
-## Repository Policy
+## Contributing
 
-This repository is private. The default branch is `main`; release assets are published through GitHub Releases. Direct write access should stay limited to the owner account.
+Issues are open for bug reports, crash reports, usability feedback, and feature requests. Pull requests are welcome, but please keep changes focused and include validation notes.
+
+The default branch is `main` and is protected. Direct write access is limited to the owner account; external contributions should go through forks and pull requests.
+
+Useful links:
+
+- [Issues](https://github.com/zhengzizhe/conductor/issues)
+- [Releases](https://github.com/zhengzizhe/conductor/releases)
+- [Pulse](https://github.com/zhengzizhe/conductor/pulse)
+- [Commit Activity](https://github.com/zhengzizhe/conductor/graphs/commit-activity)
+- [Contributors](https://github.com/zhengzizhe/conductor/graphs/contributors)
+
+## GitHub Activity
+
+[![Star History Chart](https://api.star-history.com/svg?repos=zhengzizhe/conductor&type=Date)](https://www.star-history.com/#zhengzizhe/conductor&Date)
+
+![GitHub commit activity](docs/media/github-activity.svg)

@@ -10,9 +10,9 @@ Conductor's updater is designed to avoid replacing the running app in-process.
 - The staged app must pass `codesign --verify --deep --strict`.
 - Replacement is performed by an external script after Conductor exits.
 
-## Private Repository Policy
+## Repository Policy
 
-The GitHub repository is private and should keep write access limited to the owner account. The default branch is `main`.
+The GitHub repository is public so release assets and updater manifests can be downloaded without authentication. The default branch is `main` and should stay protected. Direct write access is limited to the owner account; external contributions should go through issues and pull requests.
 
 ## Notes
 
