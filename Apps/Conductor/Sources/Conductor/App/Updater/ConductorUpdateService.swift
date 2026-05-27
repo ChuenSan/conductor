@@ -399,6 +399,8 @@ actor ConductorUpdateService {
           exit 30
         fi
 
+        /usr/bin/xattr -dr com.apple.quarantine "$CURRENT_APP" 2>/dev/null || true
+        /usr/bin/codesign --verify --deep --strict "$CURRENT_APP"
         /usr/bin/open "$CURRENT_APP"
         /bin/rm -rf "$BACKUP_ROOT" "$STAGE" "$DELTA_ROOT"
         echo "Conductor updater finished at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
