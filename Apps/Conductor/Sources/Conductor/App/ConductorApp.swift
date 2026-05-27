@@ -19,6 +19,57 @@ private let conductorUncaughtExceptionHandler: @convention(c) (NSException) -> V
     )
 }
 
+private enum ConductorStartupTrustRepair {
+    static func clearCurrentAppQuarantineInBackground() {
+        guard let appURL = currentApplicationBundleURL() else { return }
+
+        Task.detached(priority: .utility) {
+            guard hasQuarantineAttribute(at: appURL) else { return }
+
+            do {
+                try runXattr(arguments: ["-dr", "com.apple.quarantine", appURL.path])
+                ConductorLog.app.info("Cleared quarantine attribute for current app bundle")
+            } catch {
+                ConductorLog.app.warning("Unable to clear app quarantine attribute: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private static func currentApplicationBundleURL() -> URL? {
+        var candidate = Bundle.main.bundleURL.standardizedFileURL
+        while !candidate.path.isEmpty, candidate.path != "/" {
+            if candidate.pathExtension == "app" {
+                return candidate
+            }
+            candidate.deleteLastPathComponent()
+        }
+        return nil
+    }
+
+    private static func hasQuarantineAttribute(at url: URL) -> Bool {
+        (try? runXattr(arguments: ["-p", "com.apple.quarantine", url.path])) == true
+    }
+
+    @discardableResult
+    private static func runXattr(arguments: [String]) throws -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+        process.arguments = arguments
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw NSError(
+                domain: "ConductorStartupTrustRepair",
+                code: Int(process.terminationStatus),
+                userInfo: [NSLocalizedDescriptionKey: "xattr exited with status \(process.terminationStatus)"]
+            )
+        }
+        return process.terminationStatus == 0
+    }
+}
+
 @main
 struct ConductorApp {
     @MainActor
@@ -232,6 +283,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     func startApplication() {
         guard !didStart else { return }
         didStart = true
+        ConductorStartupTrustRepair.clearCurrentAppQuarantineInBackground()
         NSSetUncaughtExceptionHandler(conductorUncaughtExceptionHandler)
         ConductorDiagnostics.record(
             "app-start",
