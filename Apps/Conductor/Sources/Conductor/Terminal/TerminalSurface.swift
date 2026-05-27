@@ -452,9 +452,15 @@ final class TerminalSurface {
         }
     }
 
-    func scroll(deltaX: CGFloat, deltaY: CGFloat, modifiers: NSEvent.ModifierFlags) {
+    func scroll(deltaX: CGFloat, deltaY: CGFloat, precise: Bool, momentumPhase: NSEvent.Phase) {
         guard let surface else { return }
-        ghostty_surface_mouse_scroll(surface, Double(deltaX), Double(deltaY), modifiers.ghosttyScrollMods)
+        var x = Double(deltaX)
+        var y = Double(deltaY)
+        if precise {
+            x *= 2
+            y *= 2
+        }
+        ghostty_surface_mouse_scroll(surface, x, y, Self.scrollMods(precise: precise, momentumPhase: momentumPhase))
     }
 
     func updateMousePosition(_ point: NSPoint, modifiers: NSEvent.ModifierFlags) {
@@ -575,6 +581,31 @@ final class TerminalSurface {
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
     }
+
+    private static func scrollMods(precise: Bool, momentumPhase: NSEvent.Phase) -> ghostty_input_scroll_mods_t {
+        var raw: Int32 = precise ? 1 : 0
+        raw |= momentumRawValue(for: momentumPhase) << 1
+        return ghostty_input_scroll_mods_t(raw)
+    }
+
+    private static func momentumRawValue(for phase: NSEvent.Phase) -> Int32 {
+        switch phase {
+        case .began:
+            return Int32(GHOSTTY_MOUSE_MOMENTUM_BEGAN.rawValue)
+        case .stationary:
+            return Int32(GHOSTTY_MOUSE_MOMENTUM_STATIONARY.rawValue)
+        case .changed:
+            return Int32(GHOSTTY_MOUSE_MOMENTUM_CHANGED.rawValue)
+        case .ended:
+            return Int32(GHOSTTY_MOUSE_MOMENTUM_ENDED.rawValue)
+        case .cancelled:
+            return Int32(GHOSTTY_MOUSE_MOMENTUM_CANCELLED.rawValue)
+        case .mayBegin:
+            return Int32(GHOSTTY_MOUSE_MOMENTUM_MAY_BEGIN.rawValue)
+        default:
+            return Int32(GHOSTTY_MOUSE_MOMENTUM_NONE.rawValue)
+        }
+    }
 }
 
 private enum TerminalSurfaceLifecycle {
@@ -604,7 +635,4 @@ private extension NSEvent.ModifierFlags {
         return mods
     }
 
-    var ghosttyScrollMods: ghostty_input_scroll_mods_t {
-        ghostty_input_scroll_mods_t(ghosttyMods.rawValue)
-    }
 }

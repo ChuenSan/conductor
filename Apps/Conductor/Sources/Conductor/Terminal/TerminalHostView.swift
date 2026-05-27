@@ -163,7 +163,12 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
 
     override func scrollWheel(with event: NSEvent) {
         surface?.recordUserActivity()
-        surface?.scroll(deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY, modifiers: event.modifierFlags)
+        surface?.scroll(
+            deltaX: event.scrollingDeltaX,
+            deltaY: event.scrollingDeltaY,
+            precise: event.hasPreciseScrollingDeltas,
+            momentumPhase: event.momentumPhase
+        )
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
