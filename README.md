@@ -19,7 +19,7 @@ Conductor brings terminals, web tabs, files, command actions, usage insight, and
 [GitHub activity](#github-activity) ·
 [Releases](https://github.com/zhengzizhe/conductor/releases)
 
-![Conductor workbench](docs/media/conductor-workbench.svg)
+![Conductor workbench](docs/media/conductor-screenshot-workbench.png)
 
 ## Why Conductor
 
@@ -64,11 +64,15 @@ open .build/Conductor.app
 
 ## Screenshots
 
-![Updater settings](docs/media/conductor-updater.svg)
+Captured from the current macOS build.
 
-## Demo
+### Usage Records
 
-![Conductor demo loop](docs/media/conductor-demo.svg)
+![Usage records card](docs/media/conductor-screenshot-token-records-open.png)
+
+### Settings
+
+![Settings panel](docs/media/conductor-screenshot-settings.png)
 
 ## Docs By Goal
 
