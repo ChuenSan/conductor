@@ -1,0 +1,80 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1440" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7F8FA"/>
+      <stop offset="1" stop-color="#E9EEF3"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="170" y1="72" x2="1388" y2="826" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="#F3F6FA" stop-opacity="0.86"/>
+    </linearGradient>
+    <filter id="shadow" x="126" y="36" width="1306" height="842" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="34" flood-color="#506070" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect width="1440" height="900" rx="32" fill="url(#bg)"/>
+  <rect x="16" y="16" width="86" height="868" rx="22" fill="#E7EDF3"/>
+  <circle cx="36" cy="42" r="7" fill="#D8DEE5"/>
+  <circle cx="58" cy="42" r="7" fill="#D8DEE5"/>
+  <circle cx="80" cy="42" r="7" fill="#D8DEE5"/>
+  <rect x="38" y="130" width="42" height="42" rx="12" fill="#F7FAFC" stroke="#D7DEE6"/>
+  <path d="M50 150h18M50 157h18M50 164h18" stroke="#67717D" stroke-width="2" stroke-linecap="round"/>
+  <rect x="38" y="218" width="42" height="42" rx="12" fill="#DCE7F3" stroke="#C7D7E9"/>
+  <rect x="50" y="230" width="8" height="8" rx="2" fill="#5A83B8"/>
+  <rect x="62" y="230" width="8" height="8" rx="2" fill="#5A83B8"/>
+  <rect x="50" y="242" width="8" height="8" rx="2" fill="#5A83B8"/>
+  <rect x="62" y="242" width="8" height="8" rx="2" fill="#5A83B8"/>
+  <rect x="38" y="796" width="42" height="42" rx="12" fill="#F7FAFC" stroke="#D7DEE6"/>
+  <path d="M59 808v18M50 817h18" stroke="#67717D" stroke-width="2" stroke-linecap="round"/>
+  <g filter="url(#shadow)">
+    <rect x="136" y="56" width="1256" height="788" rx="28" fill="url(#panel)" stroke="#DCE3EA"/>
+  </g>
+  <rect x="156" y="76" width="1216" height="52" rx="16" fill="#F6F8FA" stroke="#E1E6EB"/>
+  <rect x="178" y="88" width="170" height="28" rx="10" fill="#FFFFFF" stroke="#D9E1EA"/>
+  <text x="206" y="107" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="14" font-weight="700" fill="#2B3037">工作区 3</text>
+  <rect x="1060" y="88" width="88" height="28" rx="10" fill="#FFFFFF" stroke="#D9E1EA"/>
+  <text x="1084" y="107" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#59626D">新建</text>
+  <rect x="1160" y="88" width="180" height="28" rx="10" fill="#FFFFFF" stroke="#D9E1EA"/>
+  <circle cx="1182" cy="102" r="5" fill="#34C759"/>
+  <text x="1198" y="107" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#59626D">服务正常</text>
+  <rect x="156" y="148" width="626" height="644" rx="18" fill="#FCFDFE" stroke="#E0E6ED"/>
+  <rect x="804" y="148" width="548" height="644" rx="18" fill="#141619"/>
+  <rect x="180" y="174" width="578" height="34" rx="10" fill="#F1F5F8"/>
+  <text x="204" y="196" font-family="SFMono-Regular, ui-monospace, Menlo, monospace" font-size="15" fill="#6A7480">~/Desktop/conductor</text>
+  <text x="180" y="248" font-family="SFMono-Regular, ui-monospace, Menlo, monospace" font-size="16" fill="#111827">Last login: Wed May 27 10:21:03 on ttys005</text>
+  <text x="180" y="292" font-family="SFMono-Regular, ui-monospace, Menlo, monospace" font-size="18" fill="#5D8FD7">›</text>
+  <text x="806" y="130" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" fill="#66707B">设置 / 用量</text>
+  <rect x="832" y="178" width="492" height="92" rx="16" fill="#202329" stroke="#2C3138"/>
+  <text x="870" y="214" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="800" fill="#F7F8FA">用量工作台</text>
+  <text x="870" y="242" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="14" font-weight="600" fill="#8792A0">2 个服务有数据，3 项需处理</text>
+  <circle cx="1266" cy="222" r="7" fill="#34C759"/>
+  <text x="1282" y="228" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#9BB7E5">在线</text>
+  <rect x="832" y="296" width="226" height="226" rx="16" fill="#22252B" stroke="#303640"/>
+  <text x="864" y="338" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="17" font-weight="800" fill="#F4F6F8">趋势</text>
+  <text x="864" y="374" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="800" fill="#F4F6F8">$1,639.90</text>
+  <path d="M864 456 C890 434 906 472 930 444 C952 420 970 466 998 430 C1018 406 1034 430 1036 382" stroke="#82A8E8" stroke-width="4" fill="none"/>
+  <rect x="864" y="482" width="12" height="26" rx="4" fill="#6E91C9"/>
+  <rect x="884" y="472" width="12" height="36" rx="4" fill="#6E91C9"/>
+  <rect x="904" y="490" width="12" height="18" rx="4" fill="#6E91C9"/>
+  <rect x="924" y="462" width="12" height="46" rx="4" fill="#6E91C9"/>
+  <rect x="944" y="498" width="12" height="10" rx="4" fill="#6E91C9"/>
+  <rect x="964" y="452" width="12" height="56" rx="4" fill="#6E91C9"/>
+  <rect x="984" y="432" width="12" height="76" rx="4" fill="#6E91C9"/>
+  <rect x="1004" y="412" width="12" height="96" rx="4" fill="#6E91C9"/>
+  <rect x="1080" y="296" width="244" height="104" rx="16" fill="#22252B" stroke="#303640"/>
+  <text x="1112" y="340" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="18" font-weight="800" fill="#F4F6F8">本地整理</text>
+  <text x="1112" y="374" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="800" fill="#F4F6F8">2.0 GB</text>
+  <rect x="1080" y="418" width="244" height="104" rx="16" fill="#22252B" stroke="#303640"/>
+  <text x="1112" y="462" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="18" font-weight="800" fill="#F4F6F8">运行时更新</text>
+  <text x="1112" y="496" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="800" fill="#F4F6F8">Ready</text>
+  <rect x="832" y="548" width="492" height="182" rx="16" fill="#22252B" stroke="#303640"/>
+  <text x="864" y="590" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="18" font-weight="800" fill="#F4F6F8">快捷操作</text>
+  <rect x="864" y="620" width="74" height="34" rx="10" fill="#303744"/>
+  <rect x="948" y="620" width="74" height="34" rx="10" fill="#303744"/>
+  <rect x="1032" y="620" width="74" height="34" rx="10" fill="#303744"/>
+  <rect x="1116" y="620" width="126" height="34" rx="10" fill="#303744"/>
+  <text x="884" y="642" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#9BB7E5">刷新</text>
+  <text x="968" y="642" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#9BB7E5">记录</text>
+  <text x="1052" y="642" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#9BB7E5">复制</text>
+  <text x="1138" y="642" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#9BB7E5">检查更新</text>
+</svg>

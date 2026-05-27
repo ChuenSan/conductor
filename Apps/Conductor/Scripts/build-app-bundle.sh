@@ -31,6 +31,7 @@ MARKETING_VERSION="${CONDUCTOR_MARKETING_VERSION:-$DEFAULT_MARKETING_VERSION}"
 BUILD_NUMBER="${CONDUCTOR_BUILD_NUMBER:-1}"
 MIN_SYSTEM_VERSION="${CONDUCTOR_MIN_SYSTEM_VERSION:-14.0}"
 APP_CATEGORY="${CONDUCTOR_APP_CATEGORY:-public.app-category.developer-tools}"
+UPDATE_MANIFEST_URL="${CONDUCTOR_UPDATE_MANIFEST_URL:-}"
 
 APP="$ROOT/.build/Conductor.app"
 CONTENTS="$APP/Contents"
@@ -157,6 +158,8 @@ write_info_plist() {
   <string>$(xml_escape "$MIN_SYSTEM_VERSION")</string>
   <key>NSHumanReadableCopyright</key>
   <string>Copyright © 2026 Conductor. All rights reserved.</string>
+  <key>ConductorUpdateManifestURL</key>
+  <string>$(xml_escape "$UPDATE_MANIFEST_URL")</string>
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSSupportsAutomaticGraphicsSwitching</key>

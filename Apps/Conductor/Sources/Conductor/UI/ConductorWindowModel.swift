@@ -240,6 +240,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var agentHookSettingsMessage: String?
     @Published private(set) var agentCLIStatuses: [AgentHookProvider: AgentCLIStatus]
     @Published private(set) var terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
+    @Published var updatePreferences = ConductorUpdatePreferences.defaults()
+    @Published private(set) var updateState = ConductorUpdateState()
     @Published private(set) var terminalSearchFocusGeneration = 0
     @Published private(set) var terminalSearchTargetID: TerminalID?
     @Published private(set) var paneFlashTokens: [PaneID: UInt64] = [:]
@@ -303,6 +305,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var panelCoordinator = PanelCoordinator()
     private var appearanceCoordinator = AppearanceCoordinator(appearance: AppearancePreferences())
     private var fileWorkspaceCoordinator = FileWorkspaceCoordinator()
+    private let updatePreferencesStore = ConductorUpdatePreferencesStore()
+    private let updateService = ConductorUpdateService()
+    private var updateTask: Task<Void, Never>?
+    private var automaticUpdateCheckStarted = false
 
     init() {
         let persisted = persistence.load()
@@ -321,6 +327,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.appearanceCoordinator = AppearanceCoordinator(appearance: resolvedAppearance)
         self.agentCLIStatuses = Dictionary(uniqueKeysWithValues: AgentHookProvider.allCases.map { ($0, .unknown(provider: $0)) })
         self.terminalFontDownloadStates = [:]
+        self.updatePreferences = updatePreferencesStore.load()
+        self.updateState = ConductorUpdateState(currentVersion: ConductorAppVersion.current())
         self.workspaceWebTabs = persisted?.workspaceWebTabs ?? []
         self.selectedWorkspaceContentTabID = Self.restoredWorkspaceContentSelection(
             persisted?.selectedWorkspaceContentTabID,
@@ -360,6 +368,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.notifications = notifications
         self.agentCLIStatuses = Dictionary(uniqueKeysWithValues: AgentHookProvider.allCases.map { ($0, .unknown(provider: $0)) })
         self.terminalFontDownloadStates = [:]
+        self.updatePreferences = updatePreferencesStore.load()
+        self.updateState = ConductorUpdateState(currentVersion: ConductorAppVersion.current())
         self.sidebarVisible = sidebarVisible
         self.commandPaletteVisible = commandPaletteVisible
         self.notificationPanelVisible = notificationPanelVisible
@@ -747,6 +757,190 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 self.agentCLIStatuses = statuses
             }
         }
+    }
+
+    func setUpdateManifestURL(_ value: String) {
+        guard updatePreferences.manifestURLString != value else { return }
+        updatePreferences.manifestURLString = value
+        updatePreferencesStore.save(updatePreferences)
+    }
+
+    func setAutomaticUpdateChecksEnabled(_ enabled: Bool) {
+        guard updatePreferences.automaticChecksEnabled != enabled else { return }
+        updatePreferences.automaticChecksEnabled = enabled
+        updatePreferencesStore.save(updatePreferences)
+        if enabled {
+            startUpdateChecksIfNeeded()
+        }
+    }
+
+    func setPrefersDeltaUpdates(_ enabled: Bool) {
+        guard updatePreferences.prefersDeltaUpdates != enabled else { return }
+        updatePreferences.prefersDeltaUpdates = enabled
+        updatePreferencesStore.save(updatePreferences)
+    }
+
+    func startUpdateChecksIfNeeded() {
+        guard !automaticUpdateCheckStarted else { return }
+        guard updatePreferences.automaticChecksEnabled,
+              updatePreferences.manifestURL != nil else {
+            return
+        }
+        automaticUpdateCheckStarted = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            self?.checkForUpdates(manual: false)
+        }
+    }
+
+    func checkForUpdates(manual: Bool = true) {
+        guard updateState.canCheck else { return }
+        guard let manifestURL = updatePreferences.manifestURL else {
+            if manual {
+                updateState = ConductorUpdateState(
+                    phase: .failed(L("请先填写更新清单地址。", "Enter an update manifest URL first.")),
+                    currentVersion: ConductorAppVersion.current()
+                )
+            }
+            return
+        }
+
+        updateTask?.cancel()
+        let preferences = updatePreferences
+        let currentVersion = ConductorAppVersion.current()
+        updateState = ConductorUpdateState(
+            phase: .checking,
+            currentVersion: currentVersion,
+            lastCheckedAt: updateState.lastCheckedAt
+        )
+        updateTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let manifest = try await updateService.fetchManifest(from: manifestURL)
+                try Task.checkCancellation()
+                let selected = manifest.selectedArtifact(prefersDeltaUpdates: preferences.prefersDeltaUpdates)
+                let availableVersion = manifest.targetVersion
+                let isAvailable = availableVersion > currentVersion
+                updateState = ConductorUpdateState(
+                    phase: isAvailable ? .available : .upToDate,
+                    currentVersion: currentVersion,
+                    availableVersion: isAvailable ? availableVersion : nil,
+                    manifest: manifest,
+                    selectedPackageKind: isAvailable ? selected.kind : nil,
+                    selectedArtifact: isAvailable ? selected.artifact : nil,
+                    lastCheckedAt: Date()
+                )
+            } catch is CancellationError {
+            } catch {
+                updateState = ConductorUpdateState(
+                    phase: .failed(localizedUpdateError(error)),
+                    currentVersion: currentVersion,
+                    lastCheckedAt: Date()
+                )
+            }
+        }
+    }
+
+    func downloadAvailableUpdate() {
+        guard updateState.canDownload,
+              let manifest = updateState.manifest,
+              let selectedKind = updateState.selectedPackageKind,
+              let selectedArtifact = updateState.selectedArtifact,
+              let manifestURL = updatePreferences.manifestURL else {
+            return
+        }
+
+        updateTask?.cancel()
+        var downloadingState = updateState
+        downloadingState.phase = .downloading
+        updateState = downloadingState
+        updateTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let downloadedUpdate = try await updateService.downloadPackage(
+                    manifest: manifest,
+                    manifestURL: manifestURL,
+                    kind: selectedKind,
+                    artifact: selectedArtifact
+                )
+                try Task.checkCancellation()
+                updateState = ConductorUpdateState(
+                    phase: .downloaded,
+                    currentVersion: ConductorAppVersion.current(),
+                    availableVersion: manifest.targetVersion,
+                    manifest: manifest,
+                    selectedPackageKind: downloadedUpdate.kind,
+                    selectedArtifact: downloadedUpdate.artifact,
+                    downloadedPackageURL: downloadedUpdate.packageURL,
+                    lastCheckedAt: updateState.lastCheckedAt
+                )
+            } catch is CancellationError {
+            } catch {
+                var failedState = updateState
+                failedState.phase = .failed(localizedUpdateError(error))
+                updateState = failedState
+            }
+        }
+    }
+
+    func installDownloadedUpdateAndRelaunch() {
+        guard updateState.canInstall,
+              let manifest = updateState.manifest,
+              let selectedKind = updateState.selectedPackageKind,
+              let selectedArtifact = updateState.selectedArtifact,
+              let packageURL = updateState.downloadedPackageURL,
+              let manifestURL = updatePreferences.manifestURL else {
+            return
+        }
+
+        let downloadedUpdate = ConductorDownloadedUpdate(
+            packageURL: packageURL,
+            artifactURL: manifestURL.deletingLastPathComponent().appendingPathComponent(selectedArtifact.filename),
+            kind: selectedKind,
+            manifest: manifest,
+            artifact: selectedArtifact
+        )
+        var installingState = updateState
+        installingState.phase = .installing
+        updateState = installingState
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let preparedUpdate = try await updateService.prepareInstaller(for: downloadedUpdate)
+                try updateService.launchInstallerAndTerminate(preparedUpdate)
+            } catch {
+                var failedState = updateState
+                failedState.phase = .failed(localizedUpdateError(error))
+                updateState = failedState
+            }
+        }
+    }
+
+    func showUpdatesAndCheck() {
+        showSettingsPanel(section: .updates)
+        checkForUpdates(manual: true)
+    }
+
+    private func localizedUpdateError(_ error: Error) -> String {
+        if let updateError = error as? ConductorUpdateError {
+            switch updateError {
+            case .missingManifestURL:
+                return L("请先填写更新清单地址。", "Enter an update manifest URL first.")
+            case .invalidHTTPStatus(let status):
+                return L("更新服务器返回 HTTP \(status)。", "Update server returned HTTP \(status).")
+            case .invalidManifest(let reason):
+                return L("更新清单无法读取：\(reason)", "Update manifest could not be read: \(reason)")
+            case .noAppBundle:
+                return L("需要从 .app 包启动后才能自动替换。", "Conductor must be running from a .app bundle to replace itself.")
+            case .checksumMismatch:
+                return L("下载包校验失败，已停止安装。", "Downloaded update failed checksum verification.")
+            case .missingDownloadedPackage:
+                return L("找不到已下载的更新包。", "Downloaded update package was not found.")
+            case .installerLaunchFailed(let reason):
+                return L("无法启动安装器：\(reason)", "Could not start the installer: \(reason)")
+            }
+        }
+        return error.localizedDescription
     }
 
     func openAgentInstallPage(_ provider: AgentHookProvider) {

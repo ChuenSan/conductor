@@ -33,6 +33,7 @@ Release builds can set bundle metadata without editing source:
 CONDUCTOR_BUNDLE_IDENTIFIER=com.example.conductor \
 CONDUCTOR_BUILD_NUMBER=2026052701 \
 CONDUCTOR_CODE_SIGN_IDENTITY="Developer ID Application: Example" \
+CONDUCTOR_UPDATE_MANIFEST_URL=https://github.com/owner/repo/releases/latest/download/latest-stable-macos-arm64.json \
 ./Scripts/build-app-bundle.sh
 ```
 
@@ -47,6 +48,7 @@ CONDUCTOR_CODE_SIGN_IDENTITY="Developer ID Application: Example" \
 To create release artifacts with a full update zip and manifest:
 
 ```bash
+CONDUCTOR_GITHUB_REPO=owner/repo \
 ./Scripts/package-release.sh 2026052701
 ```
 
@@ -62,6 +64,33 @@ CONDUCTOR_PREVIOUS_ZIP=/path/to/Conductor-0.1.0-1-macos-arm64.zip \
 ```
 
 Artifacts are written to `Artifacts/releases/<version>-<build>-macos-<arch>/`.
+The script also writes two stable updater manifests:
+
+- `Artifacts/releases/latest-<channel>-macos-<arch>.json` for local file/static hosting.
+- `Artifacts/releases/<version>-<build>-macos-<arch>/latest-<channel>-macos-<arch>.json` for GitHub Release assets.
+
+For GitHub Releases, upload the full zip, optional delta zip, and the release
+directory's `latest-<channel>-macos-<arch>.json` asset. The app can then use:
+
+```text
+https://github.com/owner/repo/releases/latest/download/latest-stable-macos-arm64.json
+```
+
+To create or update the GitHub Release with the generated assets:
+
+```bash
+CONDUCTOR_GITHUB_REPO=owner/repo \
+./Scripts/publish-github-release.sh Artifacts/releases/0.1.1-2026052701-macos-arm64
+```
+
+For a local updater test, point Settings > Updates at the root stable manifest
+or launch with:
+
+```bash
+CONDUCTOR_UPDATE_MANIFEST_URL=file:///absolute/path/to/Artifacts/releases/latest-stable-macos-arm64.json \
+open .build/Conductor.app
+```
+
 `Artifacts/` is intentionally ignored by Git. The full zip is the safe fallback
 for every update; the delta zip contains only changed files plus a
 `update-delta.json` manifest listing changed and removed bundle paths.

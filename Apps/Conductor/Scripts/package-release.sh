@@ -40,7 +40,13 @@ RELEASE_DIR="$ARTIFACT_ROOT/$RELEASE_ID"
 APP_PATH="$ROOT/.build/Conductor.app"
 FULL_ZIP="$RELEASE_DIR/${APP_NAME}-${VERSION}-${BUILD}-${PLATFORM}-${ARCH}.zip"
 MANIFEST_PATH="$RELEASE_DIR/${APP_NAME}-${VERSION}-${BUILD}-${PLATFORM}-${ARCH}.json"
+UPDATER_MANIFEST_PATH="$ARTIFACT_ROOT/latest-${CHANNEL}-${PLATFORM}-${ARCH}.json"
+GITHUB_UPDATER_MANIFEST_PATH="$RELEASE_DIR/latest-${CHANNEL}-${PLATFORM}-${ARCH}.json"
 DELTA_ZIP=""
+
+if [[ -z "${CONDUCTOR_UPDATE_MANIFEST_URL:-}" && -n "${CONDUCTOR_GITHUB_REPO:-}" ]]; then
+  export CONDUCTOR_UPDATE_MANIFEST_URL="https://github.com/${CONDUCTOR_GITHUB_REPO}/releases/latest/download/latest-${CHANNEL}-${PLATFORM}-${ARCH}.json"
+fi
 
 if [[ -x /usr/local/opt/swift/bin/swift ]]; then
   export PATH="/usr/local/opt/swift/bin:$PATH"
@@ -141,6 +147,7 @@ python3 - "$MANIFEST_PATH" <<PY
 import json
 import sys
 
+delta = json.loads("""$DELTA_JSON""")
 manifest = {
     "schemaVersion": 1,
     "app": "$APP_NAME",
@@ -158,11 +165,45 @@ manifest = {
         "sha256": "$FULL_SHA",
         "size": int("$FULL_SIZE")
     },
-    "delta": $DELTA_JSON
+    "delta": delta
 }
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump(manifest, handle, ensure_ascii=False, indent=2)
     handle.write("\\n")
+PY
+
+python3 - "$MANIFEST_PATH" "$UPDATER_MANIFEST_PATH" "$RELEASE_ID" <<'PY'
+import json
+import sys
+
+source_path, updater_path, release_id = sys.argv[1:]
+with open(source_path, "r", encoding="utf-8") as handle:
+    manifest = json.load(handle)
+
+for key in ("full", "delta"):
+    artifact = manifest.get(key)
+    if not artifact:
+        continue
+    filename = artifact.get("filename", "")
+    if filename and "://" not in filename and not filename.startswith("/"):
+        artifact["filename"] = f"{release_id}/{filename}"
+
+with open(updater_path, "w", encoding="utf-8") as handle:
+    json.dump(manifest, handle, ensure_ascii=False, indent=2)
+    handle.write("\n")
+PY
+
+python3 - "$MANIFEST_PATH" "$GITHUB_UPDATER_MANIFEST_PATH" <<'PY'
+import json
+import sys
+
+source_path, github_path = sys.argv[1:]
+with open(source_path, "r", encoding="utf-8") as handle:
+    manifest = json.load(handle)
+
+with open(github_path, "w", encoding="utf-8") as handle:
+    json.dump(manifest, handle, ensure_ascii=False, indent=2)
+    handle.write("\n")
 PY
 
 echo "Release artifacts:"
@@ -171,3 +212,5 @@ if [[ -n "$DELTA_ZIP" ]]; then
   echo "  delta:    $DELTA_ZIP"
 fi
 echo "  manifest: $MANIFEST_PATH"
+echo "  updater:  $UPDATER_MANIFEST_PATH"
+echo "  github:   $GITHUB_UPDATER_MANIFEST_PATH"

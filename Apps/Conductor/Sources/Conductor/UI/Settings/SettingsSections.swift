@@ -230,6 +230,19 @@ extension AppearanceSettingsPanel {
         }
     }
 
+    func updateSettings(snapshot: SettingsSnapshot) -> some View {
+        SettingsUpdateSection(
+            preferences: snapshot.updatePreferences,
+            state: snapshot.updateState,
+            setManifestURL: { model.setUpdateManifestURL($0) },
+            setAutomaticChecksEnabled: { model.setAutomaticUpdateChecksEnabled($0) },
+            setPrefersDeltaUpdates: { model.setPrefersDeltaUpdates($0) },
+            checkForUpdates: { model.checkForUpdates(manual: true) },
+            downloadUpdate: { model.downloadAvailableUpdate() },
+            installUpdate: { model.installDownloadedUpdateAndRelaunch() }
+        )
+    }
+
     @ViewBuilder
     func terminalShellSettings(snapshot: SettingsSnapshot) -> some View {
         let renderer = snapshot.appearance.terminalRenderer
@@ -1508,6 +1521,9 @@ private struct SettingsOverviewPath: View {
                 detail: snapshot.appearance.agentNotifications.codex || snapshot.appearance.agentNotifications.claudeCode
                     ? L("通知开启", "Alerts On")
                     : L("通知关闭", "Alerts Off")),
+            SettingsOverviewRoute(
+                section: .updates,
+                detail: snapshot.updateState.phase.statusTitle),
             SettingsOverviewRoute(
                 section: .themes,
                 detail: snapshot.theme.title),

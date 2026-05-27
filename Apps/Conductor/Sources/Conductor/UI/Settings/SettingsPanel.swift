@@ -25,7 +25,9 @@ struct AppearanceSettingsPanel: View {
             appearance: model.appearance,
             agentHookSettingsMessage: model.agentHookSettingsMessage,
             agentCLIStatuses: model.agentCLIStatuses,
-            terminalFontDownloadStates: model.terminalFontDownloadStates
+            terminalFontDownloadStates: model.terminalFontDownloadStates,
+            updatePreferences: model.updatePreferences,
+            updateState: model.updateState
         )
         return ZStack {
             ConductorGlassSurface(style: .settings, clarity: snapshot.appearance.chromeClarity, interactive: true) {
@@ -83,7 +85,7 @@ struct AppearanceSettingsPanel: View {
 
             sidebarGroup(
                 title: L("工作流", "Workflow"),
-                sections: [.shell, .usage, .automation, .commands]
+                sections: [.shell, .usage, .automation, .updates, .commands]
             )
 
             sidebarGroup(
@@ -130,7 +132,7 @@ struct AppearanceSettingsPanel: View {
                         .id(selectedSection)
                         .transition(ConductorMotion.contentSwapTransition(edge: settingsContentEdge))
                 }
-                .frame(maxWidth: selectedSection == .usage ? 600 : 580, alignment: .topLeading)
+                .frame(maxWidth: selectedSection == .usage || selectedSection == .updates ? 600 : 580, alignment: .topLeading)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .animation(ConductorMotion.contentSwap, value: selectedSection)
@@ -161,6 +163,8 @@ struct AppearanceSettingsPanel: View {
             usageSettings(snapshot: snapshot)
         case .automation:
             automationSettings(snapshot: snapshot)
+        case .updates:
+            updateSettings(snapshot: snapshot)
         case .commands:
             commandSettings()
         case .themes:

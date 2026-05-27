@@ -8,6 +8,7 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
     case shell
     case usage
     case automation
+    case updates
     case commands
     case themes
 
@@ -27,6 +28,8 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
             ConductorLocalization.text(zh: "用量", en: "Usage")
         case .automation:
             ConductorLocalization.text(zh: "AI/通知", en: "AI")
+        case .updates:
+            ConductorLocalization.text(zh: "更新", en: "Updates")
         case .commands:
             ConductorLocalization.text(zh: "快捷键", en: "Shortcuts")
         case .themes:
@@ -48,6 +51,8 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
             ConductorLocalization.text(zh: "Token 记录和本地用量", en: "Token records and local usage")
         case .automation:
             ConductorLocalization.text(zh: "Agent、通知、铃声", en: "Agents, alerts, bell")
+        case .updates:
+            ConductorLocalization.text(zh: "检查、下载、替换运行时", en: "Check, download, and replace runtime")
         case .commands:
             ConductorLocalization.text(zh: "快捷键与命令入口", en: "Shortcuts and commands")
         case .themes:
@@ -69,6 +74,8 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
             "chart.bar"
         case .automation:
             "bolt.horizontal"
+        case .updates:
+            "arrow.triangle.2.circlepath"
         case .commands:
             "command"
         case .themes:
@@ -84,6 +91,8 @@ struct SettingsSnapshot: Equatable {
     let agentHookSettingsMessage: String?
     let agentCLIStatuses: [AgentHookProvider: AgentCLIStatus]
     let terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
+    let updatePreferences: ConductorUpdatePreferences
+    let updateState: ConductorUpdateState
 
     init(
         selectedSection: SettingsSectionID,
@@ -91,7 +100,9 @@ struct SettingsSnapshot: Equatable {
         appearance: AppearancePreferences,
         agentHookSettingsMessage: String?,
         agentCLIStatuses: [AgentHookProvider: AgentCLIStatus],
-        terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
+        terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState],
+        updatePreferences: ConductorUpdatePreferences,
+        updateState: ConductorUpdateState
     ) {
         self.selectedSection = selectedSection
         self.theme = theme
@@ -99,5 +110,7 @@ struct SettingsSnapshot: Equatable {
         self.agentHookSettingsMessage = agentHookSettingsMessage
         self.agentCLIStatuses = agentCLIStatuses
         self.terminalFontDownloadStates = terminalFontDownloadStates
+        self.updatePreferences = updatePreferences
+        self.updateState = updateState
     }
 }

@@ -289,6 +289,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         startCodexBarIfEnabled()
         installAppearanceBinding()
         installMainMenu()
+        model.startUpdateChecksIfNeeded()
         runShortcutAutomationIfRequested()
         runSmokeAutomationIfRequested()
         runFocusAutomationIfRequested()
@@ -366,6 +367,13 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu(title: "Conductor")
         appMenu.addItem(menuItem(L("设置...", "Settings..."), command: .toggleSettings, #selector(settingsPanelCommand)))
+        let updateItem = NSMenuItem(
+            title: L("检查更新...", "Check for Updates..."),
+            action: #selector(checkForUpdatesCommand),
+            keyEquivalent: ""
+        )
+        updateItem.target = self
+        appMenu.addItem(updateItem)
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: L("退出 Conductor", "Quit Conductor"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appMenuItem.submenu = appMenu
@@ -673,6 +681,15 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     @objc private func settingsPanelCommand() {
         scheduleCommand(.toggleSettings)
+    }
+
+    @objc private func checkForUpdatesCommand() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.model.showUpdatesAndCheck()
+            self.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     @objc private func notificationCenterCommand() {
