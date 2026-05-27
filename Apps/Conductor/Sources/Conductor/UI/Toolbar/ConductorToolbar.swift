@@ -56,6 +56,11 @@ struct ConductorToolbar: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(0)
 
+                if shouldShowUpdateButton {
+                    ConductorToolbarUpdateButton(model: model, state: model.updateState)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
+
                 ConductorPillGroup {
                     ConductorToolbarMenuButton(
                         state: toolbarControlState(
@@ -160,6 +165,16 @@ struct ConductorToolbar: View {
         }
         .frame(height: ConductorDesign.toolbarHeight(for: appearance))
         .animation(model.shellAnimation(ConductorMotion.standard), value: theme)
+        .animation(model.shellAnimation(ConductorMotion.panel), value: shouldShowUpdateButton)
+    }
+
+    private var shouldShowUpdateButton: Bool {
+        switch model.updateState.phase {
+        case .available, .downloading, .downloaded, .installing:
+            true
+        case .idle, .checking, .upToDate, .failed:
+            false
+        }
     }
 
     private func beginRenameWorkspace(_ row: WorkspaceChromeDisplayModel) {
@@ -208,6 +223,103 @@ struct ConductorToolbar: View {
         )
     }
 
+}
+
+private struct ConductorToolbarUpdateButton: View {
+    let model: ConductorWindowModel
+    let state: ConductorUpdateState
+
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorFontFamily) private var fontFamily
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Button(action: performAction) {
+            HStack(spacing: 5) {
+                if state.phase == .downloading {
+                    ProgressView(value: state.downloadProgress?.fraction ?? 0)
+                        .controlSize(.mini)
+                        .tint(.white)
+                        .frame(width: 12, height: 12)
+                        .accessibilityHidden(true)
+                }
+
+                Text(title)
+                    .font(.conductorSystem(size: 10.6, weight: .bold, family: fontFamily, scale: fontScale))
+                    .lineLimit(1)
+                    .monospacedDigit()
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background(buttonFill)
+            .overlay {
+                Capsule()
+                    .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.12 : 0.28), lineWidth: 0.8)
+            }
+            .clipShape(Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.98, pressedOpacity: 0.94))
+        .macNativeTooltip(tooltip)
+        .accessibilityLabel(Text(tooltip))
+        .conductorHover($hovering)
+        .animation(ConductorMotion.hover, value: hovering)
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(3)
+    }
+
+    private var title: String {
+        switch state.phase {
+        case .downloading:
+            guard let progress = state.downloadProgress else {
+                return L("下载中", "Downloading")
+            }
+            return "\(Int((progress.fraction * 100).rounded()))%"
+        case .downloaded:
+            return L("安装", "Install")
+        case .installing:
+            return L("安装中", "Installing")
+        default:
+            return L("更新", "Update")
+        }
+    }
+
+    private var tooltip: String {
+        switch state.phase {
+        case .available:
+            return L("下载可用更新", "Download available update")
+        case .downloading:
+            return L("打开更新进度", "Open update progress")
+        case .downloaded:
+            return L("安装更新并重新打开", "Install update and reopen")
+        case .installing:
+            return L("正在安装更新", "Installing update")
+        default:
+            return L("检查更新", "Check for updates")
+        }
+    }
+
+    private var buttonFill: Color {
+        let base = state.phase == .installing ? theme.floatingEmphasis : theme.accent
+        return base.opacity(hovering ? 0.94 : 0.84)
+    }
+
+    @MainActor
+    private func performAction() {
+        switch state.phase {
+        case .available:
+            model.downloadAvailableUpdate()
+        case .downloaded:
+            model.installDownloadedUpdateAndRelaunch()
+        case .downloading, .installing:
+            model.showSettingsPanel(section: .updates)
+        default:
+            model.showUpdatesAndCheck()
+        }
+    }
 }
 
 private struct ConductorToolbarMenuButton<MenuContent: View>: View {

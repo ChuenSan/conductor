@@ -161,9 +161,10 @@ private struct ConductorUsageSettingsLoadedContent: View {
                     codexAccountPromotionCoordinator: context.codexAccountPromotionCoordinator,
                     showsMenuBarMetricPicker: false,
                     hiddenProviderSettingIDs: Self.hiddenProviderSettingIDs,
-                    allowsNestedScrolling: false,
+                    allowsNestedScrolling: true,
                     runProviderLoginFlow: context.runProviderLoginFlow)
                     .padding(10)
+                    .frame(height: 292, alignment: .topLeading)
             case .workbench:
                 ConductorUsageWorkbenchPanel(
                     context: context,

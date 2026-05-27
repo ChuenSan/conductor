@@ -762,6 +762,17 @@ private struct TerminalTabButton: View {
                     renameCancelled = false
                 }
             } else {
+                TerminalTabDragHandle(
+                    visible: hovering || isSelected || display.isDragging,
+                    dragging: display.isDragging
+                ) {
+                    ConductorMotion.withoutAnimation {
+                        model.selectTab(tab.id, in: paneID)
+                    }
+                    model.beginTerminalTabDrag(tab.id)
+                    return terminalTabDragPayload(for: tab.id)
+                }
+
                 Button {
                     onVisualSelect()
                     ConductorMotion.withoutAnimation {
@@ -809,7 +820,7 @@ private struct TerminalTabButton: View {
                 .macNativeTooltip(L("关闭标签", "Close Tab"))
             }
         }
-        .padding(.leading, 9)
+        .padding(.leading, editingTitle ? 9 : 3)
         .padding(.trailing, 5)
         .frame(height: density.paneTabHeight)
         .frame(
@@ -850,13 +861,6 @@ private struct TerminalTabButton: View {
         .animation(ConductorMotion.dragPreview, value: display.isDragging)
         .conductorHover($hovering)
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab))
-        .onDrag {
-            ConductorMotion.withoutAnimation {
-                model.selectTab(tab.id, in: paneID)
-            }
-            model.beginTerminalTabDrag(tab.id)
-            return terminalTabDragPayload(for: tab.id)
-        }
         .contextMenu {
             Button(L("重命名标签...", "Rename Tab...")) {
                 ConductorMotion.perform(ConductorMotion.selection) {
@@ -955,6 +959,42 @@ private struct TerminalTabButton: View {
         ConductorMotion.perform(ConductorMotion.selection) {
             editingTitle = false
         }
+    }
+}
+
+private struct TerminalTabDragHandle: View {
+    let visible: Bool
+    let dragging: Bool
+    let payload: () -> NSItemProvider
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(theme.shellHoverFill.opacity(visible ? (dragging ? 0.34 : 0.16) : 0.001))
+
+            VStack(spacing: 2.6) {
+                ForEach(0..<3, id: \.self) { _ in
+                    HStack(spacing: 2.6) {
+                        dragDot
+                        dragDot
+                    }
+                }
+            }
+        }
+        .frame(width: 20, height: 24)
+        .foregroundStyle(theme.shellChromeTextMuted.opacity(visible ? (dragging ? 0.86 : 0.58) : 0.24))
+        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .macNativeTooltip(L("拖动标签", "Drag Tab"))
+        .accessibilityLabel(L("拖动标签", "Drag Tab"))
+        .onDrag(payload)
+        .animation(ConductorMotion.hover, value: visible)
+        .animation(ConductorMotion.dragPreview, value: dragging)
+    }
+
+    private var dragDot: some View {
+        Circle()
+            .frame(width: 2.45, height: 2.45)
     }
 }
 

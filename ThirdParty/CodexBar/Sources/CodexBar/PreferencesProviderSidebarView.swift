@@ -18,10 +18,11 @@ struct ProviderSidebarListView: View {
         Group {
             if scrollsVertically {
                 ScrollView {
-                    providerRows(style: style)
+                    providerRows(style: style, lazy: true)
                 }
+                .scrollIndicators(.visible)
             } else {
-                providerRows(style: style)
+                providerRows(style: style, lazy: false)
             }
         }
         .background(
@@ -34,48 +35,62 @@ struct ProviderSidebarListView: View {
         .frame(minWidth: ProviderSettingsMetrics.sidebarWidth, maxWidth: ProviderSettingsMetrics.sidebarWidth)
     }
 
-    private func providerRows(style: ConductorUsagePanelStyle) -> some View {
-        VStack(spacing: 0) {
-            ForEach(self.providers, id: \.self) { provider in
-                let isSelected = self.selection == provider
-                ProviderSidebarRowView(
-                    provider: provider,
-                    store: self.store,
-                    isEnabled: self.isEnabled(provider),
-                    subtitle: self.subtitle(provider),
-                    isSelected: isSelected,
-                    style: style,
-                    draggingProvider: self.$draggingProvider)
-                    .padding(.horizontal, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(
-                                isSelected
-                                    ? style.emphasis.opacity(style.usesDarkChrome ? 0.18 : 0.10)
-                                    : Color.clear)
-                            .padding(.horizontal, 4))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(
-                                isSelected
-                                    ? style.emphasis.opacity(style.usesDarkChrome ? 0.32 : 0.22)
-                                    : Color.clear,
-                                lineWidth: 0.8)
-                            .padding(.horizontal, 4)
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture { self.selection = provider }
-                    .onDrop(
-                        of: [UTType.plainText],
-                        delegate: ProviderSidebarDropDelegate(
-                            item: provider,
-                            providers: self.providers,
-                            dragging: self.$draggingProvider,
-                            moveProviders: self.moveProviders))
+    @ViewBuilder
+    private func providerRows(style: ConductorUsagePanelStyle, lazy: Bool) -> some View {
+        if lazy {
+            LazyVStack(spacing: 0) {
+                providerRowList(style: style)
             }
+            .padding(.vertical, 4)
+        } else {
+            VStack(spacing: 0) {
+                providerRowList(style: style)
+            }
+            .padding(.vertical, 4)
         }
-        .padding(.vertical, 4)
     }
+
+    @ViewBuilder
+    private func providerRowList(style: ConductorUsagePanelStyle) -> some View {
+        ForEach(self.providers, id: \.self) { provider in
+            let isSelected = self.selection == provider
+            ProviderSidebarRowView(
+                provider: provider,
+                store: self.store,
+                isEnabled: self.isEnabled(provider),
+                subtitle: self.subtitle(provider),
+                isSelected: isSelected,
+                style: style,
+                draggingProvider: self.$draggingProvider)
+                .padding(.horizontal, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(
+                            isSelected
+                                ? style.emphasis.opacity(style.usesDarkChrome ? 0.18 : 0.10)
+                                : Color.clear)
+                        .padding(.horizontal, 4))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(
+                            isSelected
+                                ? style.emphasis.opacity(style.usesDarkChrome ? 0.32 : 0.22)
+                                : Color.clear,
+                            lineWidth: 0.8)
+                        .padding(.horizontal, 4)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { self.selection = provider }
+                .onDrop(
+                    of: [UTType.plainText],
+                    delegate: ProviderSidebarDropDelegate(
+                        item: provider,
+                        providers: self.providers,
+                        dragging: self.$draggingProvider,
+                        moveProviders: self.moveProviders))
+        }
+    }
+
 }
 
 @MainActor
