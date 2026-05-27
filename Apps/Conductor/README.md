@@ -27,6 +27,45 @@ To create a clickable development app bundle:
 open .build/Conductor.app
 ```
 
+Release builds can set bundle metadata without editing source:
+
+```bash
+CONDUCTOR_BUNDLE_IDENTIFIER=com.example.conductor \
+CONDUCTOR_BUILD_NUMBER=2026052701 \
+CONDUCTOR_CODE_SIGN_IDENTITY="Developer ID Application: Example" \
+./Scripts/build-app-bundle.sh
+```
+
+`VERSION` is the default marketing version. Bump it with:
+
+```bash
+./Scripts/bump-version.sh patch
+./Scripts/bump-version.sh minor
+./Scripts/bump-version.sh 0.3.0
+```
+
+To create release artifacts with a full update zip and manifest:
+
+```bash
+./Scripts/package-release.sh 2026052701
+```
+
+To also create a file-level incremental update package, pass the previous app
+bundle or previous full zip:
+
+```bash
+CONDUCTOR_PREVIOUS_APP=/path/to/Conductor.app \
+./Scripts/package-release.sh 2026052701
+
+CONDUCTOR_PREVIOUS_ZIP=/path/to/Conductor-0.1.0-1-macos-arm64.zip \
+./Scripts/package-release.sh 2026052701
+```
+
+Artifacts are written to `Artifacts/releases/<version>-<build>-macos-<arch>/`.
+`Artifacts/` is intentionally ignored by Git. The full zip is the safe fallback
+for every update; the delta zip contains only changed files plus a
+`update-delta.json` manifest listing changed and removed bundle paths.
+
 Full local gate:
 
 ```bash
