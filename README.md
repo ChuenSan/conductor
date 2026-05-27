@@ -68,7 +68,7 @@ Captured from the current macOS build.
 
 ### Usage Records
 
-![Usage records card](docs/media/conductor-screenshot-token-records-open.png)
+![Usage records card](docs/media/conductor-screenshot-token-records-panel.png)
 
 ### Settings
 
