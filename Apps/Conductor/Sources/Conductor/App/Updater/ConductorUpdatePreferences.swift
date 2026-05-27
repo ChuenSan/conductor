@@ -5,14 +5,26 @@ struct ConductorUpdatePreferences: Codable, Equatable, Sendable {
     var automaticChecksEnabled: Bool
     var prefersDeltaUpdates: Bool
 
+    static let publicManifestURLString = "https://github.com/zhengzizhe/conductor/releases/latest/download/latest-stable-macos-arm64.json"
+
     static func defaults(environment: [String: String] = ProcessInfo.processInfo.environment) -> ConductorUpdatePreferences {
         let bundledURL = Bundle.main.object(forInfoDictionaryKey: "ConductorUpdateManifestURL") as? String
-        let manifestURLString = environment["CONDUCTOR_UPDATE_MANIFEST_URL"] ?? bundledURL ?? ""
+        let manifestURLString = firstNonEmpty(
+            environment["CONDUCTOR_UPDATE_MANIFEST_URL"],
+            bundledURL,
+            publicManifestURLString
+        )
         return ConductorUpdatePreferences(
             manifestURLString: manifestURLString,
             automaticChecksEnabled: !manifestURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             prefersDeltaUpdates: true
         )
+    }
+
+    private static func firstNonEmpty(_ values: String?...) -> String {
+        values
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? ""
     }
 
     var normalizedManifestURLString: String {
@@ -41,7 +53,8 @@ final class ConductorUpdatePreferencesStore {
 
     func load() -> ConductorUpdatePreferences {
         var preferences = ConductorUpdatePreferences.defaults()
-        if let value = userDefaults.string(forKey: manifestURLKey) {
+        if let value = userDefaults.string(forKey: manifestURLKey),
+           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             preferences.manifestURLString = value
         }
         if userDefaults.object(forKey: automaticChecksKey) != nil {
