@@ -240,20 +240,20 @@ private struct WorkspaceFileTopTab: View {
 
     private var baseFill: Color {
         if hovering {
-            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.36 : 0.18)
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.24 : 0.12)
         }
         return Color.clear
     }
 
     private var selectedFill: Color {
-        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.72) : theme.shellPanelStrong.opacity(0.82)
+        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.62) : theme.shellPanelStrong.opacity(0.72)
     }
 
     private var tabStroke: Color {
         if selected {
-            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.45 : 0.28) * appearance.chromeClarity.strokeMultiplier)
+            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.30 : 0.18) * appearance.chromeClarity.strokeMultiplier)
         }
-        return theme.shellStroke.opacity(hovering ? 0.12 : 0.0)
+        return theme.shellStroke.opacity(hovering ? 0.08 : 0.0)
     }
 
     private var titleColor: Color {
@@ -331,14 +331,14 @@ private struct WorkspaceFileTopTab: View {
                 if selected {
                     tabShape
                         .fill(selectedFill)
-                        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.14 : 0.04), radius: 2.5, y: 1.2)
+                        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.08 : 0.025), radius: 1.5, y: 0.8)
                 }
             }
         }
         .clipShape(tabShape)
         .overlay {
             tabShape
-                .stroke(tabStroke, lineWidth: 1)
+                .stroke(tabStroke, lineWidth: 0.6)
         }
         .scaleEffect(hovering && !selected ? 1.002 : 1)
         .animation(ConductorMotion.hover, value: hovering)
@@ -412,20 +412,20 @@ private struct WorkspaceWebTopTab: View {
 
     private var baseFill: Color {
         if hovering {
-            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.36 : 0.18)
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.24 : 0.12)
         }
         return Color.clear
     }
 
     private var selectedFill: Color {
-        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.72) : theme.shellPanelStrong.opacity(0.82)
+        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.62) : theme.shellPanelStrong.opacity(0.72)
     }
 
     private var tabStroke: Color {
         if selected {
-            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.45 : 0.28) * appearance.chromeClarity.strokeMultiplier)
+            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.30 : 0.18) * appearance.chromeClarity.strokeMultiplier)
         }
-        return theme.shellStroke.opacity(hovering ? 0.12 : 0.0)
+        return theme.shellStroke.opacity(hovering ? 0.08 : 0.0)
     }
 
     private var titleColor: Color {
@@ -498,14 +498,14 @@ private struct WorkspaceWebTopTab: View {
                 if selected {
                     tabShape
                         .fill(selectedFill)
-                        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.14 : 0.04), radius: 2.5, y: 1.2)
+                        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.08 : 0.025), radius: 1.5, y: 0.8)
                 }
             }
         }
         .clipShape(tabShape)
         .overlay {
             tabShape
-                .stroke(tabStroke, lineWidth: 1)
+                .stroke(tabStroke, lineWidth: 0.6)
         }
         .scaleEffect(hovering && !selected ? 1.002 : 1)
         .animation(ConductorMotion.hover, value: hovering)
@@ -603,20 +603,20 @@ private struct WorkspaceTopTab: View {
 
     private var baseFill: Color {
         if hovering {
-            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.36 : 0.18)
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.24 : 0.12)
         }
         return Color.clear
     }
 
     private var selectedFill: Color {
-        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.72) : theme.shellPanelStrong.opacity(0.82)
+        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.62) : theme.shellPanelStrong.opacity(0.72)
     }
 
     private var tabStroke: Color {
         if selected {
-            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.45 : 0.28) * appearance.chromeClarity.strokeMultiplier)
+            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.30 : 0.18) * appearance.chromeClarity.strokeMultiplier)
         }
-        return theme.shellStroke.opacity(hovering ? 0.12 : 0.0)
+        return theme.shellStroke.opacity(hovering ? 0.08 : 0.0)
     }
 
     private var titleColor: Color {
@@ -633,61 +633,45 @@ private struct WorkspaceTopTab: View {
     }
 
     var body: some View {
-        Group {
-            if editing {
-                editingTab
-            } else {
-                displayTab
-            }
-        }
-        .frame(
-            width: WorkspaceTabMetrics.width(for: appearance),
-            height: WorkspaceTabMetrics.height(for: appearance)
-        )
-        .background {
-            ZStack {
-                tabShape
-                    .fill(baseFill)
-                if visuallySelected {
-                    tabShape
-                        .fill(selectedFill)
-                        .matchedGeometryEffect(id: "workspace-tab-selection", in: selectionNamespace)
-                        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.14 : 0.04), radius: 2.5, y: 1.2)
+        if editing {
+            editingTab
+                .frame(
+                    width: WorkspaceTabMetrics.width(for: appearance),
+                    height: WorkspaceTabMetrics.height(for: appearance)
+                )
+                .background {
+                    ZStack {
+                        tabShape
+                            .fill(baseFill)
+                        if visuallySelected {
+                            tabShape
+                                .fill(selectedFill)
+                                .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.08 : 0.025), radius: 1.5, y: 0.8)
+                        }
+                    }
                 }
-            }
-        }
-        .clipShape(tabShape)
-        .overlay {
-            tabShape
-                .stroke(tabStroke, lineWidth: 1)
-        }
-        .scaleEffect(hovering && !selected ? 1.002 : 1)
-        .animation(ConductorMotion.hover, value: hovering)
-        .animation(ConductorMotion.selection, value: editing)
-        .animation(ConductorMotion.attention, value: unreadCount)
-        .conductorHover($hovering)
-        .contentShape(tabShape)
-        .contextMenu {
-            Button(L("重命名工作区...", "Rename Workspace...")) {
-                onRename()
-            }
-            Button(L("复制工作区", "Duplicate Workspace")) {
-                onDuplicate()
-            }
-            Divider()
-            Button(L("关闭其他工作区", "Close Other Workspaces")) {
-                onCloseOthers()
-            }
-            .disabled(!canClose)
-            Button(L("关闭右侧工作区", "Close Workspaces to the Right")) {
-                onCloseRight()
-            }
-            .disabled(!canClose)
-            Divider()
-            Button(L("关闭工作区", "Close Workspace")) {
-                onClose()
-            }
-            .disabled(!canClose)
+                .clipShape(tabShape)
+                .overlay {
+                    tabShape
+                        .stroke(tabStroke, lineWidth: 0.6)
+                }
+                .animation(ConductorMotion.selection, value: editing)
+        } else {
+            NativeWorkspaceTopTab(
+                row: row,
+                width: WorkspaceTabMetrics.width(for: appearance),
+                height: WorkspaceTabMetrics.height(for: appearance),
+                selected: selected,
+                canClose: canClose,
+                theme: theme,
+                fontScale: fontScale,
+                onSelect: onSelect,
+                onRename: onRename,
+                onDuplicate: onDuplicate,
+                onClose: onClose,
+                onCloseOthers: onCloseOthers,
+                onCloseRight: onCloseRight
+            )
         }
     }
 
@@ -737,13 +721,6 @@ private struct WorkspaceTopTab: View {
             }
             .buttonStyle(ConductorPressButtonStyle())
             .accessibilityLabel(tabAccessibilityTitle)
-            .simultaneousGesture(
-                TapGesture(count: 2).onEnded {
-                    guard !editing else { return }
-                    onSelect()
-                    onRename()
-                }
-            )
 
             Button {
                 onClose()
@@ -761,6 +738,299 @@ private struct WorkspaceTopTab: View {
             .padding(.trailing, 5)
             .accessibilityLabel(L("关闭工作区", "Close Workspace"))
             .macNativeTooltip(L("关闭工作区", "Close Workspace"))
+        }
+    }
+}
+
+private struct NativeWorkspaceTopTab: NSViewRepresentable {
+    let row: WorkspaceChromeDisplayModel
+    let width: CGFloat
+    let height: CGFloat
+    let selected: Bool
+    let canClose: Bool
+    let theme: TerminalTheme
+    let fontScale: AppearanceFontScale
+    let onSelect: () -> Void
+    let onRename: () -> Void
+    let onDuplicate: () -> Void
+    let onClose: () -> Void
+    let onCloseOthers: () -> Void
+    let onCloseRight: () -> Void
+
+    func makeNSView(context: Context) -> NativeWorkspaceTopTabView {
+        NativeWorkspaceTopTabView()
+    }
+
+    func updateNSView(_ view: NativeWorkspaceTopTabView, context: Context) {
+        view.update(
+            row: row,
+            size: NSSize(width: width, height: height),
+            selected: selected,
+            canClose: canClose,
+            theme: theme,
+            fontScale: fontScale,
+            onSelect: onSelect,
+            onRename: onRename,
+            onDuplicate: onDuplicate,
+            onClose: onClose,
+            onCloseOthers: onCloseOthers,
+            onCloseRight: onCloseRight
+        )
+    }
+}
+
+private final class NativeWorkspaceTopTabView: NSView {
+    private var row: WorkspaceChromeDisplayModel?
+    private var targetSize = NSSize(width: 140, height: 28)
+    private var selected = false
+    private var canClose = true
+    private var theme: TerminalTheme = .graphite
+    private var fontScale: AppearanceFontScale = .standard
+    private var hovering = false
+    private var mouseDownOnClose = false
+    private var onSelect: (() -> Void)?
+    private var onRename: (() -> Void)?
+    private var onDuplicate: (() -> Void)?
+    private var onClose: (() -> Void)?
+    private var onCloseOthers: (() -> Void)?
+    private var onCloseRight: (() -> Void)?
+    private var tracking: NSTrackingArea?
+    private var menuController: NativeWorkspaceMenuController?
+
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+    }
+
+    func update(
+        row: WorkspaceChromeDisplayModel,
+        size: NSSize,
+        selected: Bool,
+        canClose: Bool,
+        theme: TerminalTheme,
+        fontScale: AppearanceFontScale,
+        onSelect: @escaping () -> Void,
+        onRename: @escaping () -> Void,
+        onDuplicate: @escaping () -> Void,
+        onClose: @escaping () -> Void,
+        onCloseOthers: @escaping () -> Void,
+        onCloseRight: @escaping () -> Void
+    ) {
+        self.row = row
+        self.targetSize = size
+        self.selected = selected
+        self.canClose = canClose
+        self.theme = theme
+        self.fontScale = fontScale
+        self.onSelect = onSelect
+        self.onRename = onRename
+        self.onDuplicate = onDuplicate
+        self.onClose = onClose
+        self.onCloseOthers = onCloseOthers
+        self.onCloseRight = onCloseRight
+        toolTip = tabAccessibilityTitle(for: row)
+        needsDisplay = true
+    }
+
+    override var intrinsicContentSize: NSSize {
+        targetSize
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking {
+            removeTrackingArea(tracking)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        hovering = true
+        needsDisplay = true
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        if !hovering {
+            hovering = true
+            needsDisplay = true
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hovering = false
+        needsDisplay = true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        mouseDownOnClose = canClose && closeRect.contains(convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        defer { mouseDownOnClose = false }
+        guard bounds.contains(point) else { return }
+        if mouseDownOnClose && canClose && closeRect.contains(point) {
+            onClose?()
+        } else if !mouseDownOnClose {
+            onSelect?()
+        }
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        let controller = NativeWorkspaceMenuController()
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.delegate = controller
+        controller.onClose = { [weak self, weak controller] in
+            guard let self, self.menuController === controller else { return }
+            self.menuController = nil
+        }
+        menu.addItem(controller.item(title: L("重命名工作区...", "Rename Workspace..."), enabled: true) { [weak self] in self?.onRename?() })
+        menu.addItem(controller.item(title: L("复制工作区", "Duplicate Workspace"), enabled: true) { [weak self] in self?.onDuplicate?() })
+        menu.addItem(.separator())
+        menu.addItem(controller.item(title: L("关闭其他工作区", "Close Other Workspaces"), enabled: canClose) { [weak self] in self?.onCloseOthers?() })
+        menu.addItem(controller.item(title: L("关闭右侧工作区", "Close Workspaces to the Right"), enabled: canClose) { [weak self] in self?.onCloseRight?() })
+        menu.addItem(.separator())
+        menu.addItem(controller.item(title: L("关闭工作区", "Close Workspace"), enabled: canClose) { [weak self] in self?.onClose?() })
+        menuController = controller
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let row else { return }
+        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 1), xRadius: ConductorTokens.Radius.workspaceTab, yRadius: ConductorTokens.Radius.workspaceTab)
+        fillColor.setFill()
+        shape.fill()
+        strokeColor.setStroke()
+        shape.lineWidth = 0.6
+        shape.stroke()
+        drawGlyph(selected: selected)
+        drawTitle(row)
+        drawTerminalCount(row.terminalCount)
+        drawUnread(row.unreadCount)
+        if canClose && (hovering || selected) {
+            drawCloseGlyph()
+        }
+    }
+
+    private var closeRect: NSRect {
+        NSRect(x: bounds.maxX - 22, y: (bounds.height - 16) / 2, width: 16, height: 16)
+    }
+
+    private var fillColor: NSColor {
+        if selected {
+            return NSColor(theme.shellPanelStrong.opacity(theme.usesDarkChrome ? 0.62 : 0.72))
+        }
+        if hovering {
+            return NSColor(theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.24 : 0.12))
+        }
+        return .clear
+    }
+
+    private var strokeColor: NSColor {
+        if selected {
+            return NSColor(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.30 : 0.18))
+        }
+        return NSColor(theme.shellStroke.opacity(hovering ? 0.08 : 0))
+    }
+
+    private func drawGlyph(selected: Bool) {
+        let image = NSImage(systemSymbolName: WorkspaceChromeGlyph.systemName(selected: selected), accessibilityDescription: nil)
+        image?.isTemplate = true
+        (selected ? NSColor(theme.shellChromeText.opacity(0.90)) : NSColor(theme.shellChromeTextMuted.opacity(0.70))).set()
+        image?.draw(in: NSRect(x: 8, y: (bounds.height - 17) / 2, width: 17, height: 17))
+    }
+
+    private func drawTitle(_ row: WorkspaceChromeDisplayModel) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingMiddle
+        let rect = NSRect(x: 32, y: (bounds.height - 15) / 2, width: max(0, bounds.width - 76), height: 16)
+        NSAttributedString(
+            string: row.title,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: fontScale.size(11.3), weight: .semibold),
+                .foregroundColor: selected ? NSColor(theme.shellChromeText.opacity(0.94)) : NSColor(theme.shellChromeTextMuted.opacity(0.86)),
+                .paragraphStyle: paragraph
+            ]
+        ).draw(in: rect)
+    }
+
+    private func drawTerminalCount(_ count: Int) {
+        let text = "\(count)"
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: fontScale.size(10.2), weight: .semibold),
+            .foregroundColor: selected ? NSColor(theme.shellChromeText.opacity(0.72)) : NSColor(theme.shellChromeTextMuted.opacity(0.70))
+        ]
+        let size = text.size(withAttributes: attrs)
+        text.draw(at: NSPoint(x: bounds.maxX - 45, y: (bounds.height - size.height) / 2), withAttributes: attrs)
+    }
+
+    private func drawUnread(_ unreadCount: Int) {
+        guard unreadCount > 0 else { return }
+        let text = unreadCount > 99 ? "99+" : "\(unreadCount)"
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: fontScale.size(9), weight: .bold),
+            .foregroundColor: NSColor.white
+        ]
+        let size = text.size(withAttributes: attrs)
+        let rect = NSRect(x: bounds.maxX - 60 - size.width, y: (bounds.height - 14) / 2, width: max(15, size.width + 8), height: 14)
+        NSColor(theme.floatingEmphasis.opacity(0.72)).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 7, yRadius: 7).fill()
+        text.draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2), withAttributes: attrs)
+    }
+
+    private func drawCloseGlyph() {
+        let image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
+        image?.isTemplate = true
+        NSColor(theme.shellChromeText.opacity(0.74)).set()
+        image?.draw(in: closeRect.insetBy(dx: 4, dy: 4))
+    }
+
+    private func tabAccessibilityTitle(for row: WorkspaceChromeDisplayModel) -> String {
+        let base = L("\(row.title)，\(row.terminalCount) 个终端", "\(row.title), \(row.terminalCount) terminals")
+        guard row.unreadCount > 0 else { return base }
+        return base + L("，\(row.unreadCount) 条未读", ", \(row.unreadCount) unread")
+    }
+}
+
+private final class NativeWorkspaceMenuController: NSObject, NSMenuDelegate {
+    private var nextActionTag = 1
+    private var actions: [Int: () -> Void] = [:]
+    var onClose: (() -> Void)?
+
+    func item(title: String, enabled: Bool, action: @escaping () -> Void) -> NSMenuItem {
+        let tag = nextActionTag
+        nextActionTag += 1
+        actions[tag] = action
+        let item = NSMenuItem(title: title, action: #selector(performMenuAction(_:)), keyEquivalent: "")
+        item.target = self
+        item.tag = tag
+        item.isEnabled = enabled
+        return item
+    }
+
+    @objc private func performMenuAction(_ sender: NSMenuItem) {
+        actions[sender.tag]?()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        DispatchQueue.main.async { [weak self] in
+            self?.onClose?()
         }
     }
 }

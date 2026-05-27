@@ -248,11 +248,11 @@ struct FileManagerPanel: View {
             content()
         }
         .padding(2)
-        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.20 : 0.12))
+        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.14 : 0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.16 : 0.14), lineWidth: 1)
+                .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.10 : 0.08), lineWidth: 0.6)
         }
     }
 
@@ -1047,11 +1047,11 @@ private struct FileManagerInfoSheet: View {
                 infoRow(L("完整路径", "Full Path"), item.url.path, selectable: true)
                 infoRow(L("所在目录", "Parent"), item.url.deletingLastPathComponent().path, selectable: true)
             }
-            .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.18 : 0.30))
+            .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.12 : 0.18))
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.26 : 0.20), lineWidth: 1)
+                    .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.14 : 0.10), lineWidth: 0.6)
             }
 
             HStack(spacing: 8) {

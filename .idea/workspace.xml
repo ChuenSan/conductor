@@ -4,22 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f98e82ac-6f30-47b3-8f0e-142ad41a4e34" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.trellis/spec/frontend/component-guidelines.md" beforeDir="false" afterPath="$PROJECT_DIR$/.trellis/spec/frontend/component-guidelines.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.trellis/spec/guides/high-performance-terminal-roadmap.md" beforeDir="false" afterPath="$PROJECT_DIR$/.trellis/spec/guides/high-performance-terminal-roadmap.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/App/ConductorApp.swift" beforeDir="false" afterPath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/App/ConductorApp.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/Terminal/GhosttyAppRuntime.swift" beforeDir="false" afterPath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/Terminal/GhosttyAppRuntime.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/Terminal/TerminalSurfaceRepresentable.swift" beforeDir="false" afterPath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/Terminal/TerminalSurfaceRepresentable.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorContextSearchControls.swift" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorDesign.swift" beforeDir="false" afterPath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorDesign.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorDocumentWorkspaceView.swift" beforeDir="false" afterPath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorDocumentWorkspaceView.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorFileWorkspaceView.swift" beforeDir="false" afterPath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorFileWorkspaceView.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorNativePreviewWorkspaceView.swift" beforeDir="false" afterPath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorNativePreviewWorkspaceView.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorRootView.swift" beforeDir="false" afterPath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorRootView.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorWindowModel.swift" beforeDir="false" afterPath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/ConductorWindowModel.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/FileManagerPanel.swift" beforeDir="false" afterPath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/FileManagerPanel.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/SplitNodeView.swift" beforeDir="false" afterPath="$PROJECT_DIR$/Apps/Conductor/Sources/Conductor/UI/SplitNodeView.swift" afterDir="false" />
-    </list>
+    <list default="true" id="f98e82ac-6f30-47b3-8f0e-142ad41a4e34" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -71,6 +56,14 @@
     &quot;settings.editor.selected.configurable&quot;: &quot;preferences.lookFeel&quot;
   }
 }</component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-30f59d01ecdd-1e3ef52c3f72-intellij.indexing.shared.core-IU-262.6228.19" />
+        <option value="bundled-js-predefined-d6986cc7102b-6f3a0af6a84c-JavaScript-IU-262.6228.19" />
+      </set>
+    </attachedChunks>
+  </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
       <changelist id="f98e82ac-6f30-47b3-8f0e-142ad41a4e34" name="Changes" comment="" />

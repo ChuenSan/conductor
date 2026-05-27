@@ -18,7 +18,7 @@ struct ProviderSidebarListView: View {
         Group {
             if scrollsVertically {
                 ScrollView {
-                    providerRows(style: style, lazy: true)
+                    providerRows(style: style, lazy: false)
                 }
                 .scrollIndicators(.visible)
             } else {
@@ -27,10 +27,10 @@ struct ProviderSidebarListView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: ProviderSettingsMetrics.sidebarCornerRadius, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.32 : 0.44)))
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.22 : 0.30)))
         .overlay(
             RoundedRectangle(cornerRadius: ProviderSettingsMetrics.sidebarCornerRadius, style: .continuous)
-                .stroke(style.stroke.opacity(0.30), lineWidth: 0.8))
+                .stroke(style.stroke.opacity(0.18), lineWidth: 0.6))
         .clipShape(RoundedRectangle(cornerRadius: ProviderSettingsMetrics.sidebarCornerRadius, style: .continuous))
         .frame(minWidth: ProviderSettingsMetrics.sidebarWidth, maxWidth: ProviderSettingsMetrics.sidebarWidth)
     }
@@ -67,16 +67,16 @@ struct ProviderSidebarListView: View {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(
                             isSelected
-                                ? style.emphasis.opacity(style.usesDarkChrome ? 0.18 : 0.10)
+                                ? style.emphasis.opacity(style.usesDarkChrome ? 0.12 : 0.07)
                                 : Color.clear)
                         .padding(.horizontal, 4))
                 .overlay {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .stroke(
                             isSelected
-                                ? style.emphasis.opacity(style.usesDarkChrome ? 0.32 : 0.22)
+                                ? style.emphasis.opacity(style.usesDarkChrome ? 0.18 : 0.12)
                                 : Color.clear,
-                            lineWidth: 0.8)
+                            lineWidth: 0.6)
                         .padding(.horizontal, 4)
                 }
                 .contentShape(Rectangle())

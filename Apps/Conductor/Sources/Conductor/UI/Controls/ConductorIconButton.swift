@@ -139,13 +139,13 @@ struct ConductorIconButton: View {
         switch variant {
         case .toolbar:
             if theme.usesDarkChrome {
-                return Color.white.opacity(state.isActive ? 0.060 : (hovering ? 0.040 : 0.008))
+                return Color.white.opacity(state.isActive ? 0.044 : (hovering ? 0.028 : 0.004))
             }
-            return state.isActive ? theme.shellSelectedFill.opacity(0.70) : (hovering ? theme.shellHoverFill.opacity(0.66) : theme.shellControlFill.opacity(0.48))
+            return state.isActive ? theme.shellSelectedFill.opacity(0.52) : (hovering ? theme.shellHoverFill.opacity(0.42) : theme.shellControlFill.opacity(0.28))
         case .sidebarDock:
-            return hovering && state.isEnabled ? theme.shellHoverFill.opacity(0.78) : theme.shellControlFill.opacity(0.34)
+            return hovering && state.isEnabled ? theme.shellHoverFill.opacity(0.52) : theme.shellControlFill.opacity(0.20)
         case .sidebarRail:
-            return state.isActive ? theme.shellSelectedFill : (hovering ? theme.shellHoverFill : Color.clear)
+            return state.isActive ? theme.shellSelectedFill.opacity(0.66) : (hovering ? theme.shellHoverFill.opacity(0.56) : Color.clear)
         case .settingsIcon:
             return hovering && state.isEnabled ? theme.floatingHoverFill : theme.floatingControlFill
         case .fileManagerPanel:
@@ -157,9 +157,9 @@ struct ConductorIconButton: View {
         switch variant {
         case .toolbar:
             if theme.usesDarkChrome {
-                return Color.white.opacity(state.isActive ? 0.105 : (hovering ? 0.075 : 0.034))
+                return Color.white.opacity(state.isActive ? 0.070 : (hovering ? 0.050 : 0.020))
             }
-            return theme.shellStroke.opacity(state.isActive ? 0.58 : (hovering ? 0.42 : 0.26))
+            return theme.shellStroke.opacity(state.isActive ? 0.38 : (hovering ? 0.28 : 0.16))
         case .sidebarDock, .sidebarRail, .settingsIcon, .fileManagerPanel:
             return Color.clear
         }
@@ -168,7 +168,7 @@ struct ConductorIconButton: View {
     private var strokeWidth: CGFloat {
         switch variant {
         case .toolbar:
-            1
+            0.6
         case .sidebarDock, .sidebarRail, .settingsIcon, .fileManagerPanel:
             0
         }

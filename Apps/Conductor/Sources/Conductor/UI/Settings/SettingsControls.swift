@@ -377,7 +377,7 @@ struct GhosttyColorOverrideControl: View {
                 .frame(width: 22, height: 22)
                 .overlay {
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .stroke(theme.floatingStroke.opacity(0.75), lineWidth: 1)
+                        .stroke(theme.floatingStroke.opacity(0.42), lineWidth: 0.6)
                 }
 
             ColorPicker("", selection: Binding(
@@ -507,7 +507,7 @@ struct TerminalRendererSummary: View {
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.64), lineWidth: 1)
+                .stroke(theme.floatingStroke.opacity(0.34), lineWidth: 0.6)
         }
     }
 
@@ -677,7 +677,7 @@ struct SettingsStatusPill: View {
         .clipShape(Capsule())
         .overlay {
             Capsule()
-                .stroke(theme.floatingStroke.opacity(0.75), lineWidth: 1)
+                .stroke(theme.floatingStroke.opacity(0.38), lineWidth: 0.6)
         }
     }
 }
@@ -731,7 +731,7 @@ struct SettingsFormSurface<Content: View>: View {
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.24), lineWidth: 0.7)
+                .stroke(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.10 : 0.08), lineWidth: 0.5)
         }
     }
 }
@@ -777,8 +777,7 @@ struct SettingsControlRow<Trailing: View>: View {
         .frame(minHeight: 40)
         .background(hovering ? theme.floatingHoverFill.opacity(0.16) : Color.clear)
         .contentShape(Rectangle())
-        .conductorHover($hovering)
-        .animation(ConductorMotion.hover, value: hovering)
+        .conductorHover($hovering, animation: nil)
     }
 }
 
@@ -873,26 +872,62 @@ struct SettingsSegmentedPicker<Option: Hashable>: View {
     let selection: Option
     let title: (Option) -> String
     let action: (Option) -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private let controlWidth: CGFloat = 284
+    private let controlHeight: CGFloat = 22
+    private let cornerRadius: CGFloat = 5
 
     var body: some View {
-        Picker(
-            "",
-            selection: Binding(
-                get: { selection },
-                set: { value in
-                    guard value != selection else { return }
-                    action(value)
+        HStack(spacing: 0) {
+            ForEach(Array(options.enumerated()), id: \.element) { index, option in
+                segment(option)
+                if index < options.count - 1 {
+                    Rectangle()
+                        .fill(theme.floatingSeparator.opacity(0.36))
+                        .frame(width: 1, height: 14)
+                        .opacity(option == selection || options[index + 1] == selection ? 0 : 1)
                 }
-            )
-        ) {
-            ForEach(options, id: \.self) { option in
-                Text(title(option))
-                    .tag(option)
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .frame(width: 278)
+        .padding(1)
+        .frame(width: controlWidth, height: controlHeight)
+        .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.28 : 0.34))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.18 : 0.20), lineWidth: 0.6)
+        }
+    }
+
+    private func segment(_ option: Option) -> some View {
+        let selected = option == selection
+        return Button {
+            guard option != selection else { return }
+            action(option)
+        } label: {
+            Text(title(option))
+                .font(.conductorSystem(size: 11.5, weight: selected ? .semibold : .medium, scale: fontScale))
+                .foregroundStyle(selected ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            if selected {
+                RoundedRectangle(cornerRadius: cornerRadius - 1, style: .continuous)
+                    .fill(theme.floatingPanelBase.opacity(theme.usesDarkChrome ? 0.86 : 0.96))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: cornerRadius - 1, style: .continuous)
+                            .stroke(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.24), lineWidth: 0.6)
+                    }
+                    .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.10 : 0.055), radius: 2, y: 0.8)
+            }
+        }
     }
 }
 
@@ -980,26 +1015,10 @@ struct SettingsSidebarItem: View {
             .background(rowBackground)
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay(alignment: .leading) {
-                if selected {
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(theme.floatingEmphasis.opacity(0.74))
-                        .frame(width: 2.5, height: 16)
-                        .padding(.leading, 1)
-                }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .stroke(
-                        theme.floatingStroke.opacity(selected || hovering ? 0.26 : 0),
-                        lineWidth: 0.7)
-                    .allowsHitTesting(false)
-            }
         }
         .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
-        .conductorHover($hovering)
+        .conductorHover($hovering, animation: nil)
         .animation(ConductorMotion.selectionGlide, value: selected)
-        .animation(ConductorMotion.hover, value: hovering)
     }
 
     private var rowBackground: some View {
@@ -1034,23 +1053,16 @@ struct CommandShortcutGuide: View {
 
     @ViewBuilder
     var body: some View {
-        let guide = ScrollView {
-            LazyVStack(alignment: .leading, spacing: 5) {
-                ForEach(rows) { row in
-                    if row.showsSectionTitle {
-                        CommandShortcutSectionDivider(title: row.item.section, isFirst: row.isFirst)
-                    }
-                    CommandShortcutGuideRow(
-                        item: row.item,
-                        style: style,
-                        editable: editable,
-                        isRecording: recordingCommand == row.item.command,
-                        onRecord: { onRecord(row.item.command) },
-                        onReset: { onReset(row.item.command) })
-                }
-            }
-            .padding(.vertical, style == .plain ? 4 : 2)
-        }
+        let guide = NativeCommandShortcutGuide(
+            rows: rows,
+            style: style,
+            editable: editable,
+            recordingCommand: recordingCommand,
+            theme: theme,
+            fontScale: fontScale,
+            onRecord: onRecord,
+            onReset: onReset
+        )
         .scrollIndicators(.visible)
         .frame(height: height)
 
@@ -1061,7 +1073,7 @@ struct CommandShortcutGuide: View {
                 .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(theme.floatingStroke, lineWidth: 1)
+                        .stroke(theme.floatingStroke.opacity(0.32), lineWidth: 0.7)
                 }
         case .plain:
             guide
@@ -1077,6 +1089,317 @@ struct CommandShortcutGuide: View {
                         .frame(height: 1)
                 }
         }
+    }
+}
+
+private struct NativeCommandShortcutGuide: NSViewRepresentable {
+    let rows: [CommandShortcutGuideRowModel]
+    let style: CommandShortcutGuideStyle
+    let editable: Bool
+    let recordingCommand: ConductorShellCommand?
+    let theme: TerminalTheme
+    let fontScale: AppearanceFontScale
+    let onRecord: (ConductorShellCommand) -> Void
+    let onReset: (ConductorShellCommand) -> Void
+
+    func makeNSView(context: Context) -> NativeCommandShortcutGuideView {
+        NativeCommandShortcutGuideView()
+    }
+
+    func updateNSView(_ view: NativeCommandShortcutGuideView, context: Context) {
+        view.update(
+            rows: rows,
+            style: style,
+            editable: editable,
+            recordingCommand: recordingCommand,
+            theme: theme,
+            fontScale: fontScale,
+            onRecord: onRecord,
+            onReset: onReset
+        )
+    }
+}
+
+private final class NativeCommandShortcutGuideView: NSView, NSTableViewDataSource, NSTableViewDelegate {
+    private let scrollView = NSScrollView()
+    private let tableView = NSTableView()
+    private let columnIdentifier = NSUserInterfaceItemIdentifier("command-shortcut-row")
+    private var rows: [CommandShortcutGuideRowModel] = []
+    private var style: CommandShortcutGuideStyle = .plain
+    private var editable = false
+    private var recordingCommand: ConductorShellCommand?
+    private var theme: TerminalTheme = .graphite
+    private var fontScale: AppearanceFontScale = .standard
+    private var onRecord: ((ConductorShellCommand) -> Void)?
+    private var onReset: ((ConductorShellCommand) -> Void)?
+
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasHorizontalScroller = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        tableView.headerView = nil
+        tableView.backgroundColor = .clear
+        tableView.selectionHighlightStyle = .none
+        tableView.focusRingType = .none
+        tableView.allowsColumnSelection = false
+        tableView.allowsMultipleSelection = false
+        tableView.allowsEmptySelection = true
+        tableView.intercellSpacing = NSSize(width: 0, height: 0)
+        tableView.dataSource = self
+        tableView.delegate = self
+        let column = NSTableColumn(identifier: columnIdentifier)
+        column.resizingMask = .autoresizingMask
+        tableView.addTableColumn(column)
+        scrollView.documentView = tableView
+
+        addSubview(scrollView)
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    func update(
+        rows: [CommandShortcutGuideRowModel],
+        style: CommandShortcutGuideStyle,
+        editable: Bool,
+        recordingCommand: ConductorShellCommand?,
+        theme: TerminalTheme,
+        fontScale: AppearanceFontScale,
+        onRecord: @escaping (ConductorShellCommand) -> Void,
+        onReset: @escaping (ConductorShellCommand) -> Void
+    ) {
+        self.rows = rows
+        self.style = style
+        self.editable = editable
+        self.recordingCommand = recordingCommand
+        self.theme = theme
+        self.fontScale = fontScale
+        self.onRecord = onRecord
+        self.onReset = onReset
+        tableView.reloadData()
+    }
+
+    override func layout() {
+        super.layout()
+        tableView.tableColumns.first?.width = scrollView.contentView.bounds.width
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        rows.count
+    }
+
+    func tableView(_ tableView: NSTableView, heightOfRow rowIndex: Int) -> CGFloat {
+        guard rows.indices.contains(rowIndex) else { return 30 }
+        return rows[rowIndex].showsSectionTitle ? 47 : 30
+    }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        NativeCommandShortcutTableRowView()
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row rowIndex: Int) -> NSView? {
+        guard rows.indices.contains(rowIndex) else { return nil }
+        let row = rows[rowIndex]
+        let view = tableView.makeView(withIdentifier: columnIdentifier, owner: self) as? NativeCommandShortcutGuideRowView ?? NativeCommandShortcutGuideRowView()
+        view.identifier = columnIdentifier
+        view.update(
+            row: row,
+            style: style,
+            editable: editable,
+            isRecording: recordingCommand == row.item.command,
+            theme: theme,
+            fontScale: fontScale,
+            onRecord: { [weak self] in self?.onRecord?(row.item.command) },
+            onReset: { [weak self] in self?.onReset?(row.item.command) }
+        )
+        return view
+    }
+}
+
+private final class NativeCommandShortcutTableRowView: NSTableRowView {
+    override func drawSelection(in dirtyRect: NSRect) {}
+    override func drawBackground(in dirtyRect: NSRect) {}
+}
+
+private final class NativeCommandShortcutGuideRowView: NSTableCellView {
+    private var row: CommandShortcutGuideRowModel?
+    private var style: CommandShortcutGuideStyle = .plain
+    private var editable = false
+    private var isRecording = false
+    private var theme: TerminalTheme = .graphite
+    private var fontScale: AppearanceFontScale = .standard
+    private var onRecord: (() -> Void)?
+    private var onReset: (() -> Void)?
+    private let recordButton = NSButton()
+    private let resetButton = NSButton()
+
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        wantsLayer = true
+        setupButton(recordButton, action: #selector(recordShortcut))
+        setupButton(resetButton, action: #selector(resetShortcut))
+        addSubview(recordButton)
+        addSubview(resetButton)
+    }
+
+    private func setupButton(_ button: NSButton, action: Selector) {
+        button.bezelStyle = .texturedRounded
+        button.isBordered = true
+        button.controlSize = .small
+        button.font = .systemFont(ofSize: 9.2, weight: .semibold)
+        button.target = self
+        button.action = action
+        button.imagePosition = .imageLeading
+    }
+
+    func update(
+        row: CommandShortcutGuideRowModel,
+        style: CommandShortcutGuideStyle,
+        editable: Bool,
+        isRecording: Bool,
+        theme: TerminalTheme,
+        fontScale: AppearanceFontScale,
+        onRecord: @escaping () -> Void,
+        onReset: @escaping () -> Void
+    ) {
+        self.row = row
+        self.style = style
+        self.editable = editable
+        self.isRecording = isRecording
+        self.theme = theme
+        self.fontScale = fontScale
+        self.onRecord = onRecord
+        self.onReset = onReset
+
+        recordButton.title = isRecording ? L("按键", "Press") : L("更改", "Change")
+        recordButton.image = NSImage(systemSymbolName: isRecording ? "record.circle.fill" : "keyboard", accessibilityDescription: nil)
+        recordButton.isHidden = !editable
+        resetButton.title = L("默认", "Default")
+        resetButton.image = NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: nil)
+        resetButton.isHidden = !editable
+        needsLayout = true
+        needsDisplay = true
+    }
+
+    override func layout() {
+        super.layout()
+        let contentY = contentOriginY
+        let buttonWidth: CGFloat = 58
+        let buttonHeight: CGFloat = 21
+        let gap: CGFloat = 6
+        resetButton.frame = NSRect(x: bounds.maxX - buttonWidth - 8, y: contentY + 4.5, width: buttonWidth, height: buttonHeight)
+        recordButton.frame = NSRect(x: resetButton.frame.minX - buttonWidth - gap, y: contentY + 4.5, width: buttonWidth, height: buttonHeight)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let row else { return }
+        drawSectionHeader(row)
+        drawRowContent(row)
+        if style == .plain {
+            NSColor(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16)).setFill()
+            NSRect(x: 30, y: bounds.maxY - 1, width: max(0, bounds.width - 30), height: 1).fill()
+        }
+    }
+
+    private var contentOriginY: CGFloat {
+        row?.showsSectionTitle == true ? 17 : 0
+    }
+
+    private func drawSectionHeader(_ row: CommandShortcutGuideRowModel) {
+        guard row.showsSectionTitle else { return }
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: fontScale.size(9.2), weight: .semibold),
+            .foregroundColor: NSColor(ConductorDesign.tertiaryText)
+        ]
+        let title = row.item.section.uppercased()
+        title.draw(at: NSPoint(x: 4, y: row.isFirst ? 1 : 7), withAttributes: attrs)
+        NSColor(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.38 : 0.30)).setFill()
+        NSRect(x: 92, y: row.isFirst ? 8 : 14, width: max(0, bounds.width - 100), height: 1).fill()
+    }
+
+    private func drawRowContent(_ row: CommandShortcutGuideRowModel) {
+        let y = contentOriginY
+        let contentHeight: CGFloat = 30
+        let iconRect = NSRect(x: 6, y: y + 6, width: 18, height: 18)
+        let icon = NSImage(systemSymbolName: row.item.systemImage, accessibilityDescription: nil)
+        icon?.isTemplate = true
+        NSColor(ConductorDesign.secondaryText).set()
+        icon?.draw(in: iconRect.insetBy(dx: 3.5, dy: 3.5))
+
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: fontScale.size(11), weight: .semibold),
+            .foregroundColor: NSColor(ConductorDesign.primaryText)
+        ]
+        let trailingWidth: CGFloat = editable ? 205 : 76
+        let titleRect = NSRect(x: 32, y: y + 7, width: max(0, bounds.width - trailingWidth - 40), height: 16)
+        (row.item.title as NSString).draw(in: titleRect, withAttributes: titleAttrs)
+
+        let shortcutAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: fontScale.size(9.5), weight: .semibold),
+            .foregroundColor: NSColor(isRecording ? theme.floatingEmphasis : ConductorDesign.secondaryText)
+        ]
+        let shortcut = row.item.shortcut as NSString
+        let shortcutSize = shortcut.size(withAttributes: shortcutAttrs)
+        let shortcutWidth = min(max(shortcutSize.width + 12, 44), 92)
+        let shortcutX = editable ? recordButton.frame.minX - shortcutWidth - 8 : bounds.maxX - shortcutWidth - 8
+        let shortcutRect = NSRect(x: shortcutX, y: y + 7, width: shortcutWidth, height: style == .plain ? 16 : 17)
+        NSColor(shortcutBackground).setFill()
+        NSBezierPath(roundedRect: shortcutRect, xRadius: style == .plain ? 4 : 8, yRadius: style == .plain ? 4 : 8).fill()
+        shortcut.draw(
+            at: NSPoint(x: shortcutRect.midX - shortcutSize.width / 2, y: shortcutRect.midY - shortcutSize.height / 2),
+            withAttributes: shortcutAttrs
+        )
+
+        _ = contentHeight
+    }
+
+    private var shortcutBackground: Color {
+        switch style {
+        case .card:
+            return theme.floatingSelectedFill
+        case .plain:
+            return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.46 : 0.54)
+        }
+    }
+
+    @objc private func recordShortcut() {
+        onRecord?()
+    }
+
+    @objc private func resetShortcut() {
+        onReset?()
     }
 }
 
@@ -1308,8 +1631,7 @@ struct ThemeOptionRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .conductorHover($hovering)
-        .animation(ConductorMotion.hover, value: hovering)
+        .conductorHover($hovering, animation: nil)
     }
 
     private var rowFill: Color {
@@ -1317,7 +1639,7 @@ struct ThemeOptionRow: View {
             return activeTheme.floatingSelectedFill
         }
         if hovering {
-            return activeTheme.floatingHoverFill.opacity(0.72)
+            return activeTheme.floatingHoverFill.opacity(0.44)
         }
         return Color.clear
     }
@@ -1402,7 +1724,7 @@ struct ThemePreviewArtwork: View {
         .clipShape(RoundedRectangle(cornerRadius: large ? 13 : 9, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: large ? 13 : 9, style: .continuous)
-                .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.22 : 0.42), lineWidth: 1)
+                .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.12 : 0.24), lineWidth: 0.6)
         }
     }
 }
@@ -1443,12 +1765,12 @@ struct ThemePreviewMotif: View {
             case .glass, .fluid, .frost:
                 ZStack {
                     Circle()
-                        .fill(theme.accent.opacity(0.16))
+                        .fill(theme.accent.opacity(0.08))
                         .frame(width: proxy.size.width * 0.42)
-                        .blur(radius: 22)
+                        .blur(radius: 12)
                         .offset(x: proxy.size.width * 0.28, y: -proxy.size.height * 0.18)
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.18 : 0.34), lineWidth: 1)
+                        .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.10 : 0.20), lineWidth: 0.6)
                         .frame(width: proxy.size.width * 0.42, height: proxy.size.height * 0.44)
                         .offset(x: proxy.size.width * 0.22, y: proxy.size.height * 0.18)
                 }

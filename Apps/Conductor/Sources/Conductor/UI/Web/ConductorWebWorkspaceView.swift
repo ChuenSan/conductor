@@ -394,7 +394,7 @@ struct ConductorWebWorkspaceView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(startAddressFocused ? theme.floatingEmphasis.opacity(0.50) : theme.shellStroke.opacity(0.24), lineWidth: 1)
         }
-        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.18 : 0.06), radius: 16, y: 8)
+        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.10 : 0.04), radius: 10, y: 4)
     }
 
     private func recentWebTabs(tab: WorkspaceWebTabState) -> some View {
@@ -582,9 +582,9 @@ struct ConductorWebWorkspaceView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(theme.shellStroke.opacity(0.26), lineWidth: 1)
+                .stroke(theme.shellStroke.opacity(0.16), lineWidth: 0.6)
         }
-        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.26 : 0.12), radius: 28, y: 14)
+        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.08 : 0.035), radius: 8, y: 3)
     }
 
     private func errorAddressField(_ tab: WorkspaceWebTabState) -> some View {
@@ -683,9 +683,9 @@ struct ConductorWebWorkspaceView: View {
         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(theme.shellStroke.opacity(0.30), lineWidth: 1)
+                .stroke(theme.shellStroke.opacity(0.18), lineWidth: 0.6)
         }
-        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.18 : 0.10), radius: 10, y: 5)
+        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.06 : 0.025), radius: 4, y: 2)
     }
 
     private func quickAction(

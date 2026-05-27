@@ -583,44 +583,17 @@ private struct SidebarRailSurface: View {
         let shape = SidebarRailShape()
         
         ZStack {
-            if isCollapsed {
-                shape
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.08 : 0.05),
-                                Color.clear,
-                                theme.accent.opacity(theme.usesDarkChrome ? 0.05 : 0.02)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .blur(radius: 6)
-                    .offset(x: 2)
-            }
-
             shape
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            theme.shellPanelBackground,
-                            theme.shellPanelBackground.opacity(0.95),
-                            theme.shellPanelStrong.opacity(0.98)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(theme.shellPanelBackground)
 
             if isCollapsed {
                 shape
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(theme.usesDarkChrome ? 0.04 : 0.08),
+                                Color.white.opacity(theme.usesDarkChrome ? 0.018 : 0.05),
                                 Color.clear,
-                                Color.black.opacity(theme.usesDarkChrome ? 0.04 : 0.0)
+                                Color.black.opacity(theme.usesDarkChrome ? 0.018 : 0.0)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
@@ -634,9 +607,9 @@ private struct SidebarRailSurface: View {
                 .strokeBorder(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(theme.usesDarkChrome ? 0.12 : 0.36),
-                            theme.shellStroke.opacity(theme.usesDarkChrome ? 0.18 : 0.10),
-                            Color.black.opacity(0.12)
+                            Color.white.opacity(theme.usesDarkChrome ? 0.07 : 0.24),
+                            theme.shellStroke.opacity(theme.usesDarkChrome ? 0.12 : 0.08),
+                            Color.black.opacity(theme.usesDarkChrome ? 0.06 : 0.03)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -778,7 +751,7 @@ struct WorkspaceWebTabDisplayModel: Identifiable, Equatable {
 
 enum WorkspaceChromeGlyph {
     static func systemName(selected: Bool) -> String {
-        selected ? "square.grid.2x2.fill" : "square.grid.2x2"
+        return selected ? "square.grid.2x2.fill" : "square.grid.2x2"
     }
 }
 
@@ -978,7 +951,6 @@ private struct SidebarRailButton: View {
     let action: () -> Void
 
     @State private var hovering = false
-    @State private var pulseActive = false
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -988,89 +960,30 @@ private struct SidebarRailButton: View {
             action()
         }) {
             ZStack {
-                // Shared matched geometry background bubble for active selection (fluid liquid selection)
                 if selected {
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.28 : 0.18),
-                                    theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.08 : 0.04)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .fill(theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.18 : 0.11))
                         .matchedGeometryEffect(id: "rail-selection-bubble", in: namespace)
                 }
 
-                // Hover highlight overlay background
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(hovering ? theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.65 : 0.45) : Color.clear)
+                    .fill(hovering ? theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.44 : 0.30) : Color.clear)
                     .animation(ConductorMotion.hover, value: hovering)
 
-                // High-precision specular inner glow
-                if selected {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(theme.usesDarkChrome ? 0.12 : 0.22),
-                                    Color.clear
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .blendMode(.screen)
-                }
-
-                // Icon inside with creative styling & animations
                 Image(systemName: icon)
                     .font(.conductorSystem(size: 13, weight: selected ? .bold : .semibold, scale: fontScale))
                     .foregroundStyle(
                         selected ? theme.floatingEmphasis : (hovering ? theme.shellChromeText.opacity(0.92) : ConductorDesign.secondaryText)
                     )
-                    .scaleEffect(hovering ? 1.14 : 1.0)
-                    .rotationEffect(.degrees(hovering && !selected ? -4 : 0)) // Elegant tilt on hover
-                    .offset(y: hovering ? -0.5 : 0)
-                    .shadow(color: selected ? theme.floatingEmphasis.opacity(pulseActive ? 0.50 : 0.25) : Color.clear, radius: hovering ? 4 : 2)
+                    .scaleEffect(hovering ? 1.04 : 1.0)
                     .animation(ConductorMotion.hover, value: hovering)
             }
             .frame(width: 34, height: 34)
             .background {
-                // Glass-orb bounding ring
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(theme.usesDarkChrome ? 0.14 : 0.42),
-                                Color.white.opacity(theme.usesDarkChrome ? 0.03 : 0.10),
-                                theme.floatingEmphasis.opacity(selected ? 0.42 : 0.0)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: selected ? 1.0 : 0.7
-                    )
+                    .stroke(theme.shellStroke.opacity(selected ? 0.24 : 0.12), lineWidth: 0.6)
             }
             .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .shadow(
-                color: selected ? theme.floatingEmphasis.opacity(pulseActive ? 0.32 : 0.16) : Color.black.opacity(hovering ? 0.08 : 0.03),
-                radius: selected ? (pulseActive ? 8 : 4) : (hovering ? 4 : 2),
-                x: 0,
-                y: selected ? 2 : 1
-            )
-            .overlay(alignment: .leading) {
-                // Elegant fluid liquid edge indicator on the left side
-                if selected {
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(theme.floatingEmphasis)
-                        .frame(width: 3, height: 14)
-                        .matchedGeometryEffect(id: "rail-selection-edge-indicator", in: namespace)
-                        .padding(.leading, 1.5)
-                }
-            }
         }
         .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.94, pressedOpacity: 0.95))
         .disabled(disabled)
@@ -1078,22 +991,6 @@ private struct SidebarRailButton: View {
         .macNativeTooltip(help)
         .accessibilityLabel(help)
         .conductorHover($hovering)
-        .onAppear {
-            if selected {
-                withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
-                    pulseActive = true
-                }
-            }
-        }
-        .onChange(of: selected) { _, newValue in
-            if newValue {
-                withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
-                    pulseActive = true
-                }
-            } else {
-                pulseActive = false
-            }
-        }
     }
 }
 
@@ -1370,17 +1267,16 @@ private struct SidebarActionRow: View {
             .foregroundStyle(theme.shellChromeTextMuted.opacity(0.86))
             .padding(.horizontal, showsTitle ? 8 : 0)
             .frame(width: showsTitle ? nil : 34, height: showsTitle ? 28 : 34)
-            .background(hovering ? theme.shellHoverFill : Color.clear)
+            .background(hovering ? theme.shellHoverFill.opacity(0.56) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: showsTitle ? ConductorTokens.Radius.row : 11))
             .contentShape(RoundedRectangle(cornerRadius: showsTitle ? ConductorTokens.Radius.row : 11))
         }
         .buttonStyle(ConductorPressButtonStyle())
         .disabled(disabled)
         .opacity(disabled ? 0.38 : 1)
-        .scaleEffect(hovering && !disabled ? (showsTitle ? 1.006 : 1.032) : 1)
+        .scaleEffect(hovering && !disabled && !showsTitle ? 1.018 : 1)
         .animation(ConductorMotion.micro, value: disabled)
-        .animation(ConductorMotion.hover, value: hovering)
-        .conductorHover($hovering)
+        .conductorHover($hovering, animation: nil)
         .macNativeTooltip(help ?? title, enabled: !showsTitle)
     }
 }

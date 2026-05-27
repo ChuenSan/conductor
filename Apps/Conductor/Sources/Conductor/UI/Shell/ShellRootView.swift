@@ -166,7 +166,7 @@ struct ShellRootView: View {
             .frame(maxHeight: .infinity)
             .offset(x: fileManagerTrayVisible ? 0 : fileManagerTargetWidth)
             .clipped()
-            .shadow(color: Color.black.opacity(model.theme.usesDarkChrome ? 0.22 : 0.14), radius: 18, x: -8, y: 0)
+            .shadow(color: Color.black.opacity(model.theme.usesDarkChrome ? 0.14 : 0.08), radius: 12, x: -4, y: 0)
             .animation(fileManagerTrayAnimation, value: fileManagerTrayVisible)
         }
     }
@@ -324,9 +324,9 @@ private struct TerminalSearchBar: View {
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
-                .stroke(theme.floatingStroke, lineWidth: 1)
+                .stroke(theme.floatingStroke.opacity(0.42), lineWidth: 0.6)
         }
-        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.18 : 0.10), radius: 14, x: 0, y: 8)
+        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.10 : 0.05), radius: 8, x: 0, y: 4)
         .onAppear {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(30))
@@ -1250,29 +1250,14 @@ private struct CommandButton: View {
             .background(rowBackground)
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .stroke(selected ? theme.floatingSelectedStroke.opacity(0.55) : Color.clear, lineWidth: 0.8)
-            }
-            .overlay(alignment: .leading) {
-                if selected {
-                    Capsule()
-                        .fill(theme.floatingEmphasis.opacity(0.70))
-                        .frame(width: 2.5, height: 14)
-                        .padding(.leading, 3)
-                }
-            }
         }
         .buttonStyle(.plain)
         .disabled(command.disabled)
         .opacity(command.disabled ? 0.62 : 1)
         .animation(ConductorMotion.selectionGlide, value: selected)
-        .animation(ConductorMotion.hover, value: hovering)
         .onHover { value in
             guard hovering != value else { return }
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
+            hovering = value
             if value {
                 onHover()
             }
@@ -1283,10 +1268,10 @@ private struct CommandButton: View {
         let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
         return ZStack {
             shape
-                .fill(hovering ? theme.floatingHoverFill.opacity(0.82) : theme.floatingControlFill.opacity(0.28))
+                .fill(hovering ? theme.floatingHoverFill.opacity(0.54) : Color.clear)
             if selected {
                 shape
-                    .fill(theme.floatingSelectedFill.opacity(0.82))
+                    .fill(theme.floatingSelectedFill.opacity(0.66))
                     .matchedGeometryEffect(id: "command-selection", in: selectionNamespace)
             }
         }
@@ -1507,7 +1492,7 @@ private struct WorkspaceOverviewPanel: View {
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup)
-                .stroke(theme.floatingStroke, lineWidth: 1)
+                .stroke(theme.floatingStroke.opacity(0.42), lineWidth: 0.6)
         }
     }
 
@@ -1673,16 +1658,13 @@ private struct WorkspaceOverviewCard: View {
         .accessibilityAddTraits(.isButton)
         .onHover { value in
             guard hovering != value else { return }
-            ConductorMotion.perform(ConductorMotion.hover) {
-                hovering = value
-            }
+            hovering = value
             if value {
                 onHover()
             }
         }
         .animation(ConductorMotion.standard, value: selected)
         .animation(ConductorMotion.feedback, value: highlighted)
-        .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.attention, value: unreadCount)
     }
 

@@ -302,6 +302,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var activeTerminalContextMenuController: TerminalContextMenuController?
     private var selectedWorkspaceID: WorkspaceID
     private var skipPreviousWorkspaceSyncForNextAssignment = false
+    private var suppressCrossWorkspaceTerminalFocusUntil = Date.distantPast
     private var panelCoordinator = PanelCoordinator()
     private var appearanceCoordinator = AppearanceCoordinator(appearance: AppearancePreferences())
     private var fileWorkspaceCoordinator = FileWorkspaceCoordinator()
@@ -2053,6 +2054,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         defer { ConductorSignpost.end("focus-terminal", signpost) }
         if workspace.paneID(containing: terminalID) == nil,
            let workspaceID = workspaces.first(where: { $0.paneID(containing: terminalID) != nil })?.id {
+            guard !shouldSuppressCrossWorkspaceTerminalFocus(to: workspaceID, terminalID: terminalID) else {
+                return
+            }
             activateWorkspace(workspaceID, source: .terminalFocus)
         }
         guard let paneID = workspace.paneID(containing: terminalID) else { return }
@@ -2443,6 +2447,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
         closeTerminalSearch()
         if target.id != workspace.id {
+            if source != .terminalFocus {
+                suppressCrossWorkspaceTerminalFocusUntil = Date().addingTimeInterval(0.35)
+            }
             selectedWorkspaceID = target.id
             skipPreviousWorkspaceSyncForNextAssignment = !syncPreviousWorkspace
             workspace = target
@@ -2460,6 +2467,22 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             terminalID: terminalID,
             committed: true,
             reason: target.id == previousWorkspaceID ? "same-workspace" : "workspace-changed"
+        )
+        return true
+    }
+
+    private func shouldSuppressCrossWorkspaceTerminalFocus(to workspaceID: WorkspaceID, terminalID: TerminalID) -> Bool {
+        guard workspaceID != workspace.id,
+              Date() < suppressCrossWorkspaceTerminalFocusUntil else {
+            return false
+        }
+        ConductorDiagnostics.record(
+            "terminal-focus-suppressed-after-navigation",
+            fields: [
+                "currentWorkspace": workspace.id.description,
+                "requestedWorkspace": workspaceID.description,
+                "terminal": terminalID.description
+            ]
         )
         return true
     }

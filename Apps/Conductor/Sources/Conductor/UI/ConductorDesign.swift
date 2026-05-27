@@ -121,7 +121,7 @@ enum ConductorTokens {
         static let glassTintOnDark = Color.white.opacity(0.035)
         static let glassStroke = Color.white.opacity(0.60)
         static let glassStrokeSubtle = Color.white.opacity(0.34)
-        static let glassShadow = Color.black.opacity(0.105)
+        static let glassShadow = Color.black.opacity(0.075)
         static let terminalRaised = Color(red: 0.024, green: 0.035, blue: 0.052)
         static let terminalChrome = Color(red: 0.047, green: 0.071, blue: 0.106)
         static let terminalChromeSelected = Color.clear
@@ -201,15 +201,15 @@ enum ConductorTokens {
     }
 
     enum Shadow {
-        static let panelOpacity = 0.105
-        static let panelRadius: CGFloat = 24
-        static let panelY: CGFloat = 10
-        static let controlOpacity = 0.035
-        static let controlRadius: CGFloat = 7
-        static let controlY: CGFloat = 2
-        static let selectedOpacity = 0.050
-        static let selectedRadius: CGFloat = 9
-        static let selectedY: CGFloat = 2
+        static let panelOpacity = 0.075
+        static let panelRadius: CGFloat = 16
+        static let panelY: CGFloat = 6
+        static let controlOpacity = 0.025
+        static let controlRadius: CGFloat = 5
+        static let controlY: CGFloat = 1
+        static let selectedOpacity = 0.035
+        static let selectedRadius: CGFloat = 6
+        static let selectedY: CGFloat = 1
     }
 }
 
@@ -283,7 +283,7 @@ enum ConductorGlassSurfaceStyle: Equatable {
         case .controlGroup, .terminalToolbar:
             ConductorDesign.shadow(ConductorTokens.Shadow.controlOpacity)
         case .card:
-            ConductorDesign.shadow(0.085)
+            ConductorDesign.shadow(0.055)
         case .sidebar, .settings, .palette, .panel:
             ConductorTokens.Palette.glassShadow
         }
@@ -294,7 +294,7 @@ enum ConductorGlassSurfaceStyle: Equatable {
         case .controlGroup, .terminalToolbar:
             ConductorTokens.Shadow.controlRadius
         case .card:
-            12
+            8
         case .sidebar, .settings, .palette, .panel:
             ConductorTokens.Shadow.panelRadius
         }
@@ -305,7 +305,7 @@ enum ConductorGlassSurfaceStyle: Equatable {
         case .controlGroup, .terminalToolbar:
             ConductorTokens.Shadow.controlY
         case .card:
-            7
+            4
         case .sidebar, .settings, .palette, .panel:
             ConductorTokens.Shadow.panelY
         }
@@ -1531,7 +1531,7 @@ struct ConductorPillGroup<Content: View>: View {
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup - 2, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup - 2, style: .continuous)
-                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.046) : theme.shellStroke.opacity(0.30), lineWidth: 1)
+                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.032) : theme.shellStroke.opacity(0.18), lineWidth: 0.6)
         }
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)

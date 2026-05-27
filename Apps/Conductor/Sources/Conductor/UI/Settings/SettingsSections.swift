@@ -1223,7 +1223,7 @@ extension AppearanceSettingsPanel {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.42), lineWidth: 1)
+                .stroke(theme.floatingStroke.opacity(0.30), lineWidth: 0.6)
         }
         .background {
             ConductorKeyboardShortcutBridge(autofocus: true, forceAutofocus: true) { event in
@@ -1364,7 +1364,7 @@ struct TerminalSettingsSectionRail: View {
         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.42), lineWidth: 0.8)
+                .stroke(theme.floatingStroke.opacity(0.30), lineWidth: 0.6)
         }
     }
 }
@@ -1545,7 +1545,7 @@ private struct SettingsOverviewPath: View {
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.24), lineWidth: 0.7)
+                .stroke(theme.floatingStroke.opacity(0.14), lineWidth: 0.5)
         }
     }
 }
@@ -1595,8 +1595,7 @@ private struct SettingsOverviewRouteCard: View {
             .background(cardFill)
         }
         .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.992, pressedOpacity: 0.96))
-        .conductorHover($hovering)
-        .animation(ConductorMotion.hover, value: hovering)
+        .conductorHover($hovering, animation: nil)
         .accessibilityLabel(route.section.title)
         .accessibilityValue(route.detail)
     }
@@ -1604,13 +1603,7 @@ private struct SettingsOverviewRouteCard: View {
     private var cardFill: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(hovering
-                ? theme.floatingHoverFill.opacity(theme.usesDarkChrome ? 0.16 : 0.22)
+                ? theme.floatingHoverFill.opacity(theme.usesDarkChrome ? 0.10 : 0.14)
                 : Color.clear)
-            .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(theme.floatingEmphasis.opacity(hovering ? 0.34 : 0))
-                    .frame(width: 2)
-                    .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-            }
     }
 }

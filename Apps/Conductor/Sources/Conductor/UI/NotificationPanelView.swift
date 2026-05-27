@@ -445,11 +445,11 @@ private struct NotificationRowView: View {
                         .accessibilityHidden(true)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(theme.floatingControlFill.opacity(0.54))
+                                .fill(theme.floatingControlFill.opacity(0.34))
                         )
                         .overlay {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(theme.floatingStroke.opacity(0.56), lineWidth: 0.8)
+                                .stroke(theme.floatingStroke.opacity(0.30), lineWidth: 0.6)
                         }
                         .overlay(alignment: .topTrailing) {
                             if row.unread {
@@ -479,7 +479,7 @@ private struct NotificationRowView: View {
                     .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(hovering ? ConductorDesign.secondaryText : ConductorDesign.tertiaryText)
                     .frame(width: 18, height: 18)
-                    .background(hovering ? theme.floatingControlFill.opacity(0.70) : Color.clear)
+                    .background(hovering ? theme.floatingControlFill.opacity(0.42) : Color.clear)
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             }
             .buttonStyle(ConductorPressButtonStyle())
@@ -494,21 +494,12 @@ private struct NotificationRowView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(
-                    row.unread ? theme.floatingSelectedStroke.opacity(0.58) : theme.floatingStroke.opacity(0.46),
-                    lineWidth: 0.8
+                    row.unread ? theme.floatingSelectedStroke.opacity(0.38) : theme.floatingStroke.opacity(0.20),
+                    lineWidth: 0.6
                 )
         }
-        .overlay(alignment: .leading) {
-            if row.unread {
-                Capsule()
-                    .fill(theme.floatingEmphasis.opacity(0.72))
-                    .frame(width: 2.5, height: 18)
-                    .padding(.leading, 3)
-            }
-        }
-        .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.attention, value: row.unread)
-        .conductorHover($hovering)
+        .conductorHover($hovering, animation: nil)
     }
 
     private var rowTitle: some View {

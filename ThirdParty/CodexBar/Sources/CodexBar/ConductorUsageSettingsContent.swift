@@ -82,7 +82,7 @@ private struct ConductorUsageSettingsLoadedContent: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(style.stroke.opacity(0.26), lineWidth: 0.8)
+                        .stroke(style.stroke.opacity(0.16), lineWidth: 0.6)
                 }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -125,19 +125,11 @@ private struct ConductorUsageSettingsLoadedContent: View {
                     .foregroundStyle(selection == tab ? style.primaryText : style.secondaryText)
                     .padding(.horizontal, 10)
                     .frame(height: 28)
-                    .background(selection == tab ? style.controlStrongFill.opacity(0.64) : style.controlFill.opacity(0.34))
+                    .background(selection == tab ? style.controlStrongFill.opacity(0.48) : style.controlFill.opacity(0.22))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(selection == tab ? style.emphasis.opacity(0.20) : Color.clear, lineWidth: 0.8)
-                    }
-                    .overlay(alignment: .leading) {
-                        if selection == tab {
-                            Capsule()
-                                .fill(style.emphasis.opacity(0.42))
-                                .frame(width: 3, height: 14)
-                                .padding(.leading, 3)
-                        }
+                            .stroke(selection == tab ? style.emphasis.opacity(0.12) : Color.clear, lineWidth: 0.6)
                     }
                 }
                 .buttonStyle(.plain)

@@ -419,10 +419,9 @@ struct FileManagerRowView: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(rowStrokeColor, lineWidth: isSelected || isDropTargeted ? 1 : 0)
+                .stroke(rowStrokeColor, lineWidth: isSelected || isDropTargeted ? 0.6 : 0)
         }
-        .conductorHover($hovering)
-        .animation(ConductorMotion.hover, value: hovering)
+        .conductorHover($hovering, animation: nil)
         .animation(ConductorMotion.selection, value: isSelected)
         .animation(ConductorMotion.micro, value: isExpanded)
         .animation(ConductorMotion.micro, value: isDropTargeted)
