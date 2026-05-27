@@ -329,7 +329,7 @@ private struct StableTerminalTabStrip: View {
     @State private var scrollTargetID: TerminalID?
     @State private var visualSelectedTabID: TerminalID?
 
-    private let tabSpacing: CGFloat = 4
+    private let tabSpacing: CGFloat = 3
     private let tabEdgePadding: CGFloat = 0
 
     private var tabIDs: [TerminalID] {
@@ -693,10 +693,10 @@ private struct TerminalTabButton: View {
     }
 
     private var tabFill: Color {
-        if theme.usesDarkChrome {
-            return hovering ? theme.shellHoverFill.opacity(0.88) : theme.shellControlFill.opacity(0.66)
+        if hovering {
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.36 : 0.18)
         }
-        return hovering ? theme.shellHoverFill.opacity(0.84) : theme.shellControlFill.opacity(0.58)
+        return Color.clear
     }
 
     private var selectedFill: Color {
@@ -708,9 +708,9 @@ private struct TerminalTabButton: View {
             return theme.floatingSelectedStroke.opacity(0.95)
         }
         if isSelected {
-            return theme.shellStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.56 : 0.42) : 0.34)
+            return theme.shellStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.45 : 0.28) : 0.22)
         }
-        return theme.shellStroke.opacity(hovering ? 0.34 : 0.18)
+        return theme.shellStroke.opacity(hovering ? 0.12 : 0.0)
     }
 
     private var terminalDetailLabel: String? {
@@ -779,6 +779,7 @@ private struct TerminalTabButton: View {
                         fontScaleID: fontScale.id
                     )
                     .equatable()
+                    .opacity(isSelected ? 1.0 : (hovering ? 0.90 : 0.65))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -825,6 +826,7 @@ private struct TerminalTabButton: View {
                     shape
                         .fill(selectedFill)
                         .matchedGeometryEffect(id: "terminal-tab-selection", in: selectionNamespace)
+                        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.12 : 0.03), radius: 2.2, y: 1.0)
                 }
             }
         }

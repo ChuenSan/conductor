@@ -165,8 +165,8 @@ enum ConductorTokens {
         static let shellGap: CGFloat = 0
         static let shellJoinerWidth: CGFloat = 0
         static let sidebarWidth: CGFloat = 230
-        static let sidebarCollapsedWidth: CGFloat = 60
-        static let sidebarCollapsedBodyWidth: CGFloat = 60
+        static let sidebarCollapsedWidth: CGFloat = 68
+        static let sidebarCollapsedBodyWidth: CGFloat = 68
         static let sidebarCollapsedCapHeight: CGFloat = 50
         static let sidebarX: CGFloat = 8
         static let sidebarTop: CGFloat = 0
@@ -1542,9 +1542,9 @@ struct ConductorSegmentDivider: View {
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        Rectangle()
-            .fill(theme.usesDarkChrome ? Color.white.opacity(0.032) : theme.shellStroke.opacity(0.34))
-            .frame(width: 1, height: 16)
+        RoundedRectangle(cornerRadius: 0.5)
+            .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.24 : 0.15))
+            .frame(width: 1, height: 14)
     }
 }
 

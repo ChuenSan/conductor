@@ -249,6 +249,9 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.title = "Conductor"
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        window.minSize = NSSize(width: 1080, height: 720)
+        window.tabbingMode = .disallowed
+        _ = window.setFrameAutosaveName("Conductor.MainWindow")
         window.isOpaque = false
         window.delegate = self
         window.backgroundColor = .clear

@@ -13,50 +13,100 @@ private func L(_ zh: String, _ en: String) -> String {
 
 private struct WindowControlButtons: View {
     let spacing: CGFloat
+    @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.conductorTheme) private var theme
+    @State private var isHoveringGroup = false
 
-    init(spacing: CGFloat = 6) {
+    init(spacing: CGFloat = 8) {
         self.spacing = spacing
     }
 
-    private let controls: [WindowControl] = [
-        WindowControl(id: "close", color: Color(red: 1.0, green: 0.33, blue: 0.32), accessibilityLabel: L("关闭窗口", "Close Window")) {
-            NSApp.keyWindow?.performClose(nil)
-        },
-        WindowControl(id: "minimize", color: Color(red: 1.0, green: 0.75, blue: 0.10), accessibilityLabel: L("最小化窗口", "Minimize Window")) {
-            NSApp.keyWindow?.performMiniaturize(nil)
-        },
-        WindowControl(id: "fullscreen", color: Color(red: 0.14, green: 0.78, blue: 0.27), accessibilityLabel: L("切换全屏", "Toggle Full Screen")) {
-            NSApp.keyWindow?.toggleFullScreen(nil)
-        }
-    ]
+    private var isWindowActive: Bool {
+        controlActiveState != .inactive
+    }
 
     var body: some View {
         HStack(spacing: spacing) {
-            ForEach(controls) { control in
-                Button(action: control.action) {
-                    Circle()
-                        .fill(control.color)
-                        .overlay {
-                            Circle()
-                                .stroke(Color.black.opacity(0.12), lineWidth: 0.7)
-                        }
-                        .frame(width: 12, height: 12)
-                }
-                .buttonStyle(.plain)
-                .frame(width: 12, height: 12)
-                .accessibilityLabel(control.accessibilityLabel)
-                .macNativeTooltip(control.accessibilityLabel)
+            // Close Button (Red)
+            controlButton(
+                id: "close",
+                activeColor: Color(red: 1.0, green: 0.38, blue: 0.34),
+                inactiveColor: theme.usesDarkChrome ? Color(white: 0.30) : Color(white: 0.84),
+                symbolName: "xmark",
+                symbolSize: 5.5,
+                symbolColor: Color(red: 0.35, green: 0.03, blue: 0.02),
+                accessibilityLabel: L("关闭窗口", "Close Window")
+            ) {
+                NSApp.keyWindow?.performClose(nil)
+            }
+
+            // Minimize Button (Yellow)
+            controlButton(
+                id: "minimize",
+                activeColor: Color(red: 1.0, green: 0.74, blue: 0.18),
+                inactiveColor: theme.usesDarkChrome ? Color(white: 0.30) : Color(white: 0.84),
+                symbolName: "minus",
+                symbolSize: 5.5,
+                symbolColor: Color(red: 0.38, green: 0.20, blue: 0.01),
+                accessibilityLabel: L("最小化窗口", "Minimize Window")
+            ) {
+                NSApp.keyWindow?.performMiniaturize(nil)
+            }
+
+            // Fullscreen Button (Green)
+            controlButton(
+                id: "fullscreen",
+                activeColor: Color(red: 0.15, green: 0.79, blue: 0.25),
+                inactiveColor: theme.usesDarkChrome ? Color(white: 0.30) : Color(white: 0.84),
+                symbolName: "arrow.up.left.and.arrow.down.right",
+                symbolSize: 4.5,
+                symbolColor: Color(red: 0.01, green: 0.32, blue: 0.04),
+                accessibilityLabel: L("切换全屏", "Toggle Full Screen")
+            ) {
+                NSApp.keyWindow?.toggleFullScreen(nil)
             }
         }
         .frame(height: 16)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHoveringGroup = hovering
+            }
+        }
     }
-}
 
-private struct WindowControl: Identifiable {
-    let id: String
-    let color: Color
-    let accessibilityLabel: String
-    let action: () -> Void
+    @ViewBuilder
+    private func controlButton(
+        id: String,
+        activeColor: Color,
+        inactiveColor: Color,
+        symbolName: String,
+        symbolSize: CGFloat,
+        symbolColor: Color,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Circle()
+                .fill(isWindowActive ? activeColor : inactiveColor)
+                .overlay {
+                    Circle()
+                        .stroke(isWindowActive ? Color.black.opacity(0.12) : Color.black.opacity(0.06), lineWidth: 0.7)
+                }
+                .overlay {
+                    if isHoveringGroup && isWindowActive {
+                        Image(systemName: symbolName)
+                            .font(.system(size: symbolSize, weight: .bold))
+                            .foregroundStyle(symbolColor)
+                            .transition(.opacity.animation(.easeIn(duration: 0.08)))
+                    }
+                }
+                .frame(width: 12, height: 12)
+        }
+        .buttonStyle(.plain)
+        .frame(width: 12, height: 12)
+        .accessibilityLabel(accessibilityLabel)
+        .macNativeTooltip(accessibilityLabel)
+    }
 }
 
 struct ConductorSidebar: View {
@@ -115,12 +165,12 @@ struct ConductorSidebar: View {
         if sidebarVisible {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    WindowControlButtons(spacing: 6)
+                    WindowControlButtons(spacing: 8)
                     Spacer(minLength: 8)
                     sidebarToggleButton
                 }
-                .padding(.horizontal, ConductorTokens.Space.sidebarX)
-                .padding(.top, 10)
+                .padding(.horizontal, ConductorTokens.Space.sidebarX + 4)
+                .padding(.top, 14)
             }
             .frame(height: sidebarHeaderHeight, alignment: .top)
         } else {
@@ -130,7 +180,7 @@ struct ConductorSidebar: View {
                     WindowControlButtons(spacing: 6)
                     Spacer()
                 }
-                .padding(.top, 12)
+                .padding(.top, 16)
             }
             .frame(height: sidebarHeaderHeight, alignment: .top)
         }

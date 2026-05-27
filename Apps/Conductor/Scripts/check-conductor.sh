@@ -30,7 +30,7 @@ PY
 }
 
 wait_for_conductor_exit() {
-  local pattern="$ROOT/.build/x86_64-apple-macosx/debug/Conductor|$ROOT/.build/debug/Conductor|$ROOT/.build/Conductor.app/Contents/MacOS/Conductor"
+  local pattern="$ROOT/.build/.*/debug/Conductor|$ROOT/.build/debug/Conductor|$ROOT/.build/Conductor.app/Contents/MacOS/Conductor"
   for _ in {1..40}; do
     if ! pgrep -fl "$pattern" >/tmp/conductor-wait-pids.txt; then
       return 0
@@ -186,9 +186,13 @@ fi
 ./Scripts/build-app-bundle.sh >/tmp/conductor-app-bundle-path.txt
 
 cd "$REPO_ROOT"
-python3 .trellis/scripts/task.py validate 05-15-conductor-macos-foundation
+if [[ -f ".trellis/scripts/task.py" ]]; then
+  python3 .trellis/scripts/task.py validate 05-15-conductor-macos-foundation
+else
+  echo "Skipping Trellis validation; .trellis is not present in this checkout."
+fi
 
-if pgrep -fl '/Users/uchihasasuke/Desktop/conductor/Apps/Conductor/.build/debug/Conductor|/Users/uchihasasuke/Desktop/conductor/Apps/Conductor/.build/Conductor.app/Contents/MacOS/Conductor|\.build/debug/Conductor|\.build/Conductor.app/Contents/MacOS/Conductor' >/tmp/conductor-leftover.txt; then
+if pgrep -fl "$ROOT/.build/.*/debug/Conductor|$ROOT/.build/debug/Conductor|$ROOT/.build/Conductor.app/Contents/MacOS/Conductor" >/tmp/conductor-leftover.txt; then
   cat /tmp/conductor-leftover.txt >&2
   exit 1
 fi

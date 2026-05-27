@@ -21,6 +21,12 @@ SWIFT_BUILD_ARGS=(-c "$CONFIGURATION")
 if [[ "$CONFIGURATION" == "release" && "${CONDUCTOR_CROSS_MODULE_OPTIMIZATION:-1}" != "0" ]]; then
   SWIFT_BUILD_ARGS+=(-Xswiftc -cross-module-optimization)
 fi
+BUNDLE_IDENTIFIER="${CONDUCTOR_BUNDLE_IDENTIFIER:-app.conductor.dev}"
+BUNDLE_DISPLAY_NAME="${CONDUCTOR_BUNDLE_DISPLAY_NAME:-Conductor}"
+MARKETING_VERSION="${CONDUCTOR_MARKETING_VERSION:-0.1.0}"
+BUILD_NUMBER="${CONDUCTOR_BUILD_NUMBER:-1}"
+MIN_SYSTEM_VERSION="${CONDUCTOR_MIN_SYSTEM_VERSION:-14.0}"
+APP_CATEGORY="${CONDUCTOR_APP_CATEGORY:-public.app-category.developer-tools}"
 
 APP="$ROOT/.build/Conductor.app"
 CONTENTS="$APP/Contents"
@@ -101,29 +107,33 @@ copy_ghostty_resources() {
 }
 
 write_info_plist() {
-  cat > "$CONTENTS/Info.plist" <<'PLIST'
+  cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>$(xml_escape "$BUNDLE_DISPLAY_NAME")</string>
   <key>CFBundleExecutable</key>
   <string>Conductor</string>
   <key>CFBundleIdentifier</key>
-  <string>app.conductor.dev</string>
+  <string>$(xml_escape "$BUNDLE_IDENTIFIER")</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Conductor</string>
+  <string>$(xml_escape "$BUNDLE_DISPLAY_NAME")</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>$(xml_escape "$MARKETING_VERSION")</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>$(xml_escape "$BUILD_NUMBER")</string>
+  <key>LSApplicationCategoryType</key>
+  <string>$(xml_escape "$APP_CATEGORY")</string>
   <key>UTExportedTypeDeclarations</key>
   <array>
     <dict>
@@ -140,7 +150,9 @@ write_info_plist() {
     </dict>
   </array>
   <key>LSMinimumSystemVersion</key>
-  <string>14.0</string>
+  <string>$(xml_escape "$MIN_SYSTEM_VERSION")</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © 2026 Conductor. All rights reserved.</string>
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSSupportsAutomaticGraphicsSwitching</key>
@@ -148,6 +160,19 @@ write_info_plist() {
 </dict>
 </plist>
 PLIST
+  if command -v plutil >/dev/null 2>&1; then
+    plutil -lint "$CONTENTS/Info.plist" >/dev/null
+  fi
+}
+
+xml_escape() {
+  local value="$1"
+  value="${value//&/&amp;}"
+  value="${value//</&lt;}"
+  value="${value//>/&gt;}"
+  value="${value//\"/&quot;}"
+  value="${value//\'/&apos;}"
+  printf '%s' "$value"
 }
 
 sign_app_bundle() {
@@ -159,7 +184,11 @@ sign_app_bundle() {
     else
       echo "Signing Conductor.app with identity: $identity" >&2
     fi
-    if codesign --force --deep --sign "$identity" "$APP" >/dev/null; then
+    local codesign_args=(--force --deep --sign "$identity")
+    if [[ "$identity" != "-" && "${CONDUCTOR_ENABLE_HARDENED_RUNTIME:-1}" != "0" ]]; then
+      codesign_args+=(--options runtime)
+    fi
+    if codesign "${codesign_args[@]}" "$APP" >/dev/null; then
       return
     fi
     if [[ "$identity" != "-" ]]; then

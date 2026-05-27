@@ -202,9 +202,9 @@ private struct WorkspaceTabSectionDivider: View {
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        Rectangle()
-            .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.45 : 0.28))
-            .frame(width: 1, height: 20)
+        RoundedRectangle(cornerRadius: 0.5)
+            .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.24 : 0.15))
+            .frame(width: 1, height: 14)
             .padding(.horizontal, 4)
     }
 }
@@ -218,7 +218,7 @@ private enum WorkspaceTabMetrics {
         appearance.density.workspaceTabHeight
     }
 
-    static let spacing: CGFloat = 4
+    static let spacing: CGFloat = 3
     static let edgePadding: CGFloat = 0
 }
 
@@ -239,10 +239,10 @@ private struct WorkspaceFileTopTab: View {
     }
 
     private var baseFill: Color {
-        if theme.usesDarkChrome {
-            return hovering ? theme.shellHoverFill.opacity(0.92) : theme.shellControlFill.opacity(0.58)
+        if hovering {
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.36 : 0.18)
         }
-        return hovering ? theme.shellHoverFill.opacity(0.86) : theme.shellControlFill.opacity(0.52)
+        return Color.clear
     }
 
     private var selectedFill: Color {
@@ -251,13 +251,16 @@ private struct WorkspaceFileTopTab: View {
 
     private var tabStroke: Color {
         if selected {
-            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.58 : 0.42) * appearance.chromeClarity.strokeMultiplier)
+            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.45 : 0.28) * appearance.chromeClarity.strokeMultiplier)
         }
-        return theme.shellStroke.opacity(hovering ? 0.34 : 0.18)
+        return theme.shellStroke.opacity(hovering ? 0.12 : 0.0)
     }
 
     private var titleColor: Color {
-        selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86)
+        if selected {
+            return theme.shellChromeText.opacity(0.95)
+        }
+        return theme.shellChromeTextMuted.opacity(hovering ? 0.88 : 0.64)
     }
 
     private var fileIcon: String {
@@ -328,6 +331,7 @@ private struct WorkspaceFileTopTab: View {
                 if selected {
                     tabShape
                         .fill(selectedFill)
+                        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.14 : 0.04), radius: 2.5, y: 1.2)
                 }
             }
         }
@@ -407,10 +411,10 @@ private struct WorkspaceWebTopTab: View {
     }
 
     private var baseFill: Color {
-        if theme.usesDarkChrome {
-            return hovering ? theme.shellHoverFill.opacity(0.92) : theme.shellControlFill.opacity(0.58)
+        if hovering {
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.36 : 0.18)
         }
-        return hovering ? theme.shellHoverFill.opacity(0.86) : theme.shellControlFill.opacity(0.52)
+        return Color.clear
     }
 
     private var selectedFill: Color {
@@ -419,13 +423,16 @@ private struct WorkspaceWebTopTab: View {
 
     private var tabStroke: Color {
         if selected {
-            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.58 : 0.42) * appearance.chromeClarity.strokeMultiplier)
+            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.45 : 0.28) * appearance.chromeClarity.strokeMultiplier)
         }
-        return theme.shellStroke.opacity(hovering ? 0.34 : 0.18)
+        return theme.shellStroke.opacity(hovering ? 0.12 : 0.0)
     }
 
     private var titleColor: Color {
-        selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86)
+        if selected {
+            return theme.shellChromeText.opacity(0.95)
+        }
+        return theme.shellChromeTextMuted.opacity(hovering ? 0.88 : 0.64)
     }
 
     private var webIcon: String {
@@ -491,6 +498,7 @@ private struct WorkspaceWebTopTab: View {
                 if selected {
                     tabShape
                         .fill(selectedFill)
+                        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.14 : 0.04), radius: 2.5, y: 1.2)
                 }
             }
         }
@@ -594,10 +602,10 @@ private struct WorkspaceTopTab: View {
     }
 
     private var baseFill: Color {
-        if theme.usesDarkChrome {
-            return hovering ? theme.shellHoverFill.opacity(0.92) : theme.shellControlFill.opacity(0.72)
+        if hovering {
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.36 : 0.18)
         }
-        return hovering ? theme.shellHoverFill.opacity(0.86) : theme.shellControlFill.opacity(0.62)
+        return Color.clear
     }
 
     private var selectedFill: Color {
@@ -606,13 +614,16 @@ private struct WorkspaceTopTab: View {
 
     private var tabStroke: Color {
         if selected {
-            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.58 : 0.42) * appearance.chromeClarity.strokeMultiplier)
+            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.45 : 0.28) * appearance.chromeClarity.strokeMultiplier)
         }
-        return theme.shellStroke.opacity(hovering ? 0.34 : 0.18)
+        return theme.shellStroke.opacity(hovering ? 0.12 : 0.0)
     }
 
     private var titleColor: Color {
-        selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86)
+        if selected {
+            return theme.shellChromeText.opacity(0.95)
+        }
+        return theme.shellChromeTextMuted.opacity(hovering ? 0.88 : 0.64)
     }
 
     private var tabAccessibilityTitle: String {
@@ -641,6 +652,7 @@ private struct WorkspaceTopTab: View {
                     tabShape
                         .fill(selectedFill)
                         .matchedGeometryEffect(id: "workspace-tab-selection", in: selectionNamespace)
+                        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.14 : 0.04), radius: 2.5, y: 1.2)
                 }
             }
         }
