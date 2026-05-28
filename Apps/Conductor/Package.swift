@@ -13,7 +13,8 @@ let package = Package(
         .library(name: "ConductorCore", targets: ["ConductorCore"])
     ],
     dependencies: [
-        .package(path: "../../ThirdParty/CodexBar")
+        .package(path: "../../ThirdParty/CodexBar"),
+        .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.1")
     ],
     targets: [
         .binaryTarget(
@@ -28,7 +29,9 @@ let package = Package(
             dependencies: [
                 "ConductorCore",
                 "GhosttyKit",
-                .product(name: "CodexBarFeature", package: "CodexBar")
+                .product(name: "CodexBarCore", package: "CodexBar"),
+                .product(name: "CodexBarFeature", package: "CodexBar"),
+                .product(name: "Yams", package: "Yams")
             ],
             resources: [
                 .process("Resources")
@@ -42,6 +45,7 @@ let package = Package(
                 .linkedFramework("Quartz"),
                 .linkedFramework("QuartzCore"),
                 .linkedFramework("UniformTypeIdentifiers"),
+                .linkedFramework("UserNotifications"),
                 .linkedFramework("WebKit")
             ]
         ),

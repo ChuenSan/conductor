@@ -35,15 +35,6 @@ enum AgentHookProvider: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    var settingsSubtitle: String {
-        switch self {
-        case .codex:
-            ConductorLocalization.text(zh: "接收 Codex 完成通知", en: "Receive Codex completion notifications")
-        case .claudeCode:
-            ConductorLocalization.text(zh: "接收 Claude Code/cc 通知", en: "Receive Claude Code/cc notifications")
-        }
-    }
-
     var systemImage: String {
         switch self {
         case .codex:
@@ -82,7 +73,7 @@ enum AgentHookProvider: String, CaseIterable, Codable, Identifiable {
 }
 
 enum ConductorAgentHookBridge {
-    static let notificationName = Notification.Name("com.conductor.agent-hook")
+    static let eventName = Notification.Name("com.conductor.agent-hook")
 
     enum Key {
         static let terminalID = "terminalID"
@@ -94,6 +85,55 @@ enum ConductorAgentHookBridge {
         static let sessionID = "sessionID"
         static let turnID = "turnID"
     }
+
+    static func writePendingEvent(_ userInfo: [String: String]) {
+        let fileManager = FileManager.default
+        let directoryURL = pendingEventDirectory(fileManager: fileManager)
+        try? fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        guard let data = try? JSONSerialization.data(withJSONObject: userInfo, options: [.sortedKeys]) else {
+            return
+        }
+        let fileURL = directoryURL.appendingPathComponent("\(UUID().uuidString).json")
+        try? data.write(to: fileURL, options: [.atomic])
+    }
+
+    static func drainPendingEvents() -> [[String: String]] {
+        let fileManager = FileManager.default
+        let directoryURL = pendingEventDirectory(fileManager: fileManager)
+        guard let fileURLs = try? fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return fileURLs
+            .filter { $0.pathExtension == "json" }
+            .sorted { lhs, rhs in
+                modificationDate(for: lhs) < modificationDate(for: rhs)
+            }
+            .compactMap { fileURL in
+                defer { try? fileManager.removeItem(at: fileURL) }
+                guard let data = try? Data(contentsOf: fileURL),
+                      let object = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
+                    return nil
+                }
+                return object
+            }
+    }
+
+    private static func pendingEventDirectory(fileManager: FileManager) -> URL {
+        let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
+        return baseURL
+            .appendingPathComponent("Conductor", isDirectory: true)
+            .appendingPathComponent("AgentHookEvents", isDirectory: true)
+    }
+
+    private static func modificationDate(for url: URL) -> Date {
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+    }
 }
 
 enum ConductorHookCLI {
@@ -104,17 +144,6 @@ enum ConductorHookCLI {
         let agent = args[1].lowercased()
         let action = args[2].lowercased()
         guard let provider = AgentHookProvider(cliName: agent) else {
-            return true
-        }
-
-        if action == "install" {
-            do {
-                let bridgePath = Bundle.main.executablePath ?? CommandLine.arguments.first ?? "Conductor"
-                print(try AgentNotificationHookInstaller.install(provider: provider, bridgePath: bridgePath))
-            } catch {
-                FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
-                Foundation.exit(1)
-            }
             return true
         }
 
@@ -157,17 +186,15 @@ enum ConductorHookCLI {
             userInfo[ConductorAgentHookBridge.Key.turnID] = turnID
         }
 
-        if action == "notification" {
-            userInfo[ConductorAgentHookBridge.Key.title] = provider.title
-            userInfo[ConductorAgentHookBridge.Key.body] = firstString(in: payload, keys: ["message", "notification", "body", "summary"]) ?? "Agent 等待你的处理。"
-        } else if action == "stop" || action == "agent-response" || action == "subagent-stop" {
+        if action == "stop" || action == "agent-response" || action == "subagent-stop" {
             let cwd = userInfo[ConductorAgentHookBridge.Key.cwd]
-            userInfo[ConductorAgentHookBridge.Key.title] = "任务完成"
+            userInfo[ConductorAgentHookBridge.Key.title] = provider.title
             userInfo[ConductorAgentHookBridge.Key.body] = completionBody(payload: payload, cwd: cwd)
         }
 
+        ConductorAgentHookBridge.writePendingEvent(userInfo)
         DistributedNotificationCenter.default().postNotificationName(
-            ConductorAgentHookBridge.notificationName,
+            ConductorAgentHookBridge.eventName,
             object: nil,
             userInfo: userInfo,
             deliverImmediately: true

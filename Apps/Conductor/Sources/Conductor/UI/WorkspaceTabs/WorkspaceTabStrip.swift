@@ -246,12 +246,12 @@ private struct WorkspaceFileTopTab: View {
     }
 
     private var selectedFill: Color {
-        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.62) : theme.shellPanelStrong.opacity(0.72)
+        theme.shellSelectedFill
     }
 
     private var tabStroke: Color {
         if selected {
-            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.30 : 0.18) * appearance.chromeClarity.strokeMultiplier)
+            return theme.floatingSelectedStroke.opacity((theme.usesDarkChrome ? 0.58 : 0.48) * appearance.chromeClarity.strokeMultiplier)
         }
         return theme.shellStroke.opacity(hovering ? 0.08 : 0.0)
     }
@@ -418,12 +418,12 @@ private struct WorkspaceWebTopTab: View {
     }
 
     private var selectedFill: Color {
-        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.62) : theme.shellPanelStrong.opacity(0.72)
+        theme.shellSelectedFill
     }
 
     private var tabStroke: Color {
         if selected {
-            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.30 : 0.18) * appearance.chromeClarity.strokeMultiplier)
+            return theme.floatingSelectedStroke.opacity((theme.usesDarkChrome ? 0.58 : 0.48) * appearance.chromeClarity.strokeMultiplier)
         }
         return theme.shellStroke.opacity(hovering ? 0.08 : 0.0)
     }
@@ -593,8 +593,8 @@ private struct WorkspaceTopTab: View {
         active
     }
 
-    private var unreadCount: Int {
-        row.unreadCount
+    private var activeAgentCount: Int {
+        row.activeAgentCount
     }
 
     private var tabShape: RoundedRectangle {
@@ -609,12 +609,12 @@ private struct WorkspaceTopTab: View {
     }
 
     private var selectedFill: Color {
-        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.62) : theme.shellPanelStrong.opacity(0.72)
+        theme.shellSelectedFill
     }
 
     private var tabStroke: Color {
         if selected {
-            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.30 : 0.18) * appearance.chromeClarity.strokeMultiplier)
+            return theme.floatingSelectedStroke.opacity((theme.usesDarkChrome ? 0.58 : 0.48) * appearance.chromeClarity.strokeMultiplier)
         }
         return theme.shellStroke.opacity(hovering ? 0.08 : 0.0)
     }
@@ -628,8 +628,8 @@ private struct WorkspaceTopTab: View {
 
     private var tabAccessibilityTitle: String {
         let base = L("\(row.title)，\(row.terminalCount) 个终端", "\(row.title), \(row.terminalCount) terminals")
-        guard unreadCount > 0 else { return base }
-        return base + L("，\(unreadCount) 条未读", ", \(unreadCount) unread")
+        let agentSuffix = activeAgentCount > 0 ? L("，AI 终端运行中", ", AI terminal running") : ""
+        return base + agentSuffix
     }
 
     var body: some View {
@@ -703,8 +703,7 @@ private struct WorkspaceTopTab: View {
             } label: {
                 WorkspaceTopTabContent(
                     title: row.title,
-                    terminalCount: row.terminalCount,
-                    unreadCount: unreadCount,
+                    activeAgentCount: activeAgentCount,
                     selected: selected,
                     themeID: theme.id,
                     fontScaleID: fontScale.id
@@ -796,17 +795,28 @@ private final class NativeWorkspaceTopTabView: NSView {
     private var onCloseRight: (() -> Void)?
     private var tracking: NSTrackingArea?
     private var menuController: NativeWorkspaceMenuController?
+    private let agentSpinner = NSProgressIndicator()
 
     override var isFlipped: Bool { true }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        wantsLayer = true
+        configureView()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
+        configureView()
+    }
+
+    private func configureView() {
         wantsLayer = true
+        agentSpinner.style = .spinning
+        agentSpinner.controlSize = .small
+        agentSpinner.isIndeterminate = true
+        agentSpinner.isDisplayedWhenStopped = false
+        agentSpinner.isHidden = true
+        addSubview(agentSpinner)
     }
 
     func update(
@@ -836,7 +846,14 @@ private final class NativeWorkspaceTopTabView: NSView {
         self.onCloseOthers = onCloseOthers
         self.onCloseRight = onCloseRight
         toolTip = tabAccessibilityTitle(for: row)
+        updateAgentSpinner(for: row)
         needsDisplay = true
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        layoutAgentSpinner()
     }
 
     override var intrinsicContentSize: NSSize {
@@ -921,11 +938,29 @@ private final class NativeWorkspaceTopTabView: NSView {
         shape.stroke()
         drawGlyph(selected: selected)
         drawTitle(row)
-        drawTerminalCount(row.terminalCount)
-        drawUnread(row.unreadCount)
         if canClose && (hovering || selected) {
             drawCloseGlyph()
         }
+    }
+
+    private func updateAgentSpinner(for row: WorkspaceChromeDisplayModel) {
+        if row.activeAgentCount > 0 {
+            agentSpinner.isHidden = false
+            agentSpinner.startAnimation(nil)
+        } else {
+            agentSpinner.stopAnimation(nil)
+            agentSpinner.isHidden = true
+        }
+    }
+
+    private func layoutAgentSpinner() {
+        let side: CGFloat = 13
+        agentSpinner.frame = NSRect(
+            x: bounds.maxX - 43,
+            y: (bounds.height - side) / 2,
+            width: side,
+            height: side
+        )
     }
 
     private var closeRect: NSRect {
@@ -934,7 +969,7 @@ private final class NativeWorkspaceTopTabView: NSView {
 
     private var fillColor: NSColor {
         if selected {
-            return NSColor(theme.shellPanelStrong.opacity(theme.usesDarkChrome ? 0.62 : 0.72))
+            return NSColor(theme.shellSelectedFill)
         }
         if hovering {
             return NSColor(theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.24 : 0.12))
@@ -944,22 +979,32 @@ private final class NativeWorkspaceTopTabView: NSView {
 
     private var strokeColor: NSColor {
         if selected {
-            return NSColor(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.30 : 0.18))
+            return NSColor(theme.floatingSelectedStroke.opacity(theme.usesDarkChrome ? 0.58 : 0.48))
         }
         return NSColor(theme.shellStroke.opacity(hovering ? 0.08 : 0))
     }
 
     private func drawGlyph(selected: Bool) {
+        let chipRect = NSRect(x: 6, y: (bounds.height - 22) / 2, width: 22, height: 22)
+        if selected {
+            NSColor(theme.shellControlRaisedFill.opacity(0.84)).setFill()
+            NSBezierPath(roundedRect: chipRect, xRadius: 7, yRadius: 7).fill()
+        }
+
         let image = NSImage(systemSymbolName: WorkspaceChromeGlyph.systemName(selected: selected), accessibilityDescription: nil)
         image?.isTemplate = true
-        (selected ? NSColor(theme.shellChromeText.opacity(0.90)) : NSColor(theme.shellChromeTextMuted.opacity(0.70))).set()
-        image?.draw(in: NSRect(x: 8, y: (bounds.height - 17) / 2, width: 17, height: 17))
+        let symbolColor = selected ? NSColor(theme.shellChromeText.opacity(0.96)) : NSColor(theme.shellChromeTextMuted.opacity(0.70))
+        symbolColor.set()
+        let imageRect = NSRect(x: 11, y: (bounds.height - 12) / 2, width: 12, height: 12)
+        image?.withSymbolConfiguration(.init(pointSize: 11, weight: .bold))?
+            .draw(in: imageRect, from: .zero, operation: .sourceAtop, fraction: 1)
     }
 
     private func drawTitle(_ row: WorkspaceChromeDisplayModel) {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingMiddle
-        let rect = NSRect(x: 32, y: (bounds.height - 15) / 2, width: max(0, bounds.width - 76), height: 16)
+        let trailingReserved: CGFloat = row.activeAgentCount > 0 ? 66 : 48
+        let rect = NSRect(x: 36, y: (bounds.height - 15) / 2, width: max(0, bounds.width - trailingReserved), height: 16)
         NSAttributedString(
             string: row.title,
             attributes: [
@@ -968,30 +1013,6 @@ private final class NativeWorkspaceTopTabView: NSView {
                 .paragraphStyle: paragraph
             ]
         ).draw(in: rect)
-    }
-
-    private func drawTerminalCount(_ count: Int) {
-        let text = "\(count)"
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: fontScale.size(10.2), weight: .semibold),
-            .foregroundColor: selected ? NSColor(theme.shellChromeText.opacity(0.72)) : NSColor(theme.shellChromeTextMuted.opacity(0.70))
-        ]
-        let size = text.size(withAttributes: attrs)
-        text.draw(at: NSPoint(x: bounds.maxX - 45, y: (bounds.height - size.height) / 2), withAttributes: attrs)
-    }
-
-    private func drawUnread(_ unreadCount: Int) {
-        guard unreadCount > 0 else { return }
-        let text = unreadCount > 99 ? "99+" : "\(unreadCount)"
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: fontScale.size(9), weight: .bold),
-            .foregroundColor: NSColor.white
-        ]
-        let size = text.size(withAttributes: attrs)
-        let rect = NSRect(x: bounds.maxX - 60 - size.width, y: (bounds.height - 14) / 2, width: max(15, size.width + 8), height: 14)
-        NSColor(theme.floatingEmphasis.opacity(0.72)).setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 7, yRadius: 7).fill()
-        text.draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2), withAttributes: attrs)
     }
 
     private func drawCloseGlyph() {
@@ -1003,8 +1024,8 @@ private final class NativeWorkspaceTopTabView: NSView {
 
     private func tabAccessibilityTitle(for row: WorkspaceChromeDisplayModel) -> String {
         let base = L("\(row.title)，\(row.terminalCount) 个终端", "\(row.title), \(row.terminalCount) terminals")
-        guard row.unreadCount > 0 else { return base }
-        return base + L("，\(row.unreadCount) 条未读", ", \(row.unreadCount) unread")
+        let agentSuffix = row.activeAgentCount > 0 ? L("，AI 终端运行中", ", AI terminal running") : ""
+        return base + agentSuffix
     }
 }
 
@@ -1037,8 +1058,7 @@ private final class NativeWorkspaceMenuController: NSObject, NSMenuDelegate {
 
 private struct WorkspaceTopTabContent: View, Equatable {
     let title: String
-    let terminalCount: Int
-    let unreadCount: Int
+    let activeAgentCount: Int
     let selected: Bool
     let themeID: String
     let fontScaleID: String
@@ -1047,8 +1067,7 @@ private struct WorkspaceTopTabContent: View, Equatable {
 
     nonisolated static func == (lhs: WorkspaceTopTabContent, rhs: WorkspaceTopTabContent) -> Bool {
         lhs.title == rhs.title &&
-        lhs.terminalCount == rhs.terminalCount &&
-        lhs.unreadCount == rhs.unreadCount &&
+        lhs.activeAgentCount == rhs.activeAgentCount &&
         lhs.selected == rhs.selected &&
         lhs.themeID == rhs.themeID &&
         lhs.fontScaleID == rhs.fontScaleID
@@ -1067,18 +1086,13 @@ private struct WorkspaceTopTabContent: View, Equatable {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text("\(terminalCount)")
-                .font(.conductorSystem(size: 10.2, weight: .semibold, scale: fontScale))
-                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.72) : theme.shellChromeTextMuted.opacity(0.70))
-                .frame(minWidth: 17, minHeight: 17)
-            if unreadCount > 0 {
-                Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                    .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 4)
-                    .frame(minWidth: 15, minHeight: 14)
-                    .background(theme.floatingEmphasis.opacity(0.72))
-                    .clipShape(Capsule())
+            if activeAgentCount > 0 {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(theme.floatingEmphasis)
+                    .scaleEffect(0.55)
+                    .frame(width: 13, height: 13)
+                    .accessibilityHidden(true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1091,10 +1105,12 @@ private struct WorkspaceTabGlyph: View {
 
     var body: some View {
         Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
-            .font(.system(size: 10.8, weight: .semibold))
-            .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
-            .frame(width: 17, height: 17)
+            .font(.system(size: 11, weight: .bold))
+            .symbolRenderingMode(.monochrome)
+            .foregroundStyle(selected ? theme.shellChromeText.opacity(0.96) : theme.shellChromeTextMuted.opacity(0.70))
+            .frame(width: 22, height: 22)
+            .background(selected ? theme.shellControlRaisedFill.opacity(0.84) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .accessibilityHidden(true)
     }
 }

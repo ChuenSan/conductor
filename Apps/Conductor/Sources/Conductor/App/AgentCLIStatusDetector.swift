@@ -1,4 +1,5 @@
 import Foundation
+import CodexBarCore
 
 enum AgentCLIInstallState: Equatable {
     case unknown
@@ -38,6 +39,10 @@ enum AgentCLIStatusDetector {
     }
 
     private static func detect(_ provider: AgentHookProvider) -> AgentCLIStatus {
+        if let path = providerPreferredPath(provider) {
+            return AgentCLIStatus(provider: provider, state: .installed(path: path), checkedAt: Date())
+        }
+
         for executable in provider.executableCandidates {
             if let path = commandPath(for: executable) {
                 return AgentCLIStatus(provider: provider, state: .installed(path: path), checkedAt: Date())
@@ -46,32 +51,79 @@ enum AgentCLIStatusDetector {
         return AgentCLIStatus(provider: provider, state: .missing, checkedAt: Date())
     }
 
-    private static func commandPath(for executable: String) -> String? {
-        let script = """
-        PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
-        command -v \(shellQuote(executable))
-        """
-        let process = Process()
-        let output = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", script]
-        process.standardOutput = output
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            return nil
+    private static func providerPreferredPath(_ provider: AgentHookProvider) -> String? {
+        switch provider {
+        case .codex:
+            BinaryLocator.resolveCodexBinary()
+        case .claudeCode:
+            BinaryLocator.resolveClaudeBinary()
         }
-
-        guard process.terminationStatus == 0 else { return nil }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        let path = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        return path.isEmpty ? nil : path
     }
 
-    private static func shellQuote(_ value: String) -> String {
-        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    private static func commandPath(for executable: String) -> String? {
+        let fileManager = FileManager.default
+        if let path = findExecutable(executable, in: searchDirectories(), fileManager: fileManager) {
+            return path
+        }
+
+        let shell = ProcessInfo.processInfo.environment["SHELL"]
+        if let path = ShellCommandLocator.commandV(executable, shell, 2.0, fileManager) {
+            return path
+        }
+
+        return ShellCommandLocator.resolveAlias(executable, shell, 2.0, fileManager, NSHomeDirectory())
+    }
+
+    private static func searchDirectories() -> [String] {
+        var directories: [String] = []
+        let environment = ProcessInfo.processInfo.environment
+
+        append(LoginShellPathCache.shared.current ?? [], to: &directories)
+
+        if let path = environment["PATH"] {
+            append(path.split(separator: ":").map(String.init), to: &directories)
+        }
+
+        let home = NSHomeDirectory()
+        append([
+            "\(home)/.local/bin",
+            "\(home)/.claude/local",
+            "\(home)/.claude/bin",
+            "\(home)/.npm-global/bin",
+            "\(home)/.volta/bin",
+            "\(home)/.bun/bin",
+            "\(home)/.deno/bin",
+            "\(home)/.yarn/bin",
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+            "/usr/sbin",
+            "/sbin",
+        ], to: &directories)
+
+        return directories
+    }
+
+    private static func append(_ candidates: [String], to directories: inout [String]) {
+        for candidate in candidates {
+            let path = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !path.isEmpty, !directories.contains(path) else { continue }
+            directories.append(path)
+        }
+    }
+
+    private static func findExecutable(
+        _ executable: String,
+        in directories: [String],
+        fileManager: FileManager) -> String?
+    {
+        for directory in directories where !directory.isEmpty {
+            let path = "\(directory.hasSuffix("/") ? String(directory.dropLast()) : directory)/\(executable)"
+            if fileManager.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+        return nil
     }
 }

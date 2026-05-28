@@ -50,7 +50,7 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
         case .usage:
             ConductorLocalization.text(zh: "Token 记录和本地用量", en: "Token records and local usage")
         case .automation:
-            ConductorLocalization.text(zh: "Agent、通知、铃声", en: "Agents, alerts, bell")
+            ConductorLocalization.text(zh: "Agent 安装检测与回复提醒", en: "Agent checks and reply alerts")
         case .updates:
             ConductorLocalization.text(zh: "检查、下载、替换运行时", en: "Check, download, and replace runtime")
         case .commands:

@@ -34,9 +34,8 @@ struct TerminalSearchTargetDisplay: Identifiable, Equatable {
 
 struct TerminalDisplayMetadata: Equatable {
     var workingDirectory: String?
-    var unreadCount = 0
-    var lastNotificationTitle: String?
-    var lastNotificationBody: String?
+    var activeAgentTitle: String?
+    var activeAgentStartedAt: Date?
     var progressKind: TerminalProgressKind?
     var progressPercent: Int?
     var lastCommandExitCode: Int?
@@ -46,6 +45,10 @@ struct TerminalDisplayMetadata: Equatable {
     var search = TerminalSearchMetadata()
     var readonly = false
     var bellCount = 0
+
+    var hasActiveAgent: Bool {
+        activeAgentTitle?.isEmpty == false
+    }
 }
 
 private enum TerminalContextMenuAction {
@@ -149,7 +152,6 @@ enum WorkspaceNavigationSource: String {
     case sidebar
     case tabStrip
     case overview
-    case notification
     case terminalFocus
     case newWorkspace
     case duplicateWorkspace
@@ -198,13 +200,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
     @Published private(set) var metadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
-    @Published private(set) var notifications = TerminalNotificationState()
-    @Published var notificationPanelVisible = false {
-        didSet {
-            guard oldValue != notificationPanelVisible else { return }
-            onNotificationPanelVisibilityChange?(notificationPanelVisible)
-        }
-    }
+    @Published private(set) var applicationActive = NSApp.isActive
     @Published var sidebarVisible = true
     @Published var commandPaletteVisible = false
     @Published var settingsPanelVisible = false
@@ -251,8 +247,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var terminalTabDragLocalMouseUpMonitor: Any?
     private var terminalTabDragGlobalMouseUpMonitor: Any?
 
-    var onNotificationPanelVisibilityChange: ((Bool) -> Void)?
-
     var selectedWorkspaceFileTab: ConductorWorkspaceFileTab? {
         guard case .file(let selectedWorkspaceFileTabID) = selectedWorkspaceContentTabID else { return nil }
         return workspaceFileTabs.first { $0.id == selectedWorkspaceFileTabID }
@@ -294,6 +288,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
 
+    func setApplicationActive(_ active: Bool) {
+        guard applicationActive != active else { return }
+        applicationActive = active
+    }
+
     private let persistence = WorkspacePersistence()
     private let surfaceCoordinator = TerminalSurfaceCoordinator()
     private var pendingPersistence: DispatchWorkItem?
@@ -308,8 +307,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var fileWorkspaceCoordinator = FileWorkspaceCoordinator()
     private let updatePreferencesStore = ConductorUpdatePreferencesStore()
     private let updateService = ConductorUpdateService()
+    private let agentReplyNotificationService = AgentReplyNotificationService()
     private var updateTask: Task<Void, Never>?
     private var automaticUpdateCheckStarted = false
+    private var agentRuntimePollTask: Task<Void, Never>?
 
     init() {
         let persisted = persistence.load()
@@ -343,6 +344,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         ConductorUsageFeature.configureHostMenuStyle(Self.usageMenuStyle(for: self.theme))
         TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
+        startAgentRuntimePolling()
     }
 
     #if DEBUG
@@ -351,10 +353,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         selectedWorkspaceID: WorkspaceID? = nil,
         theme: TerminalTheme = .graphite,
         appearance: AppearancePreferences = AppearancePreferences(),
-        notifications: TerminalNotificationState = TerminalNotificationState(),
         sidebarVisible: Bool = true,
         commandPaletteVisible: Bool = false,
-        notificationPanelVisible: Bool = false,
         settingsPanelVisible: Bool = false,
         workspaceOverviewVisible: Bool = false
     ) {
@@ -366,14 +366,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.theme = theme
         self.appearance = appearance
         self.appearanceCoordinator = AppearanceCoordinator(appearance: appearance)
-        self.notifications = notifications
         self.agentCLIStatuses = Dictionary(uniqueKeysWithValues: AgentHookProvider.allCases.map { ($0, .unknown(provider: $0)) })
         self.terminalFontDownloadStates = [:]
         self.updatePreferences = updatePreferencesStore.load()
         self.updateState = ConductorUpdateState(currentVersion: ConductorAppVersion.current())
         self.sidebarVisible = sidebarVisible
         self.commandPaletteVisible = commandPaletteVisible
-        self.notificationPanelVisible = notificationPanelVisible
         self.settingsPanelVisible = settingsPanelVisible
         self.workspaceOverviewVisible = workspaceOverviewVisible
         syncPanelCoordinatorFromPublished()
@@ -383,6 +381,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         ConductorUsageFeature.configureHostMenuStyle(Self.usageMenuStyle(for: self.theme))
         TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
+        startAgentRuntimePolling()
     }
     #endif
 
@@ -721,6 +720,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         appearance.terminalRenderer.ghosttyOverrides = TerminalRendererPreferences.normalizedOverrides(overrides)
     }
 
+    func setTerminalScrollbackLimit(_ value: String) {
+        let key = "scrollback-limit"
+        let normalizedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var overrides = appearance.terminalRenderer.ghosttyOverrides.filter { $0.key != key }
+        if !normalizedValue.isEmpty {
+            overrides.append(TerminalGhosttyConfigOverride(key: key, value: normalizedValue, enabled: true))
+        }
+        appearance.terminalRenderer.ghosttyOverrides = TerminalRendererPreferences.normalizedOverrides(overrides)
+    }
+
     func resetGhosttyOverrides() {
         guard !appearance.terminalRenderer.ghosttyOverrides.isEmpty else { return }
         appearance.terminalRenderer.ghosttyOverrides = []
@@ -731,23 +740,35 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         appearance.reducedMotion = reducedMotion
     }
 
-    func setAgentNotificationsEnabled(_ enabled: Bool, for provider: AgentHookProvider) {
+    func setAgentReplyNotificationsEnabled(_ enabled: Bool) {
+        guard appearance.agentReplyNotifications.enabled != enabled else { return }
+        appearance.agentReplyNotifications.enabled = enabled
         if enabled {
-            do {
-                let bridgePath = Bundle.main.executablePath ?? CommandLine.arguments.first ?? "Conductor"
-                agentHookSettingsMessage = try AgentNotificationHookInstaller.install(provider: provider, bridgePath: bridgePath)
-            } catch {
-                agentHookSettingsMessage = error.localizedDescription
-                return
+            agentReplyNotificationService.requestAuthorization { [weak self] granted in
+                self?.agentHookSettingsMessage = granted
+                    ? L("AI 回复通知已开启", "AI reply notifications enabled")
+                    : L("通知权限未开启，请在系统设置里允许 Conductor 发送通知。", "Notifications are not allowed. Enable Conductor notifications in System Settings.")
             }
-        } else {
-            agentHookSettingsMessage = "\(provider.title) \(L("通知已关闭", "notifications disabled"))"
         }
+    }
 
-        var next = appearance.agentNotifications
-        next.setEnabled(enabled, for: provider)
-        guard next != appearance.agentNotifications else { return }
-        appearance.agentNotifications = next
+    func setAgentReplyNotificationsOnlyWhenUnattended(_ onlyWhenUnattended: Bool) {
+        guard appearance.agentReplyNotifications.onlyWhenUnattended != onlyWhenUnattended else { return }
+        appearance.agentReplyNotifications.onlyWhenUnattended = onlyWhenUnattended
+    }
+
+    func setAgentReplyNotificationsIncludeSummary(_ includeSummary: Bool) {
+        guard appearance.agentReplyNotifications.includeSummary != includeSummary else { return }
+        appearance.agentReplyNotifications.includeSummary = includeSummary
+    }
+
+    func setAgentReplyNotificationsPlaySound(_ playSound: Bool) {
+        guard appearance.agentReplyNotifications.playSound != playSound else { return }
+        appearance.agentReplyNotifications.playSound = playSound
+    }
+
+    func installAgentReplyNotificationActivationHandler(_ handler: @escaping (TerminalID) -> Void) {
+        agentReplyNotificationService.activateTerminal = handler
     }
 
     func refreshAgentCLIStatuses() {
@@ -1264,34 +1285,35 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func newTerminal() {
-        let signpost = ConductorSignpost.begin("new-terminal")
-        defer { ConductorSignpost.end("new-terminal", signpost) }
-        let terminalID = workspace.newTerminal(title: nextTerminalTitle(prefix: "zsh"))
+        createTerminal(workingDirectory: nil, signpostName: "new-terminal")
+    }
+
+    private func createTerminal(workingDirectory: String?, signpostName: StaticString) {
+        let signpost = ConductorSignpost.begin(signpostName)
+        defer { ConductorSignpost.end(signpostName, signpost) }
+        let terminalID = workspace.newTerminal(
+            title: nextTerminalTitle(prefix: "zsh"),
+            workingDirectory: workingDirectory
+        )
         markTerminalInteractionFocus()
         selectedWorkspaceContentTabID = .terminal(terminalID)
     }
 
     func newTerminalAtFocusedDirectory() {
-        let signpost = ConductorSignpost.begin("new-terminal-current-directory")
-        defer { ConductorSignpost.end("new-terminal-current-directory", signpost) }
-        let terminalID = workspace.newTerminal(
-            title: nextTerminalTitle(prefix: "zsh"),
-            workingDirectory: focusedWorkingDirectoryURL?.path
+        createTerminal(
+            workingDirectory: focusedWorkingDirectoryURL?.path,
+            signpostName: "new-terminal-current-directory"
         )
-        markTerminalInteractionFocus()
-        selectedWorkspaceContentTabID = .terminal(terminalID)
     }
 
-    private func newTerminalAtDirectory(for terminalID: TerminalID) {
-        let signpost = ConductorSignpost.begin("new-terminal-context-directory")
-        defer { ConductorSignpost.end("new-terminal-context-directory", signpost) }
-        guard activateTerminalContextTarget(terminalID) != nil else { return }
-        let newTerminalID = workspace.newTerminal(
-            title: nextTerminalTitle(prefix: "zsh"),
-            workingDirectory: workingDirectoryURL(for: terminalID)?.path
+    @discardableResult
+    private func newTerminalAtDirectory(for terminalID: TerminalID) -> Bool {
+        guard activateTerminalContextTarget(terminalID) != nil else { return false }
+        createTerminal(
+            workingDirectory: workingDirectoryURL(for: terminalID)?.path,
+            signpostName: "new-terminal-context-directory"
         )
-        markTerminalInteractionFocus()
-        selectedWorkspaceContentTabID = .terminal(newTerminalID)
+        return true
     }
 
     func openFocusedDirectory() {
@@ -1847,7 +1869,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         if last, let lastTabID = pane.tabs.last?.id {
             let didSelect = workspace.selectTab(lastTabID, in: paneID)
             if didSelect {
-                markTerminalNotificationsRead(lastTabID)
+                attendTerminal(lastTabID)
                 reconcileSurfaceFocus()
             }
             return didSelect
@@ -1858,13 +1880,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 let targetID = pane.tabs[offset - 1].id
                 let didSelect = workspace.selectTab(targetID, in: paneID)
                 if didSelect {
-                    markTerminalNotificationsRead(targetID)
+                    attendTerminal(targetID)
                     reconcileSurfaceFocus()
                 }
                 return didSelect
             }
             if let selectedID = workspace.selectAdjacentTab(offset: offset, in: paneID) {
-                markTerminalNotificationsRead(selectedID)
+                attendTerminal(selectedID)
                 reconcileSurfaceFocus()
                 return true
             }
@@ -1934,12 +1956,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         return updated
     }
 
-    func ghosttyRuntimeDidReceiveNotification(terminalID: TerminalID, title: String, body: String) -> Bool {
-        recordTerminalNotification(terminalID: terminalID, title: title, body: body, kind: .notification)
-    }
-
     func ghosttyRuntimeDidRingBell(terminalID: TerminalID) -> Bool {
-        recordTerminalNotification(terminalID: terminalID, title: "Bell", body: "", kind: .bell)
+        true
     }
 
     func ghosttyRuntimeDidUpdateProgress(terminalID: TerminalID, kind: TerminalProgressKind, progress: Int?) -> Bool {
@@ -1954,6 +1972,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         updateMetadata(for: terminalID) { metadata in
             metadata.lastCommandExitCode = exitCode
             metadata.lastCommandDurationNanoseconds = durationNanoseconds
+            metadata.activeAgentTitle = nil
+            metadata.activeAgentStartedAt = nil
             if metadata.progressKind != .error {
                 metadata.progressKind = nil
                 metadata.progressPercent = nil
@@ -2027,12 +2047,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
         if pane.selectedTabID == terminalID, workspace.focusedPaneID == paneID {
             markTerminalInteractionFocus()
-            markTerminalNotificationsRead(terminalID)
+            attendTerminal(terminalID)
             return
         }
         markTerminalInteractionFocus()
         workspace.selectTab(terminalID, in: paneID)
-        markTerminalNotificationsRead(terminalID)
+        attendTerminal(terminalID)
         reconcileSurfaceFocus()
     }
 
@@ -2040,12 +2060,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         guard let pane = workspace.panes[paneID] else { return }
         if workspace.focusedPaneID == paneID {
             markTerminalInteractionFocus()
-            markTerminalNotificationsRead(pane.selectedTabID)
+            attendTerminal(pane.selectedTabID)
             return
         }
         markTerminalInteractionFocus()
         workspace.focusPane(paneID)
-        markTerminalNotificationsRead(pane.selectedTabID)
+        attendTerminal(pane.selectedTabID)
         reconcileSurfaceFocus()
     }
 
@@ -2061,8 +2081,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
         guard let paneID = workspace.paneID(containing: terminalID) else { return }
         markTerminalInteractionFocus()
-        markTerminalNotificationsRead(terminalID)
-        selectedWorkspaceContentTabID = .terminal(terminalID)
+        attendTerminal(terminalID)
         if workspace.focusedPaneID == paneID,
            workspace.panes[paneID]?.selectedTabID == terminalID {
             reconcileSurfaceFocus()
@@ -2355,12 +2374,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             duplicateTab(target.tab.id, in: target.paneID)
             return true
         case .newTerminal:
-            guard activateTerminalContextTarget(terminalID) != nil else { return false }
-            newTerminal()
-            return true
+            return newTerminalAtDirectory(for: terminalID)
         case .newTerminalAtDirectory:
-            newTerminalAtDirectory(for: terminalID)
-            return true
+            return newTerminalAtDirectory(for: terminalID)
         case .splitRight:
             guard activateTerminalContextTarget(terminalID) != nil else { return false }
             splitRight()
@@ -2506,7 +2522,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
 
         markTerminalInteractionFocus()
-        markTerminalNotificationsRead(terminalID)
         selectedWorkspaceContentTabID = .terminal(terminalID)
         reconcileSurfaceFocus()
         refreshSurfaceAfterNavigation(terminalID)
@@ -2729,6 +2744,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func selectNextTab() {
         if let terminalID = workspace.selectAdjacentTab(offset: 1) {
+            attendTerminal(terminalID)
             reconcileSurfaceFocus()
             refreshSurfaceAfterNavigation(terminalID)
         }
@@ -2736,6 +2752,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func selectPreviousTab() {
         if let terminalID = workspace.selectAdjacentTab(offset: -1) {
+            attendTerminal(terminalID)
             reconcileSurfaceFocus()
             refreshSurfaceAfterNavigation(terminalID)
         }
@@ -2743,21 +2760,21 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func focusNextPane() {
         if let paneID = workspace.focusAdjacentPane(.next) {
-            markSelectedTerminalNotificationsRead(in: paneID)
+            attendSelectedTerminal(in: paneID)
             reconcileSurfaceFocus()
         }
     }
 
     func focusPreviousPane() {
         if let paneID = workspace.focusAdjacentPane(.previous) {
-            markSelectedTerminalNotificationsRead(in: paneID)
+            attendSelectedTerminal(in: paneID)
             reconcileSurfaceFocus()
         }
     }
 
     func focusPane(direction: FocusDirection) {
         if let paneID = workspace.focusAdjacentPane(direction) {
-            markSelectedTerminalNotificationsRead(in: paneID)
+            attendSelectedTerminal(in: paneID)
             reconcileSurfaceFocus()
         }
     }
@@ -2849,131 +2866,94 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         return dismissed
     }
 
-    func toggleNotificationPanel() {
-        let signpost = ConductorSignpost.begin("notifications-toggle")
-        defer { ConductorSignpost.end("notifications-toggle", signpost) }
-        if notificationPanelVisible {
-            notificationPanelVisible = false
-            return
-        }
-        closeTerminalSearch()
-        syncPanelCoordinatorFromPublished()
-        panelCoordinator.commandPaletteVisible = false
-        panelCoordinator.settingsVisible = false
-        panelCoordinator.workspaceOverviewVisible = false
-        publishPanelState()
-        notificationPanelVisible = true
-    }
-
-    func hideNotificationPanel() {
-        notificationPanelVisible = false
-    }
-
-    func notifyFocusedTerminalForTesting() {
-        guard let tab = workspace.focusedPane?.selectedTab else { return }
-        _ = recordTerminalNotification(
-            terminalID: tab.id,
-            title: "测试通知",
-            body: "当前终端的通知通道可用。",
-            kind: .agent
-        )
-    }
-
-    @discardableResult
-    func jumpToLatestUnread() -> Bool {
-        guard let notification = notifications.snapshot.latestUnread else { return false }
-        return openNotification(notification.id)
-    }
-
-    @discardableResult
-    func openNotification(_ notificationID: UUID) -> Bool {
-        guard let notification = notifications.records.first(where: { $0.id == notificationID }) else {
-            return false
-        }
-        ConductorLog.performance.debug("open notification id=\(notificationID.uuidString, privacy: .public) terminal=\(notification.terminalID.description, privacy: .public)")
-        if workspace.paneID(containing: notification.terminalID) == nil,
-           let workspaceID = workspaces.first(where: { $0.paneID(containing: notification.terminalID) != nil })?.id {
-            activateWorkspace(workspaceID, source: .notification)
-        }
-        focusTerminal(notification.terminalID)
-        markNotificationRead(notificationID)
-        refreshSurfaceAfterNavigation(notification.terminalID)
-        hideNotificationPanel()
-        return true
-    }
-
-    func markNotificationRead(_ notificationID: UUID) {
-        guard let terminalID = notifications.records.first(where: { $0.id == notificationID })?.terminalID else {
-            return
-        }
-        mutateNotifications { $0.markRead(id: notificationID) }
-        refreshNotificationMetadata(for: terminalID)
-    }
-
-    func markTerminalNotificationsRead(_ terminalID: TerminalID) {
-        guard notifications.snapshot.unreadCount(for: terminalID) > 0 || metadata(for: terminalID).unreadCount > 0 else {
-            return
-        }
-        ConductorLog.performance.debug("mark notifications read terminal=\(terminalID.description, privacy: .public)")
-        var next = notifications
-        if next.markTerminalRead(terminalID) {
-            notifications = next
-        } else if metadata(for: terminalID).unreadCount == notifications.snapshot.unreadCount(for: terminalID) {
-            return
-        }
-        refreshNotificationMetadata(for: terminalID)
-    }
-
     func recordTerminalUserActivity(_ terminalID: TerminalID) {
         guard terminalLocation(for: terminalID) != nil else { return }
-        markTerminalNotificationsRead(terminalID)
+        attendTerminal(terminalID)
     }
 
-    private func markSelectedTerminalNotificationsRead(in paneID: PaneID) {
+    private func attendSelectedTerminal(in paneID: PaneID) {
         guard let terminalID = workspace.panes[paneID]?.selectedTabID else { return }
-        markTerminalNotificationsRead(terminalID)
+        attendTerminal(terminalID)
     }
 
-    func clearNotification(_ notificationID: UUID) {
-        guard let terminalID = notifications.records.first(where: { $0.id == notificationID })?.terminalID else {
-            return
-        }
-        mutateNotifications { $0.clear(id: notificationID) }
-        refreshNotificationMetadata(for: terminalID)
-    }
-
-    func clearAllNotifications() {
-        let terminalIDs = Set(notifications.records.map(\.terminalID))
-        mutateNotifications { $0.clearAll() }
-        terminalIDs.forEach(refreshNotificationMetadata)
+    private func attendTerminal(_ terminalID: TerminalID) {
+        selectedWorkspaceContentTabID = .terminal(terminalID)
     }
 
     func receiveAgentHookNotification(_ userInfo: [String: String]?) {
         guard let userInfo,
               let rawTerminalID = userInfo[ConductorAgentHookBridge.Key.terminalID],
               let uuid = UUID(uuidString: rawTerminalID.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            ConductorLog.app.info("Ignoring agent hook notification with missing terminal id")
             return
         }
         let agent = userInfo[ConductorAgentHookBridge.Key.agent] ?? ""
-        guard appearance.agentNotifications.isEnabled(forAgentName: agent) else { return }
 
         let terminalID = TerminalID(uuid)
         let action = userInfo[ConductorAgentHookBridge.Key.action]?.lowercased() ?? ""
+        ConductorLog.app.info("Received agent hook action=\(action, privacy: .public) agent=\(agent, privacy: .public) terminal=\(terminalID.description, privacy: .public)")
         switch action {
         case "prompt-submit", "session-start":
-            markTerminalNotificationsRead(terminalID)
-        case "stop", "agent-response", "subagent-stop", "notification":
-            let title = userInfo[ConductorAgentHookBridge.Key.title] ?? "任务完成"
-            let body = userInfo[ConductorAgentHookBridge.Key.body] ?? "终端任务已完成，等待下一步。"
-            _ = recordTerminalNotification(
+            let providerTitle = Self.agentDisplayTitle(for: agent)
+            updateMetadata(for: terminalID) { metadata in
+                metadata.activeAgentTitle = providerTitle
+                metadata.activeAgentStartedAt = Date()
+            }
+        case "stop", "agent-response", "subagent-stop":
+            updateMetadata(for: terminalID) { metadata in
+                metadata.activeAgentTitle = nil
+                metadata.activeAgentStartedAt = nil
+            }
+            deliverAgentReplyNotification(
                 terminalID: terminalID,
-                title: title,
-                body: body,
-                kind: .agent
+                agentTitle: Self.agentDisplayTitle(for: agent),
+                body: userInfo[ConductorAgentHookBridge.Key.body] ?? ""
             )
         default:
             break
         }
+    }
+
+    private func deliverAgentReplyNotification(
+        terminalID: TerminalID,
+        agentTitle: String,
+        body: String
+    ) {
+        guard let location = terminalLocation(for: terminalID) else {
+            ConductorLog.app.info("Agent reply notification skipped because terminal is not open")
+            return
+        }
+        let request = AgentReplyNotificationRequest(
+            terminalID: terminalID,
+            agentTitle: agentTitle,
+            body: body,
+            isUnattended: isTerminalUnattended(terminalID, location: location)
+        )
+        agentReplyNotificationService.deliver(request, preferences: appearance.agentReplyNotifications)
+    }
+
+    private func isTerminalUnattended(
+        _ terminalID: TerminalID,
+        location: (workspaceID: WorkspaceID, paneID: PaneID)
+    ) -> Bool {
+        guard applicationActive,
+              workspace.id == location.workspaceID,
+              workspace.focusedPaneID == location.paneID,
+              workspace.panes[location.paneID]?.selectedTabID == terminalID,
+              selectedWorkspaceTerminalTabID == terminalID else {
+            return true
+        }
+        return false
+    }
+
+    private static func agentDisplayTitle(for rawAgent: String) -> String {
+        if let provider = AgentHookProvider(cliName: rawAgent) {
+            return provider.title
+        }
+        if let definition = AgentIntegrationCatalog.definition(named: rawAgent) {
+            return definition.displayName
+        }
+        return L("AI 终端", "AI Terminal")
     }
 
     func equalizeSplits() {
@@ -3125,61 +3105,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             pendingMetadataByTerminalID.removeValue(forKey: terminalID)
         }
         surfaceCoordinator.closeSurfaces(for: terminalIDs)
-        if !terminalIDs.isEmpty {
-            var next = notifications
-            for terminalID in terminalIDs {
-                next.clearTerminal(terminalID)
-            }
-            notifications = next
-        }
-    }
-
-    @discardableResult
-    private func recordTerminalNotification(
-        terminalID: TerminalID,
-        title: String,
-        body: String,
-        kind: TerminalNotificationKind
-    ) -> Bool {
-        guard let location = terminalLocation(for: terminalID) else { return false }
-        var nextNotifications = notifications
-        let notification = nextNotifications.add(
-            workspaceID: location.workspaceID,
-            paneID: location.paneID,
-            terminalID: terminalID,
-            title: title,
-            body: body,
-            kind: kind
-        )
-        notifications = nextNotifications
-        updateMetadata(for: terminalID) { metadata in
-            metadata.unreadCount = notifications.snapshot.unreadCount(for: terminalID)
-            metadata.lastNotificationTitle = notification.title
-            metadata.lastNotificationBody = notification.body.isEmpty ? nil : notification.body
-            if kind == .bell {
-                metadata.bellCount += 1
-            }
-        }
-        return true
-    }
-
-    private func mutateNotifications(_ mutation: (inout TerminalNotificationState) -> Void) {
-        var next = notifications
-        mutation(&next)
-        notifications = next
-    }
-
-    private func refreshNotificationMetadata(for terminalID: TerminalID) {
-        updateMetadata(for: terminalID) { metadata in
-            metadata.unreadCount = notifications.snapshot.unreadCount(for: terminalID)
-            if let latest = notifications.snapshot.latestByTerminalID[terminalID] {
-                metadata.lastNotificationTitle = latest.title
-                metadata.lastNotificationBody = latest.body.isEmpty ? nil : latest.body
-            } else {
-                metadata.lastNotificationTitle = nil
-                metadata.lastNotificationBody = nil
-            }
-        }
     }
 
     private func terminalLocation(for terminalID: TerminalID) -> (workspaceID: WorkspaceID, paneID: PaneID)? {
@@ -3316,6 +3241,75 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         pendingMetadataByTerminalID[terminalID] ?? metadataByTerminalID[terminalID] ?? TerminalDisplayMetadata()
     }
 
+    private enum VisibleAgentRuntimeState: Equatable {
+        case active(title: String)
+        case inactive(title: String)
+    }
+
+    private func startAgentRuntimePolling() {
+        guard agentRuntimePollTask == nil else { return }
+        agentRuntimePollTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                if let self {
+                    self.refreshVisibleAgentRuntimeStates()
+                } else {
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+        }
+    }
+
+    private func refreshVisibleAgentRuntimeStates() {
+        for terminalID in allTerminalIDs() {
+            guard let surface = surfaceCoordinator.existingSurface(for: terminalID) else {
+                continue
+            }
+            surface.refresh()
+            guard let state = Self.visibleAgentRuntimeState(in: surface.visibleText()) else {
+                continue
+            }
+            let current = metadata(for: terminalID)
+            switch state {
+            case .active(let title):
+                guard current.activeAgentTitle != title else { continue }
+                updateMetadata(for: terminalID) { metadata in
+                    metadata.activeAgentTitle = title
+                    metadata.activeAgentStartedAt = Date()
+                }
+            case .inactive(let title):
+                guard current.activeAgentTitle == title else { continue }
+                updateMetadata(for: terminalID) { metadata in
+                    metadata.activeAgentTitle = nil
+                    metadata.activeAgentStartedAt = nil
+                }
+            }
+        }
+    }
+
+    private func allTerminalIDs() -> [TerminalID] {
+        var ids: [TerminalID] = []
+        var seen = Set<TerminalID>()
+        for workspace in workspaces {
+            for pane in workspace.panes.values {
+                for tab in pane.tabs where seen.insert(tab.id).inserted {
+                    ids.append(tab.id)
+                }
+            }
+        }
+        return ids
+    }
+
+    private static func visibleAgentRuntimeState(in text: String?) -> VisibleAgentRuntimeState? {
+        guard let text, !text.isEmpty else { return nil }
+        let normalized = text.lowercased()
+        let isCodexScreen = normalized.contains("openai codex") || normalized.contains("codex (v")
+        guard isCodexScreen else { return nil }
+        let isInterruptible = normalized.contains("esc to interrupt") || normalized.contains("ctrl-c to interrupt")
+        let isWorking = normalized.contains("working") || normalized.contains("thinking")
+        return isInterruptible && isWorking ? .active(title: "Codex") : .inactive(title: "Codex")
+    }
+
     private func focusedWorkingDirectoryPath(for terminalID: TerminalID) -> String? {
         let metadataPath = metadata(for: terminalID).workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let metadataPath, !metadataPath.isEmpty {
@@ -3333,16 +3327,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let fileURL = url.standardizedFileURL
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory) else {
-            if let terminalID, containsTerminal(terminalID) {
-                _ = recordTerminalNotification(
-                    terminalID: terminalID,
-                    title: L("文件不存在", "File Not Found"),
-                    body: fileURL.path,
-                    kind: .notification
-                )
-            } else {
-                ConductorLog.terminal.warning("Ignoring missing local file URL: \(fileURL.path)")
-            }
+            ConductorLog.terminal.warning("Ignoring missing local file URL: \(fileURL.path)")
             return true
         }
 

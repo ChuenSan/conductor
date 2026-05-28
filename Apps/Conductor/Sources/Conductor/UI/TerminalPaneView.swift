@@ -34,7 +34,6 @@ struct TerminalPaneChromeSnapshot: Equatable {
         let workspacePaneCount = workspace.panes.count
         let workspaceCanSplit = workspace.canSplit()
         let metadataByTerminalID = model.metadataByTerminalID
-        let notificationSnapshot = model.notifications.snapshot
 
         self.paneID = pane.id
         self.selectedTabID = pane.selectedTabID
@@ -53,7 +52,6 @@ struct TerminalPaneChromeSnapshot: Equatable {
             TerminalTabDisplayModel(
                 tab: tab,
                 metadata: metadataByTerminalID[tab.id],
-                unreadCount: notificationSnapshot.unreadCount(for: tab.id),
                 isDragging: model.isTerminalTabDragging(tab.id),
                 tabIndex: index,
                 tabCount: pane.tabs.count,
@@ -76,7 +74,6 @@ struct TerminalTabDisplayModel: Identifiable, Equatable {
     var id: TerminalID { tab.id }
     let tab: TerminalTabState
     let metadata: TerminalDisplayMetadata?
-    let unreadCount: Int
     let isDragging: Bool
     let tabIndex: Int
     let tabCount: Int
@@ -736,7 +733,7 @@ private final class NativeTerminalTabItemView: NSView, NSDraggingSource, NSTextF
 
     private var fillColor: NSColor {
         if selected {
-            return NSColor(theme.shellPanelStrong.opacity(paneFocused ? (theme.usesDarkChrome ? 0.66 : 0.78) : (theme.usesDarkChrome ? 0.52 : 0.64)))
+            return NSColor(theme.shellSelectedFill)
         }
         if hovering {
             return NSColor(theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.36 : 0.18))
@@ -749,7 +746,7 @@ private final class NativeTerminalTabItemView: NSView, NSDraggingSource, NSTextF
             return NSColor(theme.floatingSelectedStroke.opacity(0.95))
         }
         if selected {
-            return NSColor(theme.shellStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.45 : 0.28) : 0.22))
+            return NSColor(theme.floatingSelectedStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.58 : 0.48) : (theme.usesDarkChrome ? 0.38 : 0.32)))
         }
         return NSColor(theme.shellStroke.opacity(hovering ? 0.12 : 0.0))
     }
@@ -807,12 +804,8 @@ private final class NativeTerminalTabItemView: NSView, NSDraggingSource, NSTextF
     }
 
     private func drawStatus(for display: TerminalTabDisplayModel) {
-        let hasUnread = display.unreadCount > 0 || (display.metadata?.unreadCount ?? 0) > 0
         let rect = NSRect(x: bounds.maxX - ((hovering || selected) ? 36 : 14), y: bounds.midY - 3, width: 6, height: 6)
-        if hasUnread {
-            NSColor(theme.floatingEmphasis.opacity(0.72)).setFill()
-            NSBezierPath(ovalIn: rect).fill()
-        } else if display.metadata?.progressKind != nil {
+        if display.metadata?.progressKind != nil {
             NSColor(theme.floatingEmphasis.opacity(0.72)).setStroke()
             let path = NSBezierPath(ovalIn: rect.insetBy(dx: -0.5, dy: -0.5))
             path.lineWidth = 1.25
@@ -894,9 +887,6 @@ private final class NativeTerminalTabItemView: NSView, NSDraggingSource, NSTextF
         var parts = [display.tab.title]
         if let detail = detailLabel(for: display) {
             parts.append(detail)
-        }
-        if display.unreadCount > 0 || (display.metadata?.unreadCount ?? 0) > 0 {
-            parts.append(L("未读", "Unread"))
         }
         if display.metadata?.readonly == true {
             parts.append(L("只读", "Read Only"))
@@ -1166,10 +1156,6 @@ private struct TerminalTabButton: View {
         display.metadata
     }
 
-    private var unreadCount: Int {
-        display.unreadCount
-    }
-
     private var canMoveTargetTabToNextPane: Bool {
         guard display.hasNextPane else { return false }
         return display.tabCount > 1 || display.workspacePaneCount > 1
@@ -1187,7 +1173,7 @@ private struct TerminalTabButton: View {
     }
 
     private var selectedFill: Color {
-        theme.shellPanelStrong.opacity(paneFocused ? (theme.usesDarkChrome ? 0.56 : 0.68) : (theme.usesDarkChrome ? 0.44 : 0.54))
+        theme.shellSelectedFill
     }
 
     private var tabStroke: Color {
@@ -1195,7 +1181,7 @@ private struct TerminalTabButton: View {
             return theme.floatingSelectedStroke.opacity(0.95)
         }
         if isSelected {
-            return theme.shellStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.30 : 0.18) : 0.14)
+            return theme.floatingSelectedStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.58 : 0.48) : (theme.usesDarkChrome ? 0.38 : 0.32))
         }
         return theme.shellStroke.opacity(hovering ? 0.08 : 0.0)
     }
@@ -1219,9 +1205,6 @@ private struct TerminalTabButton: View {
         var parts = [tab.title]
         if let terminalDetailLabel {
             parts.append(terminalDetailLabel)
-        }
-        if unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0 {
-            parts.append(L("未读", "Unread"))
         }
         if metadata?.readonly == true {
             parts.append(L("只读", "Read Only"))
@@ -1270,7 +1253,6 @@ private struct TerminalTabButton: View {
                         title: tab.title,
                         detail: terminalDetailLabel,
                         selected: isSelected,
-                        hasUnread: unreadCount > 0 || (metadata?.unreadCount ?? 0) > 0,
                         showsProgress: metadata?.progressKind != nil,
                         readonly: metadata?.readonly == true,
                         themeID: theme.id,
@@ -1338,7 +1320,6 @@ private struct TerminalTabButton: View {
         .animation(ConductorMotion.hover, value: hovering)
         .animation(ConductorMotion.micro, value: isDropTarget)
         .animation(ConductorMotion.selection, value: editingTitle)
-        .animation(ConductorMotion.attention, value: unreadCount)
         .animation(ConductorMotion.dragPreview, value: display.isDragging)
         .conductorHover($hovering)
         .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab))
@@ -1483,7 +1464,6 @@ private struct TerminalTabButtonContent: View, Equatable {
     let title: String
     let detail: String?
     let selected: Bool
-    let hasUnread: Bool
     let showsProgress: Bool
     let readonly: Bool
     let themeID: String
@@ -1495,7 +1475,6 @@ private struct TerminalTabButtonContent: View, Equatable {
         lhs.title == rhs.title &&
             lhs.detail == rhs.detail &&
             lhs.selected == rhs.selected &&
-            lhs.hasUnread == rhs.hasUnread &&
             lhs.showsProgress == rhs.showsProgress &&
             lhs.readonly == rhs.readonly &&
             lhs.themeID == rhs.themeID &&
@@ -1520,11 +1499,7 @@ private struct TerminalTabButtonContent: View, Equatable {
                     .lineLimit(1)
             }
             Spacer(minLength: 2)
-            if hasUnread {
-                Circle()
-                    .fill(theme.floatingEmphasis.opacity(0.72))
-                    .frame(width: 6, height: 6)
-            } else if showsProgress {
+            if showsProgress {
                 Circle()
                     .stroke(theme.floatingEmphasis.opacity(0.72), lineWidth: 1.25)
                     .frame(width: 7, height: 7)

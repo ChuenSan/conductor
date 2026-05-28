@@ -69,9 +69,8 @@ enum TerminalGhosttyConfigCatalog {
         "background-opacity-cells", "background-blur", "unfocused-split-opacity",
         "unfocused-split-fill", "split-divider-color", "split-preserve-zoom",
         "search-foreground", "search-background", "search-selected-foreground",
-        "search-selected-background", "initial-command", "notify-on-command-finish",
-        "notify-on-command-finish-action", "notify-on-command-finish-after",
-        "wait-after-command", "abnormal-command-exit-runtime", "scrollback-limit",
+        "search-selected-background", "initial-command", "wait-after-command",
+        "abnormal-command-exit-runtime", "scrollback-limit",
         "link-url", "link-previews", "x11-instance-name", "working-directory",
         "key-remap", "window-padding-x", "window-padding-y", "window-padding-balance",
         "window-padding-color", "window-vsync", "window-inherit-working-directory",
@@ -95,7 +94,7 @@ enum TerminalGhosttyConfigCatalog {
         "shell-integration", "shell-integration-features", "command-palette-entry",
         "osc-color-report-format", "vt-kam-allowed", "custom-shader",
         "custom-shader-animation", "bell-features", "bell-audio-path",
-        "bell-audio-volume", "app-notifications", "macos-non-native-fullscreen",
+        "bell-audio-volume", "macos-non-native-fullscreen",
         "macos-window-buttons", "macos-titlebar-style", "macos-titlebar-proxy-icon",
         "macos-dock-drop-behavior", "macos-option-as-alt", "macos-window-shadow",
         "macos-hidden", "macos-auto-secure-input", "macos-secure-input-indication",
@@ -105,7 +104,7 @@ enum TerminalGhosttyConfigCatalog {
         "linux-cgroup-hard-fail", "gtk-opengl-debug", "gtk-single-instance",
         "gtk-titlebar", "gtk-tabs-location", "gtk-titlebar-hide-when-maximized",
         "gtk-toolbar-style", "gtk-titlebar-style", "gtk-wide-tabs", "gtk-custom-css",
-        "desktop-notifications", "progress-style", "bold-color", "faint-opacity",
+        "progress-style", "bold-color", "faint-opacity",
         "enquiry-response", "async-backend", "auto-update", "auto-update-channel",
         "_xdg-terminal-exec", "bold-italic", "ssh-env", "ssh-terminfo",
         "clipboard-copy", "config-reload", "force-autohint"
@@ -179,14 +178,12 @@ enum TerminalGhosttyConfigCatalog {
             ]
         ),
         GhosttyConfigFunctionGroup(
-            id: "notifications",
-            title: ConductorLocalization.text(zh: "通知与铃声", en: "Notifications and Bell"),
-            subtitle: ConductorLocalization.text(zh: "命令完成通知和铃声提示；Agent 通知仍放在 AI 页。", en: "Command-finish notifications and bell behavior; agent notifications stay in the AI page."),
-            systemImage: "bell.badge",
+            id: "bell",
+            title: ConductorLocalization.text(zh: "铃声", en: "Bell"),
+            subtitle: ConductorLocalization.text(zh: "终端铃声提示。", en: "Terminal bell feedback."),
+            systemImage: "bell",
             keys: [
-                "notify-on-command-finish", "notify-on-command-finish-action",
-                "notify-on-command-finish-after", "bell-features",
-                "bell-audio-path", "bell-audio-volume"
+                "bell-features", "bell-audio-path", "bell-audio-volume"
             ]
         ),
         GhosttyConfigFunctionGroup(
@@ -305,15 +302,12 @@ enum TerminalGhosttyConfigCatalog {
             ]
         ),
         GhosttyConfigFunctionGroup(
-            id: "notifications",
-            title: ConductorLocalization.text(zh: "通知、铃声与进度", en: "Notifications, Bell, and Progress"),
-            subtitle: ConductorLocalization.text(zh: "命令完成通知、桌面通知、铃声文件/音量和进度样式。", en: "Command finish notifications, desktop notifications, bell sound, volume, and progress style."),
-            systemImage: "bell.badge",
+            id: "bell-progress",
+            title: ConductorLocalization.text(zh: "铃声与进度", en: "Bell and Progress"),
+            subtitle: ConductorLocalization.text(zh: "铃声文件/音量和进度样式。", en: "Bell sound, volume, and progress style."),
+            systemImage: "bell",
             keys: [
-                "notify-on-command-finish", "notify-on-command-finish-action",
-                "notify-on-command-finish-after", "bell-features", "bell-audio-path",
-                "bell-audio-volume", "app-notifications", "desktop-notifications",
-                "progress-style"
+                "bell-features", "bell-audio-path", "bell-audio-volume", "progress-style"
             ]
         ),
         GhosttyConfigFunctionGroup(
@@ -442,11 +436,6 @@ enum TerminalGhosttyConfigCatalog {
                 "macos-titlebar-style", "macos-titlebar-proxy-icon", "macos-option-as-alt",
                 "macos-auto-secure-input", "macos-secure-input-indication", "macos-shortcuts"
             ]
-        ),
-        GhosttyConfigKeyGroup(
-            id: "notifications",
-            title: ConductorLocalization.text(zh: "通知", en: "Notifications"),
-            keys: ["notify-on-command-finish", "notify-on-command-finish-action", "notify-on-command-finish-after", "app-notifications"]
         )
     ]
 
@@ -536,8 +525,6 @@ enum TerminalGhosttyConfigCatalog {
             ConductorLocalization.text(zh: "控制鼠标捕获、滚动速度、右键/中键动作和输入时隐藏指针。", en: "Controls mouse capture, scroll speed, right/middle-click actions, and hiding the pointer while typing.")
         case _ where key.hasPrefix("clipboard-") || key == "copy-on-select":
             ConductorLocalization.text(zh: "控制剪贴板读写、复制策略、粘贴保护和安全粘贴模式。", en: "Controls clipboard access, copy behavior, paste protection, and safe paste modes.")
-        case _ where key.hasPrefix("notify-") || key.hasSuffix("notifications"):
-            ConductorLocalization.text(zh: "控制命令完成、应用和桌面通知何时出现以及如何触发。", en: "Controls when command-finish, app, and desktop notifications appear.")
         case _ where key.hasPrefix("bell-"):
             ConductorLocalization.text(zh: "配置终端铃声的功能、音频文件和音量。", en: "Configures terminal bell behavior, sound file, and volume.")
         case _ where key.hasPrefix("window-"):
@@ -690,7 +677,6 @@ enum TerminalGhosttyConfigCatalog {
             case "duration": "持续时间"
             case "delay": "延迟"
             case "timeout": "超时"
-            case "notification", "notifications", "notify": "通知"
             case "bell": "铃声"
             case "audio": "音频"
             case "volume": "音量"
@@ -819,8 +805,6 @@ enum TerminalGhosttyConfigCatalog {
             ConductorLocalization.text(zh: "跨平台", en: "Cross-platform")
         case _ where key.hasPrefix("quick-terminal-"):
             ConductorLocalization.text(zh: "Quick Terminal", en: "Quick Terminal")
-        case _ where key.hasPrefix("notify-") || key.hasSuffix("notifications"):
-            ConductorLocalization.text(zh: "通知", en: "Notifications")
         case _ where key.hasPrefix("adjust-"):
             ConductorLocalization.text(zh: "字格微调", en: "Metrics")
         default:
@@ -872,13 +856,13 @@ enum TerminalGhosttyConfigCatalog {
         "config-default-files", "confirm-close-surface",
         "quit-after-last-window-closed", "initial-window",
         "quick-terminal-autohide", "custom-shader-animation",
-        "app-notifications", "macos-non-native-fullscreen",
+        "macos-non-native-fullscreen",
         "macos-titlebar-proxy-icon", "macos-window-shadow", "macos-hidden",
         "macos-auto-secure-input", "macos-secure-input-indication",
         "macos-applescript", "macos-shortcuts", "linux-cgroup",
         "linux-cgroup-hard-fail", "gtk-opengl-debug", "gtk-single-instance",
         "gtk-titlebar-hide-when-maximized", "gtk-wide-tabs",
-        "desktop-notifications", "notify-on-command-finish", "bold-italic", "ssh-env",
+        "bold-italic", "ssh-env",
         "clipboard-copy", "config-reload", "force-autohint", "vt-kam-allowed",
         "auto-update", "background-blur"
     ]

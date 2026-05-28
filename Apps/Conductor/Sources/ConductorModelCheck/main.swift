@@ -848,73 +848,6 @@ func checkComplexWorkspaceStressMaintainsInvariants() {
     requireValidWorkspace(workspace, "stress final")
 }
 
-func checkTerminalNotificationStateIndexesAndLifecycle() {
-    let workspaceID = WorkspaceID()
-    let paneID = PaneID()
-    let firstTerminalID = TerminalID()
-    let secondTerminalID = TerminalID()
-    let baseDate = Date(timeIntervalSince1970: 1_000)
-    var state = TerminalNotificationState()
-
-    let first = state.add(
-        workspaceID: workspaceID,
-        paneID: paneID,
-        terminalID: firstTerminalID,
-        title: "Codex",
-        body: "Needs input",
-        kind: .agent,
-        createdAt: baseDate
-    )
-    require(state.snapshot.unreadCount == 1, "notification add should increase unread count")
-    require(state.snapshot.unreadCount(for: workspaceID) == 1, "notification should index unread by workspace")
-    require(state.snapshot.unreadCount(for: paneID) == 1, "notification should index unread by pane")
-    require(state.snapshot.unreadCount(for: firstTerminalID) == 1, "notification should index unread by terminal")
-    require(state.snapshot.latestUnread?.id == first.id, "latest unread should be first notification")
-
-    let replacement = state.add(
-        workspaceID: workspaceID,
-        paneID: paneID,
-        terminalID: firstTerminalID,
-        title: "Codex",
-        body: "Still waiting",
-        kind: .agent,
-        createdAt: baseDate.addingTimeInterval(1)
-    )
-    require(state.records.count == 1, "same terminal should coalesce to latest notification")
-    require(state.records[0].id == replacement.id, "coalesced notification should replace old record")
-    require(state.snapshot.unreadCount == 1, "coalescing should not double unread count")
-
-    let second = state.add(
-        workspaceID: workspaceID,
-        paneID: paneID,
-        terminalID: secondTerminalID,
-        title: "Bell",
-        body: "",
-        kind: .bell,
-        createdAt: baseDate.addingTimeInterval(2)
-    )
-    require(state.snapshot.unreadCount == 2, "second terminal should add unread")
-    require(state.snapshot.latestUnread?.id == second.id, "newest unread should be latest")
-
-    require(state.markRead(id: second.id), "mark read should mutate unread notification")
-    require(state.snapshot.unreadCount == 1, "mark read should decrease unread count")
-    require(state.snapshot.latestUnread?.id == replacement.id, "latest unread should skip read records")
-
-    require(state.markTerminalRead(firstTerminalID), "terminal read should mark all unread records for that terminal")
-    require(state.snapshot.unreadCount == 0, "terminal read should clear terminal unread count")
-    require(state.snapshot.unreadCount(for: firstTerminalID) == 0, "terminal read should clear terminal unread index")
-    require(state.snapshot.latestUnread == nil, "terminal read should clear latest unread when no unread records remain")
-    require(!state.markTerminalRead(firstTerminalID), "terminal read should be idempotent once records are read")
-
-    require(state.clearTerminal(firstTerminalID), "clear terminal should remove records")
-    require(state.snapshot.unreadCount == 0, "clearing unread terminal should clear unread count")
-    require(state.records.count == 1 && state.records[0].id == second.id, "clear terminal should preserve other terminal records")
-
-    require(state.clearAll(), "clear all should remove remaining records")
-    require(state.records.isEmpty, "clear all should empty records")
-    require(state.snapshot == .empty, "clear all should reset snapshot")
-}
-
 func checkAgentIntegrationCatalog() {
     guard let codex = AgentIntegrationCatalog.definition(named: "codex") else {
         return require(false, "agent catalog should include Codex")
@@ -1060,7 +993,6 @@ checkContextTabMoveAvailabilityUsesTargetTabPane()
 checkMoveTabToEndInSamePane()
 checkRapidTabSwitchingKeepsStableStructure()
 checkComplexWorkspaceStressMaintainsInvariants()
-checkTerminalNotificationStateIndexesAndLifecycle()
 checkAgentIntegrationCatalog()
 checkSearchMatcherRanking()
 checkSearchSelection()

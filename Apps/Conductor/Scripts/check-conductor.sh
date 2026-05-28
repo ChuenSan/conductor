@@ -140,7 +140,7 @@ echo
 grep -qx 'status=ok' /tmp/conductor-notification-ok.txt
 grep -qx 'notification=open' /tmp/conductor-notification-ok.txt
 grep -qx 'opened=true' /tmp/conductor-notification-ok.txt
-grep -qx 'panelClosed=true' /tmp/conductor-notification-ok.txt
+grep -qx 'panelStayedOpen=true' /tmp/conductor-notification-ok.txt
 grep -qx 'unreadCleared=true' /tmp/conductor-notification-ok.txt
 grep -qx 'targetFocused=true' /tmp/conductor-notification-ok.txt
 

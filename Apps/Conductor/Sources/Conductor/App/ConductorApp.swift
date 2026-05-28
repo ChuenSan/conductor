@@ -201,10 +201,11 @@ final class ConductorWindow: NSWindow {
         let location = event.locationInWindow
         let size = frame.size
         let borderHitWidth: CGFloat = 6
+        let topChromeHitHeight: CGFloat = 42
         return location.x <= borderHitWidth ||
             location.x >= size.width - borderHitWidth ||
             location.y <= borderHitWidth ||
-            location.y >= size.height - borderHitWidth
+            location.y >= size.height - topChromeHitHeight
     }
 
     private static func owningTerminalHost(for responder: NSResponder?) -> TerminalHostView? {
@@ -244,25 +245,11 @@ final class ConductorHostingView<Content: View>: NSHostingView<Content> {
 }
 
 @MainActor
-final class NotificationWindowDelegate: NSObject, NSWindowDelegate {
-    private let onClose: () -> Void
-
-    init(onClose: @escaping () -> Void) {
-        self.onClose = onClose
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        onClose()
-    }
-}
-
-@MainActor
 final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSWindowDelegate {
     private var window: ConductorWindow?
-    private var notificationWindow: NSPanel?
-    private var notificationWindowDelegate: NotificationWindowDelegate?
     private var codexBarRuntime: CodexBarEmbeddedRuntime?
     private var agentHookObserver: NSObjectProtocol?
+    private var agentHookDrainTimer: Timer?
     private var shellKeyMonitor: Any?
     private var cancellables = Set<AnyCancellable>()
     private let model = ConductorWindowModel()
@@ -273,8 +260,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
     private var resizeStressOriginalTheme: TerminalTheme?
     private var didStart = false
     private var isTerminating = false
-    private let notificationWindowMotionDuration: TimeInterval = 0.18
-    private let notificationWindowMotionDistance: CGFloat = 18
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         startApplication()
@@ -313,9 +298,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.routeAppShortcut = { [weak self] event in
             self?.routeAppShortcut(event) ?? false
         }
-        model.onNotificationPanelVisibilityChange = { [weak self] visible in
-            self?.setNotificationWindowVisible(visible)
-        }
         installShellKeyMonitor()
         installAgentHookObserver()
         mainThreadWatchdog.start()
@@ -338,6 +320,9 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
+        model.installAgentReplyNotificationActivationHandler { [weak self] terminalID in
+            self?.activateTerminalFromAgentReplyNotification(terminalID)
+        }
         startCodexBarIfEnabled()
         installAppearanceBinding()
         installMainMenu()
@@ -349,7 +334,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         runLifecycleAutomationIfRequested()
         runWorkspaceAutomationIfRequested()
         runShellPanelAutomationIfRequested()
-        runNotificationAutomationIfRequested()
         runStressAutomationIfRequested()
         runResizeStressAutomationIfRequested()
         ConductorLog.app.info("Conductor window launched")
@@ -357,11 +341,13 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     func applicationDidBecomeActive(_ notification: Notification) {
         ConductorDiagnostics.record("app-active")
+        model.setApplicationActive(true)
         GhosttyAppRuntime.shared.setAppFocus(true)
     }
 
     func applicationDidResignActive(_ notification: Notification) {
         ConductorDiagnostics.record("app-inactive")
+        model.setApplicationActive(false)
         GhosttyAppRuntime.shared.setAppFocus(false)
     }
 
@@ -372,10 +358,11 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         Self.appendStressTrace("applicationWillTerminate", to: ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"])
         model.flushPersistence()
         codexBarRuntime?.stop()
-        notificationWindow?.close()
         if let agentHookObserver {
             DistributedNotificationCenter.default().removeObserver(agentHookObserver)
         }
+        agentHookDrainTimer?.invalidate()
+        agentHookDrainTimer = nil
         if let shellKeyMonitor {
             NSEvent.removeMonitor(shellKeyMonitor)
         }
@@ -469,9 +456,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let viewMenu = NSMenu(title: L("视图", "View"))
         viewMenu.addItem(menuItem(L("工作区总览", "Workspace Overview"), command: .toggleWorkspaceOverview, #selector(workspaceOverviewCommand)))
         viewMenu.addItem(menuItem(L("命令面板", "Command Palette"), command: .toggleCommandPalette, #selector(commandPaletteCommand)))
-        viewMenu.addItem(menuItem(L("通知", "Notifications"), command: .toggleNotifications, #selector(notificationCenterCommand)))
-        viewMenu.addItem(menuItem(L("跳转到最新未读", "Jump to Latest Unread"), command: .jumpToLatestUnread, #selector(jumpToLatestUnreadCommand)))
-        viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(menuItem(L("聚焦网页地址", "Focus Web Address"), command: .focusWebAddress, #selector(focusWebAddressCommand)))
         viewMenu.addItem(menuItem(L("重新载入网页", "Reload Web Page"), command: .reloadSelectedWebTab, #selector(reloadSelectedWebTabCommand)))
         viewMenu.addItem(menuItem(L("在浏览器中打开网页", "Open Web Page in Browser"), command: .openSelectedWebTabExternally, #selector(openSelectedWebTabExternallyCommand)))
@@ -549,10 +533,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             .toggleWorkspaceOverview
         case #selector(settingsPanelCommand):
             .toggleSettings
-        case #selector(notificationCenterCommand):
-            .toggleNotifications
-        case #selector(jumpToLatestUnreadCommand):
-            .jumpToLatestUnread
         case #selector(openCurrentDirectoryCommand):
             .openFocusedDirectory
         case #selector(copyCurrentDirectoryCommand):
@@ -614,7 +594,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             environment["CONDUCTOR_LAYOUT_AUTORUN"] == "1" ||
             environment["CONDUCTOR_LIFECYCLE_AUTORUN"] == "1" ||
             environment["CONDUCTOR_SHELL_PANEL_AUTORUN"] == "1" ||
-            environment["CONDUCTOR_NOTIFICATION_AUTORUN"] == "1" ||
             environment["CONDUCTOR_STRESS_AUTORUN"] == "1" ||
             environment["CONDUCTOR_RESIZE_STRESS_AUTORUN"] == "1" ||
             environment["CONDUCTOR_WORKSPACE_AUTORUN"] == "1"
@@ -744,14 +723,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         }
     }
 
-    @objc private func notificationCenterCommand() {
-        scheduleCommand(.toggleNotifications)
-    }
-
-    @objc private func jumpToLatestUnreadCommand() {
-        scheduleCommand(.jumpToLatestUnread)
-    }
-
     @objc private func openCurrentDirectoryCommand() {
         scheduleCommand(.openFocusedDirectory)
     }
@@ -800,14 +771,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         scheduleCommand(.resetWorkspace)
     }
 
-    private func setNotificationWindowVisible(_ visible: Bool) {
-        if visible {
-            showNotificationWindow()
-        } else {
-            hideNotificationWindow()
-        }
-    }
-
     private func installAppearanceBinding() {
         model.$theme
             .removeDuplicates()
@@ -815,9 +778,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
                 guard let self else { return }
                 if let window {
                     applyAppearance(for: theme, to: window)
-                }
-                if let notificationWindow {
-                    applyAppearance(for: theme, to: notificationWindow)
                 }
             }
             .store(in: &cancellables)
@@ -838,137 +798,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.contentView?.appearance = appearance
     }
 
-    private func hideNotificationWindow() {
-        guard let notificationWindow else {
-            restoreMainWindowFocus()
-            return
-        }
-        guard notificationWindow.isVisible else {
-            notificationWindow.orderOut(nil)
-            restoreMainWindowFocus()
-            return
-        }
-
-        let startFrame = notificationWindow.frame
-        let endFrame = startFrame.offsetBy(dx: notificationWindowMotionDistance * 0.72, dy: 0)
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = notificationWindowMotionDuration
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1.0, 0.3, 1.0)
-            notificationWindow.animator().alphaValue = 0
-            notificationWindow.animator().setFrame(endFrame, display: true)
-        } completionHandler: { [weak self, weak notificationWindow] in
-            Task { @MainActor in
-                guard let self, let notificationWindow else { return }
-                guard !self.model.notificationPanelVisible else {
-                    notificationWindow.alphaValue = 1
-                    notificationWindow.setFrame(startFrame, display: false)
-                    notificationWindow.orderFrontRegardless()
-                    return
-                }
-                notificationWindow.orderOut(nil)
-                notificationWindow.alphaValue = 1
-                notificationWindow.setFrame(startFrame, display: false)
-                self.restoreMainWindowFocus()
-            }
-        }
-    }
-
-    private func restoreMainWindowFocus() {
-        guard let window else { return }
-        if NSApp.isActive {
-            window.makeKeyAndOrderFront(nil)
-        } else {
-            window.orderFront(nil)
-        }
-    }
-
-    private func showNotificationWindow() {
-        if let notificationWindow {
-            animateNotificationWindowIn(notificationWindow)
-            return
-        }
-
-        let panel = NSPanel(
-            contentRect: notificationWindowFrame(),
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-        panel.title = "通知"
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        applyAppearance(for: model.theme, to: panel)
-        [
-            NSWindow.ButtonType.closeButton,
-            .miniaturizeButton,
-            .zoomButton
-        ].forEach { buttonType in
-            panel.standardWindowButton(buttonType)?.isHidden = true
-        }
-        panel.isReleasedWhenClosed = false
-        panel.isFloatingPanel = false
-        panel.becomesKeyOnlyIfNeeded = true
-        panel.hidesOnDeactivate = false
-        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
-        panel.minSize = NSSize(
-            width: ConductorTokens.Space.notificationPanelMinWidth,
-            height: ConductorTokens.Space.notificationPanelMinHeight
-        )
-
-        let delegate = NotificationWindowDelegate { [weak self] in
-            self?.model.hideNotificationPanel()
-        }
-        panel.delegate = delegate
-        notificationWindowDelegate = delegate
-
-        let contentContainer = NSView()
-        contentContainer.wantsLayer = true
-        contentContainer.layer?.backgroundColor = NSColor.clear.cgColor
-        let hostingView = ConductorHostingView(
-            rootView: NotificationPanelRootView(model: model)
-                .frame(
-                    minWidth: ConductorTokens.Space.notificationPanelMinWidth,
-                    minHeight: ConductorTokens.Space.notificationPanelMinHeight
-                )
-        )
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        contentContainer.addSubview(hostingView)
-        panel.contentView = contentContainer
-        NSLayoutConstraint.activate([
-            hostingView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
-            hostingView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
-            hostingView.topAnchor.constraint(equalTo: contentContainer.topAnchor),
-            hostingView.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor)
-        ])
-
-        notificationWindow = panel
-        animateNotificationWindowIn(panel)
-    }
-
-    private func animateNotificationWindowIn(_ panel: NSPanel) {
-        let targetFrame = panel.frame
-        if panel.isVisible {
-            panel.alphaValue = 1
-            panel.orderFrontRegardless()
-            return
-        }
-        panel.alphaValue = 0
-        panel.setFrame(targetFrame.offsetBy(dx: notificationWindowMotionDistance, dy: 0), display: false)
-        panel.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = notificationWindowMotionDuration
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1.0, 0.3, 1.0)
-            panel.animator().alphaValue = 1
-            panel.animator().setFrame(targetFrame, display: true)
-        }
-    }
-
     private func installAgentHookObserver() {
         guard agentHookObserver == nil else { return }
         agentHookObserver = DistributedNotificationCenter.default().addObserver(
-            forName: ConductorAgentHookBridge.notificationName,
+            forName: ConductorAgentHookBridge.eventName,
             object: nil,
             queue: .main
         ) { [weak self] notification in
@@ -977,26 +810,44 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
                 result[key] = value
             }
             Task { @MainActor [weak self] in
-                self?.model.receiveAgentHookNotification(userInfo)
+                let drainedCount = self?.drainPendingAgentHookEvents() ?? 0
+                if drainedCount == 0 {
+                    self?.model.receiveAgentHookNotification(userInfo)
+                }
             }
         }
+        agentHookDrainTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.drainPendingAgentHookEvents()
+            }
+        }
+        drainPendingAgentHookEvents()
     }
 
-    private func notificationWindowFrame() -> NSRect {
-        let size = NSSize(
-            width: ConductorTokens.Space.notificationPanelWidth,
-            height: ConductorTokens.Space.notificationPanelHeight
-        )
-        guard let window else {
-            return NSRect(x: 180, y: 180, width: size.width, height: size.height)
+    @discardableResult
+    private func drainPendingAgentHookEvents() -> Int {
+        let events = ConductorAgentHookBridge.drainPendingEvents()
+        for userInfo in events {
+            model.receiveAgentHookNotification(userInfo)
         }
-        let frame = window.frame
-        return NSRect(
-            x: frame.maxX - size.width - 24,
-            y: max(frame.minY + 40, frame.maxY - size.height - 72),
-            width: size.width,
-            height: size.height
-        )
+        return events.count
+    }
+
+    private func activateTerminalFromAgentReplyNotification(_ terminalID: TerminalID) {
+        if window == nil {
+            didStart = false
+            startApplication()
+        }
+        guard let window else { return }
+        window.deminiaturize(nil)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        model.focusTerminal(terminalID)
+        if let tab = model.workspace.focusedPane?.selectedTab {
+            let surface = model.surface(for: tab)
+            surface.attachIfPossible()
+            _ = window.makeFirstResponder(surface.hostView)
+        }
     }
 
     @objc private func selectNextTabCommand() {
@@ -1348,7 +1199,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             }
 
             _ = self.model.surface(for: self.model.workspace.focusedPane!.selectedTab!)
-            _ = self.model.ghosttyRuntimeDidReceiveNotification(terminalID: first, title: "seed", body: "metadata")
 
             self.model.newTerminal()
             guard let second = self.model.workspace.focusedPane?.selectedTabID,
@@ -1484,63 +1334,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             } catch {
                 ConductorLog.app.error("Shell panel automation output write failed: \(error.localizedDescription)")
             }
-            model.workspace = originalWorkspace
-            model.theme = originalTheme
-            model.flushPersistence()
-            NSApp.terminate(nil)
-        }
-    }
-
-    private func runNotificationAutomationIfRequested() {
-        guard ProcessInfo.processInfo.environment["CONDUCTOR_NOTIFICATION_AUTORUN"] == "1" else { return }
-        let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_NOTIFICATION_OUTPUT"] ?? "/tmp/conductor-notification-ok.txt"
-        let originalWorkspace = model.workspace
-        let originalTheme = model.theme
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [model] in
-            model.closeAllSurfaces()
-            model.workspace = WorkspaceState(title: "Notification Automation")
-            model.commandPaletteVisible = false
-            model.settingsPanelVisible = false
-            model.workspaceOverviewVisible = false
-            model.notificationPanelVisible = true
-
-            model.toggleNotificationPanel()
-            let toggleClosed = !model.notificationPanelVisible
-            model.commandPaletteVisible = true
-            model.toggleNotificationPanel()
-            let toggleOpenedAlone = model.notificationPanelVisible &&
-                !model.commandPaletteVisible &&
-                !model.settingsPanelVisible &&
-                !model.workspaceOverviewVisible
-
-            let focusedBefore = model.workspace.focusedPane?.selectedTabID
-            model.notifyFocusedTerminalForTesting()
-            let notification = model.notifications.snapshot.latestUnread
-            let opened = notification.map { model.openNotification($0.id) } ?? false
-            let focusedAfter = model.workspace.focusedPane?.selectedTabID
-            let unreadCleared = focusedBefore.map { model.notifications.snapshot.unreadCount(for: $0) == 0 } ?? false
-            let panelClosed = !model.notificationPanelVisible
-            let targetFocused = focusedAfter == focusedBefore
-            let status = toggleClosed && toggleOpenedAlone && opened && panelClosed && unreadCleared && targetFocused
-
-            let summary = [
-                "status=\(status ? "ok" : "invalid")",
-                "notification=open",
-                "toggleClosed=\(toggleClosed)",
-                "toggleOpenedAlone=\(toggleOpenedAlone)",
-                "opened=\(opened)",
-                "panelClosed=\(panelClosed)",
-                "unreadCleared=\(unreadCleared)",
-                "targetFocused=\(targetFocused)"
-            ].joined(separator: "\n")
-
-            do {
-                try summary.write(toFile: outputPath, atomically: true, encoding: .utf8)
-            } catch {
-                ConductorLog.app.error("Notification automation output write failed: \(error.localizedDescription)")
-            }
-            model.closeAllSurfaces()
             model.workspace = originalWorkspace
             model.theme = originalTheme
             model.flushPersistence()

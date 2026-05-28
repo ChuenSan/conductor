@@ -329,24 +329,18 @@ private struct ConductorUsageMenuCardView: View {
         }
         .padding(10)
         .frame(width: width, alignment: .leading)
-        .overlay(alignment: .topTrailing) {
-            ConductorUsageMenuCircuitOverlay(style: style)
-                .frame(width: 150, height: 86)
-                .opacity(style.usesDarkChrome ? 0.24 : 0.18)
-                .allowsHitTesting(false)
-        }
     }
 
     private var header: some View {
         HStack(alignment: .center, spacing: 9) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(style.emphasis.opacity(style.usesDarkChrome ? 0.20 : 0.14))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.48))
                 Image(systemName: "chart.bar.xaxis")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(style.emphasis)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(style.secondaryText)
             }
-            .frame(width: 28, height: 28)
+            .frame(width: 26, height: 26)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -360,7 +354,7 @@ private struct ConductorUsageMenuCardView: View {
                             .foregroundStyle(style.secondaryText)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.56))
+                            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.28 : 0.42))
                             .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
                 }
@@ -399,10 +393,10 @@ private struct ConductorUsageMenuCardView: View {
 
     private var detailSurface: some View {
         RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.28 : 0.34))
+            .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.22 : 0.30))
             .overlay {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(style.stroke.opacity(0.34), lineWidth: 0.7)
+                    .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
             }
     }
 }
@@ -469,12 +463,12 @@ private struct ConductorUsageMetricTile: View {
         }
         .padding(9)
         .background {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.30 : 0.38))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.24 : 0.34))
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(style.stroke.opacity(0.36), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(style.stroke.opacity(0.26), lineWidth: 0.7)
         }
     }
 }
@@ -526,11 +520,11 @@ private struct ConductorUsageDetailTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.24 : 0.42))
+                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.20 : 0.34))
         }
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(style.stroke.opacity(0.28), lineWidth: 0.7)
+                .stroke(style.stroke.opacity(0.22), lineWidth: 0.7)
         }
     }
 }

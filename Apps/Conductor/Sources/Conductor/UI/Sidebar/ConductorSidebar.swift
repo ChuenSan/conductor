@@ -289,7 +289,7 @@ struct ConductorSidebar: View {
                 SidebarWorkspaceHeaderStats(
                     splitCount: snapshot.currentSplitCount,
                     terminalCount: snapshot.currentTerminalCount,
-                    unreadCount: snapshot.totalUnreadCount
+                    activeAgentCount: snapshot.currentActiveAgentCount
                 )
                 Spacer()
                 Button {
@@ -352,6 +352,7 @@ struct ConductorSidebar: View {
                             id: "sidebar-rail.workspace.\(row.id)",
                             icon: WorkspaceChromeGlyph.systemName(selected: row.selected),
                             selected: row.selected,
+                            activeAgentCount: row.activeAgentCount,
                             help: row.title,
                             namespace: railSelectionNamespace
                         ) {
@@ -448,7 +449,7 @@ struct ConductorSidebar: View {
             subtitle: row.subtitle,
             splitCount: row.splitCount,
             terminalCount: row.terminalCount,
-            unreadCount: row.unreadCount,
+            activeAgentCount: row.activeAgentCount,
             selected: row.selected,
             visuallySelected: row.selected,
             selectionNamespace: sidebarSelectionNamespace,
@@ -640,14 +641,13 @@ struct WorkspaceChromeSnapshot: Equatable {
     let webTabs: [WorkspaceWebTabDisplayModel]
     let currentSplitCount: Int
     let currentTerminalCount: Int
-    let totalUnreadCount: Int
+    let currentActiveAgentCount: Int
     let canCloseWorkspace: Bool
 
     @MainActor
     init(model: ConductorWindowModel) {
         RenderCounter.increment("workspace-chrome-snapshot")
         let selectedWorkspaceID = model.workspace.id
-        let notificationSnapshot = model.notifications.snapshot
         let metadataSnapshot = model.metadataByTerminalID
         let rows = model.workspaces.map { workspace in
             WorkspaceChromeDisplayModel(
@@ -656,7 +656,7 @@ struct WorkspaceChromeSnapshot: Equatable {
                 subtitle: Self.workspaceSubtitle(workspace, metadata: metadataSnapshot),
                 splitCount: workspace.panes.count,
                 terminalCount: Self.workspaceTerminalCount(workspace),
-                unreadCount: notificationSnapshot.unreadCount(for: workspace.id),
+                activeAgentCount: Self.workspaceActiveAgentCount(workspace, metadata: metadataSnapshot),
                 selected: workspace.id == selectedWorkspaceID
             )
         }
@@ -683,12 +683,21 @@ struct WorkspaceChromeSnapshot: Equatable {
         }
         self.currentSplitCount = model.workspace.panes.count
         self.currentTerminalCount = Self.workspaceTerminalCount(model.workspace)
-        self.totalUnreadCount = notificationSnapshot.unreadCount
+        self.currentActiveAgentCount = Self.workspaceActiveAgentCount(model.workspace, metadata: metadataSnapshot)
         self.canCloseWorkspace = model.workspaces.count > 1
     }
 
     private static func workspaceTerminalCount(_ workspace: WorkspaceState) -> Int {
         workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+    }
+
+    private static func workspaceActiveAgentCount(
+        _ workspace: WorkspaceState,
+        metadata: [TerminalID: TerminalDisplayMetadata]
+    ) -> Int {
+        workspace.panes.values.reduce(0) { count, pane in
+            count + pane.tabs.filter { metadata[$0.id]?.hasActiveAgent == true }.count
+        }
     }
 
     private static func workspaceSubtitle(
@@ -732,7 +741,7 @@ struct WorkspaceChromeDisplayModel: Identifiable, Equatable {
     var subtitle: String = ""
     let splitCount: Int
     let terminalCount: Int
-    let unreadCount: Int
+    let activeAgentCount: Int
     let selected: Bool
 }
 
@@ -758,7 +767,7 @@ enum WorkspaceChromeGlyph {
 private struct SidebarWorkspaceHeaderStats: View {
     let splitCount: Int
     let terminalCount: Int
-    let unreadCount: Int
+    let activeAgentCount: Int
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -766,10 +775,10 @@ private struct SidebarWorkspaceHeaderStats: View {
         HStack(spacing: 4) {
             metric(systemImage: "rectangle.split.2x1", value: splitCount, help: L("当前工作区分屏数", "Panes in current workspace"))
             metric(systemImage: "terminal", value: terminalCount, help: L("当前工作区终端数", "Terminals in current workspace"))
-
-            if unreadCount > 0 {
-                metric(systemImage: "bell", valueText: unreadCount > 99 ? "99+" : "\(unreadCount)", emphasis: true, help: L("未读通知", "Unread notifications"))
+            if activeAgentCount > 0 {
+                agentMetric(count: activeAgentCount)
             }
+
         }
         .padding(.leading, 3)
         .accessibilityHidden(true)
@@ -804,6 +813,25 @@ private struct SidebarWorkspaceHeaderStats: View {
         .clipShape(Capsule())
         .macNativeTooltip(help)
     }
+
+    private func agentMetric(count: Int) -> some View {
+        HStack(spacing: 4) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(theme.floatingEmphasis)
+                .scaleEffect(0.48)
+                .frame(width: 10, height: 10)
+                .accessibilityHidden(true)
+            Text(count > 99 ? "99+" : "\(count)")
+                .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
+        }
+        .foregroundStyle(theme.floatingEmphasis)
+        .padding(.horizontal, 5)
+        .frame(height: 16)
+        .background(theme.shellSelectedFill.opacity(0.90))
+        .clipShape(Capsule())
+        .macNativeTooltip(L("AI 终端运行中", "AI terminal running"))
+    }
 }
 
 private struct TokenRecordsSidebarCard: View {
@@ -814,23 +842,23 @@ private struct TokenRecordsSidebarCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 9) {
+            HStack(spacing: 8) {
                 Image(systemName: "chart.bar.fill")
-                    .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis)
-                    .frame(width: 26, height: 26)
-                    .background(theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.18 : 0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.86))
+                    .frame(width: 22, height: 22)
+                    .background(iconFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L("Token 记录", "Token Records"))
-                        .font(.conductorSystem(size: 12.2, weight: .semibold, scale: fontScale))
+                        .font(.conductorSystem(size: 11.7, weight: .semibold, scale: fontScale))
                         .foregroundStyle(theme.shellChromeText)
                         .lineLimit(1)
                     Text(L("用量详情", "Usage details"))
-                        .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
-                        .foregroundStyle(theme.shellChromeTextMuted.opacity(0.72))
+                        .font(.conductorSystem(size: 9.8, weight: .medium, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeTextMuted.opacity(0.66))
                         .lineLimit(1)
                 }
 
@@ -838,28 +866,32 @@ private struct TokenRecordsSidebarCard: View {
 
                 Image(systemName: "chevron.right")
                     .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.62))
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(hovering ? 0.78 : 0.50))
             }
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+            .padding(.horizontal, 7)
+            .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
             .background(cardFill)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(theme.shellStroke.opacity(hovering ? 0.36 : 0.22), lineWidth: 0.7)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(theme.shellStroke.opacity(hovering ? 0.34 : 0.18), lineWidth: 0.7)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
         .conductorHover($hovering)
         .macNativeTooltip(L("打开 Token 记录", "Open Token Records"))
     }
 
+    private var iconFill: Color {
+        hovering ? theme.shellHoverFill.opacity(0.62) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.42 : 0.30)
+    }
+
     private var cardFill: Color {
         if hovering {
-            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.72 : 0.54)
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.58 : 0.46)
         }
-        return theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.26 : 0.16)
+        return theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.20 : 0.12)
     }
 }
 
@@ -946,6 +978,7 @@ private struct SidebarRailButton: View {
     let icon: String
     var selected = false
     var disabled = false
+    var activeAgentCount = 0
     let help: String
     let namespace: Namespace.ID
     let action: () -> Void
@@ -977,6 +1010,19 @@ private struct SidebarRailButton: View {
                     )
                     .scaleEffect(hovering ? 1.04 : 1.0)
                     .animation(ConductorMotion.hover, value: hovering)
+
+                if activeAgentCount > 0 {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(theme.floatingEmphasis)
+                        .scaleEffect(0.44)
+                        .frame(width: 11, height: 11)
+                        .padding(3)
+                        .background(theme.shellPanelBackground.opacity(0.94))
+                        .clipShape(Circle())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .accessibilityHidden(true)
+                }
             }
             .frame(width: 34, height: 34)
             .background {
@@ -1041,7 +1087,7 @@ private struct WorkspaceSidebarRow: View {
     let subtitle: String
     let splitCount: Int
     let terminalCount: Int
-    let unreadCount: Int
+    let activeAgentCount: Int
     let selected: Bool
     let visuallySelected: Bool
     let selectionNamespace: Namespace.ID
@@ -1078,7 +1124,7 @@ private struct WorkspaceSidebarRow: View {
         .clipShape(rowShape)
         .contentShape(rowShape)
         .animation(nil, value: editing)
-        .animation(ConductorMotion.emphasized, value: unreadCount)
+        .animation(ConductorMotion.emphasized, value: activeAgentCount)
         .frame(maxWidth: .infinity, alignment: .leading)
         .conductorHover($hovering)
     }
@@ -1112,7 +1158,7 @@ private struct WorkspaceSidebarRow: View {
                 subtitle: subtitle,
                 splitCount: splitCount,
                 terminalCount: terminalCount,
-                unreadCount: unreadCount,
+                activeAgentCount: activeAgentCount,
                 selected: selected,
                 themeID: theme.id,
                 fontScaleID: fontScale.id
@@ -1134,7 +1180,6 @@ private struct WorkspaceSidebarRow: View {
             if visuallySelected {
                 rowShape
                     .fill(theme.shellSelectedFill)
-                    .matchedGeometryEffect(id: "sidebar-workspace-selection", in: selectionNamespace)
             }
         }
         .allowsHitTesting(false)
@@ -1146,7 +1191,7 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
     let subtitle: String
     let splitCount: Int
     let terminalCount: Int
-    let unreadCount: Int
+    let activeAgentCount: Int
     let selected: Bool
     let themeID: String
     let fontScaleID: String
@@ -1158,7 +1203,7 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         lhs.subtitle == rhs.subtitle &&
             lhs.splitCount == rhs.splitCount &&
             lhs.terminalCount == rhs.terminalCount &&
-            lhs.unreadCount == rhs.unreadCount &&
+            lhs.activeAgentCount == rhs.activeAgentCount &&
             lhs.selected == rhs.selected &&
             lhs.themeID == rhs.themeID &&
             lhs.fontScaleID == rhs.fontScaleID
@@ -1205,16 +1250,9 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                         value: terminalCount,
                         accessibilityLabel: L("\(terminalCount) 个终端", "\(terminalCount) terminals")
                     )
-                }
-                if unreadCount > 0 {
-                    Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                        .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .frame(minWidth: 16, minHeight: 15)
-                        .background(theme.floatingEmphasis)
-                        .clipShape(Capsule())
-                        .accessibilityLabel(L("\(unreadCount) 条未读通知", "\(unreadCount) unread notifications"))
+                    if activeAgentCount > 0 {
+                        agentMetric(count: activeAgentCount)
+                    }
                 }
             }
         }
@@ -1237,6 +1275,27 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         .clipShape(Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func agentMetric(count: Int) -> some View {
+        HStack(spacing: 3) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(theme.floatingEmphasis)
+                .scaleEffect(0.46)
+                .frame(width: 10, height: 10)
+                .accessibilityHidden(true)
+            Text(count > 99 ? "99+" : "\(count)")
+                .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
+                .monospacedDigit()
+        }
+        .foregroundStyle(theme.floatingEmphasis)
+        .padding(.horizontal, 5)
+        .frame(height: 16)
+        .background(selected ? theme.shellHoverFill.opacity(0.76) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.28 : 0.18))
+        .clipShape(Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L("\(count) 个 AI 终端运行中", "\(count) AI terminals running"))
     }
 }
 

@@ -202,46 +202,33 @@ struct ConductorTokenRecordsWindowView: View {
 
             usageOverviewInsights(model)
         }
-        .padding(12)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            style.controlStrongFill.opacity(style.usesDarkChrome ? 0.50 : 0.68),
-                            style.controlFill.opacity(style.usesDarkChrome ? 0.34 : 0.52),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing))
-                .overlay(alignment: .topTrailing) {
-                    ConductorUsageCircuitOverlay(style: style)
-                        .opacity(style.usesDarkChrome ? 0.38 : 0.25)
-                        .frame(width: 230, height: 126)
-                        .allowsHitTesting(false)
-                }
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.30 : 0.42))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(style.stroke.opacity(0.44), lineWidth: 0.8)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(style.stroke.opacity(0.30), lineWidth: 0.7)
         }
     }
 
     private func usageOverviewHeader(_ model: UsageMenuCardView.Model, provider: UsageProvider) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "speedometer")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(style.emphasis)
-                .frame(width: 30, height: 30)
-                .background(style.emphasis.opacity(style.usesDarkChrome ? 0.18 : 0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: "chart.bar.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(style.secondaryText)
+                .frame(width: 26, height: 26)
+                .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.46))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(model.providerName)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(style.primaryText)
                         .lineLimit(1)
                     if let plan = model.planText, !plan.isEmpty {
@@ -276,8 +263,8 @@ struct ConductorTokenRecordsWindowView: View {
             .lineLimit(1)
             .padding(.horizontal, 7)
             .frame(height: 18)
-            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.72 : 0.86))
-            .clipShape(Capsule())
+            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.50))
+            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
     }
 
     @ViewBuilder
@@ -390,11 +377,11 @@ struct ConductorTokenRecordsWindowView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
-        .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.54 : 0.72))
+        .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.50))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(style.stroke.opacity(0.32), lineWidth: 0.7)
+                .stroke(style.stroke.opacity(0.26), lineWidth: 0.7)
         }
     }
 
@@ -1717,21 +1704,18 @@ private struct ConductorSignalInfoCard: View {
     let primary: String
     let secondary: String?
     let style: ConductorUsagePanelStyle
-    @State private var active = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 11) {
+        HStack(alignment: .center, spacing: 10) {
             ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.48 : 0.66))
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.48))
                 Image(systemName: systemName)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(style.emphasis)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(style.secondaryText)
                     .accessibilityHidden(true)
-                ConductorPulseRing(style: style, active: active)
-                    .padding(5)
             }
-            .frame(width: 42, height: 42)
+            .frame(width: 30, height: 30)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
@@ -1751,25 +1735,17 @@ private struct ConductorSignalInfoCard: View {
             }
 
             Spacer(minLength: 6)
-
-            ConductorSignalCells(style: style, active: active)
-                .frame(width: 86, height: 28)
         }
         .padding(10)
         .background {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.40 : 0.58))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.28 : 0.40))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(style.stroke.opacity(0.32), lineWidth: 0.7)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
                 }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .onAppear {
-            withAnimation(.linear(duration: 1.6).repeatForever(autoreverses: true)) {
-                active = true
-            }
-        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -1813,14 +1789,14 @@ private struct ConductorCostSignalCard: View {
         }
         .padding(10)
         .background {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.40 : 0.58))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.28 : 0.40))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(style.stroke.opacity(0.32), lineWidth: 0.7)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
                 }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onAppear {
             withAnimation(.spring(response: 0.58, dampingFraction: 0.84).delay(0.05)) {
                 revealed = true
@@ -1832,24 +1808,21 @@ private struct ConductorCostSignalCard: View {
 private struct ConductorTokenUsageSignalCard: View {
     let section: UsageMenuCardView.Model.TokenUsageSection
     let style: ConductorUsagePanelStyle
-    @State private var active = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 8) {
                 Image(systemName: "chart.xyaxis.line")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(style.emphasis)
-                    .frame(width: 26, height: 26)
-                    .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.46 : 0.66))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(style.secondaryText)
+                    .frame(width: 24, height: 24)
+                    .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.48))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .accessibilityHidden(true)
                 Text(codexBarLocalizedDisplayText(L("cost_header_estimated")))
                     .font(.system(size: 10.8, weight: .bold))
                     .foregroundStyle(style.tertiaryText)
                 Spacer()
-                ConductorSignalCells(style: style, active: active)
-                    .frame(width: 70, height: 22)
             }
 
             HStack(spacing: 7) {
@@ -1873,19 +1846,14 @@ private struct ConductorTokenUsageSignalCard: View {
         }
         .padding(10)
         .background {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.40 : 0.58))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.28 : 0.40))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(style.stroke.opacity(0.32), lineWidth: 0.7)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
                 }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .onAppear {
-            withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: true)) {
-                active = true
-            }
-        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -1902,8 +1870,8 @@ private struct ConductorTokenLinePill: View {
             .minimumScaleFactor(0.72)
             .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
-            .background(style.controlStrongFill.opacity(prominent ? 0.66 : 0.42))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(style.controlStrongFill.opacity(prominent ? 0.48 : 0.32))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
@@ -2479,19 +2447,13 @@ private struct ConductorUsageMetricTile: View {
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
         .background {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.42 : 0.66))
-                .overlay(alignment: .bottomTrailing) {
-                    ConductorUsageCircuitOverlay(style: style)
-                        .opacity(style.usesDarkChrome ? 0.22 : 0.16)
-                        .frame(width: 130, height: 66)
-                        .allowsHitTesting(false)
-                }
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.30 : 0.46))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(style.stroke.opacity(0.34), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(style.stroke.opacity(0.26), lineWidth: 0.7)
         }
         .onAppear {
             withAnimation(.spring(response: 0.58, dampingFraction: 0.82).delay(0.05)) {

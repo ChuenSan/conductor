@@ -180,10 +180,6 @@ enum ConductorTokens {
         static let paneTabHeight: CGFloat = 21
         static let paneTabWidth: CGFloat = 118
         static let statusHeight: CGFloat = 18
-        static let notificationPanelWidth: CGFloat = 300
-        static let notificationPanelHeight: CGFloat = 308
-        static let notificationPanelMinWidth: CGFloat = 280
-        static let notificationPanelMinHeight: CGFloat = 260
     }
 
     enum Typography {
@@ -654,13 +650,6 @@ enum ConductorMotion {
         )
     }
 
-    static var notificationRowTransition: AnyTransition {
-        reducedMotion ? .identity : .asymmetric(
-            insertion: .opacity.combined(with: .offset(y: -4)),
-            removal: .opacity
-        )
-    }
-
     static var dropPreviewTransition: AnyTransition {
         reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.992, anchor: .center))
     }
@@ -686,11 +675,6 @@ enum ConductorMotion {
     static func rowTransition(itemCount: Int) -> AnyTransition {
         guard itemCount <= animatedCollectionLimit else { return .identity }
         return rowTransition
-    }
-
-    static func notificationRowTransition(itemCount: Int) -> AnyTransition {
-        guard itemCount <= animatedCollectionLimit else { return .identity }
-        return notificationRowTransition
     }
 
     static func list(itemCount: Int) -> Animation? {

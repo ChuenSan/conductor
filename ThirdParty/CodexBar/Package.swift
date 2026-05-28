@@ -34,6 +34,7 @@ let package = Package(
         .macOS(.v14),
     ],
     products: [
+        .library(name: "CodexBarCore", targets: ["CodexBarCore"]),
         .library(name: "CodexBarFeature", targets: ["CodexBar"]),
     ],
     dependencies: dependencies,

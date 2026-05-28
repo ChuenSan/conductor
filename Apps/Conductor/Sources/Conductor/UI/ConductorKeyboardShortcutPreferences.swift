@@ -264,8 +264,6 @@ struct KeyboardShortcutPreferences: Codable, Equatable {
         .toggleCommandPalette: shortcut("k"),
         .toggleWorkspaceOverview: shortcut("o"),
         .toggleSettings: shortcut(","),
-        .toggleNotifications: shortcut("n", [.command, .option]),
-        .jumpToLatestUnread: shortcut("j", [.command, .option]),
         .toggleFullScreen: shortcut("f", [.control, .command]),
         .showTerminalSearch: shortcut("f"),
         .findNext: shortcut("g"),

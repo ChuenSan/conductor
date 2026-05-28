@@ -15,9 +15,6 @@ struct ConductorUsageWorkbenchPanel: View {
     @State private var isRefreshingAll = false
 
     private var providerStates: [ConductorUsageWorkbenchProviderState] {
-        _ = context.settings.menuObservationToken
-        _ = context.store.menuObservationToken
-
         var providers = context.store.enabledProvidersForDisplay()
         for provider in UsageProvider.allCases {
             let hasData = context.store.snapshot(for: provider) != nil ||

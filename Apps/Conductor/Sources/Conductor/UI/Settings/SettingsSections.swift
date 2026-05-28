@@ -147,10 +147,7 @@ extension AppearanceSettingsPanel {
             terminalSettingsSectionRail(snapshot: snapshot)
 
             activeTerminalSettingsSection(snapshot: snapshot)
-                .id(selectedTerminalSettingsSection)
-                .transition(ConductorMotion.contentSwapTransition(edge: terminalContentEdge))
         }
-        .animation(ConductorMotion.contentSwap, value: selectedTerminalSettingsSection)
     }
 
     func terminalSettingsSectionRail(snapshot: SettingsSnapshot) -> some View {
@@ -186,12 +183,7 @@ extension AppearanceSettingsPanel {
 
     func selectTerminalSettingsSection(_ section: TerminalSettingsSection) {
         guard selectedTerminalSettingsSection != section else { return }
-        terminalContentEdge = contentSwapEdge(
-            from: selectedTerminalSettingsSection,
-            to: section,
-            in: TerminalSettingsSection.allCases
-        )
-        ConductorMotion.perform(ConductorMotion.contentSwap) {
+        ConductorMotion.withoutAnimation {
             selectedTerminalSettingsSection = section
         }
     }
@@ -223,10 +215,10 @@ extension AppearanceSettingsPanel {
 
             SettingsSectionLabel(
                 title: L("终端提醒", "Terminal Alerts"),
-                subtitle: L("命令完成通知和铃声是工作流反馈，不再散落在终端视觉设置里", "Command finish alerts and bell feedback belong with workflow feedback")
+                subtitle: L("保留铃声反馈设置", "Bell feedback settings")
             )
 
-            terminalNotificationSettings(snapshot: snapshot)
+            terminalBellSettings(snapshot: snapshot)
         }
     }
 
@@ -249,6 +241,7 @@ extension AppearanceSettingsPanel {
         let commandOverride = renderer.ghosttyOverride(for: "initial-command")
         let directoryOverride = renderer.ghosttyOverride(for: "working-directory")
         let scrollbackOverride = renderer.ghosttyOverride(for: "scrollback-limit")
+        let scrollbackValue = scrollbackOverride.enabled ? scrollbackOverride.normalizedValue : ""
 
         SettingsPreferenceGroup(
             title: L("Shell 与启动", "Shell and Startup"),
@@ -290,13 +283,13 @@ extension AppearanceSettingsPanel {
                 SettingsControlDivider()
 
                 SettingsControlRow(
-                    title: L("滚屏历史", "Scrollback History"),
-                    subtitle: L("控制终端保留多少历史输出；越大越占内存", "Controls how much terminal history is retained; larger values use more memory"),
+                    title: L("历史保留容量", "Scrollback Capacity"),
+                    subtitle: L("Ghostty 按字节保留历史；设置会立即保存并刷新配置，容量扩展通常新建终端后生效", "Ghostty stores scrollback by bytes; changes save and refresh immediately, but capacity expansion usually applies to new terminals"),
                 ) {
                     ScrollbackPresetPicker(
-                        value: scrollbackOverride.normalizedValue,
-                        setValue: { setGhosttyOverrideValue(key: "scrollback-limit", value: $0) },
-                        reset: { resetGhosttyOverride(key: "scrollback-limit") }
+                        value: scrollbackValue,
+                        setValue: { model.setTerminalScrollbackLimit($0) },
+                        reset: { model.setTerminalScrollbackLimit("") }
                     )
                 }
             }
@@ -628,67 +621,15 @@ extension AppearanceSettingsPanel {
         }
     }
 
-    func terminalNotificationSettings(snapshot: SettingsSnapshot) -> some View {
+    func terminalBellSettings(snapshot: SettingsSnapshot) -> some View {
         let renderer = snapshot.appearance.terminalRenderer
-        let finishOverride = renderer.ghosttyOverride(for: "notify-on-command-finish")
-        let actionOverride = renderer.ghosttyOverride(for: "notify-on-command-finish-action")
-        let afterOverride = renderer.ghosttyOverride(for: "notify-on-command-finish-after")
         let bellPathOverride = renderer.ghosttyOverride(for: "bell-audio-path")
         let bellVolumeOverride = renderer.ghosttyOverride(for: "bell-audio-volume")
 
         return SettingsPreferenceGroup(
-            title: L("通知与铃声", "Notifications and Bell"),
+            title: L("铃声", "Bell"),
         ) {
             SettingsFormSurface {
-                SettingsControlRow(
-                    title: L("命令完成通知", "Command Finish Notification"),
-                    subtitle: L("长命令结束后提醒你回来处理", "Alerts you when a long-running command finishes"),
-                ) {
-                    GhosttyBooleanOverridePicker(
-                        state: booleanState(for: finishOverride),
-                        action: { setBooleanOverride(key: "notify-on-command-finish", state: $0) }
-                    )
-                }
-
-                SettingsControlDivider()
-
-                SettingsControlRow(
-                    title: L("通知方式", "Notification Action"),
-                    subtitle: L("选择只发系统通知，还是同时吸引注意", "Choose whether to only notify or also request attention"),
-                ) {
-                    GhosttyPresetOverrideMenu(
-                        value: actionOverride.normalizedValue,
-                        options: [
-                            GhosttyPresetOption(title: L("系统通知", "Notification"), value: "notify"),
-                            GhosttyPresetOption(title: L("请求注意", "Request Attention"), value: "attention"),
-                            GhosttyPresetOption(title: L("通知并请求注意", "Notify and Attention"), value: "notify,attention")
-                        ],
-                        setValue: { setGhosttyOverrideValue(key: "notify-on-command-finish-action", value: $0) },
-                        reset: { resetGhosttyOverride(key: "notify-on-command-finish-action") }
-                    )
-                }
-
-                SettingsControlDivider()
-
-                SettingsControlRow(
-                    title: L("超过多久提醒", "Notify After"),
-                    subtitle: L("只有运行时间超过这个阈值的命令才提醒", "Only commands longer than this threshold will alert"),
-                ) {
-                    GhosttyPresetOverrideMenu(
-                        value: afterOverride.normalizedValue,
-                        options: [
-                            GhosttyPresetOption(title: L("5 秒", "5 seconds"), value: "5s"),
-                            GhosttyPresetOption(title: L("10 秒", "10 seconds"), value: "10s"),
-                            GhosttyPresetOption(title: L("30 秒", "30 seconds"), value: "30s"),
-                            GhosttyPresetOption(title: L("1 分钟", "1 minute"), value: "1m")
-                        ],
-                        setValue: { setGhosttyOverrideValue(key: "notify-on-command-finish-after", value: $0) },
-                        reset: { resetGhosttyOverride(key: "notify-on-command-finish-after") }
-                    )
-                }
-
-                SettingsControlDivider()
-
                 SettingsControlRow(
                     title: L("铃声音频", "Bell Sound"),
                     subtitle: L("选择自定义铃声文件，留空时使用默认反馈", "Choose a custom bell sound file, or leave empty for the default feedback"),
@@ -1056,6 +997,7 @@ extension AppearanceSettingsPanel {
 
     func aiSettings(snapshot: SettingsSnapshot) -> some View {
         let appearance = snapshot.appearance
+        let replyNotifications = appearance.agentReplyNotifications
         let agentCLIStatuses = snapshot.agentCLIStatuses
         return VStack(alignment: .leading, spacing: 16) {
             SettingsPreferenceGroup(
@@ -1077,7 +1019,7 @@ extension AppearanceSettingsPanel {
                     }
 
                     HStack {
-                        Text(L("检测 PATH、/opt/homebrew/bin 和 /usr/local/bin；安装后点重新检测。", "Scans PATH, /opt/homebrew/bin, and /usr/local/bin; scan again after installing."))
+                        Text(L("检测登录 Shell PATH、常见安装目录和手动路径；安装后点重新检测。", "Scans login shell PATH, common install locations, and manual paths; scan again after installing."))
                             .font(.conductorSystem(size: 10.3, weight: .medium, scale: fontScale))
                             .foregroundStyle(ConductorDesign.tertiaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1094,34 +1036,62 @@ extension AppearanceSettingsPanel {
             }
 
             SettingsPreferenceGroup(
-                title: L("Agent 通知", "Agent Notifications"),
+                title: L("AI 回复通知", "AI Reply Notifications"),
             ) {
-                SettingsFormSurface {
-                    ForEach(AgentHookProvider.allCases) { provider in
+                VStack(alignment: .leading, spacing: 10) {
+                    SettingsFormSurface {
                         SettingsToggleRow(
-                            title: provider.title,
-                            subtitle: appearance.agentNotifications.isEnabled(for: provider) ? L("通知桥接已开启", "Notification bridge enabled") : L("不会安装或触发通知桥接", "Notification bridge disabled"),
+                            title: L("回复后通知", "Notify After Reply"),
+                            subtitle: replyNotifications.enabled
+                                ? L("Agent 完成回复后发送系统通知", "Sends a system notification when an agent finishes replying")
+                                : L("不会发送 AI 回复通知", "AI reply notifications are disabled"),
                             isOn: Binding(
-                                get: { appearance.agentNotifications.isEnabled(for: provider) },
-                                set: { enabled in
-                                    model.performShellMotion(ConductorMotion.selection) {
-                                        model.setAgentNotificationsEnabled(enabled, for: provider)
-                                    }
-                                }
+                                get: { replyNotifications.enabled },
+                                set: { model.setAgentReplyNotificationsEnabled($0) }
                             )
                         )
 
-                        if provider.id != AgentHookProvider.allCases.last?.id {
-                            SettingsControlDivider()
-                        }
+                        SettingsControlDivider()
+
+                        SettingsToggleRow(
+                            title: L("仅在未关注时通知", "Only When Unattended"),
+                            subtitle: L("Conductor 不在前台，或回复终端未被选中时提醒", "Alerts when Conductor is inactive or the replying terminal is not selected"),
+                            isOn: Binding(
+                                get: { replyNotifications.onlyWhenUnattended },
+                                set: { model.setAgentReplyNotificationsOnlyWhenUnattended($0) }
+                            )
+                        )
+
+                        SettingsControlDivider()
+
+                        SettingsToggleRow(
+                            title: L("包含回复摘要", "Include Reply Summary"),
+                            subtitle: L("通知正文显示 hook 提供的最后回复摘要", "Shows the last reply summary from the hook in the notification body"),
+                            isOn: Binding(
+                                get: { replyNotifications.includeSummary },
+                                set: { model.setAgentReplyNotificationsIncludeSummary($0) }
+                            )
+                        )
+
+                        SettingsControlDivider()
+
+                        SettingsToggleRow(
+                            title: L("通知声音", "Notification Sound"),
+                            subtitle: L("使用系统默认通知声音", "Uses the default system notification sound"),
+                            isOn: Binding(
+                                get: { replyNotifications.playSound },
+                                set: { model.setAgentReplyNotificationsPlaySound($0) }
+                            )
+                        )
                     }
-                }
-                if let message = snapshot.agentHookSettingsMessage {
-                    Text(message)
-                        .font(.conductorSystem(size: 10.5, weight: .medium, scale: appearance.fontScale))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let message = snapshot.agentHookSettingsMessage {
+                        Text(message)
+                            .font(.conductorSystem(size: 10.5, weight: .medium, scale: appearance.fontScale))
+                            .foregroundStyle(ConductorDesign.tertiaryText)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
@@ -1353,7 +1323,7 @@ struct TerminalSettingsSectionRail: View {
                     .foregroundStyle(section == selection ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
                     .frame(maxWidth: .infinity)
                     .frame(height: 30)
-                    .background(section == selection ? theme.floatingSelectedFill : Color.clear)
+                    .background(section == selection ? theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.68 : 0.78) : Color.clear)
                     .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -1374,15 +1344,45 @@ struct SettingsPaneHeading: View {
     @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(section.title)
-                .font(.conductorSystem(size: 13.2, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.primaryText)
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(section.title)
+                    .font(.conductorSystem(size: 16, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            }
+
+            Text(section.subtitle)
+                .font(.conductorSystem(size: 10.8, weight: .regular, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .lineLimit(1)
         }
-        .padding(.bottom, 0)
+        .padding(.bottom, 4)
+    }
+}
+
+struct SettingsContentPlaceholder: View {
+    let section: SettingsSectionID
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.10 : 0.14))
+            .frame(height: 120)
+            .overlay(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 8) {
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(theme.floatingSeparator.opacity(0.28))
+                        .frame(width: 140, height: 8)
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(theme.floatingSeparator.opacity(0.20))
+                        .frame(width: 220, height: 8)
+                }
+                .padding(.horizontal, 14)
+            }
+            .accessibilityLabel(section.title)
     }
 }
 
@@ -1394,15 +1394,14 @@ struct SettingsSectionLabel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.conductorSystem(size: 11.5, weight: .bold, scale: fontScale))
+                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
-                .textCase(.uppercase)
             Text(subtitle)
-                .font(.conductorSystem(size: 10.4, weight: .medium, scale: fontScale))
+                .font(.conductorSystem(size: 10.2, weight: .regular, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, 2)
+        .padding(.top, 4)
     }
 }
 
@@ -1518,9 +1517,9 @@ private struct SettingsOverviewPath: View {
                 detail: L("本地记录", "Local Records")),
             SettingsOverviewRoute(
                 section: .automation,
-                detail: snapshot.appearance.agentNotifications.codex || snapshot.appearance.agentNotifications.claudeCode
-                    ? L("通知开启", "Alerts On")
-                    : L("通知关闭", "Alerts Off")),
+                detail: snapshot.appearance.agentReplyNotifications.enabled
+                    ? L("回复通知开启", "Reply Alerts On")
+                    : L("回复通知关闭", "Reply Alerts Off")),
             SettingsOverviewRoute(
                 section: .updates,
                 detail: snapshot.updateState.phase.statusTitle),

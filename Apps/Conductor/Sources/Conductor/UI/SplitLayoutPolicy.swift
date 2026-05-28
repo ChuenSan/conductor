@@ -18,22 +18,27 @@ enum SplitLayoutPolicy {
     static func hitRect(in splitView: NSSplitView, outset: CGFloat = dividerHitOutset) -> NSRect {
         guard splitView.arrangedSubviews.count >= 2 else { return .zero }
         let firstFrame = splitView.arrangedSubviews[0].frame
-        let rawRect: NSRect
         if splitView.isVertical {
-            rawRect = NSRect(
+            let rawRect = NSRect(
                 x: firstFrame.maxX,
                 y: 0,
                 width: splitView.dividerThickness,
                 height: splitView.bounds.height
             )
-        } else {
-            rawRect = NSRect(
-                x: 0,
-                y: firstFrame.maxY,
-                width: splitView.bounds.width,
-                height: splitView.dividerThickness
+            return NSRect(
+                x: rawRect.minX,
+                y: rawRect.minY - outset,
+                width: rawRect.width + outset,
+                height: rawRect.height + outset * 2
             )
         }
+
+        let rawRect = NSRect(
+            x: 0,
+            y: firstFrame.maxY,
+            width: splitView.bounds.width,
+            height: splitView.dividerThickness
+        )
         return rawRect.insetBy(dx: -outset, dy: -outset)
     }
 

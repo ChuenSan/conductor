@@ -96,7 +96,7 @@ private struct ConductorUsageSettingsLoadedContent: View {
         }
         .task(id: languageSyncKey) {
             detailsReady = false
-            try? await Task.sleep(nanoseconds: 70_000_000)
+            await Task.yield()
             guard !Task.isCancelled else { return }
             detailsReady = true
         }
@@ -209,9 +209,6 @@ private struct ConductorUsageSettingsSummaryStrip: View {
     @State private var refreshInFlight = false
 
     private var summary: Summary {
-        _ = context.settings.menuObservationToken
-        _ = context.store.menuObservationToken
-
         let providers = context.store.enabledProvidersForDisplay()
         let tokenCount = Self.tokenRecordProviders.filter { provider in
             context.store.tokenSnapshot(for: provider) != nil

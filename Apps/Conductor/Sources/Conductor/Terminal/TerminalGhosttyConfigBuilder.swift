@@ -1,6 +1,13 @@
 import Foundation
 
 struct TerminalGhosttyConfigBuilder {
+    private static let defaultScrollbackLimit = "50000000"
+    private static let legacyScrollbackLimits = [
+        "10000": "10000000",
+        "50000": "50000000",
+        "100000": "100000000"
+    ]
+
     static func configText(
         theme: TerminalTheme,
         terminalFontSize: CGFloat,
@@ -24,6 +31,8 @@ struct TerminalGhosttyConfigBuilder {
         macos-titlebar-proxy-icon = hidden
         shell-integration = detect
         shell-integration-features = no-cursor
+        scrollbar = system
+        scrollback-limit = \(defaultScrollbackLimit)
         font-family = \(sanitizedConfigValue(fontFamily))
         font-size = \(fontSizeText)
         adjust-cell-height = \(cellHeightAdjustment)
@@ -47,7 +56,20 @@ struct TerminalGhosttyConfigBuilder {
     private static func overrideConfigText(_ overrides: [TerminalGhosttyConfigOverride]) -> String {
         guard !overrides.isEmpty else { return "" }
         return overrides
-            .map { "\($0.key) = \(sanitizedConfigValue($0.normalizedValue))" }
+            .map { override in
+                let value = normalizedOverrideValue(override)
+                return "\(override.key) = \(value)"
+            }
             .joined(separator: "\n")
+    }
+
+    private static func normalizedOverrideValue(_ override: TerminalGhosttyConfigOverride) -> String {
+        let value = sanitizedConfigValue(override.normalizedValue)
+        guard override.key == "scrollback-limit" else { return value }
+        if let migrated = legacyScrollbackLimits[value] {
+            return migrated
+        }
+        guard let limit = Int(value), limit > 0 else { return defaultScrollbackLimit }
+        return String(limit)
     }
 }

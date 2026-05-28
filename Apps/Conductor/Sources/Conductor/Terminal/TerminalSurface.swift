@@ -3,6 +3,22 @@ import ConductorCore
 import Foundation
 @preconcurrency import GhosttyKit
 
+struct TerminalScrollbarState: Equatable, Sendable {
+    let total: UInt64
+    let offset: UInt64
+    let len: UInt64
+
+    var hasScrollback: Bool {
+        total > len
+    }
+}
+
+extension Notification.Name {
+    static let terminalSurfaceDidUpdateScrollbar = Notification.Name("terminalSurfaceDidUpdateScrollbar")
+    static let terminalSurfaceDidUpdateCellSize = Notification.Name("terminalSurfaceDidUpdateCellSize")
+    static let terminalSurfaceDidReceiveWheelScroll = Notification.Name("terminalSurfaceDidReceiveWheelScroll")
+}
+
 @MainActor
 final class TerminalSurface {
     private struct RetainedCString {
@@ -39,6 +55,10 @@ final class TerminalSurface {
     private var inputEventCount = 0
     private let maxRetainedInputCStrings = 4096
     private let maxRetainedInputBytes = 8 * 1024 * 1024
+    private(set) var scrollbarState: TerminalScrollbarState?
+    private(set) var cellSize: CGSize = .zero
+    private var pendingScrollbarState: TerminalScrollbarState?
+    private var scrollbarFlushScheduled = false
 
     init(id: TerminalID, theme: TerminalTheme, terminalFontSize: CGFloat, workingDirectory: String?) {
         self.id = id
@@ -265,10 +285,40 @@ final class TerminalSurface {
 
     func requestWorkspaceFocus() {
         onFocusRequest?(id)
+        onUserActivity?(id)
     }
 
     func recordUserActivity() {
         onUserActivity?(id)
+    }
+
+    func enqueueScrollbarUpdate(_ scrollbar: TerminalScrollbarState) {
+        pendingScrollbarState = scrollbar
+        guard !scrollbarFlushScheduled else { return }
+        scrollbarFlushScheduled = true
+        Task { @MainActor [weak self] in
+            self?.flushPendingScrollbar()
+        }
+    }
+
+    private func flushPendingScrollbar() {
+        scrollbarFlushScheduled = false
+        guard let scrollbar = pendingScrollbarState else { return }
+        pendingScrollbarState = nil
+        guard scrollbarState != scrollbar else { return }
+        scrollbarState = scrollbar
+        NotificationCenter.default.post(
+            name: .terminalSurfaceDidUpdateScrollbar,
+            object: self,
+            userInfo: ["scrollbar": scrollbar]
+        )
+    }
+
+    func updateCellSize(width: UInt32, height: UInt32) {
+        let next = CGSize(width: CGFloat(width), height: CGFloat(height))
+        guard cellSize != next else { return }
+        cellSize = next
+        NotificationCenter.default.post(name: .terminalSurfaceDidUpdateCellSize, object: self)
     }
 
     @discardableResult
@@ -292,6 +342,33 @@ final class TerminalSurface {
     func refresh() {
         guard let surface else { return }
         ghostty_surface_refresh(surface)
+    }
+
+    func visibleText() -> String? {
+        guard let surface else { return nil }
+        let size = ghostty_surface_size(surface)
+        guard size.columns > 0, size.rows > 0 else { return nil }
+
+        let selection = ghostty_selection_s(
+            top_left: ghostty_point_s(
+                tag: GHOSTTY_POINT_SCREEN,
+                coord: GHOSTTY_POINT_COORD_TOP_LEFT,
+                x: 0,
+                y: 0
+            ),
+            bottom_right: ghostty_point_s(
+                tag: GHOSTTY_POINT_SCREEN,
+                coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT,
+                x: UInt32(size.columns - 1),
+                y: UInt32(size.rows - 1)
+            ),
+            rectangle: false
+        )
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let pointer = text.text, text.text_len > 0 else { return "" }
+        return String(decoding: UnsafeRawBufferPointer(start: pointer, count: Int(text.text_len)), as: UTF8.self)
     }
 
     @discardableResult
@@ -454,6 +531,7 @@ final class TerminalSurface {
 
     func scroll(deltaX: CGFloat, deltaY: CGFloat, precise: Bool, momentumPhase: NSEvent.Phase) {
         guard let surface else { return }
+        NotificationCenter.default.post(name: .terminalSurfaceDidReceiveWheelScroll, object: self)
         var x = Double(deltaX)
         var y = Double(deltaY)
         if precise {

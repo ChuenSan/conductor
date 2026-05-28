@@ -13,7 +13,6 @@ struct ToolbarChromeSnapshot: Equatable {
     let canToggleFileManager: Bool
     let fileManagerActive: Bool
     let workspaceOverviewVisible: Bool
-    let notificationPanelVisible: Bool
     let commandPaletteVisible: Bool
 
     @MainActor
@@ -26,7 +25,6 @@ struct ToolbarChromeSnapshot: Equatable {
         self.canToggleFileManager = model.canPerformCommand(.toggleFileManager)
         self.fileManagerActive = model.fileManagerPanelRequest != nil
         self.workspaceOverviewVisible = model.workspaceOverviewVisible
-        self.notificationPanelVisible = model.notificationPanelVisible
         self.commandPaletteVisible = model.commandPaletteVisible
     }
 }
@@ -136,16 +134,6 @@ struct ConductorToolbar: View {
                     )) {
                         finishWorkspaceRenameIfNeeded()
                         model.performCommand(.toggleWorkspaceOverview)
-                    }
-                    ConductorSegmentDivider()
-                    ConductorIconButton(state: toolbarControlState(
-                        id: "toggle-notifications",
-                        systemImage: workspaceSnapshot.totalUnreadCount > 0 ? "bell.badge" : "bell",
-                        tooltip: commandTooltip(L("通知", "Notifications"), command: .toggleNotifications, fallback: "Cmd-Opt-N"),
-                        isActive: toolbarSnapshot.notificationPanelVisible
-                    )) {
-                        finishWorkspaceRenameIfNeeded()
-                        model.performCommand(.toggleNotifications)
                     }
                     ConductorSegmentDivider()
                     ConductorIconButton(state: toolbarControlState(

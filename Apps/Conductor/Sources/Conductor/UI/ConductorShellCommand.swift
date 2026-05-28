@@ -40,9 +40,7 @@ enum ConductorShellCommand: String, CaseIterable {
     case toggleCommandPalette
     case toggleWorkspaceOverview
     case toggleSettings
-    case toggleNotifications
     case toggleFileManager
-    case jumpToLatestUnread
     case toggleFullScreen
     case resetWorkspace
     case showTerminalSearch
@@ -55,8 +53,6 @@ enum ConductorShellCommand: String, CaseIterable {
     case copyFocusedDirectory
     case duplicateWorkspace
     case closeCurrentWorkspace
-    case clearNotifications
-    case testNotification
 
     var allowsWhenSettingsPanelVisible: Bool {
         switch self {
@@ -101,12 +97,8 @@ enum ConductorShellCommand: String, CaseIterable {
             return "command-toggle-overview"
         case .toggleSettings:
             return "command-toggle-settings"
-        case .toggleNotifications:
-            return "command-toggle-notifications"
         case .toggleFileManager:
             return "command-file-manager"
-        case .jumpToLatestUnread:
-            return "command-jump-unread"
         case .toggleFullScreen:
             return "command-toggle-fullscreen"
         case .resetWorkspace:
@@ -121,8 +113,6 @@ enum ConductorShellCommand: String, CaseIterable {
             return "command-directory"
         case .duplicateWorkspace, .closeCurrentWorkspace:
             return "command-workspace"
-        case .clearNotifications, .testNotification:
-            return "command-notification"
         }
     }
 
@@ -151,8 +141,6 @@ enum ConductorShellCommand: String, CaseIterable {
             model.canMoveSelectedTabToNextPane
         case .moveTabToNewRightSplit, .moveTabToNewDownSplit:
             model.canMoveSelectedTabToNewSplit
-        case .jumpToLatestUnread:
-            model.notifications.snapshot.latestUnread != nil
         case .focusWebAddress:
             model.selectedWorkspaceWebTab != nil
         case .reloadSelectedWebTab:
@@ -165,8 +153,6 @@ enum ConductorShellCommand: String, CaseIterable {
             model.selectedWorkspaceWebTab?.url != nil || model.terminalSearchVisible || model.selectedWorkspaceFileTab != nil || model.fileManagerPanelRequest != nil
         case .toggleFileManager:
             model.fileManagerPanelRequest != nil || model.focusedWorkingDirectoryURL != nil
-        case .clearNotifications:
-            !model.notifications.records.isEmpty
         case .closeCurrentWorkspace:
             model.workspaces.count > 1
         case .newTerminalAtFocusedDirectory, .openFocusedDirectory, .copyFocusedDirectory:
@@ -252,12 +238,8 @@ enum ConductorShellCommand: String, CaseIterable {
             model.toggleWorkspaceOverview()
         case .toggleSettings:
             model.toggleSettingsPanel()
-        case .toggleNotifications:
-            model.toggleNotificationPanel()
         case .toggleFileManager:
             model.toggleFileManagerPanel()
-        case .jumpToLatestUnread:
-            _ = model.jumpToLatestUnread()
         case .toggleFullScreen:
             (window ?? NSApp.keyWindow)?.toggleFullScreen(nil)
         case .resetWorkspace:
@@ -282,10 +264,6 @@ enum ConductorShellCommand: String, CaseIterable {
             model.duplicateWorkspace(model.workspace.id)
         case .closeCurrentWorkspace:
             model.closeWorkspace(model.workspace.id)
-        case .clearNotifications:
-            model.clearAllNotifications()
-        case .testNotification:
-            model.notifyFocusedTerminalForTesting()
         }
         return true
     }

@@ -264,10 +264,7 @@ struct AppKitSplitPairView: NSViewRepresentable {
             forDrawnRect drawnRect: NSRect,
             ofDividerAt dividerIndex: Int
         ) -> NSRect {
-            proposedEffectiveRect.union(drawnRect.insetBy(
-                dx: -SplitLayoutPolicy.dividerHitOutset,
-                dy: -SplitLayoutPolicy.dividerHitOutset
-            ))
+            SplitLayoutPolicy.hitRect(in: splitView)
         }
 
         func splitView(_ splitView: NSSplitView, additionalEffectiveRectOfDividerAt dividerIndex: Int) -> NSRect {
@@ -279,7 +276,7 @@ struct AppKitSplitPairView: NSViewRepresentable {
             } else {
                 guard firstFrame.height > 1, secondFrame.height > 1 else { return .zero }
             }
-            return SplitLayoutPolicy.hitRect(in: splitView)
+            return .zero
         }
 
         private func beginUserDrag(in splitView: ConductorSplitView) {

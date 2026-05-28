@@ -220,11 +220,12 @@ struct ScrollbackPresetPicker: View {
 
     private var presets: [Preset] {
         [
-            Preset(title: L("默认", "Default"), value: ""),
-            Preset(title: "10k", value: "10000"),
-            Preset(title: "50k", value: "50000"),
-            Preset(title: "100k", value: "100000"),
-            Preset(title: L("无限制", "Unlimited"), value: "0")
+            Preset(title: L("默认 50MB", "Default 50MB"), value: ""),
+            Preset(title: "10MB", value: "10000000"),
+            Preset(title: "50MB", value: "50000000"),
+            Preset(title: "100MB", value: "100000000"),
+            Preset(title: "500MB", value: "500000000"),
+            Preset(title: "1GB", value: "1000000000")
         ]
     }
 
@@ -673,11 +674,11 @@ struct SettingsStatusPill: View {
         .foregroundStyle(theme.floatingEmphasis)
         .padding(.horizontal, 10)
         .frame(height: 26)
-        .background(theme.floatingControlStrongFill)
-        .clipShape(Capsule())
+        .background(theme.floatingControlStrongFill.opacity(theme.usesDarkChrome ? 0.82 : 0.70))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay {
-            Capsule()
-                .stroke(theme.floatingStroke.opacity(0.38), lineWidth: 0.6)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.34), lineWidth: 0.6)
         }
     }
 }
@@ -700,15 +701,15 @@ struct SettingsPreferenceGroup<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 7) {
             Text(title)
-                .font(.conductorSystem(size: 10.2, weight: .semibold, scale: fontScale))
+                .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .lineLimit(1)
 
             content
         }
-        .padding(.top, 1)
+        .padding(.top, 2)
     }
 }
 
@@ -724,14 +725,11 @@ struct SettingsFormSurface<Content: View>: View {
         VStack(spacing: 0) {
             content
         }
-        .background {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.12 : 0.20))
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.16 : 0.24))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.10 : 0.08), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.18), lineWidth: 0.6)
         }
     }
 }
@@ -740,9 +738,7 @@ struct SettingsControlRow<Trailing: View>: View {
     let title: String
     let subtitle: String
     let trailing: Trailing
-    @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
 
     init(
         title: String,
@@ -758,14 +754,14 @@ struct SettingsControlRow<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.conductorSystem(size: 11.4, weight: .medium, scale: fontScale))
+                    .font(.conductorSystem(size: 12, weight: .medium, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText.opacity(0.86))
+                    .font(.conductorSystem(size: 10, weight: .regular, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
                     .lineLimit(1)
             }
 
@@ -773,11 +769,9 @@ struct SettingsControlRow<Trailing: View>: View {
 
             trailing
         }
-        .padding(.horizontal, 9)
-        .frame(minHeight: 40)
-        .background(hovering ? theme.floatingHoverFill.opacity(0.16) : Color.clear)
+        .padding(.horizontal, 12)
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
-        .conductorHover($hovering, animation: nil)
     }
 }
 
@@ -861,9 +855,9 @@ struct SettingsControlDivider: View {
 
     var body: some View {
         Rectangle()
-            .fill(theme.floatingSeparator.opacity(0.56))
+            .fill(theme.floatingSeparator.opacity(theme.usesDarkChrome ? 0.52 : 0.38))
             .frame(height: 1)
-            .padding(.leading, 9)
+            .padding(.leading, 12)
     }
 }
 
@@ -872,62 +866,28 @@ struct SettingsSegmentedPicker<Option: Hashable>: View {
     let selection: Option
     let title: (Option) -> String
     let action: (Option) -> Void
-    @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
-    private let controlWidth: CGFloat = 284
-    private let controlHeight: CGFloat = 22
-    private let cornerRadius: CGFloat = 5
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(options.enumerated()), id: \.element) { index, option in
-                segment(option)
-                if index < options.count - 1 {
-                    Rectangle()
-                        .fill(theme.floatingSeparator.opacity(0.36))
-                        .frame(width: 1, height: 14)
-                        .opacity(option == selection || options[index + 1] == selection ? 0 : 1)
-                }
+    private var selectionBinding: Binding<Option> {
+        Binding(
+            get: { selection },
+            set: { option in
+                guard option != selection else { return }
+                action(option)
             }
-        }
-        .padding(1)
-        .frame(width: controlWidth, height: controlHeight)
-        .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.28 : 0.34))
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.18 : 0.20), lineWidth: 0.6)
-        }
+        )
     }
 
-    private func segment(_ option: Option) -> some View {
-        let selected = option == selection
-        return Button {
-            guard option != selection else { return }
-            action(option)
-        } label: {
-            Text(title(option))
-                .font(.conductorSystem(size: 11.5, weight: selected ? .semibold : .medium, scale: fontScale))
-                .foregroundStyle(selected ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background {
-            if selected {
-                RoundedRectangle(cornerRadius: cornerRadius - 1, style: .continuous)
-                    .fill(theme.floatingPanelBase.opacity(theme.usesDarkChrome ? 0.86 : 0.96))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: cornerRadius - 1, style: .continuous)
-                            .stroke(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.24), lineWidth: 0.6)
-                    }
-                    .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.10 : 0.055), radius: 2, y: 0.8)
+    var body: some View {
+        Picker("", selection: selectionBinding) {
+            ForEach(options, id: \.self) { option in
+                Text(title(option)).tag(option)
             }
         }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 284)
+        .tint(theme.floatingEmphasis)
     }
 }
 
@@ -981,55 +941,45 @@ extension AppearanceFontFamily {
 struct SettingsSidebarItem: View {
     let section: SettingsSectionID
     let selected: Bool
-    let selectionNamespace: Namespace.ID
     let action: () -> Void
-    @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 8) {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(selected ? theme.floatingEmphasis : Color.clear)
+                    .frame(width: 3, height: 16)
+
                 Image(systemName: section.systemImage)
-                    .font(.conductorSystem(size: 9.8, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText.opacity(0.86))
-                    .frame(width: 17, height: 17)
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(selected ? ConductorDesign.primaryText : ConductorDesign.secondaryText.opacity(0.86))
+                    .frame(width: 16, height: 17)
                     .accessibilityHidden(true)
 
                 Text(section.title)
-                    .font(.conductorSystem(size: 10.8, weight: selected ? .semibold : .medium, scale: fontScale))
+                    .font(.conductorSystem(size: 11.5, weight: selected ? .semibold : .medium, scale: fontScale))
                     .foregroundStyle(ConductorDesign.primaryText)
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
-
-                if selected {
-                    Image(systemName: "chevron.right")
-                        .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
-                        .foregroundStyle(theme.floatingEmphasis.opacity(0.84))
-                        .accessibilityHidden(true)
-                }
             }
-            .padding(.horizontal, 8)
-            .frame(height: 28, alignment: .center)
+            .padding(.horizontal, 7)
+            .frame(height: 30, alignment: .center)
             .background(rowBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
-        .conductorHover($hovering, animation: nil)
-        .animation(ConductorMotion.selectionGlide, value: selected)
     }
 
     private var rowBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         return ZStack {
-            shape
-                .fill(hovering ? theme.floatingHoverFill.opacity(0.18) : Color.clear)
             if selected {
                 shape
-                    .fill(theme.floatingSelectedFill.opacity(0.56))
-                    .matchedGeometryEffect(id: "settings-section-selection", in: selectionNamespace)
+                    .fill(theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.68 : 0.78))
             }
         }
     }

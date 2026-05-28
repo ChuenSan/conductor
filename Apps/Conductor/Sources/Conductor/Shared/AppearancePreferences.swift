@@ -359,7 +359,7 @@ struct AppearancePreferences: Codable, Equatable {
     var terminalFontSize: CGFloat
     var terminalRenderer: TerminalRendererPreferences
     var reducedMotion: Bool
-    var agentNotifications: AgentNotificationPreferences
+    var agentReplyNotifications: AgentReplyNotificationPreferences
     var keyboardShortcuts: KeyboardShortcutPreferences
 
     init(
@@ -371,7 +371,7 @@ struct AppearancePreferences: Codable, Equatable {
         terminalFontSize: CGFloat = Self.defaultTerminalFontSize,
         terminalRenderer: TerminalRendererPreferences = TerminalRendererPreferences(),
         reducedMotion: Bool = false,
-        agentNotifications: AgentNotificationPreferences = AgentNotificationPreferences(),
+        agentReplyNotifications: AgentReplyNotificationPreferences = AgentReplyNotificationPreferences(),
         keyboardShortcuts: KeyboardShortcutPreferences = KeyboardShortcutPreferences()
     ) {
         self.density = density
@@ -382,7 +382,7 @@ struct AppearancePreferences: Codable, Equatable {
         self.terminalFontSize = Self.clampedTerminalFontSize(terminalFontSize)
         self.terminalRenderer = terminalRenderer
         self.reducedMotion = reducedMotion
-        self.agentNotifications = agentNotifications
+        self.agentReplyNotifications = agentReplyNotifications
         self.keyboardShortcuts = keyboardShortcuts
     }
 
@@ -397,7 +397,7 @@ struct AppearancePreferences: Codable, Equatable {
         self.terminalFontSize = Self.clampedTerminalFontSize(decodedTerminalFontSize)
         self.terminalRenderer = try container.decodeIfPresent(TerminalRendererPreferences.self, forKey: .terminalRenderer) ?? TerminalRendererPreferences()
         self.reducedMotion = try container.decodeIfPresent(Bool.self, forKey: .reducedMotion) ?? false
-        self.agentNotifications = try container.decodeIfPresent(AgentNotificationPreferences.self, forKey: .agentNotifications) ?? AgentNotificationPreferences()
+        self.agentReplyNotifications = try container.decodeIfPresent(AgentReplyNotificationPreferences.self, forKey: .agentReplyNotifications) ?? AgentReplyNotificationPreferences()
         self.keyboardShortcuts = try container.decodeIfPresent(KeyboardShortcutPreferences.self, forKey: .keyboardShortcuts) ?? KeyboardShortcutPreferences()
     }
 
@@ -414,40 +414,7 @@ struct AppearancePreferences: Codable, Equatable {
         case terminalFontSize
         case terminalRenderer
         case reducedMotion
-        case agentNotifications
+        case agentReplyNotifications
         case keyboardShortcuts
-    }
-}
-
-struct AgentNotificationPreferences: Codable, Equatable {
-    var codex: Bool
-    var claudeCode: Bool
-
-    init(codex: Bool = true, claudeCode: Bool = false) {
-        self.codex = codex
-        self.claudeCode = claudeCode
-    }
-
-    func isEnabled(for provider: AgentHookProvider) -> Bool {
-        switch provider {
-        case .codex:
-            codex
-        case .claudeCode:
-            claudeCode
-        }
-    }
-
-    func isEnabled(forAgentName agent: String) -> Bool {
-        guard let provider = AgentHookProvider(cliName: agent) else { return false }
-        return isEnabled(for: provider)
-    }
-
-    mutating func setEnabled(_ enabled: Bool, for provider: AgentHookProvider) {
-        switch provider {
-        case .codex:
-            codex = enabled
-        case .claudeCode:
-            claudeCode = enabled
-        }
     }
 }

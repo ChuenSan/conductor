@@ -1,5 +1,6 @@
 import ConductorCore
 import Foundation
+import Yams
 
 struct PersistedWindowState: Codable {
     var workspaces: [WorkspaceState]
@@ -87,6 +88,7 @@ final class WorkspacePersistence {
     }
 
     private let fileURL: URL
+    private let legacyJSONFileURL: URL?
     private let isEnabled: Bool
 
     init(fileManager: FileManager = .default, isEnabled: Bool = WorkspacePersistence.isEnabledByDefault) {
@@ -97,8 +99,10 @@ final class WorkspacePersistence {
         try? fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         if let overridePath = ProcessInfo.processInfo.environment["CONDUCTOR_STATE_PATH"], !overridePath.isEmpty {
             self.fileURL = URL(fileURLWithPath: overridePath)
+            self.legacyJSONFileURL = nil
         } else {
-            self.fileURL = directoryURL.appendingPathComponent("window-state.json")
+            self.fileURL = directoryURL.appendingPathComponent("window-state.yaml")
+            self.legacyJSONFileURL = directoryURL.appendingPathComponent("window-state.json")
         }
     }
 
@@ -108,8 +112,7 @@ final class WorkspacePersistence {
             reset()
             return nil
         }
-        guard let data = try? Data(contentsOf: fileURL),
-              let state = try? JSONDecoder().decode(PersistedWindowState.self, from: data) else {
+        guard let state = loadState() else {
             return nil
         }
         let validWorkspaces = state.workspaces.map(sanitizedWorkspace).filter(isValid)
@@ -149,12 +152,46 @@ final class WorkspacePersistence {
             workspaceWebTabs: sanitizedWebTabs(workspaceWebTabs),
             selectedWorkspaceContentTabID: selectedWorkspaceContentTabID
         )
-        guard let data = try? JSONEncoder().encode(state) else { return }
+        guard let data = encodeState(state, for: fileURL) else { return }
         try? data.write(to: fileURL, options: [.atomic])
     }
 
     func reset() {
         try? FileManager.default.removeItem(at: fileURL)
+        if let legacyJSONFileURL {
+            try? FileManager.default.removeItem(at: legacyJSONFileURL)
+        }
+    }
+
+    private func loadState() -> PersistedWindowState? {
+        let candidates = [fileURL, legacyJSONFileURL].compactMap(\.self)
+        for url in candidates {
+            guard FileManager.default.fileExists(atPath: url.path),
+                  let state = decodeState(at: url) else {
+                continue
+            }
+            return state
+        }
+        return nil
+    }
+
+    private func decodeState(at url: URL) -> PersistedWindowState? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        if url.pathExtension.lowercased() == "json" {
+            return try? JSONDecoder().decode(PersistedWindowState.self, from: data)
+        }
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
+        return try? YAMLDecoder().decode(PersistedWindowState.self, from: text)
+    }
+
+    private func encodeState(_ state: PersistedWindowState, for url: URL) -> Data? {
+        if url.pathExtension.lowercased() == "json" {
+            return try? JSONEncoder().encode(state)
+        }
+        let encoder = YAMLEncoder()
+        encoder.options.allowUnicode = true
+        guard let text = try? encoder.encode(state) else { return nil }
+        return text.data(using: .utf8)
     }
 
     private func isValid(_ workspace: WorkspaceState) -> Bool {

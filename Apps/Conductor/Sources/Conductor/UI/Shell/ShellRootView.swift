@@ -850,11 +850,7 @@ private struct CommandPaletteItem: Identifiable, Equatable {
             "arrow.left.and.right"
         case "resize-up", "resize-down":
             "arrow.up.and.down"
-        case "notifications":
-            "bell"
-        case "jump-unread":
-            "bell.badge"
-        case "close-tab", "close-pane", "clear-notifications":
+        case "close-tab", "close-pane":
             "xmark"
         case "move-tab-left":
             "arrow.left.to.line"
@@ -878,8 +874,6 @@ private struct CommandPaletteItem: Identifiable, Equatable {
             "slider.horizontal.3"
         case "reset-workspace":
             "arrow.counterclockwise"
-        case "debug-notification":
-            "bell.badge"
         default:
             "command"
         }
@@ -889,12 +883,7 @@ private struct CommandPaletteItem: Identifiable, Equatable {
         if shortcut.contains("Cmd") {
             return shortcut
         }
-        switch id {
-        case "notifications":
-            return L("工具栏", "Toolbar")
-        default:
-            return L("命令面板", "Command Palette")
-        }
+        return L("命令面板", "Command Palette")
     }
 }
 
@@ -1036,17 +1025,6 @@ private enum ConductorCommandCatalog {
             CommandPaletteItem(id: "previous-tab", command: .selectPreviousTab, section: L("导航", "Navigate"), title: L("上一个标签", "Previous Tab"), shortcut: "Cmd-[", keywords: "previous tab"),
             CommandPaletteItem(id: "next-pane", command: .focusNextPane, section: L("导航", "Navigate"), title: L("下一个分屏", "Next Pane"), shortcut: "Cmd-Shift-]", keywords: "next pane focus"),
             CommandPaletteItem(id: "previous-pane", command: .focusPreviousPane, section: L("导航", "Navigate"), title: L("上一个分屏", "Previous Pane"), shortcut: "Cmd-Shift-[", keywords: "previous pane focus"),
-            CommandPaletteItem(id: "notifications", command: .toggleNotifications, section: L("导航", "Navigate"), title: L("通知", "Notifications"), shortcut: "Cmd-Opt-N", keywords: "notification unread agent"),
-            CommandPaletteItem(
-                id: "jump-unread",
-                command: .jumpToLatestUnread,
-                section: L("导航", "Navigate"),
-                title: L("跳到最新未读", "Jump to Latest Unread"),
-                shortcut: "Cmd-Opt-J",
-                disabled: !canPerform(.jumpToLatestUnread),
-                disabledReason: L("没有未读通知", "No unread notifications"),
-                keywords: "notification unread jump"
-            ),
             CommandPaletteItem(id: "focus-left", command: .focusPaneLeft, section: L("导航", "Navigate"), title: L("聚焦左侧分屏", "Focus Pane Left"), shortcut: "Cmd-Opt-←", keywords: "focus pane left"),
             CommandPaletteItem(id: "focus-right", command: .focusPaneRight, section: L("导航", "Navigate"), title: L("聚焦右侧分屏", "Focus Pane Right"), shortcut: "Cmd-Opt-→", keywords: "focus pane right"),
             CommandPaletteItem(id: "focus-up", command: .focusPaneUp, section: L("导航", "Navigate"), title: L("聚焦上方分屏", "Focus Pane Up"), shortcut: "Cmd-Opt-↑", keywords: "focus pane up"),
@@ -1077,9 +1055,7 @@ private enum ConductorCommandCatalog {
             CommandPaletteItem(id: "toggle-fullscreen", command: .toggleFullScreen, section: L("视图", "View"), title: L("切换全屏", "Toggle Full Screen"), shortcut: "Ctrl-Cmd-F", keywords: "fullscreen window mac"),
             CommandPaletteItem(id: "appearance-settings", command: .toggleSettings, section: L("视图", "View"), title: L("外观设置", "Appearance Settings"), shortcut: "Cmd-,", keywords: "appearance theme settings"),
             CommandPaletteItem(id: "duplicate-workspace", command: .duplicateWorkspace, section: L("视图", "View"), title: L("复制工作区", "Duplicate Workspace"), shortcut: "Duplicate", keywords: "workspace duplicate"),
-            CommandPaletteItem(id: "reset-workspace", command: .resetWorkspace, section: L("视图", "View"), title: L("重置工作区", "Reset Workspace"), shortcut: "Reset", keywords: "workspace reset"),
-            CommandPaletteItem(id: "clear-notifications", command: .clearNotifications, section: L("整理", "Organize"), title: L("清空通知", "Clear Notifications"), shortcut: "Clear", disabled: !canPerform(.clearNotifications), disabledReason: L("没有未读通知", "No notifications to clear"), keywords: "notification clear"),
-            CommandPaletteItem(id: "debug-notification", command: .testNotification, section: L("通知", "Notifications"), title: L("发送测试通知", "Send Test Notification"), shortcut: "Test", keywords: "notification test")
+            CommandPaletteItem(id: "reset-workspace", command: .resetWorkspace, section: L("视图", "View"), title: L("重置工作区", "Reset Workspace"), shortcut: "Reset", keywords: "workspace reset")
         ]
         return items.map { $0.resolvingShortcut(using: model.appearance.keyboardShortcuts) }
     }
@@ -1296,14 +1272,12 @@ private struct WorkspaceOverviewSnapshot: Equatable {
     let chromeClarity: ChromeClarity
     let items: [WorkspaceOverviewItemSnapshot]
     let selectedWorkspaceID: WorkspaceID
-    let notifications: TerminalNotificationSnapshot
 
     @MainActor
     init(model: ConductorWindowModel) {
         self.chromeClarity = model.appearance.chromeClarity
         self.items = model.workspaces.map(WorkspaceOverviewItemSnapshot.init(workspace:))
         self.selectedWorkspaceID = model.workspace.id
-        self.notifications = model.notifications.snapshot
     }
 
     var workspaceCount: Int {
@@ -1402,11 +1376,7 @@ private struct WorkspaceOverviewPanel: View {
                                         workspace: item.workspace,
                                         theme: theme,
                                         selected: item.id == snapshot.selectedWorkspaceID,
-                                        highlighted: item.id == highlightedWorkspaceID,
-                                        unreadCount: snapshot.notifications.unreadCount(for: item.id),
-                                        unreadCountForPane: { paneID in
-                                            snapshot.notifications.unreadCount(for: paneID)
-                                        }
+                                        highlighted: item.id == highlightedWorkspaceID
                                     ) {
                                         openWorkspace(item.id)
                                     } onHover: {
@@ -1563,8 +1533,6 @@ private struct WorkspaceOverviewCard: View {
     let theme: TerminalTheme
     let selected: Bool
     let highlighted: Bool
-    let unreadCount: Int
-    let unreadCountForPane: (PaneID) -> Int
     let action: () -> Void
     let onHover: () -> Void
     @State private var hovering = false
@@ -1588,9 +1556,6 @@ private struct WorkspaceOverviewCard: View {
         if workspace.isZoomed {
             parts.append(L("已放大", "Zoomed"))
         }
-        if unreadCount > 0 {
-            parts.append(L("\(unreadCount) 条未读", "\(unreadCount) unread"))
-        }
         return parts.joined(separator: "，")
     }
 
@@ -1599,8 +1564,7 @@ private struct WorkspaceOverviewCard: View {
             VStack(alignment: .leading, spacing: 9) {
                 WorkspaceMiniLayout(
                     workspace: workspace,
-                    theme: theme,
-                    unreadCountForPane: unreadCountForPane
+                    theme: theme
                 )
                 .frame(height: 114)
 
@@ -1616,16 +1580,6 @@ private struct WorkspaceOverviewCard: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer(minLength: 0)
-                        if unreadCount > 0 {
-                            Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                                .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 5)
-                                .frame(minWidth: 16, minHeight: 15)
-                                .background(theme.floatingEmphasis)
-                                .clipShape(Capsule())
-                                .conductorSignalPulse(active: true, trigger: unreadCount)
-                        }
                     }
 
                     HStack(spacing: 6) {
@@ -1665,7 +1619,6 @@ private struct WorkspaceOverviewCard: View {
         }
         .animation(ConductorMotion.standard, value: selected)
         .animation(ConductorMotion.feedback, value: highlighted)
-        .animation(ConductorMotion.attention, value: unreadCount)
     }
 
     private var cardFill: Color {
@@ -1714,14 +1667,12 @@ private struct WorkspaceOverviewMetric: View {
 private struct WorkspaceMiniLayout: View {
     let workspace: WorkspaceState
     let theme: TerminalTheme
-    let unreadCountForPane: (PaneID) -> Int
 
     var body: some View {
         WorkspaceMiniNode(
             node: workspace.root,
             workspace: workspace,
-            theme: theme,
-            unreadCountForPane: unreadCountForPane
+            theme: theme
         )
         .padding(5)
         .background(
@@ -1746,7 +1697,6 @@ private struct WorkspaceMiniNode: View {
     let node: SplitNode
     let workspace: WorkspaceState
     let theme: TerminalTheme
-    let unreadCountForPane: (PaneID) -> Int
 
     var body: some View {
         GeometryReader { proxy in
@@ -1761,23 +1711,22 @@ private struct WorkspaceMiniNode: View {
             WorkspaceMiniPane(
                 pane: workspace.panes[paneID],
                 focused: paneID == workspace.focusedPaneID,
-                unreadCount: unreadCountForPane(paneID),
                 theme: theme
             )
         case let .split(axis, first, second, fraction):
             let gap: CGFloat = 4
             if axis == .horizontal {
                 HStack(spacing: gap) {
-                    WorkspaceMiniNode(node: first, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                    WorkspaceMiniNode(node: first, workspace: workspace, theme: theme)
                         .frame(width: max(1, (size.width - gap) * fraction))
-                    WorkspaceMiniNode(node: second, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                    WorkspaceMiniNode(node: second, workspace: workspace, theme: theme)
                         .frame(width: max(1, (size.width - gap) * (1 - fraction)))
                 }
             } else {
                 VStack(spacing: gap) {
-                    WorkspaceMiniNode(node: first, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                    WorkspaceMiniNode(node: first, workspace: workspace, theme: theme)
                         .frame(height: max(1, (size.height - gap) * fraction))
-                    WorkspaceMiniNode(node: second, workspace: workspace, theme: theme, unreadCountForPane: unreadCountForPane)
+                    WorkspaceMiniNode(node: second, workspace: workspace, theme: theme)
                         .frame(height: max(1, (size.height - gap) * (1 - fraction)))
                 }
             }
@@ -1788,7 +1737,6 @@ private struct WorkspaceMiniNode: View {
 private struct WorkspaceMiniPane: View {
     let pane: PaneState?
     let focused: Bool
-    let unreadCount: Int
     let theme: TerminalTheme
 
     private var title: String {
@@ -1842,12 +1790,6 @@ private struct WorkspaceMiniPane: View {
             }
             .padding(6)
 
-            if unreadCount > 0 {
-                Circle()
-                    .fill(theme.floatingEmphasis)
-                    .frame(width: 6, height: 6)
-                    .offset(x: -1, y: -1)
-            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .overlay {
