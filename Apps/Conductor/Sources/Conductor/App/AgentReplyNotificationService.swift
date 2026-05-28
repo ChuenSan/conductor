@@ -49,23 +49,28 @@ final class AgentReplyNotificationService: NSObject, UNUserNotificationCenterDel
     func requestAuthorization(completion: (@MainActor @Sendable (Bool) -> Void)? = nil) {
         guard let center = center else {
             ConductorLog.app.info("Agent reply notification skipped outside app bundle")
+            ConductorDiagnostics.record("agent-notification-authorization", fields: ["status": "outside-app-bundle"])
             completion?(false)
             return
         }
         center.getNotificationSettings { settings in
             switch settings.authorizationStatus {
             case .authorized, .provisional, .ephemeral:
+                ConductorDiagnostics.record("agent-notification-authorization", fields: ["status": "authorized"])
                 Task { @MainActor in completion?(true) }
             case .denied:
                 ConductorLog.app.info("Agent reply notification authorization denied")
+                ConductorDiagnostics.record("agent-notification-authorization", fields: ["status": "denied"])
                 Task { @MainActor in completion?(false) }
             case .notDetermined:
                 center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
                     ConductorLog.app.info("Agent reply notification authorization requested granted=\(granted, privacy: .public)")
+                    ConductorDiagnostics.record("agent-notification-authorization", fields: ["status": granted ? "granted" : "not-granted"])
                     Task { @MainActor in completion?(granted) }
                 }
             @unknown default:
                 ConductorLog.app.info("Agent reply notification authorization unknown status")
+                ConductorDiagnostics.record("agent-notification-authorization", fields: ["status": "unknown"])
                 Task { @MainActor in completion?(false) }
             }
         }
@@ -74,10 +79,12 @@ final class AgentReplyNotificationService: NSObject, UNUserNotificationCenterDel
     func deliver(_ request: AgentReplyNotificationRequest, preferences: AgentReplyNotificationPreferences) {
         guard preferences.enabled else {
             ConductorLog.app.info("Agent reply notification skipped because preference is disabled")
+            ConductorDiagnostics.record("agent-notification-skipped", fields: ["reason": "disabled", "terminal": request.terminalID.description])
             return
         }
         guard !preferences.onlyWhenUnattended || request.isUnattended else {
             ConductorLog.app.info("Agent reply notification skipped because terminal is attended")
+            ConductorDiagnostics.record("agent-notification-skipped", fields: ["reason": "attended", "terminal": request.terminalID.description])
             return
         }
 
@@ -85,6 +92,7 @@ final class AgentReplyNotificationService: NSObject, UNUserNotificationCenterDel
         if let lastDeliveredAt = lastDeliveredAtByTerminalID[request.terminalID],
            now.timeIntervalSince(lastDeliveredAt) < minimumDeliveryInterval {
             ConductorLog.app.info("Agent reply notification skipped by debounce")
+            ConductorDiagnostics.record("agent-notification-skipped", fields: ["reason": "debounce", "terminal": request.terminalID.description])
             return
         }
         lastDeliveredAtByTerminalID[request.terminalID] = now
@@ -108,14 +116,17 @@ final class AgentReplyNotificationService: NSObject, UNUserNotificationCenterDel
         requestAuthorization { [center] granted in
             guard granted, let center else {
                 ConductorLog.app.info("Agent reply notification skipped because notification permission is unavailable")
+                ConductorDiagnostics.record("agent-notification-skipped", fields: ["reason": "permission", "terminal": request.terminalID.description])
                 NSApp.requestUserAttention(.informationalRequest)
                 return
             }
             center.add(notificationRequest) { error in
                 if let error {
                     ConductorLog.app.warning("Agent reply notification failed: \(error.localizedDescription, privacy: .public)")
+                    ConductorDiagnostics.record("agent-notification-failed", fields: ["error": error.localizedDescription, "terminal": request.terminalID.description])
                 } else {
                     ConductorLog.app.info("Agent reply notification delivered terminal=\(request.terminalID.description, privacy: .public)")
+                    ConductorDiagnostics.record("agent-notification-delivered", fields: ["terminal": request.terminalID.description])
                 }
             }
         }

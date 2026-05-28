@@ -1086,11 +1086,21 @@ extension AppearanceSettingsPanel {
                     }
 
                     if let message = snapshot.agentHookSettingsMessage {
-                        Text(message)
-                            .font(.conductorSystem(size: 10.5, weight: .medium, scale: appearance.fontScale))
-                            .foregroundStyle(ConductorDesign.tertiaryText)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(alignment: .center, spacing: 10) {
+                            Text(message)
+                                .font(.conductorSystem(size: 10.5, weight: .medium, scale: appearance.fontScale))
+                                .foregroundStyle(ConductorDesign.tertiaryText)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Spacer(minLength: 8)
+
+                            Button {
+                                model.openSystemNotificationSettings()
+                            } label: {
+                                Label(L("系统设置", "System Settings"), systemImage: "gearshape")
+                            }
+                        }
                     }
                 }
             }

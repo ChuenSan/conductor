@@ -745,9 +745,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         appearance.agentReplyNotifications.enabled = enabled
         if enabled {
             agentReplyNotificationService.requestAuthorization { [weak self] granted in
-                self?.agentHookSettingsMessage = granted
-                    ? L("AI 回复通知已开启", "AI reply notifications enabled")
+                guard let self else { return }
+                self.agentHookSettingsMessage = granted
+                    ? L("AI 回复通知已开启，正在配置终端 Hook。", "AI reply notifications enabled. Configuring terminal hooks.")
                     : L("通知权限未开启，请在系统设置里允许 Conductor 发送通知。", "Notifications are not allowed. Enable Conductor notifications in System Settings.")
+                if granted {
+                    self.installAgentReplyNotificationHooks()
+                }
             }
         }
     }
@@ -769,6 +773,51 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func installAgentReplyNotificationActivationHandler(_ handler: @escaping (TerminalID) -> Void) {
         agentReplyNotificationService.activateTerminal = handler
+    }
+
+    func openSystemNotificationSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    func installAgentReplyNotificationHooks(bridgePath: String? = nil) {
+        guard appearance.agentReplyNotifications.enabled else { return }
+        guard let resolvedBridgePath = bridgePath ?? Bundle.main.executablePath ?? CommandLine.arguments.first,
+              !resolvedBridgePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            agentHookSettingsMessage = L("通知 Hook 配置失败：找不到 Conductor 可执行文件。", "Notification hook setup failed: Conductor executable was not found.")
+            return
+        }
+
+        agentReplyNotificationService.requestAuthorization { [weak self] granted in
+            guard !granted else { return }
+            self?.agentHookSettingsMessage = L(
+                "通知权限未开启，请在系统设置里允许 Conductor 发送通知。",
+                "Notifications are not allowed. Enable Conductor notifications in System Settings."
+            )
+        }
+
+        Task.detached(priority: .utility) {
+            let results = AgentNotificationHookInstaller.installAll(bridgePath: resolvedBridgePath)
+            let installed = results.compactMap { result -> String? in
+                guard case let .success(providerName) = result else { return nil }
+                return providerName
+            }
+            let errors = results.compactMap { result -> String? in
+                guard case let .failure(error) = result else { return nil }
+                return error.localizedDescription
+            }
+            await MainActor.run {
+                if installed.isEmpty {
+                    self.agentHookSettingsMessage = errors.first
+                        ?? L("通知 Hook 配置失败。", "Notification hook setup failed.")
+                } else {
+                    self.agentHookSettingsMessage = L(
+                        "已配置 \(installed.joined(separator: " / ")) 回复通知 Hook。",
+                        "Configured reply notification hooks for \(installed.joined(separator: " / "))."
+                    )
+                }
+            }
+        }
     }
 
     func refreshAgentCLIStatuses() {
@@ -2892,6 +2941,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let terminalID = TerminalID(uuid)
         let action = userInfo[ConductorAgentHookBridge.Key.action]?.lowercased() ?? ""
         ConductorLog.app.info("Received agent hook action=\(action, privacy: .public) agent=\(agent, privacy: .public) terminal=\(terminalID.description, privacy: .public)")
+        ConductorDiagnostics.record(
+            "agent-hook-received",
+            fields: [
+                "action": action,
+                "agent": agent,
+                "terminal": terminalID.description
+            ]
+        )
         switch action {
         case "prompt-submit", "session-start":
             let providerTitle = Self.agentDisplayTitle(for: agent)
@@ -2919,15 +2976,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         agentTitle: String,
         body: String
     ) {
-        guard let location = terminalLocation(for: terminalID) else {
-            ConductorLog.app.info("Agent reply notification skipped because terminal is not open")
-            return
+        let location = terminalLocation(for: terminalID)
+        if location == nil {
+            ConductorLog.app.info("Agent reply notification has no open terminal match; delivering without activation target")
+            ConductorDiagnostics.record("agent-notification-terminal-missing", fields: ["terminal": terminalID.description])
         }
         let request = AgentReplyNotificationRequest(
             terminalID: terminalID,
             agentTitle: agentTitle,
             body: body,
-            isUnattended: isTerminalUnattended(terminalID, location: location)
+            isUnattended: location.map { isTerminalUnattended(terminalID, location: $0) } ?? true
         )
         agentReplyNotificationService.deliver(request, preferences: appearance.agentReplyNotifications)
     }

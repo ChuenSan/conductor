@@ -323,6 +323,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         model.installAgentReplyNotificationActivationHandler { [weak self] terminalID in
             self?.activateTerminalFromAgentReplyNotification(terminalID)
         }
+        model.installAgentReplyNotificationHooks(bridgePath: Bundle.main.executablePath)
         startCodexBarIfEnabled()
         installAppearanceBinding()
         installMainMenu()
