@@ -132,6 +132,7 @@ enum ConductorWorkspaceContentTabID: Equatable, Hashable {
     case terminal(TerminalID)
     case file(String)
     case web(WebTabID)
+    case externalWindow(ExternalWindowTabID)
 
     var diagnosticName: String {
         switch self {
@@ -141,6 +142,8 @@ enum ConductorWorkspaceContentTabID: Equatable, Hashable {
             "file"
         case .web:
             "web"
+        case .externalWindow:
+            "external-window"
         }
     }
 }
@@ -235,6 +238,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var workspaceWebFindFocusGenerationByID: [WebTabID: Int] = [:]
     @Published private(set) var workspaceWebFindNextGenerationByID: [WebTabID: Int] = [:]
     @Published private(set) var workspaceWebFindPreviousGenerationByID: [WebTabID: Int] = [:]
+    @Published private(set) var workspaceExternalWindowTabs: [WorkspaceExternalWindowTabState] = []
+    @Published var externalWindowPickerVisible = false
+    @Published private(set) var externalWindowCandidates: [ExternalWindowCandidate] = []
     @Published private(set) var selectedWorkspaceContentTabID: ConductorWorkspaceContentTabID?
     @Published var terminalSearchQuery = ""
     @Published private(set) var agentHookSettingsMessage: String?
@@ -273,11 +279,21 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         return selectedWorkspaceWebTabID
     }
 
+    var selectedWorkspaceExternalWindowTab: WorkspaceExternalWindowTabState? {
+        guard case .externalWindow(let selectedExternalWindowTabID) = selectedWorkspaceContentTabID else { return nil }
+        return workspaceExternalWindowTabs.first { $0.id == selectedExternalWindowTabID }
+    }
+
+    var selectedWorkspaceExternalWindowTabID: ExternalWindowTabID? {
+        guard case .externalWindow(let selectedExternalWindowTabID) = selectedWorkspaceContentTabID else { return nil }
+        return selectedExternalWindowTabID
+    }
+
     var selectedWorkspaceTerminalTabID: TerminalID? {
         switch selectedWorkspaceContentTabID {
         case .terminal(let terminalID) where workspace.paneID(containing: terminalID) != nil:
             return terminalID
-        case .file:
+        case .file, .externalWindow:
             return nil
         default:
             return focusedTerminalID
@@ -331,10 +347,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.updatePreferences = updatePreferencesStore.load()
         self.updateState = ConductorUpdateState(currentVersion: ConductorAppVersion.current())
         self.workspaceWebTabs = persisted?.workspaceWebTabs ?? []
+        self.workspaceExternalWindowTabs = persisted?.workspaceExternalWindowTabs ?? []
         self.selectedWorkspaceContentTabID = Self.restoredWorkspaceContentSelection(
             persisted?.selectedWorkspaceContentTabID,
             workspace: self.workspace,
-            webTabs: self.workspaceWebTabs
+            webTabs: self.workspaceWebTabs,
+            externalWindowTabs: self.workspaceExternalWindowTabs
         )
         syncPanelCoordinatorFromPublished()
         syncFileWorkspaceCoordinatorFromPublished()
@@ -1367,6 +1385,88 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
         pruneWorkspaceWebTabCommands(keeping: Set(workspaceWebTabs.map(\.id)))
         persist()
+    }
+
+    func showExternalWindowPicker() {
+        refreshExternalWindowCandidates()
+        externalWindowPickerVisible = true
+        closeWorkspaceTransientPanels()
+    }
+
+    func closeExternalWindowPicker() {
+        externalWindowPickerVisible = false
+    }
+
+    func refreshExternalWindowCandidates() {
+        externalWindowCandidates = ExternalWindowPortalService.availableWindows()
+    }
+
+    func refreshWorkspaceExternalWindowTabs() {
+        let candidates = ExternalWindowPortalService.availableWindows()
+        guard !workspaceExternalWindowTabs.isEmpty else { return }
+        var next = workspaceExternalWindowTabs
+        for index in next.indices {
+            guard let candidate = candidates.first(where: {
+                $0.windowNumber == next[index].windowNumber &&
+                    $0.ownerProcessIdentifier == next[index].ownerProcessIdentifier
+            }) else {
+                next[index].attached = false
+                continue
+            }
+            next[index].ownerName = candidate.ownerName
+            next[index].windowTitle = candidate.windowTitle
+            next[index].bundleIdentifier = candidate.bundleIdentifier
+        }
+        guard next != workspaceExternalWindowTabs else { return }
+        workspaceExternalWindowTabs = next
+    }
+
+    func bindExternalWindow(_ candidate: ExternalWindowCandidate) {
+        let tab = candidate.tabState
+        workspaceExternalWindowTabs.append(tab)
+        selectedWorkspaceContentTabID = .externalWindow(tab.id)
+        externalWindowPickerVisible = false
+        closeWorkspaceTransientPanels()
+    }
+
+    func selectWorkspaceExternalWindowTab(_ tabID: ExternalWindowTabID) {
+        guard workspaceExternalWindowTabs.contains(where: { $0.id == tabID }) else { return }
+        selectedWorkspaceContentTabID = .externalWindow(tabID)
+        closeWorkspaceTransientPanels()
+    }
+
+    func closeWorkspaceExternalWindowTab(_ tabID: ExternalWindowTabID) {
+        guard let index = workspaceExternalWindowTabs.firstIndex(where: { $0.id == tabID }) else { return }
+        workspaceExternalWindowTabs.remove(at: index)
+        if selectedWorkspaceExternalWindowTabID == tabID {
+            if !workspaceExternalWindowTabs.isEmpty {
+                selectedWorkspaceContentTabID = .externalWindow(workspaceExternalWindowTabs[min(index, workspaceExternalWindowTabs.count - 1)].id)
+            } else if !workspaceWebTabs.isEmpty {
+                selectedWorkspaceContentTabID = .web(workspaceWebTabs.last!.id)
+            } else if !workspaceFileTabs.isEmpty {
+                selectedWorkspaceContentTabID = .file(workspaceFileTabs.last!.id)
+            } else {
+                selectedWorkspaceContentTabID = focusedTerminalID.map { .terminal($0) }
+            }
+        }
+    }
+
+    func setWorkspaceExternalWindowTabAttached(_ tabID: ExternalWindowTabID, attached: Bool) {
+        guard let index = workspaceExternalWindowTabs.firstIndex(where: { $0.id == tabID }) else { return }
+        workspaceExternalWindowTabs[index].attached = attached
+    }
+
+    func focusWorkspaceExternalWindow(_ tabID: ExternalWindowTabID) {
+        guard let tab = workspaceExternalWindowTabs.first(where: { $0.id == tabID }) else { return }
+        ExternalWindowPortalService.focus(tab)
+    }
+
+    func requestExternalWindowAccessibilityPermission() {
+        _ = ExternalWindowPortalService.requestAccessibilityTrust()
+    }
+
+    func requestExternalWindowScreenCapturePermission() {
+        _ = ExternalWindowPortalService.requestScreenCaptureTrust()
     }
 
     func navigateWorkspaceWebTab(_ tabID: WebTabID, input: String) {
@@ -2659,6 +2759,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func closeSelectedTab() {
         let signpost = ConductorSignpost.begin("close-selected-tab")
         defer { ConductorSignpost.end("close-selected-tab", signpost) }
+        if let externalWindowTabID = selectedWorkspaceExternalWindowTabID {
+            closeWorkspaceExternalWindowTab(externalWindowTabID)
+            return
+        }
         if let webTabID = selectedWorkspaceWebTabID {
             closeWorkspaceWebTab(webTabID)
             return
@@ -3097,6 +3201,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             theme: theme,
             appearance: appearance,
             workspaceWebTabs: workspaceWebTabs,
+            workspaceExternalWindowTabs: workspaceExternalWindowTabs,
             selectedWorkspaceContentTabID: persistedWorkspaceContentSelection()
         )
     }
@@ -3406,6 +3511,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let theme = theme
         let appearance = appearance
         let workspaceWebTabs = workspaceWebTabs
+        let workspaceExternalWindowTabs = workspaceExternalWindowTabs
         let selectedWorkspaceContentTabID = persistedWorkspaceContentSelection()
         let item = DispatchWorkItem { [persistence] in
             let signpost = ConductorSignpost.begin("persistence-save")
@@ -3416,6 +3522,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 theme: theme,
                 appearance: appearance,
                 workspaceWebTabs: workspaceWebTabs,
+                workspaceExternalWindowTabs: workspaceExternalWindowTabs,
                 selectedWorkspaceContentTabID: selectedWorkspaceContentTabID
             )
         }
@@ -3461,7 +3568,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private static func restoredWorkspaceContentSelection(
         _ selection: PersistedWorkspaceContentTabID?,
         workspace: WorkspaceState,
-        webTabs: [WorkspaceWebTabState]
+        webTabs: [WorkspaceWebTabState],
+        externalWindowTabs: [WorkspaceExternalWindowTabState]
     ) -> ConductorWorkspaceContentTabID? {
         switch selection {
         case .terminal(let terminalID):
@@ -3470,6 +3578,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return nil
         case .web(let webTabID):
             return webTabs.contains(where: { $0.id == webTabID }) ? .web(webTabID) : nil
+        case .externalWindow(let tabID):
+            return externalWindowTabs.contains(where: { $0.id == tabID }) ? .externalWindow(tabID) : nil
         case nil:
             return nil
         }
@@ -3483,6 +3593,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return .file(tabID)
         case .web(let tabID):
             return .web(tabID)
+        case .externalWindow(let tabID):
+            return .externalWindow(tabID)
         case nil:
             return nil
         }

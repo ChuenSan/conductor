@@ -83,6 +83,11 @@ struct ConductorToolbar: View {
                             finishWorkspaceRenameIfNeeded()
                             model.performCommand(.newWebTab)
                         }
+
+                        Button(L("应用窗口", "App Window"), systemImage: "macwindow.on.rectangle") {
+                            finishWorkspaceRenameIfNeeded()
+                            model.performCommand(.newExternalWindowTab)
+                        }
                     }
                 }
 

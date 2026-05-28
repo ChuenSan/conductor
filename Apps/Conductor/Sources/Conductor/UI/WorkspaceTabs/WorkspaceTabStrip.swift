@@ -15,6 +15,7 @@ private enum WorkspaceTopTabScrollTarget: Hashable {
     case workspace(WorkspaceID)
     case file(String)
     case web(WebTabID)
+    case externalWindow(ExternalWindowTabID)
 }
 
 struct WorkspaceTabStrip: View {
@@ -37,7 +38,7 @@ struct WorkspaceTabStrip: View {
                         .transition(ConductorMotion.tabTransition)
                 }
 
-                if !snapshot.fileTabs.isEmpty || !snapshot.webTabs.isEmpty {
+                if !snapshot.fileTabs.isEmpty || !snapshot.webTabs.isEmpty || !snapshot.externalWindowTabs.isEmpty {
                     WorkspaceTabSectionDivider()
                     ForEach(snapshot.fileTabs) { fileTab in
                         WorkspaceFileTopTab(
@@ -78,6 +79,25 @@ struct WorkspaceTabStrip: View {
                         .id(WorkspaceTopTabScrollTarget.web(webTab.id))
                         .transition(ConductorMotion.tabTransition)
                     }
+                    ForEach(snapshot.externalWindowTabs) { externalTab in
+                        WorkspaceExternalWindowTopTab(
+                            tab: externalTab.tab,
+                            appearance: appearance,
+                            selected: externalTab.selected,
+                            onSelect: {
+                                finishWorkspaceRenameIfNeeded()
+                                model.selectWorkspaceExternalWindowTab(externalTab.id)
+                            },
+                            onClose: {
+                                withoutShellAnimation {
+                                    finishWorkspaceRenameIfNeeded()
+                                    model.closeWorkspaceExternalWindowTab(externalTab.id)
+                                }
+                            }
+                        )
+                        .id(WorkspaceTopTabScrollTarget.externalWindow(externalTab.id))
+                        .transition(ConductorMotion.tabTransition)
+                    }
                 }
             }
             .padding(.horizontal, WorkspaceTabMetrics.edgePadding)
@@ -95,6 +115,9 @@ struct WorkspaceTabStrip: View {
             syncScrollTarget(animated: true)
         }
         .onChange(of: snapshot.selectedWorkspaceWebTabID) {
+            syncScrollTarget(animated: true)
+        }
+        .onChange(of: snapshot.selectedWorkspaceExternalWindowTabID) {
             syncScrollTarget(animated: true)
         }
         .onChange(of: snapshot.workspaceIDs) {
@@ -120,6 +143,9 @@ struct WorkspaceTabStrip: View {
         } else if let webID = snapshot.selectedWorkspaceWebTabID,
                   snapshot.webTabs.contains(where: { $0.id == webID }) {
             nextTarget = .web(webID)
+        } else if let externalID = snapshot.selectedWorkspaceExternalWindowTabID,
+                  snapshot.externalWindowTabs.contains(where: { $0.id == externalID }) {
+            nextTarget = .externalWindow(externalID)
         } else if snapshot.workspaceIDs.contains(snapshot.selectedWorkspaceID) {
             nextTarget = .workspace(snapshot.selectedWorkspaceID)
         } else {
@@ -140,8 +166,8 @@ struct WorkspaceTabStrip: View {
         WorkspaceTopTab(
             row: row,
             appearance: appearance,
-            active: row.selected && snapshot.selectedWorkspaceFileTabID == nil && snapshot.selectedWorkspaceWebTabID == nil,
-            visuallySelected: row.selected && snapshot.selectedWorkspaceFileTabID == nil && snapshot.selectedWorkspaceWebTabID == nil,
+            active: row.selected && snapshot.selectedWorkspaceFileTabID == nil && snapshot.selectedWorkspaceWebTabID == nil && snapshot.selectedWorkspaceExternalWindowTabID == nil,
+            visuallySelected: row.selected && snapshot.selectedWorkspaceFileTabID == nil && snapshot.selectedWorkspaceWebTabID == nil && snapshot.selectedWorkspaceExternalWindowTabID == nil,
             selectionNamespace: selectionNamespace,
             canClose: snapshot.canCloseWorkspace,
             editing: editingWorkspaceID == row.id,
@@ -561,6 +587,154 @@ private struct WorkspaceWebTopTabContent: View, Equatable {
                 .fill(theme.floatingEmphasis.opacity(0.92))
                 .frame(width: 5, height: 5)
                 .opacity(loading ? 1 : 0)
+        }
+    }
+}
+
+private struct WorkspaceExternalWindowTopTab: View {
+    let tab: WorkspaceExternalWindowTabState
+    let appearance: AppearancePreferences
+    let selected: Bool
+    let onSelect: () -> Void
+    let onClose: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+    private let closeButtonSlotWidth: CGFloat = 21
+
+    private var tabShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: ConductorTokens.Radius.workspaceTab, style: .continuous)
+    }
+
+    private var baseFill: Color {
+        if hovering {
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.24 : 0.12)
+        }
+        return Color.clear
+    }
+
+    private var selectedFill: Color {
+        theme.usesDarkChrome ? theme.shellPanelStrong.opacity(0.62) : theme.shellPanelStrong.opacity(0.72)
+    }
+
+    private var tabStroke: Color {
+        if selected {
+            return theme.shellStroke.opacity((theme.usesDarkChrome ? 0.30 : 0.18) * appearance.chromeClarity.strokeMultiplier)
+        }
+        return theme.shellStroke.opacity(hovering ? 0.08 : 0.0)
+    }
+
+    private var titleColor: Color {
+        if selected {
+            return theme.shellChromeText.opacity(0.95)
+        }
+        return theme.shellChromeTextMuted.opacity(hovering ? 0.88 : 0.64)
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(action: onSelect) {
+                WorkspaceExternalWindowTopTabContent(
+                    title: tab.displayTitle,
+                    appName: tab.ownerName,
+                    selected: selected,
+                    attached: tab.attached,
+                    themeID: theme.id,
+                    fontScaleID: fontScale.id
+                )
+                .equatable()
+                .padding(.leading, 8)
+                .padding(.trailing, closeButtonSlotWidth + 5)
+                .frame(
+                    width: WorkspaceTabMetrics.width(for: appearance),
+                    height: WorkspaceTabMetrics.height(for: appearance),
+                    alignment: .leading
+                )
+                .contentShape(tabShape)
+            }
+            .buttonStyle(ConductorPressButtonStyle())
+            .accessibilityLabel(L("应用窗口 \(tab.displayTitle)", "App window \(tab.displayTitle)"))
+
+            Button {
+                onClose()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
+                    .foregroundStyle(titleColor.opacity(selected || hovering ? 0.74 : 0.52))
+                    .frame(width: 16, height: 16)
+                    .background((selected || hovering) ? theme.shellHoverFill.opacity(0.52) : Color.clear)
+                    .clipShape(Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+            .padding(.trailing, 5)
+            .macNativeTooltip(L("关闭应用窗口标签", "Close App Window Tab"))
+        }
+        .frame(
+            width: WorkspaceTabMetrics.width(for: appearance),
+            height: WorkspaceTabMetrics.height(for: appearance)
+        )
+        .background {
+            ZStack {
+                tabShape.fill(baseFill)
+                if selected {
+                    tabShape
+                        .fill(selectedFill)
+                        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.08 : 0.025), radius: 1.5, y: 0.8)
+                }
+            }
+        }
+        .clipShape(tabShape)
+        .overlay {
+            tabShape.stroke(tabStroke, lineWidth: 0.6)
+        }
+        .scaleEffect(hovering && !selected ? 1.002 : 1)
+        .animation(ConductorMotion.hover, value: hovering)
+        .conductorHover($hovering)
+        .contentShape(tabShape)
+        .contextMenu {
+            Button(L("关闭应用窗口标签", "Close App Window Tab")) {
+                onClose()
+            }
+        }
+    }
+}
+
+private struct WorkspaceExternalWindowTopTabContent: View, Equatable {
+    let title: String
+    let appName: String
+    let selected: Bool
+    let attached: Bool
+    let themeID: String
+    let fontScaleID: String
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    nonisolated static func == (lhs: WorkspaceExternalWindowTopTabContent, rhs: WorkspaceExternalWindowTopTabContent) -> Bool {
+        lhs.title == rhs.title &&
+            lhs.appName == rhs.appName &&
+            lhs.selected == rhs.selected &&
+            lhs.attached == rhs.attached &&
+            lhs.themeID == rhs.themeID &&
+            lhs.fontScaleID == rhs.fontScaleID
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "macwindow.on.rectangle")
+                .font(.system(size: 10.8, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
+                .frame(width: 17, height: 17)
+            Text(title)
+                .font(.conductorSystem(size: 11.3, weight: .semibold, scale: fontScale))
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Circle()
+                .fill(attached ? Color.green.opacity(0.82) : theme.shellChromeTextMuted.opacity(0.42))
+                .frame(width: 5, height: 5)
         }
     }
 }

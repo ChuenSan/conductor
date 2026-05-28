@@ -41,6 +41,7 @@ let package = Package(
                 .linkedFramework("Metal"),
                 .linkedFramework("Quartz"),
                 .linkedFramework("QuartzCore"),
+                .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("UniformTypeIdentifiers"),
                 .linkedFramework("WebKit")
             ]

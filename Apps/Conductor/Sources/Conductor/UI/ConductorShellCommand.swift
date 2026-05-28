@@ -7,6 +7,7 @@ enum ConductorShellCommand: String, CaseIterable {
     case newWorkspace
     case newTerminal
     case newWebTab
+    case newExternalWindowTab
     case focusWebAddress
     case reloadSelectedWebTab
     case openSelectedWebTabExternally
@@ -75,6 +76,8 @@ enum ConductorShellCommand: String, CaseIterable {
             return "command-new-terminal"
         case .newWebTab:
             return "command-new-web-tab"
+        case .newExternalWindowTab:
+            return "command-new-external-window-tab"
         case .focusWebAddress, .reloadSelectedWebTab, .openSelectedWebTabExternally, .copySelectedWebTabURL, .copySelectedWebTabReference:
             return "command-web-tab"
         case .closeSelectedTab, .closeOtherTabs, .closeTabsToRight:
@@ -186,6 +189,8 @@ enum ConductorShellCommand: String, CaseIterable {
             model.newTerminal()
         case .newWebTab:
             model.newWorkspaceWebTab()
+        case .newExternalWindowTab:
+            model.showExternalWindowPicker()
         case .focusWebAddress:
             model.focusSelectedWorkspaceWebAddress()
         case .reloadSelectedWebTab:
