@@ -83,14 +83,6 @@ struct ShellRootView: View {
                         .environment(\.locale, model.appearance.language.locale)
                         .transition(ConductorMotion.panelTransition)
                 }
-                if model.externalWindowPickerVisible {
-                    ExternalWindowPickerPanel(model: model)
-                        .environment(\.conductorTheme, model.theme)
-                        .environment(\.conductorFontScale, model.appearance.fontScale)
-                        .environment(\.conductorFontFamily, model.appearance.fontFamily)
-                        .environment(\.locale, model.appearance.language.locale)
-                        .transition(ConductorMotion.panelTransition)
-                }
             }
         }
         .animation(model.shellAnimation(ConductorMotion.panel), value: shellSnapshot.commandPaletteVisible)
@@ -235,10 +227,7 @@ struct ShellRootView: View {
 
     @ViewBuilder
     private var primaryWorkspaceContent: some View {
-        if let externalWindowTab = model.selectedWorkspaceExternalWindowTab {
-            ConductorExternalWindowWorkspaceView(model: model, tab: externalWindowTab)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if model.selectedWorkspaceWebTab != nil {
+        if model.selectedWorkspaceWebTab != nil {
             ConductorWebWorkspaceView(
                 model: model,
                 snapshot: ConductorWebSnapshot(model: model)
@@ -825,8 +814,6 @@ private struct CommandPaletteItem: Identifiable, Equatable {
             "plus.rectangle.on.rectangle"
         case "new-web-tab":
             "globe"
-        case "new-app-window-tab":
-            "macwindow.on.rectangle"
         case "web-address":
             "link"
         case "web-reload":
@@ -922,7 +909,6 @@ private enum ConductorCommandCatalog {
             CommandPaletteItem(id: "new-workspace", command: .newWorkspace, section: L("创建", "Create"), title: L("新建工作区", "New Workspace"), shortcut: "Cmd-N", keywords: "workspace new"),
             CommandPaletteItem(id: "new-terminal", command: .newTerminal, section: L("创建", "Create"), title: L("新开终端", "New Terminal"), shortcut: "Cmd-T", keywords: "terminal pane shell"),
             CommandPaletteItem(id: "new-web-tab", command: .newWebTab, section: L("创建", "Create"), title: L("新建网页标签", "New Web Tab"), shortcut: "Cmd-Shift-T", keywords: "web browser tab url docs preview localhost"),
-            CommandPaletteItem(id: "new-app-window-tab", command: .newExternalWindowTab, section: L("创建", "Create"), title: L("接入应用窗口", "Attach App Window"), shortcut: "Window", keywords: "window app portal external mac"),
             CommandPaletteItem(
                 id: "web-address",
                 command: .focusWebAddress,

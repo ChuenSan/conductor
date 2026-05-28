@@ -634,12 +634,10 @@ struct WorkspaceChromeSnapshot: Equatable {
     let selectedWorkspaceID: WorkspaceID
     let selectedWorkspaceFileTabID: String?
     let selectedWorkspaceWebTabID: WebTabID?
-    let selectedWorkspaceExternalWindowTabID: ExternalWindowTabID?
     let rows: [WorkspaceChromeDisplayModel]
     let workspaceIDs: [WorkspaceID]
     let fileTabs: [WorkspaceFileTabDisplayModel]
     let webTabs: [WorkspaceWebTabDisplayModel]
-    let externalWindowTabs: [WorkspaceExternalWindowTabDisplayModel]
     let currentSplitCount: Int
     let currentTerminalCount: Int
     let totalUnreadCount: Int
@@ -664,12 +662,10 @@ struct WorkspaceChromeSnapshot: Equatable {
         }
         let selectedWorkspaceFileTabID = model.selectedWorkspaceFileTab?.id
         let selectedWorkspaceWebTabID = model.selectedWorkspaceWebTab?.id
-        let selectedWorkspaceExternalWindowTabID = model.selectedWorkspaceExternalWindowTab?.id
 
         self.selectedWorkspaceID = selectedWorkspaceID
         self.selectedWorkspaceFileTabID = selectedWorkspaceFileTabID
         self.selectedWorkspaceWebTabID = selectedWorkspaceWebTabID
-        self.selectedWorkspaceExternalWindowTabID = selectedWorkspaceExternalWindowTabID
         self.rows = rows
         self.workspaceIDs = rows.map(\.id)
         self.fileTabs = model.workspaceFileTabs.map { tab in
@@ -683,12 +679,6 @@ struct WorkspaceChromeSnapshot: Equatable {
             WorkspaceWebTabDisplayModel(
                 tab: tab,
                 selected: tab.id == selectedWorkspaceWebTabID
-            )
-        }
-        self.externalWindowTabs = model.workspaceExternalWindowTabs.map { tab in
-            WorkspaceExternalWindowTabDisplayModel(
-                tab: tab,
-                selected: tab.id == selectedWorkspaceExternalWindowTabID
             )
         }
         self.currentSplitCount = model.workspace.panes.count
@@ -756,12 +746,6 @@ struct WorkspaceFileTabDisplayModel: Identifiable, Equatable {
 struct WorkspaceWebTabDisplayModel: Identifiable, Equatable {
     var id: WebTabID { tab.id }
     let tab: WorkspaceWebTabState
-    let selected: Bool
-}
-
-struct WorkspaceExternalWindowTabDisplayModel: Identifiable, Equatable {
-    var id: ExternalWindowTabID { tab.id }
-    let tab: WorkspaceExternalWindowTabState
     let selected: Bool
 }
 

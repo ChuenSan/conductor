@@ -437,7 +437,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         fileMenu.addItem(menuItem(L("新建工作区", "New Workspace"), command: .newWorkspace, #selector(newWorkspaceCommand)))
         fileMenu.addItem(menuItem(L("新开终端", "New Terminal"), command: .newTerminal, #selector(newTerminalCommand)))
         fileMenu.addItem(menuItem(L("新建网页标签", "New Web Tab"), command: .newWebTab, #selector(newWebTabCommand)))
-        fileMenu.addItem(menuItem(L("接入应用窗口", "Attach App Window"), command: .newExternalWindowTab, #selector(newExternalWindowCommand)))
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(menuItem(L("关闭标签", "Close Tab"), command: .closeSelectedTab, #selector(closeTabCommand)))
         fileMenu.addItem(menuItem(L("关闭分屏", "Close Pane"), command: .closeFocusedPane, #selector(closePaneCommand)))
@@ -524,8 +523,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             .newTerminal
         case #selector(newWebTabCommand):
             .newWebTab
-        case #selector(newExternalWindowCommand):
-            .newExternalWindowTab
         case #selector(closeTabCommand):
             .closeSelectedTab
         case #selector(closePaneCommand):
@@ -684,10 +681,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     @objc private func newWebTabCommand() {
         scheduleCommand(.newWebTab)
-    }
-
-    @objc private func newExternalWindowCommand() {
-        scheduleCommand(.newExternalWindowTab)
     }
 
     @objc private func closeTabCommand() {

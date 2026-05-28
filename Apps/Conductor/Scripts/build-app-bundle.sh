@@ -4,7 +4,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-if [[ -x /usr/local/opt/swift/bin/swift ]]; then
+if [[ "${CONDUCTOR_USE_HOMEBREW_SWIFT:-1}" == "0" ]]; then
+  PATH="$(python3 - <<'PY'
+import os
+print(":".join(part for part in os.environ.get("PATH", "").split(":") if part != "/usr/local/opt/swift/bin"))
+PY
+)"
+  export PATH
+elif [[ -x /usr/local/opt/swift/bin/swift ]]; then
   export PATH="/usr/local/opt/swift/bin:$PATH"
 fi
 
@@ -18,6 +25,9 @@ case "$CONFIGURATION" in
     ;;
 esac
 SWIFT_BUILD_ARGS=(-c "$CONFIGURATION")
+if [[ -n "${CONDUCTOR_BUILD_ARCH:-}" ]]; then
+  SWIFT_BUILD_ARGS+=(--arch "$CONDUCTOR_BUILD_ARCH")
+fi
 if [[ "$CONFIGURATION" == "release" && "${CONDUCTOR_CROSS_MODULE_OPTIMIZATION:-1}" != "0" ]]; then
   SWIFT_BUILD_ARGS+=(-Xswiftc -cross-module-optimization)
 fi
@@ -47,7 +57,7 @@ prepare_dependencies() {
 }
 
 build_product() {
-  swift build "${SWIFT_BUILD_ARGS[@]}"
+  swift build "${SWIFT_BUILD_ARGS[@]}" --product Conductor
   local bin_path
   bin_path="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)"
   PRODUCT_BIN_DIR="$bin_path"

@@ -7,7 +7,6 @@ struct PersistedWindowState: Codable {
     var theme: TerminalTheme
     var appearance: AppearancePreferences
     var workspaceWebTabs: [WorkspaceWebTabState]
-    var workspaceExternalWindowTabs: [WorkspaceExternalWindowTabState]
     var selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID?
 
     init(
@@ -16,7 +15,6 @@ struct PersistedWindowState: Codable {
         theme: TerminalTheme,
         appearance: AppearancePreferences = AppearancePreferences(),
         workspaceWebTabs: [WorkspaceWebTabState] = [],
-        workspaceExternalWindowTabs: [WorkspaceExternalWindowTabState] = [],
         selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID? = nil
     ) {
         self.workspaces = workspaces
@@ -24,7 +22,6 @@ struct PersistedWindowState: Codable {
         self.theme = theme
         self.appearance = appearance
         self.workspaceWebTabs = workspaceWebTabs
-        self.workspaceExternalWindowTabs = workspaceExternalWindowTabs
         self.selectedWorkspaceContentTabID = selectedWorkspaceContentTabID
     }
 
@@ -33,8 +30,7 @@ struct PersistedWindowState: Codable {
         self.theme = try container.decode(TerminalTheme.self, forKey: .theme)
         self.appearance = try container.decodeIfPresent(AppearancePreferences.self, forKey: .appearance) ?? AppearancePreferences()
         self.workspaceWebTabs = try container.decodeIfPresent([WorkspaceWebTabState].self, forKey: .workspaceWebTabs) ?? []
-        self.workspaceExternalWindowTabs = try container.decodeIfPresent([WorkspaceExternalWindowTabState].self, forKey: .workspaceExternalWindowTabs) ?? []
-        self.selectedWorkspaceContentTabID = try container.decodeIfPresent(PersistedWorkspaceContentTabID.self, forKey: .selectedWorkspaceContentTabID)
+        self.selectedWorkspaceContentTabID = (try? container.decodeIfPresent(PersistedWorkspaceContentTabID.self, forKey: .selectedWorkspaceContentTabID)) ?? nil
 
         if let workspaces = try container.decodeIfPresent([WorkspaceState].self, forKey: .workspaces),
            !workspaces.isEmpty {
@@ -55,7 +51,6 @@ struct PersistedWindowState: Codable {
         try container.encode(theme, forKey: .theme)
         try container.encode(appearance, forKey: .appearance)
         try container.encode(workspaceWebTabs, forKey: .workspaceWebTabs)
-        try container.encode(workspaceExternalWindowTabs, forKey: .workspaceExternalWindowTabs)
         try container.encodeIfPresent(selectedWorkspaceContentTabID, forKey: .selectedWorkspaceContentTabID)
     }
 
@@ -66,7 +61,6 @@ struct PersistedWindowState: Codable {
         case theme
         case appearance
         case workspaceWebTabs
-        case workspaceExternalWindowTabs
         case selectedWorkspaceContentTabID
     }
 }
@@ -75,7 +69,6 @@ enum PersistedWorkspaceContentTabID: Codable, Equatable {
     case terminal(TerminalID)
     case file(String)
     case web(WebTabID)
-    case externalWindow(ExternalWindowTabID)
 }
 
 final class WorkspacePersistence {
@@ -130,7 +123,6 @@ final class WorkspacePersistence {
             theme: state.theme,
             appearance: state.appearance,
             workspaceWebTabs: sanitizedWebTabs(state.workspaceWebTabs),
-            workspaceExternalWindowTabs: sanitizedExternalWindowTabs(state.workspaceExternalWindowTabs),
             selectedWorkspaceContentTabID: state.selectedWorkspaceContentTabID
         )
     }
@@ -141,7 +133,6 @@ final class WorkspacePersistence {
         theme: TerminalTheme,
         appearance: AppearancePreferences,
         workspaceWebTabs: [WorkspaceWebTabState] = [],
-        workspaceExternalWindowTabs: [WorkspaceExternalWindowTabState] = [],
         selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID? = nil
     ) {
         guard isEnabled else { return }
@@ -156,7 +147,6 @@ final class WorkspacePersistence {
             theme: theme,
             appearance: appearance,
             workspaceWebTabs: sanitizedWebTabs(workspaceWebTabs),
-            workspaceExternalWindowTabs: sanitizedExternalWindowTabs(workspaceExternalWindowTabs),
             selectedWorkspaceContentTabID: selectedWorkspaceContentTabID
         )
         guard let data = try? JSONEncoder().encode(state) else { return }
@@ -194,11 +184,4 @@ final class WorkspacePersistence {
         }
     }
 
-    private func sanitizedExternalWindowTabs(_ tabs: [WorkspaceExternalWindowTabState]) -> [WorkspaceExternalWindowTabState] {
-        tabs.map { tab in
-            var sanitized = tab
-            sanitized.attached = false
-            return sanitized
-        }
-    }
 }

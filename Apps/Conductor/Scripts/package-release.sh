@@ -48,7 +48,14 @@ if [[ -z "${CONDUCTOR_UPDATE_MANIFEST_URL:-}" && -n "${CONDUCTOR_GITHUB_REPO:-}"
   export CONDUCTOR_UPDATE_MANIFEST_URL="https://github.com/${CONDUCTOR_GITHUB_REPO}/releases/latest/download/latest-${CHANNEL}-${PLATFORM}-${ARCH}.json"
 fi
 
-if [[ -x /usr/local/opt/swift/bin/swift ]]; then
+if [[ "${CONDUCTOR_USE_HOMEBREW_SWIFT:-1}" == "0" ]]; then
+  PATH="$(python3 - <<'PY'
+import os
+print(":".join(part for part in os.environ.get("PATH", "").split(":") if part != "/usr/local/opt/swift/bin"))
+PY
+)"
+  export PATH
+elif [[ -x /usr/local/opt/swift/bin/swift ]]; then
   export PATH="/usr/local/opt/swift/bin:$PATH"
 fi
 
@@ -57,6 +64,7 @@ mkdir -p "$RELEASE_DIR"
 CONDUCTOR_MARKETING_VERSION="$VERSION" \
 CONDUCTOR_BUILD_NUMBER="$BUILD" \
 CONDUCTOR_BUILD_CONFIGURATION="${CONDUCTOR_BUILD_CONFIGURATION:-release}" \
+CONDUCTOR_BUILD_ARCH="${CONDUCTOR_BUILD_ARCH:-$ARCH}" \
 "$ROOT/Scripts/build-app-bundle.sh" >/tmp/conductor-release-app-path.txt
 
 if [[ ! -d "$APP_PATH" ]]; then
