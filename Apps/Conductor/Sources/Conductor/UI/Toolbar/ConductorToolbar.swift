@@ -14,6 +14,7 @@ struct ToolbarChromeSnapshot: Equatable {
     let fileManagerActive: Bool
     let workspaceOverviewVisible: Bool
     let commandPaletteVisible: Bool
+    let replyNotificationsEnabled: Bool
 
     @MainActor
     init(model: ConductorWindowModel) {
@@ -26,6 +27,7 @@ struct ToolbarChromeSnapshot: Equatable {
         self.fileManagerActive = model.fileManagerPanelRequest != nil
         self.workspaceOverviewVisible = model.workspaceOverviewVisible
         self.commandPaletteVisible = model.commandPaletteVisible
+        self.replyNotificationsEnabled = model.appearance.agentReplyNotifications.enabled
     }
 }
 
@@ -33,6 +35,7 @@ struct ConductorToolbar: View {
     let model: ConductorWindowModel
     let workspaceSnapshot: WorkspaceChromeSnapshot
     let toolbarSnapshot: ToolbarChromeSnapshot
+    let updateState: ConductorUpdateState
     let theme: TerminalTheme
     let appearance: AppearancePreferences
     @State private var editingWorkspaceID: WorkspaceID?
@@ -54,98 +57,7 @@ struct ConductorToolbar: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(0)
 
-                if shouldShowUpdateButton {
-                    ConductorToolbarUpdateButton(model: model, state: model.updateState)
-                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                }
-
-                ConductorPillGroup {
-                    ConductorToolbarMenuButton(
-                        state: toolbarControlState(
-                            id: "new-actions",
-                            systemImage: "plus",
-                            tooltip: L("新建工作区、终端或网页", "Create workspace, terminal, or web tab"),
-                            title: L("新建", "New")))
-                    {
-                        Button(L("新建工作区", "New Workspace"), systemImage: "plus") {
-                            finishWorkspaceRenameIfNeeded()
-                            model.performCommand(.newWorkspace)
-                        }
-
-                        Button(L("新开终端", "New Terminal"), systemImage: "plus.rectangle.on.rectangle") {
-                            finishWorkspaceRenameIfNeeded()
-                            model.performCommand(.newTerminal)
-                        }
-
-                        Button(L("新建网页标签", "New Web Tab"), systemImage: "globe") {
-                            finishWorkspaceRenameIfNeeded()
-                            model.performCommand(.newWebTab)
-                        }
-
-                    }
-                }
-
-                ConductorPillGroup {
-                    ConductorIconButton(state: toolbarControlState(id: "split-right", systemImage: "rectangle.split.2x1", tooltip: commandTooltip(L("向右分屏", "Split Right"), command: .splitRight, fallback: "Cmd-D"), isEnabled: toolbarSnapshot.canSplitRight)) {
-                        finishWorkspaceRenameIfNeeded()
-                        ConductorMotion.perform(ConductorMotion.layout) {
-                            model.performCommand(.splitRight)
-                        }
-                    }
-                    ConductorSegmentDivider()
-                    ConductorIconButton(state: toolbarControlState(id: "split-down", systemImage: "rectangle.split.1x2", tooltip: commandTooltip(L("向下分屏", "Split Down"), command: .splitDown, fallback: "Cmd-Shift-D"), isEnabled: toolbarSnapshot.canSplitDown)) {
-                        finishWorkspaceRenameIfNeeded()
-                        ConductorMotion.perform(ConductorMotion.layout) {
-                            model.performCommand(.splitDown)
-                        }
-                    }
-                    ConductorSegmentDivider()
-                    ConductorIconButton(state: toolbarControlState(
-                        id: "toggle-zoom",
-                        systemImage: "arrow.up.left.and.arrow.down.right",
-                        tooltip: toolbarSnapshot.isZoomed ? commandTooltip(L("还原当前分屏", "Restore Current Pane"), command: .toggleZoom, fallback: "Cmd-Opt-Z") : commandTooltip(L("放大当前分屏", "Zoom Current Pane"), command: .toggleZoom, fallback: "Cmd-Opt-Z"),
-                        isEnabled: toolbarSnapshot.canToggleZoom,
-                        isActive: toolbarSnapshot.isZoomed
-                    )) {
-                        finishWorkspaceRenameIfNeeded()
-                        ConductorMotion.perform(ConductorMotion.layout) {
-                            model.performCommand(.toggleZoom)
-                        }
-                    }
-                }
-
-                ConductorPillGroup {
-                    ConductorIconButton(state: toolbarControlState(
-                        id: "toggle-file-manager",
-                        systemImage: "folder",
-                        tooltip: L("文件管理器", "File Manager"),
-                        isEnabled: toolbarSnapshot.canToggleFileManager,
-                        isActive: toolbarSnapshot.fileManagerActive
-                    )) {
-                        finishWorkspaceRenameIfNeeded()
-                        model.performCommand(.toggleFileManager)
-                    }
-                    ConductorSegmentDivider()
-                    ConductorIconButton(state: toolbarControlState(
-                        id: "toggle-workspace-overview",
-                        systemImage: WorkspaceChromeGlyph.systemName(selected: false),
-                        tooltip: commandTooltip(L("工作区总览", "Workspace Overview"), command: .toggleWorkspaceOverview, fallback: "Cmd-O"),
-                        isActive: toolbarSnapshot.workspaceOverviewVisible
-                    )) {
-                        finishWorkspaceRenameIfNeeded()
-                        model.performCommand(.toggleWorkspaceOverview)
-                    }
-                    ConductorSegmentDivider()
-                    ConductorIconButton(state: toolbarControlState(
-                        id: "toggle-command-palette",
-                        systemImage: "command",
-                        tooltip: commandTooltip(L("命令面板", "Command Palette"), command: .toggleCommandPalette, fallback: "Cmd-K"),
-                        isActive: toolbarSnapshot.commandPaletteVisible
-                    )) {
-                        finishWorkspaceRenameIfNeeded()
-                        model.performCommand(.toggleCommandPalette)
-                    }
-                }
+                toolbarActions
             }
             .controlSize(.small)
             .padding(.leading, 12)
@@ -155,13 +67,120 @@ struct ConductorToolbar: View {
         .frame(height: ConductorDesign.toolbarHeight(for: appearance))
         .animation(model.shellAnimation(ConductorMotion.standard), value: theme)
         .animation(model.shellAnimation(ConductorMotion.panel), value: shouldShowUpdateButton)
+        .animation(model.shellAnimation(ConductorMotion.panel), value: updateState.phase)
+    }
+
+    private var toolbarActions: some View {
+        ConductorToolbarActionCluster {
+            if shouldShowUpdateButton {
+                ConductorToolbarUpdateButton(model: model, state: updateState)
+                    .transition(.identity)
+                ConductorToolbarActionDivider()
+            }
+
+            ConductorIconButton(state: toolbarControlState(
+                id: "check-notifications",
+                systemImage: toolbarSnapshot.replyNotificationsEnabled ? "bell.badge.fill" : "bell",
+                tooltip: L("检测通知权限", "Check Notification Permission"),
+                isActive: toolbarSnapshot.replyNotificationsEnabled
+            )) {
+                finishWorkspaceRenameIfNeeded()
+                model.checkNotificationPermissionFromToolbar()
+            }
+            ConductorToolbarActionDivider()
+
+            ConductorToolbarMenuButton(
+                state: toolbarControlState(
+                    id: "new-actions",
+                    systemImage: "plus",
+                    tooltip: L("新建工作区、终端或网页", "Create workspace, terminal, or web tab"),
+                    title: L("新建", "New")))
+            {
+                Button(L("新建工作区", "New Workspace"), systemImage: "plus") {
+                    finishWorkspaceRenameIfNeeded()
+                    model.performCommand(.newWorkspace)
+                }
+
+                Button(L("新开终端", "New Terminal"), systemImage: "plus.rectangle.on.rectangle") {
+                    finishWorkspaceRenameIfNeeded()
+                    model.performCommand(.newTerminal)
+                }
+
+                Button(L("新建网页标签", "New Web Tab"), systemImage: "globe") {
+                    finishWorkspaceRenameIfNeeded()
+                    model.performCommand(.newWebTab)
+                }
+            }
+
+            ConductorToolbarActionDivider()
+
+            ConductorIconButton(state: toolbarControlState(id: "split-right", systemImage: "rectangle.split.2x1", tooltip: commandTooltip(L("向右分屏", "Split Right"), command: .splitRight, fallback: "Cmd-D"), isEnabled: toolbarSnapshot.canSplitRight)) {
+                finishWorkspaceRenameIfNeeded()
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.performCommand(.splitRight)
+                }
+            }
+            ConductorSegmentDivider()
+            ConductorIconButton(state: toolbarControlState(id: "split-down", systemImage: "rectangle.split.1x2", tooltip: commandTooltip(L("向下分屏", "Split Down"), command: .splitDown, fallback: "Cmd-Shift-D"), isEnabled: toolbarSnapshot.canSplitDown)) {
+                finishWorkspaceRenameIfNeeded()
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.performCommand(.splitDown)
+                }
+            }
+            ConductorSegmentDivider()
+            ConductorIconButton(state: toolbarControlState(
+                id: "toggle-zoom",
+                systemImage: "arrow.up.left.and.arrow.down.right",
+                tooltip: toolbarSnapshot.isZoomed ? commandTooltip(L("还原当前分屏", "Restore Current Pane"), command: .toggleZoom, fallback: "Cmd-Opt-Z") : commandTooltip(L("放大当前分屏", "Zoom Current Pane"), command: .toggleZoom, fallback: "Cmd-Opt-Z"),
+                isEnabled: toolbarSnapshot.canToggleZoom,
+                isActive: toolbarSnapshot.isZoomed
+            )) {
+                finishWorkspaceRenameIfNeeded()
+                ConductorMotion.perform(ConductorMotion.layout) {
+                    model.performCommand(.toggleZoom)
+                }
+            }
+
+            ConductorToolbarActionDivider()
+
+            ConductorIconButton(state: toolbarControlState(
+                id: "toggle-file-manager",
+                systemImage: "folder",
+                tooltip: L("文件管理器", "File Manager"),
+                isEnabled: toolbarSnapshot.canToggleFileManager,
+                isActive: toolbarSnapshot.fileManagerActive
+            )) {
+                finishWorkspaceRenameIfNeeded()
+                model.performCommand(.toggleFileManager)
+            }
+            ConductorSegmentDivider()
+            ConductorIconButton(state: toolbarControlState(
+                id: "toggle-workspace-overview",
+                systemImage: WorkspaceChromeGlyph.systemName(selected: false),
+                tooltip: commandTooltip(L("工作区总览", "Workspace Overview"), command: .toggleWorkspaceOverview, fallback: "Cmd-O"),
+                isActive: toolbarSnapshot.workspaceOverviewVisible
+            )) {
+                finishWorkspaceRenameIfNeeded()
+                model.performCommand(.toggleWorkspaceOverview)
+            }
+            ConductorSegmentDivider()
+            ConductorIconButton(state: toolbarControlState(
+                id: "toggle-command-palette",
+                systemImage: "command",
+                tooltip: commandTooltip(L("命令面板", "Command Palette"), command: .toggleCommandPalette, fallback: "Cmd-K"),
+                isActive: toolbarSnapshot.commandPaletteVisible
+            )) {
+                finishWorkspaceRenameIfNeeded()
+                model.performCommand(.toggleCommandPalette)
+            }
+        }
     }
 
     private var shouldShowUpdateButton: Bool {
-        switch model.updateState.phase {
-        case .available, .downloading, .downloaded, .installing:
+        switch updateState.phase {
+        case .checking, .available, .downloading, .downloaded, .installing, .failed:
             true
-        case .idle, .checking, .upToDate, .failed:
+        case .idle, .upToDate:
             false
         }
     }
@@ -226,7 +245,13 @@ private struct ConductorToolbarUpdateButton: View {
     var body: some View {
         Button(action: performAction) {
             HStack(spacing: 5) {
-                if state.phase == .downloading {
+                if state.phase == .checking {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(.white)
+                        .frame(width: 12, height: 12)
+                        .accessibilityHidden(true)
+                } else if state.phase == .downloading {
                     ProgressView(value: state.downloadProgress?.fraction ?? 0)
                         .controlSize(.mini)
                         .tint(.white)
@@ -262,6 +287,8 @@ private struct ConductorToolbarUpdateButton: View {
 
     private var title: String {
         switch state.phase {
+        case .checking:
+            return L("检查中", "Checking")
         case .downloading:
             guard let progress = state.downloadProgress else {
                 return L("下载中", "Downloading")
@@ -271,6 +298,8 @@ private struct ConductorToolbarUpdateButton: View {
             return L("安装", "Install")
         case .installing:
             return L("安装中", "Installing")
+        case .failed:
+            return L("重试", "Retry")
         default:
             return L("更新", "Update")
         }
@@ -308,6 +337,37 @@ private struct ConductorToolbarUpdateButton: View {
         default:
             model.showUpdatesAndCheck()
         }
+    }
+}
+
+private struct ConductorToolbarActionCluster<Content: View>: View {
+    @ViewBuilder let content: Content
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 1) {
+            content
+        }
+        .padding(2)
+        .background(theme.usesDarkChrome ? Color.white.opacity(0.014) : theme.shellControlFill.opacity(0.18))
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
+                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.024) : theme.shellStroke.opacity(0.12), lineWidth: 0.6)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(3)
+    }
+}
+
+private struct ConductorToolbarActionDivider: View {
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 0.5)
+            .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.18 : 0.12))
+            .frame(width: 1, height: 16)
+            .padding(.horizontal, 2)
     }
 }
 
@@ -375,14 +435,14 @@ private struct ConductorToolbarMenuButton<MenuContent: View>: View {
 
     private var background: Color {
         if theme.usesDarkChrome {
-            return Color.white.opacity(state.isActive ? 0.044 : (hovering ? 0.028 : 0.004))
+            return Color.white.opacity(state.isActive ? 0.052 : (hovering ? 0.030 : 0.0))
         }
         return state.isActive ? theme.shellSelectedFill.opacity(0.52) : (hovering ? theme.shellHoverFill.opacity(0.42) : theme.shellControlFill.opacity(0.28))
     }
 
     private var buttonStroke: Color {
         if theme.usesDarkChrome {
-            return Color.white.opacity(state.isActive ? 0.070 : (hovering ? 0.050 : 0.020))
+            return Color.white.opacity(state.isActive ? 0.075 : (hovering ? 0.044 : 0.0))
         }
         return theme.shellStroke.opacity(state.isActive ? 0.38 : (hovering ? 0.28 : 0.16))
     }

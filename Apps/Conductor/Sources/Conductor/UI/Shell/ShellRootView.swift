@@ -49,41 +49,7 @@ struct ShellRootView: View {
         .environment(\.conductorTheme, model.theme)
         .environment(\.locale, model.appearance.language.locale)
         .overlay {
-            ZStack {
-                if shellSnapshot.commandPaletteVisible {
-                    CommandPaletteView(
-                        model: model,
-                        snapshot: CommandPaletteSnapshot(model: model)
-                    )
-                        .environment(\.conductorTheme, model.theme)
-                        .environment(\.conductorFontScale, model.appearance.fontScale)
-                        .environment(\.conductorFontFamily, model.appearance.fontFamily)
-                        .environment(\.locale, model.appearance.language.locale)
-                        .transition(ConductorMotion.panelTransition)
-                }
-                if shellSnapshot.settingsPanelVisible {
-                    AppearanceSettingsPanel(
-                        model: model,
-                        commandShortcutRows: { ConductorCommandCatalog.shortcutGuideRows(model: model) }
-                    )
-                        .environment(\.conductorTheme, model.theme)
-                        .environment(\.conductorFontScale, model.appearance.fontScale)
-                        .environment(\.conductorFontFamily, model.appearance.fontFamily)
-                        .environment(\.locale, model.appearance.language.locale)
-                        .transition(ConductorMotion.settingsPanelTransition)
-                }
-                if shellSnapshot.workspaceOverviewVisible {
-                    WorkspaceOverviewPanel(
-                        model: model,
-                        snapshot: WorkspaceOverviewSnapshot(model: model)
-                    )
-                        .environment(\.conductorTheme, model.theme)
-                        .environment(\.conductorFontScale, model.appearance.fontScale)
-                        .environment(\.conductorFontFamily, model.appearance.fontFamily)
-                        .environment(\.locale, model.appearance.language.locale)
-                        .transition(ConductorMotion.panelTransition)
-                }
-            }
+            floatingPanelOverlay(shellSnapshot: shellSnapshot)
         }
         .animation(model.shellAnimation(ConductorMotion.panel), value: shellSnapshot.commandPaletteVisible)
         .animation(model.shellAnimation(ConductorMotion.panel), value: shellSnapshot.settingsPanelVisible)
@@ -102,6 +68,57 @@ struct ShellRootView: View {
         }
         .onChange(of: model.fileManagerPanelRequest?.id) { _, _ in
             synchronizeFileManagerPresentation(animated: true)
+        }
+    }
+
+    @ViewBuilder
+    private func floatingPanelOverlay(shellSnapshot: ShellChromeSnapshot) -> some View {
+        let hasFloatingPanel = shellSnapshot.commandPaletteVisible ||
+            shellSnapshot.settingsPanelVisible ||
+            shellSnapshot.workspaceOverviewVisible
+
+        ZStack {
+            if hasFloatingPanel {
+                FloatingPanelCursorShield()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .zIndex(0)
+            }
+            if shellSnapshot.commandPaletteVisible {
+                CommandPaletteView(
+                    model: model,
+                    snapshot: CommandPaletteSnapshot(model: model)
+                )
+                .environment(\.conductorTheme, model.theme)
+                .environment(\.conductorFontScale, model.appearance.fontScale)
+                .environment(\.conductorFontFamily, model.appearance.fontFamily)
+                .environment(\.locale, model.appearance.language.locale)
+                .transition(ConductorMotion.panelTransition)
+                .zIndex(10)
+            }
+            if shellSnapshot.workspaceOverviewVisible {
+                WorkspaceOverviewPanel(
+                    model: model,
+                    snapshot: WorkspaceOverviewSnapshot(model: model)
+                )
+                .environment(\.conductorTheme, model.theme)
+                .environment(\.conductorFontScale, model.appearance.fontScale)
+                .environment(\.conductorFontFamily, model.appearance.fontFamily)
+                .environment(\.locale, model.appearance.language.locale)
+                .transition(ConductorMotion.panelTransition)
+                .zIndex(20)
+            }
+            if shellSnapshot.settingsPanelVisible {
+                AppearanceSettingsPanel(
+                    model: model,
+                    commandShortcutRows: { ConductorCommandCatalog.shortcutGuideRows(model: model) }
+                )
+                .environment(\.conductorTheme, model.theme)
+                .environment(\.conductorFontScale, model.appearance.fontScale)
+                .environment(\.conductorFontFamily, model.appearance.fontFamily)
+                .environment(\.locale, model.appearance.language.locale)
+                .transition(ConductorMotion.settingsPanelTransition)
+                .zIndex(30)
+            }
         }
     }
 
@@ -124,6 +141,7 @@ struct ShellRootView: View {
                     model: model,
                     workspaceSnapshot: workspaceSnapshot,
                     toolbarSnapshot: toolbarSnapshot,
+                    updateState: model.updateState,
                     theme: model.theme,
                     appearance: model.appearance
                 )
@@ -366,16 +384,9 @@ private struct TerminalSidebarContactWash: View {
     let theme: TerminalTheme
 
     var body: some View {
-        LinearGradient(
-            colors: [
-                theme.shellPanelBackground.opacity(theme.usesDarkChrome ? 0.34 : 0.22),
-                theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.16 : 0.075),
-                Color.clear
-            ],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
-        .frame(width: theme.usesDarkChrome ? 22 : 18)
+        Rectangle()
+            .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.30 : 0.20))
+            .frame(width: 1)
     }
 }
 
@@ -1230,7 +1241,6 @@ private struct CommandButton: View {
         .buttonStyle(.plain)
         .disabled(command.disabled)
         .opacity(command.disabled ? 0.62 : 1)
-        .animation(ConductorMotion.selectionGlide, value: selected)
         .onHover { value in
             guard hovering != value else { return }
             hovering = value
@@ -1248,7 +1258,6 @@ private struct CommandButton: View {
             if selected {
                 shape
                     .fill(theme.floatingSelectedFill.opacity(0.66))
-                    .matchedGeometryEffect(id: "command-selection", in: selectionNamespace)
             }
         }
     }
@@ -1796,5 +1805,39 @@ private struct WorkspaceMiniPane: View {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .stroke(focused ? theme.floatingSelectedStroke : Color.white.opacity(0.14), lineWidth: focused ? 1.3 : 1)
         }
+    }
+}
+
+private struct FloatingPanelCursorShield: NSViewRepresentable {
+    func makeNSView(context _: Context) -> FloatingPanelCursorShieldView {
+        FloatingPanelCursorShieldView()
+    }
+
+    func updateNSView(_ view: FloatingPanelCursorShieldView, context _: Context) {
+        view.window?.invalidateCursorRects(for: view)
+        NSCursor.arrow.set()
+    }
+}
+
+private final class FloatingPanelCursorShieldView: NSView {
+    override var isOpaque: Bool { false }
+    override var acceptsFirstResponder: Bool { false }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .arrow)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.arrow.set()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        NSCursor.arrow.set()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.invalidateCursorRects(for: self)
     }
 }

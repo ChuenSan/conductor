@@ -182,10 +182,10 @@ struct TerminalPaneView: View {
         .background {
             ZStack(alignment: .bottom) {
                 terminalBackground
-                snapshot.theme.terminalChrome.opacity(isFocused ? 0.13 : 0.085)
+                snapshot.theme.terminalChrome.opacity(isFocused ? 0.075 : 0.050)
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isFocused ? 0.010 : 0.005),
+                        Color.white.opacity(isFocused ? 0.006 : 0.003),
                         Color.clear
                     ],
                     startPoint: .top,
@@ -197,7 +197,7 @@ struct TerminalPaneView: View {
             LinearGradient(
                 colors: [
                     Color.clear,
-                    snapshot.theme.terminalOuterStroke.opacity(isFocused ? 0.30 : 0.20),
+                    snapshot.theme.terminalOuterStroke.opacity(isFocused ? 0.22 : 0.14),
                     Color.clear
                 ],
                 startPoint: .leading,
@@ -364,7 +364,7 @@ private final class NativeTerminalTabStripView: NSView {
     private var selectedTabID: TerminalID?
     private var paneID: PaneID?
     private weak var model: ConductorWindowModel?
-    private var theme: TerminalTheme = .graphite
+    private var theme: TerminalTheme = .codexDark
     private var density: AppearanceDensity = .standard
     private var fontScale: AppearanceFontScale = .standard
     private var highlightedDropTabID: TerminalID?
@@ -559,7 +559,7 @@ private final class NativeTerminalTabItemView: NSView, NSDraggingSource, NSTextF
     private var highlighted = false
     private var paneID: PaneID?
     private weak var model: ConductorWindowModel?
-    private var theme: TerminalTheme = .graphite
+    private var theme: TerminalTheme = .codexDark
     private var density: AppearanceDensity = .standard
     private var fontScale: AppearanceFontScale = .standard
     private var hovering = false
@@ -733,10 +733,10 @@ private final class NativeTerminalTabItemView: NSView, NSDraggingSource, NSTextF
 
     private var fillColor: NSColor {
         if selected {
-            return NSColor(theme.shellSelectedFill)
+            return NSColor(theme.shellSelectedFill.opacity(0.68))
         }
         if hovering {
-            return NSColor(theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.36 : 0.18))
+            return NSColor(theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.22 : 0.12))
         }
         return .clear
     }
@@ -746,9 +746,9 @@ private final class NativeTerminalTabItemView: NSView, NSDraggingSource, NSTextF
             return NSColor(theme.floatingSelectedStroke.opacity(0.95))
         }
         if selected {
-            return NSColor(theme.floatingSelectedStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.58 : 0.48) : (theme.usesDarkChrome ? 0.38 : 0.32)))
+            return NSColor(theme.floatingSelectedStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.34 : 0.30) : (theme.usesDarkChrome ? 0.22 : 0.20)))
         }
-        return NSColor(theme.shellStroke.opacity(hovering ? 0.12 : 0.0))
+        return NSColor(theme.shellStroke.opacity(hovering ? 0.08 : 0.0))
     }
 
     private var iconRect: NSRect {
@@ -767,17 +767,17 @@ private final class NativeTerminalTabItemView: NSView, NSDraggingSource, NSTextF
     private func drawIcon(in rect: NSRect) {
         let image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
         image?.isTemplate = true
-        let tint = selected ? NSColor(theme.shellChromeText) : NSColor(theme.shellChromeTextMuted)
+        let tint = selected ? NSColor(theme.shellChromeText.opacity(0.90)) : NSColor(theme.shellChromeTextMuted.opacity(0.62))
         tint.set()
         image?.draw(in: rect)
     }
 
     private func drawTitle(for display: TerminalTabDisplayModel) {
         let title = display.tab.title
-        let titleColor = selected ? NSColor(theme.shellChromeText) : NSColor(theme.shellChromeTextMuted)
+        let titleColor = selected ? NSColor(theme.shellChromeText.opacity(0.92)) : NSColor(theme.shellChromeTextMuted.opacity(0.68))
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
-        let titleFont = NSFont.systemFont(ofSize: fontScale.size(11), weight: .semibold)
+        let titleFont = NSFont.systemFont(ofSize: fontScale.size(10.8), weight: selected ? .semibold : .medium)
         let attributedTitle = NSAttributedString(
             string: title,
             attributes: [
@@ -792,7 +792,7 @@ private final class NativeTerminalTabItemView: NSView, NSDraggingSource, NSTextF
             let detailText = " · \(detail)"
             let detailAttributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: fontScale.size(9.5), weight: .medium),
-                .foregroundColor: NSColor(theme.shellChromeTextMuted.opacity(0.92)),
+                .foregroundColor: NSColor(theme.shellChromeTextMuted.opacity(0.72)),
                 .paragraphStyle: paragraph
             ]
             let combined = NSMutableAttributedString(attributedString: attributedTitle)
@@ -1111,11 +1111,11 @@ private struct PaneBarButton: View {
             .padding(.horizontal, showsTitle ? 5 : 4)
             .frame(height: 18)
             .frame(minWidth: showsTitle ? nil : 19)
-            .background(hovering ? theme.shellHoverFill.opacity(0.60) : (theme.usesDarkChrome ? Color.white.opacity(showsTitle ? 0.034 : 0.018) : theme.shellControlFill.opacity(0.62)))
+            .background(hovering ? theme.shellHoverFill.opacity(0.44) : (theme.usesDarkChrome ? Color.white.opacity(showsTitle ? 0.018 : 0.0) : theme.shellControlFill.opacity(0.34)))
             .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
-                    .stroke(hovering ? theme.shellStroke.opacity(0.42) : theme.shellStroke.opacity(0.22), lineWidth: 0.6)
+                    .stroke(hovering ? theme.shellStroke.opacity(0.30) : theme.shellStroke.opacity(0.12), lineWidth: 0.6)
             }
             .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
         }
@@ -1299,7 +1299,6 @@ private struct TerminalTabButton: View {
                 if visuallySelected {
                     shape
                         .fill(selectedFill)
-                        .matchedGeometryEffect(id: "terminal-tab-selection", in: selectionNamespace)
                         .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.07 : 0.02), radius: 1.4, y: 0.7)
                 }
             }

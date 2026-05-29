@@ -202,10 +202,44 @@ final class ConductorWindow: NSWindow {
         let size = frame.size
         let borderHitWidth: CGFloat = 6
         let topChromeHitHeight: CGFloat = 42
-        return location.x <= borderHitWidth ||
+        if location.x <= borderHitWidth ||
             location.x >= size.width - borderHitWidth ||
-            location.y <= borderHitWidth ||
-            location.y >= size.height - topChromeHitHeight
+            location.y <= borderHitWidth {
+            return true
+        }
+        guard location.y >= size.height - topChromeHitHeight else {
+            return false
+        }
+        return isEmptyTopChromeDoubleClick(event)
+    }
+
+    private func isEmptyTopChromeDoubleClick(_ event: NSEvent) -> Bool {
+        guard let contentView else { return false }
+        let point = contentView.convert(event.locationInWindow, from: nil)
+        guard let hitView = contentView.hitTest(point) else { return true }
+        return !Self.isInteractiveChromeView(hitView)
+    }
+
+    private static func isInteractiveChromeView(_ view: NSView) -> Bool {
+        var current: NSView? = view
+        while let candidate = current {
+            if candidate is NSControl ||
+                candidate is NSTextView {
+                return true
+            }
+
+            let className = NSStringFromClass(type(of: candidate))
+            if className.contains("NativeWorkspaceTopTabView") ||
+                className.contains("NativeTerminalTab") ||
+                className.contains("WorkspaceTab") ||
+                className.contains("TerminalTab") ||
+                className.contains("Button") ||
+                className.contains("Menu") {
+                return true
+            }
+            current = candidate.superview
+        }
+        return false
     }
 
     private static func owningTerminalHost(for responder: NSResponder?) -> TerminalHostView? {

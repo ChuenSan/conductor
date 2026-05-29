@@ -28,6 +28,7 @@ struct WorkspaceTabStrip: View {
     let onCancelRename: () -> Void
     @Namespace private var selectionNamespace
     @State private var scrollTargetID: WorkspaceTopTabScrollTarget?
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -107,6 +108,10 @@ struct WorkspaceTabStrip: View {
             maxHeight: WorkspaceTabMetrics.height(for: appearance),
             alignment: .leading
         )
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(theme.usesDarkChrome ? Color.white.opacity(0.012) : theme.shellControlFill.opacity(0.16))
+        }
         .clipped()
         .mask(ConductorHorizontalFadeMask())
         .animation(model.shellAnimation(ConductorMotion.list), value: snapshot.workspaceIDs)
@@ -783,7 +788,7 @@ private final class NativeWorkspaceTopTabView: NSView {
     private var targetSize = NSSize(width: 140, height: 28)
     private var selected = false
     private var canClose = true
-    private var theme: TerminalTheme = .graphite
+    private var theme: TerminalTheme = .codexDark
     private var fontScale: AppearanceFontScale = .standard
     private var hovering = false
     private var mouseDownOnClose = false
@@ -969,35 +974,59 @@ private final class NativeWorkspaceTopTabView: NSView {
 
     private var fillColor: NSColor {
         if selected {
-            return NSColor(theme.shellSelectedFill)
+            return NSColor(theme.shellSelectedFill.opacity(0.78))
         }
         if hovering {
-            return NSColor(theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.24 : 0.12))
+            return NSColor(theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.18 : 0.10))
         }
         return .clear
     }
 
     private var strokeColor: NSColor {
         if selected {
-            return NSColor(theme.floatingSelectedStroke.opacity(theme.usesDarkChrome ? 0.58 : 0.48))
+            return NSColor(theme.floatingSelectedStroke.opacity(theme.usesDarkChrome ? 0.38 : 0.34))
         }
-        return NSColor(theme.shellStroke.opacity(hovering ? 0.08 : 0))
+        return NSColor(theme.shellStroke.opacity(hovering ? 0.06 : 0))
     }
 
     private func drawGlyph(selected: Bool) {
         let chipRect = NSRect(x: 6, y: (bounds.height - 22) / 2, width: 22, height: 22)
         if selected {
-            NSColor(theme.shellControlRaisedFill.opacity(0.84)).setFill()
+            NSColor(theme.shellControlRaisedFill.opacity(0.42)).setFill()
             NSBezierPath(roundedRect: chipRect, xRadius: 7, yRadius: 7).fill()
         }
 
-        let image = NSImage(systemSymbolName: WorkspaceChromeGlyph.systemName(selected: selected), accessibilityDescription: nil)
-        image?.isTemplate = true
-        let symbolColor = selected ? NSColor(theme.shellChromeText.opacity(0.96)) : NSColor(theme.shellChromeTextMuted.opacity(0.70))
-        symbolColor.set()
-        let imageRect = NSRect(x: 11, y: (bounds.height - 12) / 2, width: 12, height: 12)
-        image?.withSymbolConfiguration(.init(pointSize: 11, weight: .bold))?
-            .draw(in: imageRect, from: .zero, operation: .sourceAtop, fraction: 1)
+        let symbolColor = selected ? NSColor.white : NSColor(theme.shellChromeTextMuted.opacity(0.70))
+        drawWorkspaceGridGlyph(in: NSRect(x: 11, y: (bounds.height - 12) / 2, width: 12, height: 12), color: symbolColor, filled: selected)
+    }
+
+    private func drawWorkspaceGridGlyph(in rect: NSRect, color: NSColor, filled: Bool) {
+        color.set()
+        let side: CGFloat = 4.2
+        let gap: CGFloat = 2.0
+        let total = side * 2 + gap
+        let origin = NSPoint(
+            x: rect.midX - total / 2,
+            y: rect.midY - total / 2
+        )
+
+        for row in 0..<2 {
+            for column in 0..<2 {
+                let square = NSRect(
+                    x: origin.x + CGFloat(column) * (side + gap),
+                    y: origin.y + CGFloat(row) * (side + gap),
+                    width: side,
+                    height: side
+                )
+                let path = NSBezierPath(roundedRect: square, xRadius: 0.9, yRadius: 0.9)
+                if filled {
+                    path.fill()
+                } else {
+                    path.lineWidth = 1.1
+                    path.stroke()
+                }
+            }
+        }
     }
 
     private func drawTitle(_ row: WorkspaceChromeDisplayModel) {
@@ -1107,7 +1136,7 @@ private struct WorkspaceTabGlyph: View {
         Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
             .font(.system(size: 11, weight: .bold))
             .symbolRenderingMode(.monochrome)
-            .foregroundStyle(selected ? theme.shellChromeText.opacity(0.96) : theme.shellChromeTextMuted.opacity(0.70))
+            .foregroundStyle(selected ? Color.white.opacity(0.96) : theme.shellChromeTextMuted.opacity(0.70))
             .frame(width: 22, height: 22)
             .background(selected ? theme.shellControlRaisedFill.opacity(0.84) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))

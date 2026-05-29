@@ -139,7 +139,7 @@ struct ConductorIconButton: View {
         switch variant {
         case .toolbar:
             if theme.usesDarkChrome {
-                return Color.white.opacity(state.isActive ? 0.044 : (hovering ? 0.028 : 0.004))
+                return Color.white.opacity(state.isActive ? 0.052 : (hovering ? 0.030 : 0.0))
             }
             return state.isActive ? theme.shellSelectedFill.opacity(0.52) : (hovering ? theme.shellHoverFill.opacity(0.42) : theme.shellControlFill.opacity(0.28))
         case .sidebarDock:
@@ -157,7 +157,7 @@ struct ConductorIconButton: View {
         switch variant {
         case .toolbar:
             if theme.usesDarkChrome {
-                return Color.white.opacity(state.isActive ? 0.070 : (hovering ? 0.050 : 0.020))
+                return Color.white.opacity(state.isActive ? 0.075 : (hovering ? 0.044 : 0.0))
             }
             return theme.shellStroke.opacity(state.isActive ? 0.38 : (hovering ? 0.28 : 0.16))
         case .sidebarDock, .sidebarRail, .settingsIcon, .fileManagerPanel:

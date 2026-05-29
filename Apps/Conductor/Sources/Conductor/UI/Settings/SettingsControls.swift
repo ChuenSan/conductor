@@ -1078,7 +1078,7 @@ private final class NativeCommandShortcutGuideView: NSView, NSTableViewDataSourc
     private var style: CommandShortcutGuideStyle = .plain
     private var editable = false
     private var recordingCommand: ConductorShellCommand?
-    private var theme: TerminalTheme = .graphite
+    private var theme: TerminalTheme = .codexDark
     private var fontScale: AppearanceFontScale = .standard
     private var onRecord: ((ConductorShellCommand) -> Void)?
     private var onReset: ((ConductorShellCommand) -> Void)?
@@ -1196,7 +1196,7 @@ private final class NativeCommandShortcutGuideRowView: NSTableCellView {
     private var style: CommandShortcutGuideStyle = .plain
     private var editable = false
     private var isRecording = false
-    private var theme: TerminalTheme = .graphite
+    private var theme: TerminalTheme = .codexDark
     private var fontScale: AppearanceFontScale = .standard
     private var onRecord: (() -> Void)?
     private var onReset: (() -> Void)?
@@ -1511,8 +1511,9 @@ struct SelectedThemeShowcase: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            ThemePreviewArtwork(theme: theme, height: 52)
-                .frame(width: 96)
+            ThemePreviewArtwork(theme: theme, height: 54, showsSidebar: false)
+                .frame(width: 128, height: 54)
+                .clipped()
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(L("当前主题", "Current Theme"))
@@ -1525,6 +1526,7 @@ struct SelectedThemeShowcase: View {
                     .foregroundStyle(ConductorDesign.primaryText)
                     .lineLimit(1)
             }
+            .layoutPriority(1)
 
             Spacer(minLength: 8)
 

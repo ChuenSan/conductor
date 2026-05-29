@@ -323,7 +323,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.workspaces = persistedWorkspaces
         self.selectedWorkspaceID = selectedID
         self.workspace = persistedWorkspaces.first { $0.id == selectedID } ?? persistedWorkspaces[0]
-        self.theme = persisted?.theme ?? .graphite
+        self.theme = persisted?.theme ?? .codexDark
         let resolvedAppearance = persisted?.appearance ?? AppearancePreferences()
         self.appearance = resolvedAppearance
         self.appearanceCoordinator = AppearanceCoordinator(appearance: resolvedAppearance)
@@ -351,7 +351,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     init(
         previewWorkspaces: [WorkspaceState],
         selectedWorkspaceID: WorkspaceID? = nil,
-        theme: TerminalTheme = .graphite,
+        theme: TerminalTheme = .codexDark,
         appearance: AppearancePreferences = AppearancePreferences(),
         sidebarVisible: Bool = true,
         commandPaletteVisible: Bool = false,
@@ -769,6 +769,53 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func setAgentReplyNotificationsPlaySound(_ playSound: Bool) {
         guard appearance.agentReplyNotifications.playSound != playSound else { return }
         appearance.agentReplyNotifications.playSound = playSound
+    }
+
+    func checkNotificationPermissionFromToolbar() {
+        showSettingsPanel(section: .automation)
+        agentHookSettingsMessage = L("正在检测 macOS 通知权限...", "Checking macOS notification permission...")
+        agentReplyNotificationService.checkAuthorizationStatus { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .authorized:
+                self.appearance.agentReplyNotifications.enabled = true
+                self.agentHookSettingsMessage = L(
+                    "通知权限已开启，AI 回复通知会在 Agent 完成回复后发送。",
+                    "Notifications are allowed. AI reply notifications will be sent when an agent finishes replying."
+                )
+                self.installAgentReplyNotificationHooks()
+            case .notDetermined:
+                self.agentReplyNotificationService.requestAuthorization { [weak self] granted in
+                    guard let self else { return }
+                    self.appearance.agentReplyNotifications.enabled = granted
+                    self.agentHookSettingsMessage = granted
+                        ? L("通知权限已开启，正在配置终端 Hook。", "Notifications are allowed. Configuring terminal hooks.")
+                        : L("通知权限未开启，请在系统设置里允许 Conductor 发送通知。", "Notifications are not allowed. Enable Conductor notifications in System Settings.")
+                    if granted {
+                        self.installAgentReplyNotificationHooks()
+                    } else {
+                        self.openSystemNotificationSettings()
+                    }
+                }
+            case .denied:
+                self.agentHookSettingsMessage = L(
+                    "macOS 已拒绝通知权限，请在系统设置里允许 Conductor 发送通知。",
+                    "macOS notification permission is denied. Enable Conductor notifications in System Settings."
+                )
+                self.openSystemNotificationSettings()
+            case .unavailable:
+                self.agentHookSettingsMessage = L(
+                    "当前运行环境无法申请系统通知，请从 Conductor.app 启动后再试。",
+                    "System notifications are unavailable in this launch context. Start from Conductor.app and try again."
+                )
+            case .unknown:
+                self.agentHookSettingsMessage = L(
+                    "暂时无法确认系统通知权限，请在系统设置里检查 Conductor 的通知设置。",
+                    "Could not confirm notification permission. Check Conductor notification settings in System Settings."
+                )
+                self.openSystemNotificationSettings()
+            }
+        }
     }
 
     func installAgentReplyNotificationActivationHandler(_ handler: @escaping (TerminalID) -> Void) {

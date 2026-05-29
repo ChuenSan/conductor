@@ -68,9 +68,7 @@ private struct WindowControlButtons: View {
         }
         .frame(height: 16)
         .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.12)) {
-                isHoveringGroup = hovering
-            }
+            isHoveringGroup = hovering
         }
     }
 
@@ -97,7 +95,6 @@ private struct WindowControlButtons: View {
                         Image(systemName: symbolName)
                             .font(.system(size: symbolSize, weight: .bold))
                             .foregroundStyle(symbolColor)
-                            .transition(.opacity.animation(.easeIn(duration: 0.08)))
                     }
                 }
                 .frame(width: 12, height: 12)
@@ -961,7 +958,7 @@ private struct SidebarDockSurface<Content: View>: View {
     var body: some View {
         VStack(spacing: 7) {
             Rectangle()
-                .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.32 : 0.22))
+                .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.18 : 0.14))
                 .frame(height: 1)
                 .padding(.horizontal, horizontalPadding == 0 ? 9 : 4)
 
@@ -996,7 +993,6 @@ private struct SidebarRailButton: View {
                 if selected {
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .fill(theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.18 : 0.11))
-                        .matchedGeometryEffect(id: "rail-selection-bubble", in: namespace)
                 }
 
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
@@ -1117,7 +1113,7 @@ private struct WorkspaceSidebarRow: View {
                     .transition(.identity)
             }
         }
-        .frame(height: editing ? 32 : 48)
+        .frame(height: editing ? 32 : 46)
         .background {
             sidebarRowBackground
         }
@@ -1176,10 +1172,17 @@ private struct WorkspaceSidebarRow: View {
     private var sidebarRowBackground: some View {
         return ZStack {
             rowShape
-                .fill(hovering ? theme.shellHoverFill : Color.clear)
+                .fill(hovering ? theme.shellHoverFill.opacity(0.64) : Color.clear)
             if visuallySelected {
                 rowShape
-                    .fill(theme.shellSelectedFill)
+                    .fill(theme.shellSelectedFill.opacity(0.74))
+                HStack {
+                    RoundedRectangle(cornerRadius: 1.2, style: .continuous)
+                        .fill(theme.floatingEmphasis.opacity(0.78))
+                        .frame(width: 2, height: 24)
+                    Spacer()
+                }
+                .padding(.leading, 1)
             }
         }
         .allowsHitTesting(false)
@@ -1210,21 +1213,27 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .center, spacing: 9) {
             Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
                 .font(.conductorSystem(size: 11, weight: .bold, scale: fontScale))
-                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : ConductorDesign.secondaryText)
-                .frame(width: 22, height: 22)
-                .background(selected ? theme.shellControlRaisedFill.opacity(0.84) : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.62))
+                .frame(width: 20, height: 20)
+                .background(selected ? theme.shellControlRaisedFill.opacity(0.34) : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(selected ? 0.94 : 0.84))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(title)
+                        .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(selected ? 0.94 : 0.84))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 4)
+                    if activeAgentCount > 0 {
+                        agentMetric(count: activeAgentCount)
+                    }
+                }
                 HStack(spacing: 4) {
                     Image(systemName: "folder")
                         .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
@@ -1233,48 +1242,20 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                         .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
                         .lineLimit(1)
                         .truncationMode(.middle)
+                    Text(workspaceMetaText)
+                        .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .foregroundStyle(theme.shellChromeTextMuted.opacity(selected ? 0.72 : 0.58))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .trailing, spacing: 4) {
-                HStack(spacing: 4) {
-                    workspaceMetric(
-                        systemImage: "rectangle.split.2x1",
-                        value: splitCount,
-                        accessibilityLabel: L("\(splitCount) 个分屏", "\(splitCount) panes")
-                    )
-                    workspaceMetric(
-                        systemImage: "terminal",
-                        value: terminalCount,
-                        accessibilityLabel: L("\(terminalCount) 个终端", "\(terminalCount) terminals")
-                    )
-                    if activeAgentCount > 0 {
-                        agentMetric(count: activeAgentCount)
-                    }
-                }
-            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
-    private func workspaceMetric(systemImage: String, value: Int, accessibilityLabel: String) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
-                .accessibilityHidden(true)
-            Text("\(value)")
-                .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
-                .monospacedDigit()
-        }
-        .foregroundStyle(theme.shellChromeTextMuted.opacity(selected ? 0.78 : 0.62))
-        .padding(.horizontal, 5)
-        .frame(height: 16)
-        .background(selected ? theme.shellHoverFill.opacity(0.70) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.22 : 0.14))
-        .clipShape(Capsule())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
+    private var workspaceMetaText: String {
+        L("· \(splitCount) 分屏 · \(terminalCount) 终端", "· \(splitCount) panes · \(terminalCount) terminals")
     }
 
     private func agentMetric(count: Int) -> some View {
@@ -1282,17 +1263,17 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
             ProgressView()
                 .controlSize(.small)
                 .tint(theme.floatingEmphasis)
-                .scaleEffect(0.46)
-                .frame(width: 10, height: 10)
+                .scaleEffect(0.42)
+                .frame(width: 9, height: 9)
                 .accessibilityHidden(true)
             Text(count > 99 ? "99+" : "\(count)")
-                .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
+                .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
                 .monospacedDigit()
         }
         .foregroundStyle(theme.floatingEmphasis)
-        .padding(.horizontal, 5)
-        .frame(height: 16)
-        .background(selected ? theme.shellHoverFill.opacity(0.76) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.28 : 0.18))
+        .padding(.horizontal, 4)
+        .frame(height: 15)
+        .background(selected ? theme.shellHoverFill.opacity(0.42) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.14 : 0.08))
         .clipShape(Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L("\(count) 个 AI 终端运行中", "\(count) AI terminals running"))

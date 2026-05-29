@@ -366,9 +366,9 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             ]
         case .codexDark:
             [
-                Color(red: 0.086, green: 0.096, blue: 0.116),
-                Color(red: 0.060, green: 0.070, blue: 0.090),
-                Color(red: 0.034, green: 0.040, blue: 0.054)
+                Color(red: 0.078, green: 0.088, blue: 0.106),
+                Color(red: 0.048, green: 0.056, blue: 0.072),
+                Color(red: 0.028, green: 0.034, blue: 0.046)
             ]
         case .slateDusk:
             [
@@ -426,9 +426,9 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
             ]
         case .graphite:
             [
-                Color(red: 0.908, green: 0.918, blue: 0.930),
-                Color(red: 0.820, green: 0.838, blue: 0.858),
-                Color(red: 0.692, green: 0.712, blue: 0.735)
+                Color(red: 0.886, green: 0.898, blue: 0.914),
+                Color(red: 0.792, green: 0.812, blue: 0.836),
+                Color(red: 0.652, green: 0.676, blue: 0.704)
             ]
         case .paperCanvas:
             [
@@ -531,7 +531,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         case .macOSDark:
             Color(red: 0.082, green: 0.084, blue: 0.092).opacity(0.98)
         case .codexDark:
-            Color(red: 0.062, green: 0.071, blue: 0.090).opacity(0.98)
+            Color(red: 0.094, green: 0.104, blue: 0.124).opacity(0.98)
         case .slateDusk:
             Color(red: 0.142, green: 0.156, blue: 0.184).opacity(0.965)
         case .carbonMist:
@@ -576,7 +576,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         case .macOSDark:
             Color(red: 0.112, green: 0.116, blue: 0.126).opacity(0.96)
         case .codexDark:
-            Color(red: 0.086, green: 0.100, blue: 0.124).opacity(0.96)
+            Color(red: 0.120, green: 0.132, blue: 0.156).opacity(0.96)
         case .slateDusk:
             Color(red: 0.180, green: 0.196, blue: 0.228).opacity(0.965)
         case .carbonMist:
@@ -637,7 +637,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         case .macOSDark:
             Color(red: 0.118, green: 0.121, blue: 0.130).opacity(0.985)
         case .codexDark:
-            Color(red: 0.106, green: 0.114, blue: 0.134).opacity(0.985)
+            Color(red: 0.132, green: 0.144, blue: 0.170).opacity(0.985)
         case .slateDusk:
             Color(red: 0.158, green: 0.172, blue: 0.202).opacity(0.980)
         case .carbonMist:
@@ -798,7 +798,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         case .macOSDark:
             Color(red: 0.48, green: 0.62, blue: 0.84)
         case .codexDark:
-            Color(red: 0.42, green: 0.47, blue: 0.55)
+            Color(red: 0.34, green: 0.58, blue: 0.96)
         case .slateDusk:
             Color(red: 0.58, green: 0.66, blue: 0.78)
         case .carbonMist:
@@ -818,7 +818,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         case .aurora:
             Color(red: 0.34, green: 0.48, blue: 0.52)
         case .graphite:
-            Color(red: 0.43, green: 0.47, blue: 0.54)
+            Color(red: 0.18, green: 0.47, blue: 0.92)
         case .paperCanvas:
             Color(red: 0.300, green: 0.600, blue: 0.920)
         case .ember:
@@ -840,7 +840,11 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingSelectedFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
+        case .codexDark:
+            accent.opacity(0.22)
+        case .graphite:
+            accent.opacity(0.15)
+        case .macOSDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.090)
         case .paperCanvas:
             Color(red: 0.300, green: 0.600, blue: 0.920).opacity(0.105)
@@ -862,7 +866,11 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var floatingSelectedStroke: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
+        case .codexDark:
+            accent.opacity(0.55)
+        case .graphite:
+            accent.opacity(0.42)
+        case .macOSDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.145)
         case .paperCanvas:
             Color(red: 0.390, green: 0.680, blue: 0.940).opacity(0.58)
@@ -918,7 +926,11 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
 
     var shellSelectedFill: Color {
         switch self {
-        case .macOSDark, .codexDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
+        case .codexDark:
+            accent.opacity(0.20)
+        case .graphite:
+            accent.opacity(0.14)
+        case .macOSDark, .slateDusk, .carbonMist, .blueHour, .stoneVeil, .harborFog, .clayAsh, .lichenMist, .midnightGlass, .tokyoNight, .forestLab:
             Color.white.opacity(0.085)
         case .paperCanvas:
             Color(red: 0.300, green: 0.600, blue: 0.920).opacity(0.105)
@@ -990,7 +1002,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         case .macOSDark:
             Color.white.opacity(0.120)
         case .codexDark:
-            Color.white.opacity(0.110)
+            Color.white.opacity(0.140)
         case .slateDusk:
             Color.white.opacity(0.170)
         case .carbonMist:
@@ -1035,7 +1047,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         case .macOSDark:
             Color(red: 0.240, green: 0.520, blue: 0.940)
         case .codexDark:
-            Color(red: 0.42, green: 0.56, blue: 0.74)
+            Color(red: 0.30, green: 0.56, blue: 0.96)
         case .slateDusk:
             Color(red: 0.56, green: 0.65, blue: 0.78)
         case .carbonMist:
@@ -1055,7 +1067,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
         case .aurora:
             Color(red: 0.13, green: 0.70, blue: 0.76)
         case .graphite:
-            Color(red: 0.43, green: 0.47, blue: 0.54)
+            Color(red: 0.16, green: 0.46, blue: 0.92)
         case .paperCanvas:
             Color(red: 0.300, green: 0.600, blue: 0.920)
         case .ember:

@@ -251,7 +251,7 @@ struct ConductorWebWorkspaceView: View {
                 .frame(height: 2)
         }
         .frame(height: 2)
-        .transition(.opacity)
+        .transition(.identity)
     }
 
     @ViewBuilder

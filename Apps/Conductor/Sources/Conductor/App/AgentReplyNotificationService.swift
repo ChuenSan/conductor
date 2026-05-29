@@ -33,6 +33,14 @@ struct AgentReplyNotificationRequest: Equatable {
     let isUnattended: Bool
 }
 
+enum AgentReplyNotificationAuthorizationState: Equatable {
+    case unavailable
+    case authorized
+    case denied
+    case notDetermined
+    case unknown
+}
+
 @MainActor
 final class AgentReplyNotificationService: NSObject, UNUserNotificationCenterDelegate {
     var activateTerminal: ((TerminalID) -> Void)?
@@ -45,6 +53,29 @@ final class AgentReplyNotificationService: NSObject, UNUserNotificationCenterDel
     }()
     private var lastDeliveredAtByTerminalID: [TerminalID: Date] = [:]
     private let minimumDeliveryInterval: TimeInterval = 3
+
+    func checkAuthorizationStatus(completion: @MainActor @Sendable @escaping (AgentReplyNotificationAuthorizationState) -> Void) {
+        guard let center else {
+            ConductorDiagnostics.record("agent-notification-authorization", fields: ["status": "outside-app-bundle"])
+            completion(.unavailable)
+            return
+        }
+        center.getNotificationSettings { settings in
+            let state: AgentReplyNotificationAuthorizationState
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                state = .authorized
+            case .denied:
+                state = .denied
+            case .notDetermined:
+                state = .notDetermined
+            @unknown default:
+                state = .unknown
+            }
+            ConductorDiagnostics.record("agent-notification-authorization-check", fields: ["status": state.diagnosticValue])
+            Task { @MainActor in completion(state) }
+        }
+    }
 
     func requestAuthorization(completion: (@MainActor @Sendable (Bool) -> Void)? = nil) {
         guard let center = center else {
@@ -166,6 +197,23 @@ final class AgentReplyNotificationService: NSObject, UNUserNotificationCenterDel
                 return
             }
             self.activateTerminal?(TerminalID(uuid))
+        }
+    }
+}
+
+private extension AgentReplyNotificationAuthorizationState {
+    var diagnosticValue: String {
+        switch self {
+        case .unavailable:
+            "unavailable"
+        case .authorized:
+            "authorized"
+        case .denied:
+            "denied"
+        case .notDetermined:
+            "not-determined"
+        case .unknown:
+            "unknown"
         }
     }
 }

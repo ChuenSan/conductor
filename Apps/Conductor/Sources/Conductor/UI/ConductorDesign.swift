@@ -10,7 +10,7 @@ private struct ConductorFontFamilyKey: EnvironmentKey {
 }
 
 private struct ConductorThemeKey: EnvironmentKey {
-    static let defaultValue = TerminalTheme.graphite
+    static let defaultValue = TerminalTheme.codexDark
 }
 
 private struct ConductorSplitResizeActiveKey: EnvironmentKey {
@@ -121,7 +121,7 @@ enum ConductorTokens {
         static let glassTintOnDark = Color.white.opacity(0.035)
         static let glassStroke = Color.white.opacity(0.60)
         static let glassStrokeSubtle = Color.white.opacity(0.34)
-        static let glassShadow = Color.black.opacity(0.075)
+        static let glassShadow = Color.black.opacity(0.22)
         static let terminalRaised = Color(red: 0.024, green: 0.035, blue: 0.052)
         static let terminalChrome = Color(red: 0.047, green: 0.071, blue: 0.106)
         static let terminalChromeSelected = Color.clear
@@ -183,23 +183,23 @@ enum ConductorTokens {
     }
 
     enum Typography {
-        static let appTitle = Font.system(size: 13.5, weight: .bold)
+        static let appTitle = Font.system(size: 14, weight: .bold)
         static let appSubtitle = Font.system(size: 11)
         static let section = Font.system(size: 10, weight: .semibold)
-        static let row = Font.system(size: 12, weight: .medium)
-        static let rowSelected = Font.system(size: 12, weight: .semibold)
+        static let row = Font.system(size: 12.5, weight: .medium)
+        static let rowSelected = Font.system(size: 12.5, weight: .semibold)
         static let toolbar = Font.system(size: 11, weight: .semibold)
-        static let workspaceTab = Font.system(size: 11.5, weight: .semibold)
-        static let workspaceTabSelected = Font.system(size: 11.5, weight: .bold)
-        static let terminalTab = Font.system(size: 10.5, weight: .medium)
-        static let terminalTabSelected = Font.system(size: 10.5, weight: .semibold)
+        static let workspaceTab = Font.system(size: 12, weight: .medium)
+        static let workspaceTabSelected = Font.system(size: 12, weight: .semibold)
+        static let terminalTab = Font.system(size: 11, weight: .medium)
+        static let terminalTabSelected = Font.system(size: 11, weight: .semibold)
         static let status = Font.system(size: 10.5, weight: .medium)
     }
 
     enum Shadow {
-        static let panelOpacity = 0.075
-        static let panelRadius: CGFloat = 16
-        static let panelY: CGFloat = 6
+        static let panelOpacity = 0.22
+        static let panelRadius: CGFloat = 28
+        static let panelY: CGFloat = 12
         static let controlOpacity = 0.025
         static let controlRadius: CGFloat = 5
         static let controlY: CGFloat = 1
@@ -489,51 +489,51 @@ enum ConductorMotion {
     nonisolated(unsafe) private static var reducedMotion = false
 
     enum Timing {
-        static let tap: Double = 0.12
-        static let feedback: Double = 0.16
-        static let hover: Double = 0.22
-        static let list: Double = 0.30
-        static let standard: Double = 0.28
-        static let search: Double = 0.36
-        static let navigation: Double = 0.36
-        static let reveal: Double = 0.36
-        static let panelDrawer: Double = 0.38
-        static let contentSwap: Double = 0.32
-        static let spatial: Double = 0.38
-        static let panel: Double = 0.36
-        static let emphasized: Double = 0.40
-        static let dragPreview: Double = 0.10
+        static let tap: Double = 0.08
+        static let feedback: Double = 0.10
+        static let hover: Double = 0.10
+        static let list: Double = 0.12
+        static let standard: Double = 0.14
+        static let search: Double = 0.16
+        static let navigation: Double = 0.12
+        static let reveal: Double = 0.16
+        static let panelDrawer: Double = 0.18
+        static let contentSwap: Double = 0.12
+        static let spatial: Double = 0.0
+        static let panel: Double = 0.18
+        static let emphasized: Double = 0.16
+        static let dragPreview: Double = 0.08
     }
 
     // Motion is part of the interaction model: feedback is local, navigation
     // preserves continuity, spatial motion changes layout, and reveal motion
     // introduces transient panels. Terminal surfaces opt out of all of these.
     static var micro: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.feedback, dampingFraction: 0.85)
+        nil
     }
 
     static var hover: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.hover, dampingFraction: 0.80)
+        nil
     }
 
     static var feedback: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.feedback, dampingFraction: 0.78)
+        nil
     }
 
     static var press: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.tap, dampingFraction: 0.85)
+        nil
     }
 
     static var reveal: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.reveal, dampingFraction: 0.80)
+        nil
     }
 
     static var search: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.search, dampingFraction: 0.82)
+        nil
     }
 
     static var scroll: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.standard, dampingFraction: 0.90)
+        nil
     }
 
     static var selection: Animation? {
@@ -541,131 +541,95 @@ enum ConductorMotion {
     }
 
     static var selectionGlide: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.navigation, dampingFraction: 0.74)
+        nil
     }
 
     static var navigation: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.navigation, dampingFraction: 0.78)
+        nil
     }
 
     static var standard: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.standard, dampingFraction: 0.85)
+        nil
     }
 
     static var panel: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.panel, dampingFraction: 0.80)
+        nil
     }
 
     static var list: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.list, dampingFraction: 0.76)
+        nil
     }
 
     static var layout: Animation? {
-        spatial
+        nil
     }
 
     static var spatial: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.spatial, dampingFraction: 0.82)
+        nil
     }
 
     static var emphasized: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.emphasized, dampingFraction: 0.65)
+        nil
     }
 
     static var attention: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.reveal, dampingFraction: 0.60)
+        nil
     }
 
     static var delivery: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.emphasized, dampingFraction: 0.72)
+        nil
     }
 
     static var cascade: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.spatial, dampingFraction: 0.75)
+        nil
     }
 
     static var contentSwap: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.contentSwap, dampingFraction: 0.82)
+        nil
     }
 
     static var dragPreview: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.dragPreview, dampingFraction: 0.88)
+        nil
     }
 
     static var panelDrawer: Animation? {
-        reducedMotion ? nil : .spring(response: Timing.panelDrawer, dampingFraction: 0.84)
+        nil
     }
 
     static var panelTransition: AnyTransition {
-        floatingPanelTransition(edge: .top, distance: 12)
+        .identity
     }
 
     static var settingsPanelTransition: AnyTransition {
-        floatingPanelTransition(edge: .trailing, distance: 16)
+        .identity
     }
 
     static var sidebarContentTransition: AnyTransition {
-        floatingPanelTransition(edge: .leading, distance: 8, scale: 1)
+        .identity
     }
 
     static var searchTransition: AnyTransition {
-        floatingPanelTransition(edge: .top, distance: 8, scale: 0.998)
+        .identity
     }
 
     static func contentSwapTransition(edge: Edge) -> AnyTransition {
-        guard !reducedMotion else { return .identity }
-        return .asymmetric(
-            insertion: .modifier(
-                active: ConductorPanelRevealModifier(
-                    opacity: 0,
-                    x: transitionOffset(edge: edge, distance: 12).x,
-                    y: transitionOffset(edge: edge, distance: 12).y,
-                    scale: 0.992
-                ),
-                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
-            ),
-            removal: .modifier(
-                active: ConductorPanelRevealModifier(
-                    opacity: 0,
-                    x: transitionOffset(edge: opposite(edge), distance: 7).x,
-                    y: transitionOffset(edge: opposite(edge), distance: 7).y,
-                    scale: 0.996
-                ),
-                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
-            )
-        )
+        .identity
     }
 
     static var tabTransition: AnyTransition {
-        reducedMotion ? .identity : .asymmetric(
-            insertion: .opacity.combined(with: .scale(scale: 0.985, anchor: .center)),
-            removal: .opacity
-        )
+        .identity
     }
 
     static var rowTransition: AnyTransition {
-        reducedMotion ? .identity : .asymmetric(
-            insertion: .opacity.combined(with: .offset(y: 4)),
-            removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .center))
-        )
+        .identity
     }
 
     static var dropPreviewTransition: AnyTransition {
-        reducedMotion ? .identity : .opacity.combined(with: .scale(scale: 0.992, anchor: .center))
+        .identity
     }
 
     static func workspaceSpreadTransition(itemCount: Int) -> AnyTransition {
-        guard itemCount <= animatedCollectionLimit, !reducedMotion else { return .identity }
-        return .asymmetric(
-            insertion: .modifier(
-                active: ConductorPanelRevealModifier(opacity: 0, x: 0, y: 14, scale: 0.965),
-                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
-            ),
-            removal: .modifier(
-                active: ConductorPanelRevealModifier(opacity: 0, x: 0, y: -6, scale: 0.982),
-                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
-            )
-        )
+        .identity
     }
 
     static func setReducedMotion(_ value: Bool) {
@@ -683,20 +647,19 @@ enum ConductorMotion {
     }
 
     static func shouldAnimateDecorative(itemCount: Int, limit: Int = signatureCollectionLimit) -> Bool {
-        !reducedMotion && itemCount <= limit
+        false
     }
 
     static func cascadeDelay(index: Int, itemCount: Int) -> TimeInterval {
-        guard shouldAnimateDecorative(itemCount: itemCount) else { return 0 }
-        return TimeInterval(min(index, 10)) * 0.014
+        0
     }
 
     static func magnetic(duration: Double = 0.18, bounce: Double = 0.018) -> Animation? {
-        reducedMotion ? nil : .smooth(duration: duration, extraBounce: bounce)
+        nil
     }
 
     static func cssEaseOut(duration: Double) -> Animation? {
-        reducedMotion ? nil : .timingCurve(0.16, 1.0, 0.3, 1.0, duration: duration)
+        nil
     }
 
     static func floatingPanelTransition(
@@ -704,27 +667,7 @@ enum ConductorMotion {
         distance: CGFloat,
         scale: CGFloat = 0.986
     ) -> AnyTransition {
-        guard !reducedMotion else { return .identity }
-        return .asymmetric(
-            insertion: .modifier(
-                active: ConductorPanelRevealModifier(
-                    opacity: 0,
-                    x: transitionOffset(edge: edge, distance: distance).x,
-                    y: transitionOffset(edge: edge, distance: distance).y,
-                    scale: scale
-                ),
-                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
-            ),
-            removal: .modifier(
-                active: ConductorPanelRevealModifier(
-                    opacity: 0,
-                    x: transitionOffset(edge: edge, distance: distance * 0.72).x,
-                    y: transitionOffset(edge: edge, distance: distance * 0.72).y,
-                    scale: max(scale, 0.992)
-                ),
-                identity: ConductorPanelRevealModifier(opacity: 1, x: 0, y: 0, scale: 1)
-            )
-        )
+        .identity
     }
 
     static func perform(_ action: () -> Void) {
@@ -1511,11 +1454,11 @@ struct ConductorPillGroup<Content: View>: View {
             content
         }
         .padding(2)
-        .background(theme.usesDarkChrome ? theme.terminalRaisedBackground.opacity(0.46) : theme.shellControlFill.opacity(0.38))
+        .background(theme.usesDarkChrome ? Color.white.opacity(0.018) : theme.shellControlFill.opacity(0.22))
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup - 2, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup - 2, style: .continuous)
-                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.032) : theme.shellStroke.opacity(0.18), lineWidth: 0.6)
+                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.026) : theme.shellStroke.opacity(0.14), lineWidth: 0.6)
         }
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)

@@ -33,16 +33,35 @@ enum ConductorUpdateError: LocalizedError {
 
 private final class ConductorUpdateDownloadProgressDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     private let fallbackSize: Int64
+    private let destinationURL: URL
     private let progress: (@Sendable (ConductorDownloadProgress) async -> Void)?
     private let lock = NSLock()
     private var lastProgressDate = Date.distantPast
+    private var continuation: CheckedContinuation<URLResponse, Error>?
+    private var moveError: Error?
+    private var didResume = false
 
     init(
         fallbackSize: Int64,
+        destinationURL: URL,
         progress: (@Sendable (ConductorDownloadProgress) async -> Void)?
     ) {
         self.fallbackSize = fallbackSize
+        self.destinationURL = destinationURL
         self.progress = progress
+    }
+
+    func download(with task: URLSessionDownloadTask) async throws -> URLResponse {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                lock.lock()
+                self.continuation = continuation
+                lock.unlock()
+                task.resume()
+            }
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     func urlSession(
@@ -65,7 +84,43 @@ private final class ConductorUpdateDownloadProgressDelegate: NSObject, URLSessio
         _ session: URLSession,
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
-    ) {}
+    ) {
+        do {
+            try? FileManager.default.removeItem(at: destinationURL)
+            try FileManager.default.moveItem(at: location, to: destinationURL)
+        } catch {
+            lock.lock()
+            moveError = error
+            lock.unlock()
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        let response = task.response
+
+        lock.lock()
+        guard !didResume, let continuation else {
+            lock.unlock()
+            return
+        }
+        didResume = true
+        let storedMoveError = moveError
+        lock.unlock()
+
+        if let error {
+            continuation.resume(throwing: error)
+        } else if let storedMoveError {
+            continuation.resume(throwing: storedMoveError)
+        } else if let response {
+            continuation.resume(returning: response)
+        } else {
+            continuation.resume(throwing: URLError(.badServerResponse))
+        }
+    }
 
     private func shouldSendProgress(_ currentProgress: ConductorDownloadProgress) -> Bool {
         lock.lock()
@@ -129,11 +184,11 @@ actor ConductorUpdateService {
         let temporaryURL = destinationDirectory.appendingPathComponent(".\(UUID().uuidString).download")
         try? fileManager.removeItem(at: temporaryURL)
         if artifactURL.isFileURL {
-            try fileManager.copyItem(at: artifactURL, to: temporaryURL)
-            let fileSize = try? temporaryURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
-            let bytesWritten = Int64(fileSize ?? Int(artifact.size))
-            await progress?(
-                ConductorDownloadProgress(bytesWritten: bytesWritten, expectedBytes: artifact.size)
+            try await copyLocalArtifact(
+                from: artifactURL,
+                to: temporaryURL,
+                fallbackSize: artifact.size,
+                progress: progress
             )
         } else {
             try await downloadRemoteArtifact(
@@ -218,20 +273,21 @@ actor ConductorUpdateService {
     ) async throws {
         let delegate = ConductorUpdateDownloadProgressDelegate(
             fallbackSize: fallbackSize,
+            destinationURL: temporaryURL,
             progress: progress
         )
         let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
         defer { session.invalidateAndCancel() }
 
         await progress?(ConductorDownloadProgress(bytesWritten: 0, expectedBytes: fallbackSize))
-        let (downloadedURL, response) = try await session.download(from: url)
+        let task = session.downloadTask(with: url)
+        let response = try await delegate.download(with: task)
         if let httpResponse = response as? HTTPURLResponse,
            !(200...299).contains(httpResponse.statusCode) {
+            try? fileManager.removeItem(at: temporaryURL)
             throw ConductorUpdateError.invalidHTTPStatus(httpResponse.statusCode)
         }
 
-        try? fileManager.removeItem(at: temporaryURL)
-        try fileManager.moveItem(at: downloadedURL, to: temporaryURL)
         let downloadedSize = try? temporaryURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
         await progress?(
             ConductorDownloadProgress(
@@ -239,6 +295,33 @@ actor ConductorUpdateService {
                 expectedBytes: response.expectedContentLength > 0 ? response.expectedContentLength : fallbackSize
             )
         )
+    }
+
+    private func copyLocalArtifact(
+        from sourceURL: URL,
+        to temporaryURL: URL,
+        fallbackSize: Int64,
+        progress: (@Sendable (ConductorDownloadProgress) async -> Void)?
+    ) async throws {
+        let sourceHandle = try FileHandle(forReadingFrom: sourceURL)
+        defer { try? sourceHandle.close() }
+
+        fileManager.createFile(atPath: temporaryURL.path, contents: nil)
+        let destinationHandle = try FileHandle(forWritingTo: temporaryURL)
+        defer { try? destinationHandle.close() }
+
+        let sourceSize = try? sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        let expectedBytes = Int64(sourceSize ?? Int(fallbackSize))
+        var bytesWritten: Int64 = 0
+        await progress?(ConductorDownloadProgress(bytesWritten: 0, expectedBytes: expectedBytes))
+
+        while true {
+            let chunk = try sourceHandle.read(upToCount: 1024 * 512) ?? Data()
+            if chunk.isEmpty { break }
+            try destinationHandle.write(contentsOf: chunk)
+            bytesWritten += Int64(chunk.count)
+            await progress?(ConductorDownloadProgress(bytesWritten: bytesWritten, expectedBytes: expectedBytes))
+        }
     }
 
     private func resolvedArtifactURL(_ filename: String, relativeTo manifestURL: URL) -> URL {
