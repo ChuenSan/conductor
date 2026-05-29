@@ -8,6 +8,7 @@ struct PersistedWindowState: Codable {
     var theme: TerminalTheme
     var appearance: AppearancePreferences
     var workspaceWebTabs: [WorkspaceWebTabState]
+    var workspaceFileTabs: [PersistedFileTab]
     var selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID?
 
     init(
@@ -16,6 +17,7 @@ struct PersistedWindowState: Codable {
         theme: TerminalTheme,
         appearance: AppearancePreferences = AppearancePreferences(),
         workspaceWebTabs: [WorkspaceWebTabState] = [],
+        workspaceFileTabs: [PersistedFileTab] = [],
         selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID? = nil
     ) {
         self.workspaces = workspaces
@@ -23,6 +25,7 @@ struct PersistedWindowState: Codable {
         self.theme = theme
         self.appearance = appearance
         self.workspaceWebTabs = workspaceWebTabs
+        self.workspaceFileTabs = workspaceFileTabs
         self.selectedWorkspaceContentTabID = selectedWorkspaceContentTabID
     }
 
@@ -31,6 +34,7 @@ struct PersistedWindowState: Codable {
         self.theme = try container.decode(TerminalTheme.self, forKey: .theme)
         self.appearance = try container.decodeIfPresent(AppearancePreferences.self, forKey: .appearance) ?? AppearancePreferences()
         self.workspaceWebTabs = try container.decodeIfPresent([WorkspaceWebTabState].self, forKey: .workspaceWebTabs) ?? []
+        self.workspaceFileTabs = try container.decodeIfPresent([PersistedFileTab].self, forKey: .workspaceFileTabs) ?? []
         self.selectedWorkspaceContentTabID = (try? container.decodeIfPresent(PersistedWorkspaceContentTabID.self, forKey: .selectedWorkspaceContentTabID)) ?? nil
 
         if let workspaces = try container.decodeIfPresent([WorkspaceState].self, forKey: .workspaces),
@@ -52,6 +56,7 @@ struct PersistedWindowState: Codable {
         try container.encode(theme, forKey: .theme)
         try container.encode(appearance, forKey: .appearance)
         try container.encode(workspaceWebTabs, forKey: .workspaceWebTabs)
+        try container.encode(workspaceFileTabs, forKey: .workspaceFileTabs)
         try container.encodeIfPresent(selectedWorkspaceContentTabID, forKey: .selectedWorkspaceContentTabID)
     }
 
@@ -62,8 +67,16 @@ struct PersistedWindowState: Codable {
         case theme
         case appearance
         case workspaceWebTabs
+        case workspaceFileTabs
         case selectedWorkspaceContentTabID
     }
+}
+
+/// On-disk representation of an open file editor tab. File tabs aren't tied to
+/// the workspace split tree, so they persist as a flat list alongside it.
+struct PersistedFileTab: Codable, Equatable {
+    var filePath: String
+    var rootPath: String
 }
 
 enum PersistedWorkspaceContentTabID: Codable, Equatable {
@@ -89,6 +102,7 @@ final class WorkspacePersistence {
 
     private let fileURL: URL
     private let legacyJSONFileURL: URL?
+    private let snapshotDirectoryURL: URL?
     private let isEnabled: Bool
 
     init(fileManager: FileManager = .default, isEnabled: Bool = WorkspacePersistence.isEnabledByDefault) {
@@ -100,9 +114,13 @@ final class WorkspacePersistence {
         if let overridePath = ProcessInfo.processInfo.environment["CONDUCTOR_STATE_PATH"], !overridePath.isEmpty {
             self.fileURL = URL(fileURLWithPath: overridePath)
             self.legacyJSONFileURL = nil
+            self.snapshotDirectoryURL = URL(fileURLWithPath: overridePath)
+                .deletingLastPathComponent()
+                .appendingPathComponent("session-snapshots", isDirectory: true)
         } else {
             self.fileURL = directoryURL.appendingPathComponent("window-state.yaml")
             self.legacyJSONFileURL = directoryURL.appendingPathComponent("window-state.json")
+            self.snapshotDirectoryURL = directoryURL.appendingPathComponent("session-snapshots", isDirectory: true)
         }
     }
 
@@ -126,6 +144,7 @@ final class WorkspacePersistence {
             theme: state.theme,
             appearance: state.appearance,
             workspaceWebTabs: sanitizedWebTabs(state.workspaceWebTabs),
+            workspaceFileTabs: sanitizedFileTabs(state.workspaceFileTabs),
             selectedWorkspaceContentTabID: state.selectedWorkspaceContentTabID
         )
     }
@@ -136,6 +155,7 @@ final class WorkspacePersistence {
         theme: TerminalTheme,
         appearance: AppearancePreferences,
         workspaceWebTabs: [WorkspaceWebTabState] = [],
+        workspaceFileTabs: [PersistedFileTab] = [],
         selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID? = nil
     ) {
         guard isEnabled else { return }
@@ -150,6 +170,7 @@ final class WorkspacePersistence {
             theme: theme,
             appearance: appearance,
             workspaceWebTabs: sanitizedWebTabs(workspaceWebTabs),
+            workspaceFileTabs: sanitizedFileTabs(workspaceFileTabs),
             selectedWorkspaceContentTabID: selectedWorkspaceContentTabID
         )
         guard let data = encodeState(state, for: fileURL) else { return }
@@ -160,6 +181,49 @@ final class WorkspacePersistence {
         try? FileManager.default.removeItem(at: fileURL)
         if let legacyJSONFileURL {
             try? FileManager.default.removeItem(at: legacyJSONFileURL)
+        }
+        if let snapshotDirectoryURL {
+            try? FileManager.default.removeItem(at: snapshotDirectoryURL)
+        }
+    }
+
+    // MARK: - Terminal session snapshots (sidecar)
+
+    /// Persists a terminal's prior-session text to a sidecar file keyed by
+    /// terminal ID. Kept out of the main YAML so large scrollback never bloats
+    /// the frequently-rewritten window state.
+    func saveTerminalSnapshot(id: TerminalID, text: String) {
+        guard isEnabled, let snapshotDirectoryURL, !text.isEmpty else { return }
+        try? FileManager.default.createDirectory(at: snapshotDirectoryURL, withIntermediateDirectories: true)
+        let url = snapshotDirectoryURL.appendingPathComponent("\(id.description).txt")
+        try? text.data(using: .utf8)?.write(to: url, options: [.atomic])
+    }
+
+    func loadTerminalSnapshot(id: TerminalID) -> String? {
+        guard isEnabled, let snapshotDirectoryURL else { return nil }
+        let url = snapshotDirectoryURL.appendingPathComponent("\(id.description).txt")
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// One-shot: snapshots are consumed on restore so they never stack up across
+    /// restarts.
+    func removeTerminalSnapshot(id: TerminalID) {
+        guard let snapshotDirectoryURL else { return }
+        let url = snapshotDirectoryURL.appendingPathComponent("\(id.description).txt")
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Drops snapshot files for terminals that no longer exist.
+    func pruneTerminalSnapshots(keeping retainedIDs: Set<TerminalID>) {
+        guard let snapshotDirectoryURL else { return }
+        let retained = Set(retainedIDs.map { "\($0.description).txt" })
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: snapshotDirectoryURL,
+            includingPropertiesForKeys: nil
+        ) else { return }
+        for url in contents where !retained.contains(url.lastPathComponent) {
+            try? FileManager.default.removeItem(at: url)
         }
     }
 
@@ -218,6 +282,17 @@ final class WorkspacePersistence {
             sanitized.canGoForward = false
             sanitized.errorMessage = nil
             return sanitized
+        }
+    }
+
+    /// Drops file tabs whose file no longer exists so restore never reopens a
+    /// stale path, and de-duplicates by file path.
+    private func sanitizedFileTabs(_ tabs: [PersistedFileTab]) -> [PersistedFileTab] {
+        var seen = Set<String>()
+        return tabs.filter { tab in
+            guard !tab.filePath.isEmpty else { return false }
+            guard FileManager.default.fileExists(atPath: tab.filePath) else { return false }
+            return seen.insert(tab.filePath).inserted
         }
     }
 

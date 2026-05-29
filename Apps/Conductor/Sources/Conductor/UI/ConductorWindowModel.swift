@@ -331,11 +331,26 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.terminalFontDownloadStates = [:]
         self.updatePreferences = updatePreferencesStore.load()
         self.updateState = ConductorUpdateState(currentVersion: ConductorAppVersion.current())
-        self.workspaceWebTabs = persisted?.workspaceWebTabs ?? []
+        let restoredWebTabs = persisted?.workspaceWebTabs ?? []
+        // Hand the restored back/forward blobs to the web surface store and strip
+        // them from the in-memory tabs so frequent debounced saves stay small.
+        var seededInteractionStates: [WebTabID: Data] = [:]
+        var leanWebTabs = restoredWebTabs
+        for index in leanWebTabs.indices {
+            if let state = leanWebTabs[index].interactionState {
+                seededInteractionStates[leanWebTabs[index].id] = state
+                leanWebTabs[index].interactionState = nil
+            }
+        }
+        ConductorWebKitSurfaceStore.shared.seedPendingInteractionStates(seededInteractionStates)
+        self.workspaceWebTabs = leanWebTabs
+        let restoredFileTabs = Self.restoredFileTabs(persisted?.workspaceFileTabs ?? [])
+        self.workspaceFileTabs = restoredFileTabs
         self.selectedWorkspaceContentTabID = Self.restoredWorkspaceContentSelection(
             persisted?.selectedWorkspaceContentTabID,
             workspace: self.workspace,
-            webTabs: self.workspaceWebTabs
+            webTabs: self.workspaceWebTabs,
+            fileTabIDs: Set(restoredFileTabs.map(\.id))
         )
         syncPanelCoordinatorFromPublished()
         syncFileWorkspaceCoordinatorFromPublished()
@@ -1345,7 +1360,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return surface
         }
         ConductorLog.performance.debug("surface create requested terminal=\(tab.id.description, privacy: .public) activeBefore=\(self.surfaceCoordinator.runtimeSurfaceCount, privacy: .public)")
-        return surfaceCoordinator.surface(
+        let surface = surfaceCoordinator.surface(
             for: tab,
             theme: theme,
             terminalFontSize: appearance.terminalFontSize,
@@ -1353,6 +1368,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 self?.installTerminalSurfaceHandlers(surface)
             }
         )
+        // Paint the prior session's output (read-only) into the fresh surface,
+        // then consume the snapshot so it never replays twice.
+        if let snapshot = persistence.loadTerminalSnapshot(id: tab.id) {
+            surface.setSnapshotReplay(snapshot)
+            persistence.removeTerminalSnapshot(id: tab.id)
+        }
+        return surface
     }
 
     private func installTerminalSurfaceHandlers(_ surface: TerminalSurface) {
@@ -3176,14 +3198,42 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         pendingPersistence?.cancel()
         pendingPersistence = nil
         syncSelectedWorkspace()
+        captureWebInteractionStates()
+        captureTerminalSnapshots()
         persistence.save(
             workspaces: workspaces,
             selectedWorkspaceID: selectedWorkspaceID,
             theme: theme,
             appearance: appearance,
             workspaceWebTabs: workspaceWebTabs,
+            workspaceFileTabs: persistedFileTabs(),
             selectedWorkspaceContentTabID: persistedWorkspaceContentSelection()
         )
+    }
+
+    /// Captures each live terminal's on-screen scrollback to a sidecar file so it
+    /// can be replayed (read-only) on next launch. Stale snapshots are pruned.
+    private func captureTerminalSnapshots() {
+        var capturedIDs = Set<TerminalID>()
+        for entry in surfaceCoordinator.allSurfaces {
+            if let text = entry.surface.capturedScrollbackText() {
+                persistence.saveTerminalSnapshot(id: entry.id, text: text)
+                capturedIDs.insert(entry.id)
+            }
+        }
+        persistence.pruneTerminalSnapshots(keeping: capturedIDs)
+    }
+
+    /// Snapshots each live web surface's back/forward history into its tab model.
+    /// Done only at flush (quit) time because the blob is large and would bloat
+    /// the frequent debounced saves.
+    private func captureWebInteractionStates() {
+        for index in workspaceWebTabs.indices {
+            let tabID = workspaceWebTabs[index].id
+            if let state = ConductorWebKitSurfaceStore.shared.interactionState(for: tabID) {
+                workspaceWebTabs[index].interactionState = state
+            }
+        }
     }
 
     func resetWorkspace() {
@@ -3496,6 +3546,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let theme = theme
         let appearance = appearance
         let workspaceWebTabs = workspaceWebTabs
+        let workspaceFileTabs = persistedFileTabs()
         let selectedWorkspaceContentTabID = persistedWorkspaceContentSelection()
         let item = DispatchWorkItem { [persistence] in
             let signpost = ConductorSignpost.begin("persistence-save")
@@ -3506,11 +3557,34 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 theme: theme,
                 appearance: appearance,
                 workspaceWebTabs: workspaceWebTabs,
+                workspaceFileTabs: workspaceFileTabs,
                 selectedWorkspaceContentTabID: selectedWorkspaceContentTabID
             )
         }
         pendingPersistence = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: item)
+    }
+
+    private func persistedFileTabs() -> [PersistedFileTab] {
+        workspaceFileTabs.map {
+            PersistedFileTab(filePath: $0.fileURL.path, rootPath: $0.rootURL.path)
+        }
+    }
+
+    private static func restoredFileTabs(_ persisted: [PersistedFileTab]) -> [ConductorWorkspaceFileTab] {
+        var seen = Set<String>()
+        return persisted.compactMap { tab in
+            guard !tab.filePath.isEmpty,
+                  FileManager.default.fileExists(atPath: tab.filePath) else {
+                return nil
+            }
+            let fileURL = URL(fileURLWithPath: tab.filePath)
+            let rootURL = tab.rootPath.isEmpty
+                ? fileURL.deletingLastPathComponent()
+                : URL(fileURLWithPath: tab.rootPath)
+            let restored = ConductorWorkspaceFileTab(fileURL: fileURL, rootURL: rootURL)
+            return seen.insert(restored.id).inserted ? restored : nil
+        }
     }
 
     private func nextTerminalTitle(prefix: String) -> String {
@@ -3551,13 +3625,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private static func restoredWorkspaceContentSelection(
         _ selection: PersistedWorkspaceContentTabID?,
         workspace: WorkspaceState,
-        webTabs: [WorkspaceWebTabState]
+        webTabs: [WorkspaceWebTabState],
+        fileTabIDs: Set<String>
     ) -> ConductorWorkspaceContentTabID? {
         switch selection {
         case .terminal(let terminalID):
             return workspace.paneID(containing: terminalID) == nil ? nil : .terminal(terminalID)
-        case .file:
-            return nil
+        case .file(let tabID):
+            return fileTabIDs.contains(tabID) ? .file(tabID) : nil
         case .web(let webTabID):
             return webTabs.contains(where: { $0.id == webTabID }) ? .web(webTabID) : nil
         case nil:

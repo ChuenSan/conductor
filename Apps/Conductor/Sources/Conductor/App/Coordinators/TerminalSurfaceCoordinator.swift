@@ -44,6 +44,10 @@ final class TerminalSurfaceCoordinator {
         surfaces[terminalID]
     }
 
+    var allSurfaces: [(id: TerminalID, surface: TerminalSurface)] {
+        surfaces.map { ($0.key, $0.value) }
+    }
+
     func closeSurfaces(for terminalIDs: [TerminalID]) {
         for terminalID in terminalIDs {
             surfaces.removeValue(forKey: terminalID)?.close()

@@ -19,6 +19,9 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
     public var canGoBack: Bool
     public var canGoForward: Bool
     public var errorMessage: String?
+    /// Opaque WKWebView.interactionState blob (back/forward list + scroll
+    /// position). Captured only at quit so it never bloats debounced saves.
+    public var interactionState: Data?
 
     public init(
         id: WebTabID = WebTabID(),
@@ -30,7 +33,8 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         estimatedProgress: Double = 0,
         canGoBack: Bool = false,
         canGoForward: Bool = false,
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        interactionState: Data? = nil
     ) {
         self.id = id
         self.url = url
@@ -42,6 +46,7 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         self.canGoBack = canGoBack
         self.canGoForward = canGoForward
         self.errorMessage = errorMessage
+        self.interactionState = interactionState
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -55,6 +60,7 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         case canGoBack
         case canGoForward
         case errorMessage
+        case interactionState
     }
 
     public init(from decoder: Decoder) throws {
@@ -69,6 +75,7 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         canGoBack = try container.decodeIfPresent(Bool.self, forKey: .canGoBack) ?? false
         canGoForward = try container.decodeIfPresent(Bool.self, forKey: .canGoForward) ?? false
         errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
+        interactionState = try container.decodeIfPresent(Data.self, forKey: .interactionState)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -83,6 +90,7 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         try container.encode(canGoBack, forKey: .canGoBack)
         try container.encode(canGoForward, forKey: .canGoForward)
         try container.encodeIfPresent(errorMessage, forKey: .errorMessage)
+        try container.encodeIfPresent(interactionState, forKey: .interactionState)
     }
 
     public var displayTitle: String {

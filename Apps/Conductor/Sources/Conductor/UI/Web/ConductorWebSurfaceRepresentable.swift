@@ -86,7 +86,17 @@ struct ConductorWebKitSurfaceRepresentable: NSViewRepresentable {
             if navigationGeneration != lastNavigationGeneration {
                 let firstUpdate = lastNavigationGeneration == -1
                 lastNavigationGeneration = navigationGeneration
-                load(tab.url, force: !firstUpdate)
+                // On the first update, try restoring the persisted back/forward
+                // history. If it takes, skip the fresh URL load so the user lands
+                // exactly where they left off.
+                let pendingState = ConductorWebKitSurfaceStore.shared.pendingInteractionState(for: tab.id)
+                if firstUpdate,
+                   ConductorWebKitSurfaceStore.shared.restoreInteractionState(pendingState, for: tab.id) {
+                    lastRequestedURL = webView.url
+                    publishState()
+                } else {
+                    load(tab.url, force: !firstUpdate)
+                }
             }
 
             if lastReloadGeneration == -1 {
