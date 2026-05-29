@@ -1175,10 +1175,10 @@ private struct WorkspaceSidebarRow: View {
                 .fill(hovering ? theme.shellHoverFill.opacity(0.64) : Color.clear)
             if visuallySelected {
                 rowShape
-                    .fill(theme.shellSelectedFill.opacity(0.74))
+                    .fill(theme.shellSelectedFill.opacity(theme.usesDarkChrome ? 0.90 : 0.74))
                 HStack {
                     RoundedRectangle(cornerRadius: 1.2, style: .continuous)
-                        .fill(theme.floatingEmphasis.opacity(0.78))
+                        .fill(theme.shellChromeText.opacity(theme.usesDarkChrome ? 0.32 : 0.22))
                         .frame(width: 2, height: 24)
                     Spacer()
                 }
@@ -1216,9 +1216,9 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         HStack(alignment: .center, spacing: 9) {
             Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
                 .font(.conductorSystem(size: 11, weight: .bold, scale: fontScale))
-                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.62))
+                .foregroundStyle(selected ? Color.white.opacity(0.96) : theme.shellChromeTextMuted.opacity(0.62))
                 .frame(width: 20, height: 20)
-                .background(selected ? theme.shellControlRaisedFill.opacity(0.34) : Color.clear)
+                .background(selected ? theme.shellControlRaisedFill.opacity(0.44) : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .accessibilityHidden(true)
 

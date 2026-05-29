@@ -229,7 +229,8 @@ final class ConductorWindow: NSWindow {
             }
 
             let className = NSStringFromClass(type(of: candidate))
-            if className.contains("NativeWorkspaceTopTabView") ||
+            if candidate.accessibilityIdentifier() == "ConductorWorkspaceTabInteractiveRegion" ||
+                className.contains("NativeWorkspaceTopTabView") ||
                 className.contains("NativeTerminalTab") ||
                 className.contains("WorkspaceTab") ||
                 className.contains("TerminalTab") ||

@@ -1167,13 +1167,13 @@ private struct TerminalTabButton: View {
 
     private var tabFill: Color {
         if hovering {
-            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.24 : 0.12)
+            return theme.shellHoverFill.opacity(0.64)
         }
         return Color.clear
     }
 
     private var selectedFill: Color {
-        theme.shellSelectedFill
+        theme.shellSelectedFill.opacity(theme.usesDarkChrome ? 0.90 : 0.74)
     }
 
     private var tabStroke: Color {
@@ -1181,7 +1181,7 @@ private struct TerminalTabButton: View {
             return theme.floatingSelectedStroke.opacity(0.95)
         }
         if isSelected {
-            return theme.floatingSelectedStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.58 : 0.48) : (theme.usesDarkChrome ? 0.38 : 0.32))
+            return theme.shellStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.34 : 0.18) : (theme.usesDarkChrome ? 0.22 : 0.12))
         }
         return theme.shellStroke.opacity(hovering ? 0.08 : 0.0)
     }
