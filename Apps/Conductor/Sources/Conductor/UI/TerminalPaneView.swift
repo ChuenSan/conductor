@@ -1167,13 +1167,16 @@ private struct TerminalTabButton: View {
 
     private var tabFill: Color {
         if hovering {
-            return theme.shellHoverFill.opacity(0.64)
+            return theme.shellHoverFill.opacity(0.64 * theme.chromeMaterial.controlOpacityBoost)
         }
         return Color.clear
     }
 
     private var selectedFill: Color {
-        theme.shellSelectedFill.opacity(theme.usesDarkChrome ? 0.90 : 0.74)
+        if theme == .microGlass {
+            return Color.white.opacity(0.105)
+        }
+        return theme.shellSelectedFill.opacity(theme.usesDarkChrome ? 0.90 : 0.74)
     }
 
     private var tabStroke: Color {
@@ -1181,6 +1184,9 @@ private struct TerminalTabButton: View {
             return theme.floatingSelectedStroke.opacity(0.95)
         }
         if isSelected {
+            if theme == .microGlass {
+                return Color.white.opacity(paneFocused ? 0.22 : 0.15)
+            }
             return theme.shellStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.34 : 0.18) : (theme.usesDarkChrome ? 0.22 : 0.12))
         }
         return theme.shellStroke.opacity(hovering ? 0.08 : 0.0)
@@ -1299,7 +1305,16 @@ private struct TerminalTabButton: View {
                 if visuallySelected {
                     shape
                         .fill(selectedFill)
-                        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.07 : 0.02), radius: 1.4, y: 0.7)
+                        .shadow(
+                            color: Color.black.opacity(max(theme.usesDarkChrome ? 0.07 : 0.02, theme.chromeMaterial.shadowOpacity)),
+                            radius: theme == .microGlass ? 5 : 1.4,
+                            y: theme == .microGlass ? 1.5 : 0.7
+                        )
+                }
+                if theme.chromeMaterial.highlightOpacity > 0 {
+                    shape
+                        .stroke(Color.white.opacity(theme.chromeMaterial.highlightOpacity), lineWidth: 0.5)
+                        .blendMode(.screen)
                 }
             }
         }

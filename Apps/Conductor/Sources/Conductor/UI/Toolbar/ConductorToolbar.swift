@@ -349,14 +349,29 @@ private struct ConductorToolbarActionCluster<Content: View>: View {
             content
         }
         .padding(2)
-        .background(theme.usesDarkChrome ? Color.white.opacity(0.014) : theme.shellControlFill.opacity(0.18))
+        .background(clusterFill)
         .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
-                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.024) : theme.shellStroke.opacity(0.12), lineWidth: 0.6)
+                .stroke(clusterStroke, lineWidth: 0.6)
         }
+        .shadow(color: Color.black.opacity(theme.chromeMaterial.shadowOpacity), radius: 8, y: 2)
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(3)
+    }
+
+    private var clusterFill: Color {
+        if theme.usesDarkChrome {
+            return Color.white.opacity(0.014 * theme.chromeMaterial.controlOpacityBoost + theme.chromeMaterial.highlightOpacity * 0.12)
+        }
+        return theme.shellControlFill.opacity(0.18 * theme.chromeMaterial.controlOpacityBoost)
+    }
+
+    private var clusterStroke: Color {
+        if theme.usesDarkChrome {
+            return Color.white.opacity(0.024 * theme.chromeMaterial.strokeOpacityBoost + theme.chromeMaterial.highlightOpacity * 0.18)
+        }
+        return theme.shellStroke.opacity(0.12 * theme.chromeMaterial.strokeOpacityBoost)
     }
 }
 
@@ -435,14 +450,16 @@ private struct ConductorToolbarMenuButton<MenuContent: View>: View {
 
     private var background: Color {
         if theme.usesDarkChrome {
-            return Color.white.opacity(state.isActive ? 0.052 : (hovering ? 0.030 : 0.0))
+            let base = state.isActive ? 0.052 : (hovering ? 0.030 : 0.0)
+            return Color.white.opacity(base * theme.chromeMaterial.controlOpacityBoost + theme.chromeMaterial.highlightOpacity * 0.10)
         }
         return state.isActive ? theme.shellSelectedFill.opacity(0.52) : (hovering ? theme.shellHoverFill.opacity(0.42) : theme.shellControlFill.opacity(0.28))
     }
 
     private var buttonStroke: Color {
         if theme.usesDarkChrome {
-            return Color.white.opacity(state.isActive ? 0.075 : (hovering ? 0.044 : 0.0))
+            let base = state.isActive ? 0.075 : (hovering ? 0.044 : 0.0)
+            return Color.white.opacity(base * theme.chromeMaterial.strokeOpacityBoost + theme.chromeMaterial.highlightOpacity * 0.12)
         }
         return theme.shellStroke.opacity(state.isActive ? 0.38 : (hovering ? 0.28 : 0.16))
     }

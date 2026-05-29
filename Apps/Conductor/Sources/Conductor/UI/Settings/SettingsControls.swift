@@ -1617,6 +1617,17 @@ struct ThemePreviewArtwork: View {
             ThemePreviewMotif(theme: theme)
                 .opacity(large ? 1 : 0.72)
 
+            if theme.chromeMaterial.glassIntensity > 0 {
+                RoundedRectangle(cornerRadius: large ? 16 : 10, style: .continuous)
+                    .stroke(Color.white.opacity(theme.chromeMaterial.highlightOpacity), lineWidth: 0.7)
+                    .padding(large ? 8 : 5)
+                    .blendMode(.screen)
+                RoundedRectangle(cornerRadius: large ? 14 : 9, style: .continuous)
+                    .fill(Color.white.opacity(theme.chromeMaterial.highlightOpacity * 0.22))
+                    .padding(large ? 11 : 7)
+                    .blendMode(.screen)
+            }
+
             HStack(spacing: large ? 8 : 5) {
                 if showsSidebar {
                     VStack(alignment: .leading, spacing: large ? 7 : 5) {
@@ -1676,8 +1687,9 @@ struct ThemePreviewArtwork: View {
         .clipShape(RoundedRectangle(cornerRadius: large ? 13 : 9, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: large ? 13 : 9, style: .continuous)
-                .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.12 : 0.24), lineWidth: 0.6)
+                .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.12 + theme.chromeMaterial.highlightOpacity * 0.45 : 0.24), lineWidth: 0.6)
         }
+        .shadow(color: Color.black.opacity(theme.chromeMaterial.shadowOpacity), radius: large ? 12 : 7, y: large ? 4 : 2)
     }
 }
 

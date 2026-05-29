@@ -584,6 +584,14 @@ private struct SidebarRailSurface: View {
             shape
                 .fill(theme.shellPanelBackground)
 
+            if theme.chromeMaterial.glassIntensity > 0 {
+                shape
+                    .fill(Color.white.opacity(theme.chromeMaterial.highlightOpacity * 0.32))
+                    .blendMode(.screen)
+                shape
+                    .fill(theme.shellControlFill.opacity(theme.chromeMaterial.glassIntensity * 0.22))
+            }
+
             if isCollapsed {
                 shape
                     .fill(
@@ -604,9 +612,9 @@ private struct SidebarRailSurface: View {
             shape
                 .strokeBorder(
                     LinearGradient(
-                        colors: [
-                            Color.white.opacity(theme.usesDarkChrome ? 0.07 : 0.24),
-                            theme.shellStroke.opacity(theme.usesDarkChrome ? 0.12 : 0.08),
+                            colors: [
+                            Color.white.opacity((theme.usesDarkChrome ? 0.07 : 0.24) * theme.chromeMaterial.strokeOpacityBoost),
+                            theme.shellStroke.opacity((theme.usesDarkChrome ? 0.12 : 0.08) * theme.chromeMaterial.strokeOpacityBoost),
                             Color.black.opacity(theme.usesDarkChrome ? 0.06 : 0.03)
                         ],
                         startPoint: .topLeading,
@@ -615,6 +623,7 @@ private struct SidebarRailSurface: View {
                     lineWidth: 0.6
                 )
         }
+        .shadow(color: Color.black.opacity(theme.chromeMaterial.shadowOpacity), radius: 12, x: 0, y: 2)
     }
 }
 

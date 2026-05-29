@@ -294,17 +294,23 @@ private struct ChromeTabShell<Content: View>: View {
 
     private var baseFill: Color {
         if hovering {
-            return theme.shellHoverFill.opacity(0.64)
+            return theme.shellHoverFill.opacity(0.64 * theme.chromeMaterial.controlOpacityBoost)
         }
         return Color.clear
     }
 
     private var selectedFill: Color {
-        theme.shellSelectedFill.opacity(theme.usesDarkChrome ? 0.90 : 0.74)
+        if theme == .microGlass {
+            return Color.white.opacity(0.105)
+        }
+        return theme.shellSelectedFill.opacity(theme.usesDarkChrome ? 0.90 : 0.74)
     }
 
     private var topStroke: Color {
         guard selected else { return Color.clear }
+        if theme == .microGlass {
+            return Color.white.opacity(0.18)
+        }
         return theme.usesDarkChrome
             ? Color.white.opacity(0.055)
             : theme.shellStroke.opacity(0.12)
@@ -336,6 +342,17 @@ private struct ChromeTabShell<Content: View>: View {
                                 .stroke(topStroke, lineWidth: 0.6)
                         }
                         .frame(width: width, height: height)
+                        .shadow(
+                            color: Color.black.opacity(theme.chromeMaterial.shadowOpacity),
+                            radius: 5,
+                            y: 1.5
+                        )
+                }
+                if theme.chromeMaterial.highlightOpacity > 0 {
+                    tabShape
+                        .stroke(Color.white.opacity(theme.chromeMaterial.highlightOpacity), lineWidth: 0.5)
+                        .frame(width: width, height: height)
+                        .blendMode(.screen)
                 }
             }
         }
