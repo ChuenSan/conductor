@@ -291,9 +291,15 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func setApplicationActive(_ active: Bool) {
         guard applicationActive != active else { return }
         applicationActive = active
+        // The agent-state poll only matters while the user can see the window;
+        // pause it when the app is in the background to avoid idle CPU.
+        setBackgroundActivityPaused(!active)
     }
 
     private let persistence = WorkspacePersistence()
+    /// Serial queue for persistence encoding + atomic writes, keeping that work
+    /// off the main thread. Serial so saves never race or interleave on disk.
+    private let persistenceQueue = DispatchQueue(label: "app.conductor.persistence", qos: .utility)
     private let surfaceCoordinator = TerminalSurfaceCoordinator()
     private var pendingPersistence: DispatchWorkItem?
     private var pendingMetadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
@@ -3415,6 +3421,22 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
 
+    private func stopAgentRuntimePolling() {
+        agentRuntimePollTask?.cancel()
+        agentRuntimePollTask = nil
+    }
+
+    /// Pauses the per-terminal agent-state poll while the window is unfocused or
+    /// the app is in the background, so an idle window costs nothing. Resumed
+    /// when the window becomes key again.
+    func setBackgroundActivityPaused(_ paused: Bool) {
+        if paused {
+            stopAgentRuntimePolling()
+        } else {
+            startAgentRuntimePolling()
+        }
+    }
+
     private func refreshVisibleAgentRuntimeStates() {
         for terminalID in allTerminalIDs() {
             guard let surface = surfaceCoordinator.existingSurface(for: terminalID) else {
@@ -3562,7 +3584,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             )
         }
         pendingPersistence = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: item)
+        // Debounce on main (so rapid edits coalesce), then encode + write on a
+        // background queue so large YAML/blob serialization never stalls the UI.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self, !item.isCancelled else { return }
+            self.persistenceQueue.async(execute: item)
+        }
     }
 
     private func persistedFileTabs() -> [PersistedFileTab] {
