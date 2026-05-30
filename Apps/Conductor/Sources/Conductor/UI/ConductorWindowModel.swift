@@ -3222,7 +3222,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private func captureTerminalSnapshots() {
         var capturedIDs = Set<TerminalID>()
         for entry in surfaceCoordinator.allSurfaces {
-            if let text = entry.surface.capturedScrollbackText() {
+            // Prefer VT-format capture (color + layout); fall back to plain text.
+            if let text = entry.surface.capturedScrollbackVT()
+                ?? entry.surface.capturedScrollbackText() {
                 persistence.saveTerminalSnapshot(id: entry.id, text: text)
                 capturedIDs.insert(entry.id)
             }

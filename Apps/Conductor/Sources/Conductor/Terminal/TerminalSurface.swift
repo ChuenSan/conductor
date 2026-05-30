@@ -478,15 +478,11 @@ final class TerminalSurface {
     private func replayPendingSnapshot(into surface: ghostty_surface_t) {
         guard let snapshot = pendingSnapshotReplay else { return }
         pendingSnapshotReplay = nil
-
-        let muted = "\u{1B}[2m"
-        let reset = "\u{1B}[0m"
-        let header = ConductorLocalization.text(zh: "──── 上次会话 (只读历史) ────", en: "──── Previous session (read-only) ────")
-        let footer = ConductorLocalization.text(zh: "──── 会话结束 ────", en: "──── End of previous session ────")
-        // CRLF so each line returns to column 0; the program-output path treats
-        // \n as line-feed only.
-        let normalized = snapshot.replacingOccurrences(of: "\n", with: "\r\n")
-        let payload = "\(muted)\(header)\(reset)\r\n\(normalized)\r\n\(muted)\(footer)\(reset)\r\n"
+        // Replay the prior session's VT bytes through ghostty's own parser
+        // (process_output is the program-output path: inert, never executed).
+        // No marker lines are injected — the restored history keeps its original
+        // colors and reads as real scrollback. See spec decision D2.
+        let payload = TerminalScrollbackSanitizer.prepareForReplay(snapshot)
         replayOutput(payload, into: surface)
     }
 
