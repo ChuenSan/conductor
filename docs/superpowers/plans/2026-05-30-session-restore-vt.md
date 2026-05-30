@@ -12,6 +12,8 @@
 
 **Working directory for all commands:** `Apps/Conductor`
 
+> **Running tests on this machine:** it is Command Line Tools-only (no Xcode/XCTest). Plain `swift test` cannot load Swift Testing at runtime. **Always run tests via `./Scripts/swift-test.sh`** (commits the rpath flags). `swift build` and `swift run ConductorModelCheck` work normally. The commands below already use the wrapper.
+
 ---
 
 ## File Structure
@@ -53,7 +55,7 @@ import Testing
 
 - [ ] **Step 2: Run it to verify the target does not exist yet**
 
-Run: `cd Apps/Conductor && swift test --filter SanityTests`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh --filter SanityTests`
 Expected: FAIL — SwiftPM reports no test target / nothing to test (the target is not declared yet).
 
 - [ ] **Step 3: Declare the test target**
@@ -72,7 +74,7 @@ In `Apps/Conductor/Package.swift`, add this entry to the end of the `targets:` a
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `cd Apps/Conductor && swift test --filter SanityTests`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh --filter SanityTests`
 Expected: PASS — `1 test passed`.
 
 - [ ] **Step 5: Commit**
@@ -132,7 +134,7 @@ import Testing
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `cd Apps/Conductor && swift test --filter TerminalScrollbackSanitizerTests`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh --filter TerminalScrollbackSanitizerTests`
 Expected: FAIL — `TerminalScrollbackSanitizer` is undefined.
 
 - [ ] **Step 3: Implement `truncate`**
@@ -186,7 +188,7 @@ public enum TerminalScrollbackSanitizer {
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `cd Apps/Conductor && swift test --filter TerminalScrollbackSanitizerTests`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh --filter TerminalScrollbackSanitizerTests`
 Expected: PASS — 4 tests pass.
 
 - [ ] **Step 5: Commit**
@@ -231,7 +233,7 @@ Append to `TerminalScrollbackSanitizerTests.swift`:
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `cd Apps/Conductor && swift test --filter TerminalScrollbackSanitizerTests`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh --filter TerminalScrollbackSanitizerTests`
 Expected: FAIL — `normalizeLineEndings` is undefined.
 
 - [ ] **Step 3: Implement `normalizeLineEndings`**
@@ -259,7 +261,7 @@ Add this method inside the `TerminalScrollbackSanitizer` enum in `TerminalScroll
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `cd Apps/Conductor && swift test --filter TerminalScrollbackSanitizerTests`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh --filter TerminalScrollbackSanitizerTests`
 Expected: PASS — all sanitizer tests pass.
 
 - [ ] **Step 5: Commit**
@@ -304,7 +306,7 @@ Append to `TerminalScrollbackSanitizerTests.swift`:
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `cd Apps/Conductor && swift test --filter TerminalScrollbackSanitizerTests`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh --filter TerminalScrollbackSanitizerTests`
 Expected: FAIL — `wrapForReplay` / `prepareForReplay` undefined.
 
 - [ ] **Step 3: Implement both methods**
@@ -331,7 +333,7 @@ Add inside the `TerminalScrollbackSanitizer` enum:
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `cd Apps/Conductor && swift test --filter TerminalScrollbackSanitizerTests`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh --filter TerminalScrollbackSanitizerTests`
 Expected: PASS — all sanitizer tests pass.
 
 - [ ] **Step 5: Commit**
@@ -389,7 +391,7 @@ import Testing
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `cd Apps/Conductor && swift test --filter ExportedScreenPathTests`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh --filter ExportedScreenPathTests`
 Expected: FAIL — `ExportedScreenPath` undefined.
 
 - [ ] **Step 3: Implement the helpers**
@@ -429,7 +431,7 @@ public enum ExportedScreenPath {
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `cd Apps/Conductor && swift test --filter ExportedScreenPathTests`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh --filter ExportedScreenPathTests`
 Expected: PASS — 5 tests pass.
 
 - [ ] **Step 5: Commit**
@@ -673,7 +675,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Run the unit tests**
 
-Run: `cd Apps/Conductor && swift test`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh`
 Expected: PASS — all `ConductorCoreTests` pass.
 
 - [ ] **Step 2: Build and run the legacy smoke gate**
@@ -780,7 +782,7 @@ extension SplitNode {
 
 - [ ] **Step 2: Run the migrated tests**
 
-Run: `cd Apps/Conductor && swift test`
+Run: `cd Apps/Conductor && ./Scripts/swift-test.sh`
 Expected: PASS — all migrated tests pass (count roughly matches the number of `check*` functions).
 
 - [ ] **Step 3: Commit**
