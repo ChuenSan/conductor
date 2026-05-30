@@ -32,3 +32,37 @@ import Testing
     let result = TerminalScrollbackSanitizer.truncate(input, maxLines: 1_000, maxBytes: 10)
     #expect(result == "")
 }
+
+@Test func normalizeAddsCarriageReturnToBareNewline() {
+    #expect(TerminalScrollbackSanitizer.normalizeLineEndings("a\nb") == "a\r\nb")
+}
+
+@Test func normalizeIsIdempotentForCRLF() {
+    // "\r\n" is a single Swift Character, so it is never matched as a bare "\n".
+    let crlf = "a\r\nb"
+    #expect(TerminalScrollbackSanitizer.normalizeLineEndings(crlf) == crlf)
+    #expect(TerminalScrollbackSanitizer.normalizeLineEndings(crlf) ==
+            TerminalScrollbackSanitizer.normalizeLineEndings(
+                TerminalScrollbackSanitizer.normalizeLineEndings(crlf)))
+}
+
+@Test func normalizeLeavesLoneCarriageReturn() {
+    #expect(TerminalScrollbackSanitizer.normalizeLineEndings("a\rb") == "a\rb")
+}
+
+@Test func wrapAddsLeadingAndTrailingReset() {
+    let wrapped = TerminalScrollbackSanitizer.wrapForReplay("hi")
+    #expect(wrapped == "\u{1B}[0mhi\u{1B}[0m")
+}
+
+@Test func prepareComposesTruncateNormalizeAndWrap() {
+    let input = "a\nb\nc"
+    let result = TerminalScrollbackSanitizer.prepareForReplay(input, maxLines: 2, maxBytes: 1_000)
+    // last 2 lines -> "b\nc"; CRLF -> "b\r\nc"; wrapped in resets.
+    #expect(result == "\u{1B}[0mb\r\nc\u{1B}[0m")
+}
+
+@Test func prepareReturnsBareResetsForEmptyInput() {
+    #expect(TerminalScrollbackSanitizer.prepareForReplay("", maxLines: 100, maxBytes: 100)
+            == "\u{1B}[0m\u{1B}[0m")
+}

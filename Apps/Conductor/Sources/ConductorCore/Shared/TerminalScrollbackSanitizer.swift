@@ -37,4 +37,37 @@ public enum TerminalScrollbackSanitizer {
         guard lineStart < bytes.count else { return "" }
         return String(decoding: bytes[lineStart...], as: UTF8.self)
     }
+
+    /// Converts bare line-feeds to CRLF so each line returns to column 0 under the
+    /// `process_output` replay path (which, unlike a real tty, does not apply ONLCR).
+    /// Idempotent: an existing "\r\n" is one Swift `Character` and is never matched
+    /// as a bare "\n", and a lone "\r" is left untouched.
+    public static func normalizeLineEndings(_ text: String) -> String {
+        var out = String()
+        out.reserveCapacity(text.count + 16)
+        for character in text {
+            if character == "\n" {
+                out.append("\r\n")
+            } else {
+                out.append(character)
+            }
+        }
+        return out
+    }
+
+    /// Brackets the payload with a full SGR reset on both sides so no stray color or
+    /// mode state survives into (or leaks out of) the replayed history.
+    public static func wrapForReplay(_ text: String) -> String {
+        let reset = "\u{1B}[0m"
+        return reset + text + reset
+    }
+
+    /// The single entry point the replay layer calls: truncate, normalize, wrap.
+    public static func prepareForReplay(
+        _ text: String,
+        maxLines: Int = 400,
+        maxBytes: Int = 128 * 1024
+    ) -> String {
+        wrapForReplay(normalizeLineEndings(truncate(text, maxLines: maxLines, maxBytes: maxBytes)))
+    }
 }
