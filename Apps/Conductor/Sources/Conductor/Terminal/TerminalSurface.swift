@@ -421,6 +421,52 @@ final class TerminalSurface {
         return result
     }
 
+    /// Captures the on-screen scrollback as a VT/ANSI byte stream (colors, cursor,
+    /// wide-char layout preserved) via libghostty's `write_screen_file:copy,vt`
+    /// action, which writes a temp file and puts its path on the pasteboard. The
+    /// user's pasteboard is saved and restored around the call. Returns nil on any
+    /// failure so the caller can fall back to plain-text capture.
+    func capturedScrollbackVT(maxLines: Int = 400, maxBytes: Int = 128 * 1024) -> String? {
+        guard surface != nil else { return nil }
+        let pasteboard = NSPasteboard.general
+
+        let savedItems: [NSPasteboardItem] = (pasteboard.pasteboardItems ?? []).map { item in
+            let copy = NSPasteboardItem()
+            for type in item.types {
+                if let data = item.data(forType: type) {
+                    copy.setData(data, forType: type)
+                }
+            }
+            return copy
+        }
+        defer {
+            pasteboard.clearContents()
+            if !savedItems.isEmpty {
+                pasteboard.writeObjects(savedItems)
+            }
+        }
+
+        pasteboard.clearContents()
+        guard performBindingAction("write_screen_file:copy,vt") else { return nil }
+        guard let raw = pasteboard.string(forType: .string),
+              let path = ExportedScreenPath.normalized(raw) else { return nil }
+
+        let fileURL = URL(fileURLWithPath: path)
+        defer {
+            if ExportedScreenPath.isUnderTemporaryDirectory(fileURL) {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+        }
+        guard let data = try? Data(contentsOf: fileURL), !data.isEmpty else { return nil }
+
+        let text = TerminalScrollbackSanitizer.truncate(
+            String(decoding: data, as: UTF8.self),
+            maxLines: maxLines,
+            maxBytes: maxBytes
+        )
+        return text.isEmpty ? nil : text
+    }
+
     /// Queues prior-session output to be painted onto the screen once the surface
     /// attaches. This writes to the display via the program-output path, NOT the
     /// shell input path, so nothing is ever executed.
