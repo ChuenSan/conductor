@@ -17,12 +17,18 @@ public enum ExportedScreenPath {
 
     /// True only when `fileURL` lives under the system temporary directory, so the
     /// caller can safely delete the export without ever touching a user file.
+    ///
+    /// Uses `resolvingSymlinksInPath` (not `standardizedFileURL`) so the macOS
+    /// `/var` → `/private/var` symlink is reconciled: libghostty may report the
+    /// canonical `/private/var/...` form while `FileManager.temporaryDirectory`
+    /// returns the `/var/...` form, and without resolving them the guard would
+    /// never match and the temp export would leak on every capture.
     public static func isUnderTemporaryDirectory(
         _ fileURL: URL,
         temporaryDirectory: URL = FileManager.default.temporaryDirectory
     ) -> Bool {
-        let file = fileURL.standardizedFileURL
-        let temp = temporaryDirectory.standardizedFileURL
-        return file.path.hasPrefix(temp.path + "/")
+        let file = fileURL.resolvingSymlinksInPath().path
+        let temp = temporaryDirectory.resolvingSymlinksInPath().path
+        return file.hasPrefix(temp + "/")
     }
 }
