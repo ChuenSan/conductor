@@ -8,12 +8,15 @@ import Testing
 }
 
 @Test func truncateNeverSplitsACodepoint() {
-    // 200 CJK chars, each 3 UTF-8 bytes. Cap at 90 bytes -> must land on a char boundary.
-    let input = String(repeating: "中", count: 200)
-    let result = TerminalScrollbackSanitizer.truncate(input, maxLines: 1_000, maxBytes: 90)
+    // Many short CJK lines (each "中中中" = 9 UTF-8 bytes). A byte cap that lands
+    // mid-line must resume at a line boundary, so content survives and the result
+    // contains only whole 3-byte chars and newlines — never a split codepoint.
+    let input = Array(repeating: "中中中", count: 50).joined(separator: "\n")
+    let result = TerminalScrollbackSanitizer.truncate(input, maxLines: 1_000, maxBytes: 40)
     #expect(!result.unicodeScalars.contains("\u{FFFD}"))
-    #expect(result.utf8.count <= 90)
-    #expect(result.allSatisfy { $0 == "中" })
+    #expect(result.utf8.count <= 40)
+    #expect(!result.isEmpty)
+    #expect(result.allSatisfy { $0 == "中" || $0 == "\n" })
 }
 
 @Test func truncateDropsPartialFirstLineAtByteBoundary() {

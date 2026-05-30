@@ -21,23 +21,20 @@ public enum TerminalScrollbackSanitizer {
         return safeByteSuffix(lineCapped, maxBytes: maxBytes)
     }
 
-    /// Returns the last `maxBytes` bytes, advanced forward to (a) the next UTF-8
-    /// leading byte and (b) the start of the next full line, so the suffix never
-    /// begins mid-codepoint or inside a partial escape sequence.
+    /// Returns the bytes from the start of the first full line at or after the
+    /// `maxBytes` cut point. Resuming on a line boundary keeps only whole lines, so
+    /// the result never begins mid-codepoint or inside a partial escape sequence
+    /// (a `\n` is never a UTF-8 continuation byte or part of an escape sequence).
+    /// If the tail past the cut contains no newline it is a single partial line —
+    /// dropped entirely, because a severed escape fragment (e.g. `5;31m` shorn of
+    /// its leading `ESC[`) would replay as literal garbage.
     static func safeByteSuffix(_ text: String, maxBytes: Int) -> String {
         let bytes = Array(text.utf8)
         guard bytes.count > maxBytes else { return text }
-        var start = bytes.count - maxBytes
-        // (a) Skip UTF-8 continuation bytes (0b10xxxxxx).
-        while start < bytes.count, (bytes[start] & 0xC0) == 0x80 {
-            start += 1
-        }
-        // (b) Skip the (possibly partial) first line: resume after the next newline.
-        // If there is no subsequent newline, the entire remaining content is a
-        // partial line fragment — drop it entirely.
-        guard let newline = bytes[start...].firstIndex(of: 0x0A) else { return "" }
-        start = newline + 1
-        guard start < bytes.count else { return "" }
-        return String(decoding: bytes[start...], as: UTF8.self)
+        let cut = bytes.count - maxBytes
+        guard let newline = bytes[cut...].firstIndex(of: 0x0A) else { return "" }
+        let lineStart = newline + 1
+        guard lineStart < bytes.count else { return "" }
+        return String(decoding: bytes[lineStart...], as: UTF8.self)
     }
 }
