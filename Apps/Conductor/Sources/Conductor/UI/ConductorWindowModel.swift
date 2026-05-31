@@ -3440,11 +3440,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func refreshVisibleAgentRuntimeStates() {
-        for terminalID in allTerminalIDs() {
+        let visible = WorkspaceVisibility.visibleTerminalIDs(
+            workspaces: workspaces,
+            selectedWorkspaceID: selectedWorkspaceID
+        )
+        for terminalID in visible {
             guard let surface = surfaceCoordinator.existingSurface(for: terminalID) else {
                 continue
             }
-            surface.refresh()
+            // Intentionally NO surface.refresh() here. visibleText() is a cheap
+            // viewport read; render cadence is libghostty's responsibility.
             guard let state = Self.visibleAgentRuntimeState(in: surface.visibleText()) else {
                 continue
             }
