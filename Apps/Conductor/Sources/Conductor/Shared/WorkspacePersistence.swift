@@ -189,35 +189,49 @@ final class WorkspacePersistence {
 
     // MARK: - Terminal session snapshots (sidecar)
 
-    /// Persists a terminal's prior-session text to a sidecar file keyed by
-    /// terminal ID. Kept out of the main YAML so large scrollback never bloats
-    /// the frequently-rewritten window state.
+    /// Persists a terminal's prior-session VT scrollback to a sidecar file keyed by
+    /// terminal ID. New snapshots use the `.vt` extension; legacy `.txt` plain-text
+    /// snapshots from before the VT upgrade are still read on load.
     func saveTerminalSnapshot(id: TerminalID, text: String) {
         guard isEnabled, let snapshotDirectoryURL, !text.isEmpty else { return }
         try? FileManager.default.createDirectory(at: snapshotDirectoryURL, withIntermediateDirectories: true)
-        let url = snapshotDirectoryURL.appendingPathComponent("\(id.description).txt")
+        let url = snapshotDirectoryURL.appendingPathComponent("\(id.description).vt")
         try? text.data(using: .utf8)?.write(to: url, options: [.atomic])
+        // Drop any stale plain-text sidecar so the two formats never diverge.
+        try? FileManager.default.removeItem(
+            at: snapshotDirectoryURL.appendingPathComponent("\(id.description).txt")
+        )
     }
 
     func loadTerminalSnapshot(id: TerminalID) -> String? {
         guard isEnabled, let snapshotDirectoryURL else { return nil }
-        let url = snapshotDirectoryURL.appendingPathComponent("\(id.description).txt")
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return String(data: data, encoding: .utf8)
+        for ext in ["vt", "txt"] {
+            let url = snapshotDirectoryURL.appendingPathComponent("\(id.description).\(ext)")
+            if let data = try? Data(contentsOf: url) {
+                return String(data: data, encoding: .utf8)
+            }
+        }
+        return nil
     }
 
-    /// One-shot: snapshots are consumed on restore so they never stack up across
-    /// restarts.
+    /// One-shot: snapshots are consumed on restore so they never stack up.
     func removeTerminalSnapshot(id: TerminalID) {
         guard let snapshotDirectoryURL else { return }
-        let url = snapshotDirectoryURL.appendingPathComponent("\(id.description).txt")
-        try? FileManager.default.removeItem(at: url)
+        for ext in ["vt", "txt"] {
+            try? FileManager.default.removeItem(
+                at: snapshotDirectoryURL.appendingPathComponent("\(id.description).\(ext)")
+            )
+        }
     }
 
     /// Drops snapshot files for terminals that no longer exist.
     func pruneTerminalSnapshots(keeping retainedIDs: Set<TerminalID>) {
         guard let snapshotDirectoryURL else { return }
-        let retained = Set(retainedIDs.map { "\($0.description).txt" })
+        var retained = Set<String>()
+        for id in retainedIDs {
+            retained.insert("\(id.description).vt")
+            retained.insert("\(id.description).txt")
+        }
         guard let contents = try? FileManager.default.contentsOfDirectory(
             at: snapshotDirectoryURL,
             includingPropertiesForKeys: nil

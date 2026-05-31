@@ -52,6 +52,10 @@ let package = Package(
         .executableTarget(
             name: "ConductorModelCheck",
             dependencies: ["ConductorCore"]
+        ),
+        .testTarget(
+            name: "ConductorCoreTests",
+            dependencies: ["ConductorCore"]
         )
     ]
 )

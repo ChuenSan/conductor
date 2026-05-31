@@ -3222,7 +3222,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private func captureTerminalSnapshots() {
         var capturedIDs = Set<TerminalID>()
         for entry in surfaceCoordinator.allSurfaces {
-            if let text = entry.surface.capturedScrollbackText() {
+            // Prefer VT-format capture (color + layout); fall back to plain text.
+            if let text = entry.surface.capturedScrollbackVT()
+                ?? entry.surface.capturedScrollbackText() {
                 persistence.saveTerminalSnapshot(id: entry.id, text: text)
                 capturedIDs.insert(entry.id)
             }
@@ -3563,14 +3565,43 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     private func persist() {
         pendingPersistence?.cancel()
-        let workspaces = workspaces
-        let selectedWorkspaceID = selectedWorkspaceID
-        let theme = theme
-        let appearance = appearance
-        let workspaceWebTabs = workspaceWebTabs
-        let workspaceFileTabs = persistedFileTabs()
-        let selectedWorkspaceContentTabID = persistedWorkspaceContentSelection()
-        let item = DispatchWorkItem { [persistence] in
+        let item = Self.makePersistenceSaveWorkItem(
+            persistence: persistence,
+            workspaces: workspaces,
+            selectedWorkspaceID: selectedWorkspaceID,
+            theme: theme,
+            appearance: appearance,
+            workspaceWebTabs: workspaceWebTabs,
+            workspaceFileTabs: persistedFileTabs(),
+            selectedWorkspaceContentTabID: persistedWorkspaceContentSelection()
+        )
+        pendingPersistence = item
+        // Debounce on main (so rapid edits coalesce), then encode + write on a
+        // background queue so large YAML/blob serialization never stalls the UI.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self, !item.isCancelled else { return }
+            self.persistenceQueue.async(execute: item)
+        }
+    }
+
+    /// Builds the persistence-save work item from a NON-isolated context so its
+    /// closure does not inherit this type's `@MainActor` isolation. A closure
+    /// literal created inside a `@MainActor` method carries main-actor isolation;
+    /// when such an item runs on the background `persistenceQueue`, Swift's runtime
+    /// executor-isolation check traps (`dispatch_assert_queue` → EXC_BREAKPOINT).
+    /// Constructing it here, where there is no actor isolation to inherit, lets the
+    /// item run safely on any queue.
+    private nonisolated static func makePersistenceSaveWorkItem(
+        persistence: WorkspacePersistence,
+        workspaces: [WorkspaceState],
+        selectedWorkspaceID: WorkspaceID,
+        theme: TerminalTheme,
+        appearance: AppearancePreferences,
+        workspaceWebTabs: [WorkspaceWebTabState],
+        workspaceFileTabs: [PersistedFileTab],
+        selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID?
+    ) -> DispatchWorkItem {
+        DispatchWorkItem {
             let signpost = ConductorSignpost.begin("persistence-save")
             defer { ConductorSignpost.end("persistence-save", signpost) }
             persistence.save(
@@ -3582,13 +3613,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 workspaceFileTabs: workspaceFileTabs,
                 selectedWorkspaceContentTabID: selectedWorkspaceContentTabID
             )
-        }
-        pendingPersistence = item
-        // Debounce on main (so rapid edits coalesce), then encode + write on a
-        // background queue so large YAML/blob serialization never stalls the UI.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            guard let self, !item.isCancelled else { return }
-            self.persistenceQueue.async(execute: item)
         }
     }
 
