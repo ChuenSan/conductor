@@ -40,6 +40,7 @@ final class TerminalSurface {
     private var lastScale = CGSize(width: -1, height: -1)
     private var lastDisplayID: UInt32 = 0
     private var isFocused = false
+    private var lastSetOccluded: Bool?
     private var currentTheme: TerminalTheme
     private var currentTerminalFontSize: CGFloat
     private var appliedTheme: TerminalTheme?
@@ -283,6 +284,18 @@ final class TerminalSurface {
         guard let surface else { return }
         ghostty_surface_set_focus(surface, focused)
         ghostty_surface_refresh(surface)
+    }
+
+    /// Tells libghostty whether the surface is hidden so it can pause its
+    /// CVDisplayLink renderer. Idempotent: redundant calls with the same
+    /// value are dropped. Safe to call before the surface is attached —
+    /// the value will be re-applied by the next `applyOcclusion()` after
+    /// attach.
+    func setOccluded(_ occluded: Bool) {
+        guard let surface else { return }
+        guard occluded != lastSetOccluded else { return }
+        lastSetOccluded = occluded
+        ghostty_surface_set_occlusion(surface, occluded)
     }
 
     func requestWorkspaceFocus() {
