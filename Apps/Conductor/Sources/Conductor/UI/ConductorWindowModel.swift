@@ -177,7 +177,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             persist()
         }
     }
-    @Published private(set) var workspaces: [WorkspaceState]
+    @Published private(set) var workspaces: [WorkspaceState] {
+        didSet { applyOcclusion() }
+    }
     @Published var theme: TerminalTheme {
         didSet {
             surfaceCoordinator.applyAppearance(theme: theme, terminalFontSize: appearance.terminalFontSize)
@@ -305,7 +307,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var pendingMetadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
     private var pendingMetadataPublish: DispatchWorkItem?
     private var activeTerminalContextMenuController: TerminalContextMenuController?
-    private var selectedWorkspaceID: WorkspaceID
+    private var selectedWorkspaceID: WorkspaceID {
+        didSet { applyOcclusion() }
+    }
     private var skipPreviousWorkspaceSyncForNextAssignment = false
     private var suppressCrossWorkspaceTerminalFocusUntil = Date.distantPast
     private var panelCoordinator = PanelCoordinator()
@@ -1380,6 +1384,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             surface.setSnapshotReplay(snapshot)
             persistence.removeTerminalSnapshot(id: tab.id)
         }
+        applyOcclusion()
         return surface
     }
 
@@ -3468,6 +3473,21 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                     metadata.activeAgentStartedAt = nil
                 }
             }
+        }
+    }
+
+    /// Marks every existing surface occluded ⇔ not in the currently-visible
+    /// terminal set, so libghostty pauses renderers for hidden tabs, hidden
+    /// splits, and background workspaces. Cheap: iterates only attached
+    /// surfaces, and each `setOccluded` call is a no-op when the value is
+    /// unchanged.
+    private func applyOcclusion() {
+        let visible = WorkspaceVisibility.visibleTerminalIDs(
+            workspaces: workspaces,
+            selectedWorkspaceID: selectedWorkspaceID
+        )
+        for entry in surfaceCoordinator.allSurfaces {
+            entry.surface.setOccluded(!visible.contains(entry.id))
         }
     }
 
