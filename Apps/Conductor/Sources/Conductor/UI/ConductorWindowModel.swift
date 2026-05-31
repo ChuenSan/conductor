@@ -3491,19 +3491,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
 
-    private func allTerminalIDs() -> [TerminalID] {
-        var ids: [TerminalID] = []
-        var seen = Set<TerminalID>()
-        for workspace in workspaces {
-            for pane in workspace.panes.values {
-                for tab in pane.tabs where seen.insert(tab.id).inserted {
-                    ids.append(tab.id)
-                }
-            }
-        }
-        return ids
-    }
-
     private static func visibleAgentRuntimeState(in text: String?) -> VisibleAgentRuntimeState? {
         guard let text, !text.isEmpty else { return nil }
         let normalized = text.lowercased()
