@@ -62,12 +62,20 @@ public enum TerminalScrollbackSanitizer {
         return reset + text + reset
     }
 
-    /// The single entry point the replay layer calls: truncate, normalize, wrap.
+    /// The single entry point the replay layer calls.
+    ///
+    /// libghostty's `write_screen_file:copy,vt` export already emits CRLF on every
+    /// row (verified empirically: 100% CRLF, 0 bare LF, no cursor positioning, no
+    /// erase, no autowrap-mode toggles — only SGR + text + CRLF). Re-running every
+    /// `Character` through a `\n`→`\r\n` rewrite would only burn a full-text
+    /// rebuild on every restore, so `prepareForReplay` deliberately skips it.
+    /// Callers handling other formats can still invoke `normalizeLineEndings`
+    /// explicitly.
     public static func prepareForReplay(
         _ text: String,
         maxLines: Int = 400,
         maxBytes: Int = 128 * 1024
     ) -> String {
-        wrapForReplay(normalizeLineEndings(truncate(text, maxLines: maxLines, maxBytes: maxBytes)))
+        wrapForReplay(truncate(text, maxLines: maxLines, maxBytes: maxBytes))
     }
 }

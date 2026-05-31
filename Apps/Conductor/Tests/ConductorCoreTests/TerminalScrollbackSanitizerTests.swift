@@ -55,11 +55,23 @@ import Testing
     #expect(wrapped == "\u{1B}[0mhi\u{1B}[0m")
 }
 
-@Test func prepareComposesTruncateNormalizeAndWrap() {
-    let input = "a\nb\nc"
+@Test func prepareTruncatesAndWrapsButLeavesLineEndingsAlone() {
+    // ghostty's `write_screen_file:copy,vt` already emits CRLF on every row, so
+    // prepareForReplay must NOT touch line endings — doing so wastes a full-text
+    // rebuild on every restore. truncate + wrap, nothing else.
+    let input = "a\r\nb\r\nc"
     let result = TerminalScrollbackSanitizer.prepareForReplay(input, maxLines: 2, maxBytes: 1_000)
-    // last 2 lines -> "b\nc"; CRLF -> "b\r\nc"; wrapped in resets.
+    // last 2 lines (split on \n) -> "b\r\nc"; wrapped in resets; line endings preserved.
     #expect(result == "\u{1B}[0mb\r\nc\u{1B}[0m")
+}
+
+@Test func prepareDoesNotIntroduceCRLFForBareNewlines() {
+    // The replay path no longer normalizes line endings. A bare "\n" stays a bare
+    // "\n" — callers may still invoke normalizeLineEndings explicitly if needed,
+    // but prepareForReplay does not.
+    let input = "a\nb"
+    let result = TerminalScrollbackSanitizer.prepareForReplay(input, maxLines: 100, maxBytes: 1_000)
+    #expect(result == "\u{1B}[0ma\nb\u{1B}[0m")
 }
 
 @Test func prepareReturnsBareResetsForEmptyInput() {
