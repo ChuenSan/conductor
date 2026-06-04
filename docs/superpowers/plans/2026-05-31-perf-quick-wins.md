@@ -390,29 +390,10 @@ Replace it with:
 
 - [ ] **Step 4: Hook the surface-attach path**
 
-Find `surface(for:)` (currently at `:1364`). The current method ends like this (the snapshot-replay tail, around `:1377-1383`):
+Find `surface(for:)` and apply occlusion before returning the surface to the
+caller:
 
 ```swift
-        // Paint the prior session's output (read-only) into the fresh surface,
-        // then consume the snapshot so it never replays twice.
-        if let snapshot = persistence.loadTerminalSnapshot(id: tab.id) {
-            surface.setSnapshotReplay(snapshot)
-            persistence.removeTerminalSnapshot(id: tab.id)
-        }
-        return surface
-    }
-```
-
-Change ONLY the trailing two lines so the new surface gets the correct
-occlusion before being returned to the caller:
-
-```swift
-        // Paint the prior session's output (read-only) into the fresh surface,
-        // then consume the snapshot so it never replays twice.
-        if let snapshot = persistence.loadTerminalSnapshot(id: tab.id) {
-            surface.setSnapshotReplay(snapshot)
-            persistence.removeTerminalSnapshot(id: tab.id)
-        }
         applyOcclusion()
         return surface
     }

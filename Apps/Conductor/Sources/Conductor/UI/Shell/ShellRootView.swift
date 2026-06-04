@@ -1942,13 +1942,6 @@ private struct WorkspaceInspectorPane: View {
                             ) {
                                 resumeAgents(in: item.id)
                             }
-                            WorkspaceInspectorActionButton(
-                                title: model.canRestorePreviousSessionSnapshot ? L("恢复上一份", "Restore Previous") : L("无快照", "No Snapshot"),
-                                systemImage: "clock.arrow.circlepath",
-                                disabled: !model.canRestorePreviousSessionSnapshot
-                            ) {
-                                restorePreviousSession()
-                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -2135,10 +2128,6 @@ private struct WorkspaceInspectorPane: View {
             model.activateWorkspace(workspaceID, source: .overview)
         }
         model.performCommand(.resumeCurrentWorkspaceAgents)
-    }
-
-    private func restorePreviousSession() {
-        model.performCommand(.restorePreviousSession)
     }
 
     private func focusResumableAgent(_ agent: TerminalAgentResumeBatchTarget) {

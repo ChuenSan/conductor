@@ -65,7 +65,6 @@ enum ConductorShellCommand: String, CaseIterable {
     case closeOtherWorkspaces
     case closeWorkspacesToRight
     case closeCurrentWorkspace
-    case restorePreviousSession
     case resumeCurrentWorkspaceAgents
 
     struct Descriptor: Equatable {
@@ -216,8 +215,6 @@ enum ConductorShellCommand: String, CaseIterable {
             return Descriptor(id: "close-workspaces-to-right", category: categoryOrganize, title: t(zh: "关闭右侧工作区", en: "Close Workspaces to the Right"), outcome: t(zh: "关闭当前工作区右侧的所有工作区。", en: "Closes all workspaces to the right of the current workspace."), keywords: "workspace close right", shortcutFallback: "Close Right", systemImage: "xmark.rectangle.fill", protocolMethod: "command.run")
         case .closeCurrentWorkspace:
             return Descriptor(id: "close-current-workspace", category: categoryOrganize, title: t(zh: "关闭当前工作区", en: "Close Current Workspace"), outcome: t(zh: "关闭当前工作区，并切到剩余工作区。", en: "Closes the current workspace and switches to another one."), keywords: "workspace close", shortcutFallback: "Close Workspace", systemImage: "xmark.rectangle", protocolMethod: "command.run")
-        case .restorePreviousSession:
-            return Descriptor(id: "restore-previous-session", category: categoryRecovery, title: t(zh: "恢复上一份会话", en: "Restore Previous Session"), outcome: t(zh: "用上一份有效快照替换当前工作台，并保留当前快照作为新的上一份。", en: "Replaces the current workbench with the previous valid snapshot while keeping the current snapshot as the new previous one."), keywords: "session restore previous fallback recovery snapshot", shortcutFallback: "Recovery", systemImage: "clock.arrow.circlepath", protocolMethod: "session.restorePrevious")
         case .resumeCurrentWorkspaceAgents:
             return Descriptor(id: "resume-workspace-agents", category: categoryRecovery, title: t(zh: "恢复当前工作区 Agent", en: "Resume Workspace Agents"), outcome: t(zh: "把当前工作区里可续跑的 Agent 恢复命令发送回对应终端。", en: "Sends supported agent resume commands back to matching terminals in the current workspace."), keywords: "agent resume restore workspace terminal codex claude", shortcutFallback: "Resume", systemImage: "arrow.clockwise.circle", protocolMethod: "terminal.resumeAgents")
         }
@@ -243,7 +240,7 @@ enum ConductorShellCommand: String, CaseIterable {
             .resizePaneLeft, .resizePaneRight, .resizePaneUp, .resizePaneDown,
             .toggleZoom, .equalizeSplits, .flashFocusedPane, .toggleWorkspaceOverview,
             .toggleCommandPalette, .toggleSettings,
-            .toggleFullScreen, .restorePreviousSession, .resumeCurrentWorkspaceAgents,
+            .toggleFullScreen, .resumeCurrentWorkspaceAgents,
             .resetWorkspace, .renameCurrentWorkspace, .closeOtherWorkspaces, .closeWorkspacesToRight, .closeCurrentWorkspace
         ]
     }
@@ -311,8 +308,6 @@ enum ConductorShellCommand: String, CaseIterable {
             return t(zh: "没有其他工作区可关闭", en: "No other workspaces to close")
         case .closeWorkspacesToRight:
             return t(zh: "右侧没有工作区", en: "No workspaces to the right")
-        case .restorePreviousSession:
-            return t(zh: "没有可用的上一份会话快照", en: "No previous session snapshot is available")
         case .resumeCurrentWorkspaceAgents:
             return t(zh: "当前工作区没有可续跑的 Agent", en: "Current workspace has no resumable agents")
         case .jumpLatestUnreadAttention:
@@ -390,8 +385,8 @@ enum ConductorShellCommand: String, CaseIterable {
             return "command-directory"
         case .renameCurrentWorkspace, .duplicateWorkspace, .closeOtherWorkspaces, .closeWorkspacesToRight, .closeCurrentWorkspace:
             return "command-workspace"
-        case .restorePreviousSession, .resumeCurrentWorkspaceAgents:
-            return "command-restore-session"
+        case .resumeCurrentWorkspaceAgents:
+            return "command-resume-agents"
         }
     }
 
@@ -454,8 +449,6 @@ enum ConductorShellCommand: String, CaseIterable {
             }
         case .closeCurrentWorkspace:
             model.workspaces.count > 1
-        case .restorePreviousSession:
-            model.canRestorePreviousSessionSnapshot
         case .resumeCurrentWorkspaceAgents:
             !model.controlResumableTerminalAgents().isEmpty
         case .jumpLatestUnreadAttention:
@@ -599,8 +592,6 @@ enum ConductorShellCommand: String, CaseIterable {
             model.closeWorkspacesToRight(of: model.workspace.id)
         case .closeCurrentWorkspace:
             model.closeWorkspace(model.workspace.id)
-        case .restorePreviousSession:
-            model.restorePreviousSessionSnapshot()
         case .resumeCurrentWorkspaceAgents:
             _ = model.controlResumeTerminalAgents()
         }

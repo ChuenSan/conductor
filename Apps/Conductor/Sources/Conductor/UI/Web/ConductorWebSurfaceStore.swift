@@ -12,27 +12,8 @@ final class ConductorWebKitSurfaceStore {
     static let shared = ConductorWebKitSurfaceStore()
 
     private var webViews: [WebTabID: WKWebView] = [:]
-    /// Tab IDs whose webView was seeded from a persisted interactionState, so
-    /// the coordinator knows to skip the initial URL load.
-    private var restoredFromInteractionState: Set<WebTabID> = []
-    /// Interaction-state blobs restored from disk, awaiting the tab's first
-    /// display. Held here (not in the tab model) so frequent debounced saves
-    /// don't re-encode the large blob.
-    private var pendingInteractionStates: [WebTabID: Data] = [:]
 
     private init() {}
-
-    /// Seeds restored interaction-state blobs at launch. Consumed lazily when
-    /// each web tab first appears.
-    func seedPendingInteractionStates(_ states: [WebTabID: Data]) {
-        for (id, data) in states where !data.isEmpty {
-            pendingInteractionStates[id] = data
-        }
-    }
-
-    func pendingInteractionState(for tabID: WebTabID) -> Data? {
-        pendingInteractionStates[tabID]
-    }
 
     func webView(for tabID: WebTabID) -> WKWebView {
         if let existing = webViews[tabID] {
@@ -46,31 +27,6 @@ final class ConductorWebKitSurfaceStore {
 
     func existingWebView(for tabID: WebTabID) -> WKWebView? {
         webViews[tabID]
-    }
-
-    /// Restores a webView's back/forward history and scroll position from a
-    /// persisted interactionState blob. Returns true when restoration was
-    /// applied so callers can skip the initial URL load.
-    @discardableResult
-    func restoreInteractionState(_ data: Data?, for tabID: WebTabID) -> Bool {
-        guard let data, !data.isEmpty else { return false }
-        let webView = webView(for: tabID)
-        webView.interactionState = Self.unarchivedInteractionState(from: data) ?? data
-        pendingInteractionStates.removeValue(forKey: tabID)
-        restoredFromInteractionState.insert(tabID)
-        return true
-    }
-
-    func consumeRestoredFlag(for tabID: WebTabID) -> Bool {
-        restoredFromInteractionState.remove(tabID) != nil
-    }
-
-    func interactionState(for tabID: WebTabID) -> Data? {
-        guard let state = webViews[tabID]?.interactionState else { return nil }
-        if let data = state as? Data {
-            return data
-        }
-        return try? NSKeyedArchiver.archivedData(withRootObject: state, requiringSecureCoding: false)
     }
 
     func runtimeState(for tabID: WebTabID) async -> ConductorWebRuntimeState? {
@@ -96,7 +52,6 @@ final class ConductorWebKitSurfaceStore {
     }
 
     func remove(_ tabID: WebTabID) {
-        restoredFromInteractionState.remove(tabID)
         guard let webView = webViews.removeValue(forKey: tabID) else { return }
         webView.stopLoading()
         webView.navigationDelegate = nil
@@ -133,10 +88,4 @@ final class ConductorWebKitSurfaceStore {
     })();
     """
 
-    private static func unarchivedInteractionState(from data: Data) -> Any? {
-        guard let unarchiver = try? NSKeyedUnarchiver(forReadingFrom: data) else { return nil }
-        unarchiver.requiresSecureCoding = false
-        defer { unarchiver.finishDecoding() }
-        return unarchiver.decodeObject(forKey: NSKeyedArchiveRootObjectKey)
-    }
 }

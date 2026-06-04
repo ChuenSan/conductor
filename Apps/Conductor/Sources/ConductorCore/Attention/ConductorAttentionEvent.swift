@@ -8,7 +8,6 @@ public struct ConductorAttentionEvent: Codable, Equatable, Identifiable, Sendabl
         case updateAvailable
         case updateFailed
         case browserError
-        case sessionRecovery
         case permissionWarning
         case manual
     }

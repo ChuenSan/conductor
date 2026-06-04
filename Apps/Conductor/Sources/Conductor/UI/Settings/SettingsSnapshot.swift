@@ -95,10 +95,6 @@ struct SettingsSnapshot: Equatable {
     let terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
     let updatePreferences: ConductorUpdatePreferences
     let updateState: ConductorUpdateState
-    let sessionRestoreReport: WorkspacePersistenceLoadReport
-    let sessionJournalSummary: ConductorSessionJournalSummary
-    let sessionJournalRecentEvents: [ConductorSessionJournalEvent]
-    let sessionSurfaceInspection: SessionSurfaceInspectionSnapshot
 
     init(
         selectedSection: SettingsSectionID,
@@ -110,11 +106,7 @@ struct SettingsSnapshot: Equatable {
         agentCLIStatuses: [AgentHookProvider: AgentCLIStatus],
         terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState],
         updatePreferences: ConductorUpdatePreferences,
-        updateState: ConductorUpdateState,
-        sessionRestoreReport: WorkspacePersistenceLoadReport,
-        sessionJournalSummary: ConductorSessionJournalSummary,
-        sessionJournalRecentEvents: [ConductorSessionJournalEvent],
-        sessionSurfaceInspection: SessionSurfaceInspectionSnapshot
+        updateState: ConductorUpdateState
     ) {
         self.selectedSection = selectedSection
         self.theme = theme
@@ -126,9 +118,5 @@ struct SettingsSnapshot: Equatable {
         self.terminalFontDownloadStates = terminalFontDownloadStates
         self.updatePreferences = updatePreferences
         self.updateState = updateState
-        self.sessionRestoreReport = sessionRestoreReport
-        self.sessionJournalSummary = sessionJournalSummary
-        self.sessionJournalRecentEvents = sessionJournalRecentEvents
-        self.sessionSurfaceInspection = sessionSurfaceInspection
     }
 }

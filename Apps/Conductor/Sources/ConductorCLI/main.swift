@@ -34,8 +34,6 @@ struct ConductorCLI {
             return request(.appVersion)
         case "quit":
             return request(.appQuit)
-        case "session":
-            return try sessionRequest(Array(args.dropFirst()))
         case "workspace":
             return try workspaceRequest(Array(args.dropFirst()))
         case "surface":
@@ -54,20 +52,6 @@ struct ConductorCLI {
             return try commandRequest(Array(args.dropFirst()))
         default:
             throw CLIError.usage(Self.usage)
-        }
-    }
-
-    private func sessionRequest(_ args: [String]) throws -> ConductorControlRequest {
-        guard let subcommand = args.first else {
-            throw CLIError.usage("Usage: conductor session inspect|restore-previous")
-        }
-        switch subcommand {
-        case "inspect", "status":
-            return request(.sessionInspect)
-        case "restore-previous":
-            return request(.sessionRestorePrevious)
-        default:
-            throw CLIError.usage("Usage: conductor session inspect|restore-previous")
         }
     }
 
@@ -781,8 +765,6 @@ struct ConductorCLI {
       conductor diagnostics export [--output path]
       conductor version
       conductor quit
-      conductor session inspect
-      conductor session restore-previous
       conductor workspace list
       conductor workspace metadata [--workspace workspace-id]
       conductor workspace create [--title title]
@@ -861,8 +843,6 @@ extension String {
     fileprivate static let appDiagnosticsExport = ConductorControlMethod.appDiagnosticsExport
     fileprivate static let appQuit = ConductorControlMethod.appQuit
     fileprivate static let appVersion = ConductorControlMethod.appVersion
-    fileprivate static let sessionInspect = ConductorControlMethod.sessionInspect
-    fileprivate static let sessionRestorePrevious = ConductorControlMethod.sessionRestorePrevious
     fileprivate static let workspaceList = ConductorControlMethod.workspaceList
     fileprivate static let workspaceCreate = ConductorControlMethod.workspaceCreate
     fileprivate static let workspaceSelect = ConductorControlMethod.workspaceSelect

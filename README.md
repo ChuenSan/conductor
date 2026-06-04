@@ -116,7 +116,6 @@ Generated from the current macOS build with `Apps/Conductor/Scripts/capture-rele
 | Run the app locally | [Getting started](docs/getting-started.md) |
 | Script the app | [Local control API](docs/api.md) |
 | Understand notifications | [Notifications](docs/notifications.md) |
-| Understand restore behavior | [Session restore](docs/session-restore.md) |
 | Ship a GitHub Release update | [Updating Conductor](docs/updating.md) |
 | Understand runtime replacement safety | [Security model](docs/security.md) |
 | Troubleshoot install/update/notification issues | [Troubleshooting](docs/troubleshooting.md) |
@@ -133,7 +132,6 @@ For maintainer release asset details, see [Updating Conductor](docs/updating.md)
 ## Current Preview Limits
 
 - Browser tabs support navigation, snapshots, screenshots, DOM actions, typed waits, downloads, runtime-error diagnostics, and same-origin frame automation; cross-origin action routing and richer user-facing automation error UI are still under active development.
-- Session restore preserves layout, browser/file tabs, snapshots, and restore-health diagnostics, but full journal replay and process reattachment are not complete yet.
 - Native macOS notifications, targetable attention events, unread badges, toast fallback, and focus actions are available; broader permission-state test coverage is still being expanded.
 - Workspace intelligence exposes project metadata and local service summaries; real-agent resume context and richer per-tab file/editor state are still being built.
 - Public preview builds may be ad-hoc signed. See [Security model](docs/security.md) and [Troubleshooting](docs/troubleshooting.md).

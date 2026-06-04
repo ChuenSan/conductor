@@ -17,7 +17,6 @@ struct ToolbarChromeSnapshot: Equatable {
     let resumableAgentCount: Int
     let canOpenLocalService: Bool
     let localServiceTitle: String?
-    let canRestorePreviousSession: Bool
 
     @MainActor
     init(model: ConductorWindowModel) {
@@ -38,11 +37,10 @@ struct ToolbarChromeSnapshot: Equatable {
             self.canOpenLocalService = false
             self.localServiceTitle = nil
         }
-        self.canRestorePreviousSession = model.canPerformCommand(.restorePreviousSession)
     }
 
     var workspaceActionCount: Int {
-        [resumableAgentCount > 0, canOpenLocalService, canRestorePreviousSession]
+        [resumableAgentCount > 0, canOpenLocalService]
             .filter { $0 }
             .count
     }
@@ -144,15 +142,6 @@ struct ConductorToolbar: View {
                         }
                     }
 
-                    if toolbarSnapshot.canRestorePreviousSession {
-                        Button(
-                            L("恢复上一份会话", "Restore Previous Session"),
-                            systemImage: "clock.arrow.circlepath"
-                        ) {
-                            finishWorkspaceRenameIfNeeded()
-                            model.performCommand(.restorePreviousSession)
-                        }
-                    }
                 }
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 ConductorToolbarActionDivider()

@@ -87,8 +87,6 @@ public enum ConductorControlMethod {
     public static let appDiagnostics = "app.diagnostics"
     public static let appDiagnosticsExport = "app.diagnosticsExport"
     public static let appQuit = "app.quit"
-    public static let sessionInspect = "session.inspect"
-    public static let sessionRestorePrevious = "session.restorePrevious"
     public static let workspaceList = "workspace.list"
     public static let workspaceCreate = "workspace.create"
     public static let workspaceSelect = "workspace.select"

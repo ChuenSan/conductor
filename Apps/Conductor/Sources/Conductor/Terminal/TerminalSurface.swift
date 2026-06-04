@@ -55,8 +55,6 @@ final class TerminalSurface {
     private var appliedRendererPreferences: TerminalRendererPreferences?
     private var surfaceConfig: ghostty_config_t?
     private var pendingText: [String] = []
-    private var pendingSnapshotReplay: String?
-    private var pendingSnapshotReplayTask: Task<Void, Never>?
     private let workingDirectory: String?
     private let launchEnvironment: [String: String]
     private var lifecycle: TerminalSurfaceLifecycle = .initialized
@@ -207,7 +205,6 @@ final class TerminalSurface {
         lifecycle = .attached
         pendingText.forEach { sendText($0) }
         pendingText.removeAll(keepingCapacity: false)
-        schedulePendingSnapshotReplay()
         ConductorLog.terminal.info("Ghostty surface created for \(self.id.description)")
     }
 
@@ -421,143 +418,6 @@ final class TerminalSurface {
         return String(decoding: UnsafeRawBufferPointer(start: pointer, count: Int(text.text_len)), as: UTF8.self)
     }
 
-    /// Captures the on-screen scrollback text for a session snapshot, trimmed to
-    /// the last `maxLines` lines / `maxBytes` bytes so persistence stays small.
-    /// Reads the full history buffer (`GHOSTTY_POINT_SCREEN`); only called at quit,
-    /// never on the polling path.
-    func capturedScrollbackText(maxLines: Int = 400, maxBytes: Int = 128 * 1024) -> String? {
-        guard let surface else { return nil }
-        let size = ghostty_surface_size(surface)
-        guard size.columns > 0, size.rows > 0 else { return nil }
-
-        let selection = ghostty_selection_s(
-            top_left: ghostty_point_s(
-                tag: GHOSTTY_POINT_SCREEN,
-                coord: GHOSTTY_POINT_COORD_TOP_LEFT,
-                x: 0,
-                y: 0
-            ),
-            bottom_right: ghostty_point_s(
-                tag: GHOSTTY_POINT_SCREEN,
-                coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT,
-                x: UInt32(size.columns - 1),
-                y: UInt32(size.rows - 1)
-            ),
-            rectangle: false
-        )
-        var text = ghostty_text_s()
-        guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
-        defer { ghostty_surface_free_text(surface, &text) }
-        guard let pointer = text.text, text.text_len > 0 else { return nil }
-        let raw = String(decoding: UnsafeRawBufferPointer(start: pointer, count: Int(text.text_len)), as: UTF8.self)
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        var lines = trimmed.components(separatedBy: "\n")
-        if lines.count > maxLines {
-            lines = Array(lines.suffix(maxLines))
-        }
-        var result = lines.joined(separator: "\n")
-        if result.utf8.count > maxBytes {
-            result = String(decoding: result.utf8.suffix(maxBytes), as: UTF8.self)
-        }
-        return result
-    }
-
-    /// Captures the on-screen scrollback as a VT/ANSI byte stream (colors, cursor,
-    /// wide-char layout preserved) via libghostty's `write_screen_file:copy,vt`
-    /// action, which writes a temp file and puts its path on the pasteboard. The
-    /// user's pasteboard is saved and restored around the call. Returns nil on any
-    /// failure so the caller can fall back to plain-text capture.
-    func capturedScrollbackVT(maxLines: Int = 400, maxBytes: Int = 128 * 1024) -> String? {
-        guard surface != nil else { return nil }
-        let pasteboard = NSPasteboard.general
-
-        let savedItems: [NSPasteboardItem] = (pasteboard.pasteboardItems ?? []).map { item in
-            let copy = NSPasteboardItem()
-            for type in item.types {
-                if let data = item.data(forType: type) {
-                    copy.setData(data, forType: type)
-                }
-            }
-            return copy
-        }
-        defer {
-            pasteboard.clearContents()
-            if !savedItems.isEmpty {
-                pasteboard.writeObjects(savedItems)
-            }
-        }
-
-        pasteboard.clearContents()
-        guard performBindingAction("write_screen_file:copy,vt") else { return nil }
-        guard let raw = pasteboard.string(forType: .string),
-              let path = ExportedScreenPath.normalized(raw) else { return nil }
-
-        let fileURL = URL(fileURLWithPath: path)
-        defer {
-            if ExportedScreenPath.isUnderTemporaryDirectory(fileURL) {
-                try? FileManager.default.removeItem(at: fileURL)
-            }
-        }
-        guard let data = try? Data(contentsOf: fileURL), !data.isEmpty else { return nil }
-
-        let text = TerminalScrollbackSanitizer.truncate(
-            String(decoding: data, as: UTF8.self),
-            maxLines: maxLines,
-            maxBytes: maxBytes
-        )
-        return text.isEmpty ? nil : text
-    }
-
-    /// Queues prior-session output to be painted onto the screen once the surface
-    /// attaches. This writes to the display via the program-output path, NOT the
-    /// shell input path, so nothing is ever executed.
-    func setSnapshotReplay(_ text: String?) {
-        guard let text, !text.isEmpty else { return }
-        pendingSnapshotReplay = text
-        schedulePendingSnapshotReplay()
-    }
-
-    private func schedulePendingSnapshotReplay() {
-        guard lifecycle == .attached, surface != nil, pendingSnapshotReplay != nil else { return }
-        guard pendingSnapshotReplayTask == nil else { return }
-        pendingSnapshotReplayTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 150_000_000)
-            guard !Task.isCancelled else { return }
-            self?.pendingSnapshotReplayTask = nil
-            self?.replayPendingSnapshotIfAttached()
-        }
-    }
-
-    private func replayPendingSnapshotIfAttached() {
-        guard lifecycle == .attached, let surface else { return }
-        replayPendingSnapshot(into: surface)
-        ghostty_surface_refresh(surface)
-    }
-
-    private func replayPendingSnapshot(into surface: ghostty_surface_t) {
-        guard let snapshot = pendingSnapshotReplay else { return }
-        pendingSnapshotReplay = nil
-        // Replay the prior session's VT bytes through ghostty's own parser
-        // (process_output is the program-output path: inert, never executed).
-        // No marker lines are injected — the restored history keeps its original
-        // colors and reads as real scrollback. See spec decision D2.
-        let payload = TerminalScrollbackSanitizer.prepareForReplay(snapshot)
-        replayOutput(payload, into: surface)
-    }
-
-    private func replayOutput(_ text: String, into surface: ghostty_surface_t) {
-        guard !text.isEmpty else { return }
-        let bytes = Array(text.utf8)
-        bytes.withUnsafeBufferPointer { buffer in
-            guard let base = buffer.baseAddress else { return }
-            base.withMemoryRebound(to: CChar.self, capacity: buffer.count) { pointer in
-                ghostty_surface_process_output(surface, pointer, UInt(buffer.count))
-            }
-        }
-    }
-
     @discardableResult
     func performBindingAction(_ action: String) -> Bool {
         guard let surface else { return false }
@@ -678,12 +538,9 @@ final class TerminalSurface {
     func close() {
         guard lifecycle != .closing && lifecycle != .closed else { return }
         lifecycle = .closing
-        pendingSnapshotReplayTask?.cancel()
-        pendingSnapshotReplayTask = nil
         preciseScrollFlushTask?.cancel()
         preciseScrollFlushTask = nil
         pendingPreciseScroll = nil
-        pendingSnapshotReplay = nil
         pendingText.removeAll(keepingCapacity: false)
         onFocusRequest = nil
         onUserActivity = nil

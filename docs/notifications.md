@@ -48,8 +48,6 @@ Implemented:
 - Conductor enables Ghostty command-finish reporting and filters it in the app layer. Background non-agent terminal commands create command-finished attention events when they fail or run for at least 30 seconds before finishing. The event keeps the originating terminal target, exit code, duration, and reason.
 - Non-agent command-finished events also attempt a macOS banner. Clicking that banner focuses the stored attention event and selects the originating terminal.
 - Clicking an agent-reply macOS banner focuses the stored in-app event, selects the target terminal when available, and marks that event read. Older banners without an event ID fall back to the newest unread event for the terminal, then the terminal itself.
-- Session restore fallback or failure creates an in-app recovery event.
-
 Still in progress:
 
 - End-to-end `.app` automation for every macOS permission state. The pure delivery policy is unit-tested for allowed, denied, not-requested, unavailable, unknown, delivery success, and delivery failure states.
@@ -116,7 +114,6 @@ Diagnostics include:
 - attention store path
 - event count
 - unread count
-- latest session journal information
 - control socket path
 - notification authorization and current launch support for macOS banners
 

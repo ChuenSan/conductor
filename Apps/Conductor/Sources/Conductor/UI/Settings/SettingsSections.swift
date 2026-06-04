@@ -12,88 +12,12 @@ extension AppearanceSettingsPanel {
     func overviewSettings(snapshot: SettingsSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             SettingsPreferenceGroup(
-                title: L("会话健康", "Session Health")
-            ) {
-                SessionRecoveryOverviewCard(
-                    report: snapshot.sessionRestoreReport,
-                    journalSummary: snapshot.sessionJournalSummary,
-                    recentEvents: snapshot.sessionJournalRecentEvents,
-                    surfaceInspection: snapshot.sessionSurfaceInspection,
-                    canRestorePrevious: model.canRestorePreviousSessionSnapshot,
-                    restorePrevious: { model.restorePreviousSessionSnapshot() },
-                    focusSurface: { focusSessionRecoverySurface($0) },
-                    performIssueAction: { performSessionRecoveryIssueAction($0) }
-                )
-            }
-
-            SettingsPreferenceGroup(
                 title: L("设置入口", "Settings"),
             ) {
                 SettingsOverviewPath(snapshot: snapshot) { section in
                     selectSection(section)
                 }
             }
-        }
-    }
-
-    func focusSessionRecoverySurface(_ target: SessionRecoverySurfaceTarget) {
-        switch target {
-        case .terminal(_, let terminalID):
-            _ = model.controlFocusTerminal(terminalID)
-        case .webTab(let workspaceID, let tabID):
-            model.selectWorkspaceWebTab(tabID, in: workspaceID)
-        case .fileTab(let workspaceID, let tabID):
-            model.selectWorkspaceFileTab(tabID, in: workspaceID)
-        }
-        model.hideSettingsPanel()
-    }
-
-    func performSessionRecoveryIssueAction(_ issue: SessionSurfaceInspectionSnapshot.RecoveryIssue) {
-        guard let target = sessionRecoveryTarget(for: issue) else { return }
-        focusSessionRecoverySurface(target, hidePanel: false)
-        switch issue.primaryAction.kind {
-        case "focus_web_address":
-            model.hideSettingsPanel()
-            model.performCommand(.focusWebAddress)
-        case "reload_web_tab":
-            model.performCommand(.reloadSelectedWebTab)
-            model.hideSettingsPanel()
-        default:
-            model.hideSettingsPanel()
-            break
-        }
-    }
-
-    private func focusSessionRecoverySurface(
-        _ target: SessionRecoverySurfaceTarget,
-        hidePanel: Bool
-    ) {
-        switch target {
-        case .terminal(_, let terminalID):
-            _ = model.controlFocusTerminal(terminalID)
-        case .webTab(let workspaceID, let tabID):
-            model.selectWorkspaceWebTab(tabID, in: workspaceID)
-        case .fileTab(let workspaceID, let tabID):
-            model.selectWorkspaceFileTab(tabID, in: workspaceID)
-        }
-        if hidePanel {
-            model.hideSettingsPanel()
-        }
-    }
-
-    private func sessionRecoveryTarget(
-        for issue: SessionSurfaceInspectionSnapshot.RecoveryIssue
-    ) -> SessionRecoverySurfaceTarget? {
-        switch issue.surfaceKind {
-        case .terminal:
-            guard let terminalID = issue.terminalID else { return nil }
-            return .terminal(workspaceID: issue.workspaceID, terminalID: terminalID)
-        case .browser:
-            guard let webTabID = issue.webTabID else { return nil }
-            return .webTab(workspaceID: issue.workspaceID, tabID: webTabID)
-        case .file:
-            guard let fileTabID = issue.fileTabID else { return nil }
-            return .fileTab(workspaceID: issue.workspaceID, tabID: fileTabID)
         }
     }
 

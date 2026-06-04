@@ -90,8 +90,6 @@ Important files:
 
 - `window-state.yaml`: workspace layout, selected workspace/content, appearance, web tabs, and file tabs.
 - `window-state.json`: legacy state file read for compatibility.
-- `session-snapshots/`: bounded terminal sidecar snapshots.
-- `session-journal.ndjson`: append-only workspace/session event journal.
 - `attention-events.json`: in-app notification and attention event store.
 - `control.sock`: local control socket while the app is running.
 
@@ -117,6 +115,5 @@ CONDUCTOR_STATE_PATH=/tmp/window-state.yaml ./Scripts/run-conductor.sh
 
 - [Local control API](api.md)
 - [Notifications](notifications.md)
-- [Session restore](session-restore.md)
 - [Updating Conductor](updating.md)
 - [Troubleshooting](troubleshooting.md)

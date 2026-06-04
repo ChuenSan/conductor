@@ -129,34 +129,6 @@ SwiftPM can spend time reevaluating dependency manifests. If the CLI is already 
 CONDUCTOR_SMOKE_SKIP_CLI_BUILD=1 ./Scripts/control-smoke.sh
 ```
 
-## Session Restore
-
-### Workspace Did Not Restore
-
-Check:
-
-- did the app launch with `CONDUCTOR_DISABLE_PERSISTENCE=1`?
-- did the app launch with `CONDUCTOR_RESET_STATE=1`?
-- is `window-state.yaml` present?
-- did the latest state file become corrupt?
-- is there a previous snapshot or session journal?
-
-Important files:
-
-```text
-~/Library/Application Support/Conductor/window-state.yaml
-~/Library/Application Support/Conductor/session-journal.ndjson
-~/Library/Application Support/Conductor/session-snapshots/
-```
-
-### Terminal Process Did Not Resume
-
-Layout and scrollback snapshots can restore without the original process. Full process reattachment is not complete yet.
-
-### Browser Tab Reloaded
-
-Browser interaction state is still being hardened. If WebKit rejects a saved interaction state, Conductor should restore the URL and explain the failure in diagnostics.
-
 ## Performance
 
 ### Terminal Scroll Feels Blocky

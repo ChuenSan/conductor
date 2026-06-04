@@ -224,10 +224,10 @@ public enum ConductorPerformanceDiagnostics {
             measurement: "Manual or background update check to settled status."
         ),
         ConductorPerformanceBudget(
-            id: "browser.restore",
-            name: "Browser tab restore",
+            id: "browser.open",
+            name: "Browser tab open",
             targetMilliseconds: 500,
-            measurement: "Workspace restore to browser tab issuing load."
+            measurement: "Browser tab issuing load."
         )
     ]
 }

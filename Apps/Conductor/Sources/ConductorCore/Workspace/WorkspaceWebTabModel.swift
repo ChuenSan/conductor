@@ -95,9 +95,6 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
     public var navigationEntries: [WorkspaceWebNavigationEntry]
     public var currentNavigationIndex: Int?
     public var scrollY: Double?
-    /// Opaque WKWebView.interactionState blob (back/forward list + scroll
-    /// position). Captured only at quit so it never bloats debounced saves.
-    public var interactionState: Data?
     public var downloadState: WorkspaceWebDownloadState?
     public var runtimeEvents: [WorkspaceWebRuntimeEvent]
 
@@ -115,7 +112,6 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         navigationEntries: [WorkspaceWebNavigationEntry] = [],
         currentNavigationIndex: Int? = nil,
         scrollY: Double? = nil,
-        interactionState: Data? = nil,
         downloadState: WorkspaceWebDownloadState? = nil,
         runtimeEvents: [WorkspaceWebRuntimeEvent] = []
     ) {
@@ -132,7 +128,6 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         self.navigationEntries = navigationEntries
         self.currentNavigationIndex = currentNavigationIndex
         self.scrollY = scrollY
-        self.interactionState = interactionState
         self.downloadState = downloadState
         self.runtimeEvents = runtimeEvents
     }
@@ -151,7 +146,6 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         case navigationEntries
         case currentNavigationIndex
         case scrollY
-        case interactionState
         case downloadState
         case runtimeEvents
     }
@@ -171,7 +165,6 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         navigationEntries = try container.decodeIfPresent([WorkspaceWebNavigationEntry].self, forKey: .navigationEntries) ?? []
         currentNavigationIndex = try container.decodeIfPresent(Int.self, forKey: .currentNavigationIndex)
         scrollY = try container.decodeIfPresent(Double.self, forKey: .scrollY)
-        interactionState = try container.decodeIfPresent(Data.self, forKey: .interactionState)
         downloadState = try container.decodeIfPresent(WorkspaceWebDownloadState.self, forKey: .downloadState)
         runtimeEvents = try container.decodeIfPresent([WorkspaceWebRuntimeEvent].self, forKey: .runtimeEvents) ?? []
     }
@@ -193,7 +186,6 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         }
         try container.encodeIfPresent(currentNavigationIndex, forKey: .currentNavigationIndex)
         try container.encodeIfPresent(scrollY, forKey: .scrollY)
-        try container.encodeIfPresent(interactionState, forKey: .interactionState)
         try container.encodeIfPresent(downloadState, forKey: .downloadState)
         if !runtimeEvents.isEmpty {
             try container.encode(runtimeEvents, forKey: .runtimeEvents)

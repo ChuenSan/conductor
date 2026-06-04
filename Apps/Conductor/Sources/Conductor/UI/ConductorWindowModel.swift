@@ -269,7 +269,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var shellToast: ConductorShellToast?
     @Published private(set) var recentShellCommandIDs: [String] = []
     @Published private(set) var attentionEvents: [ConductorAttentionEvent] = []
-    @Published private(set) var sessionRestoreReport = WorkspacePersistenceLoadReport.initial()
     @Published private(set) var workspaceFileTabs: [ConductorWorkspaceFileTab] = []
     @Published private(set) var dirtyWorkspaceFileTabIDs: Set<String> = []
     @Published private(set) var externallyChangedWorkspaceFileTabIDs: Set<String> = []
@@ -376,7 +375,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private let persistence = WorkspacePersistence()
-    private let sessionJournal = ConductorSessionJournal(isEnabled: WorkspacePersistence.isEnabledByDefault)
     private let attentionStore = ConductorAttentionStore(isEnabled: WorkspacePersistence.isEnabledByDefault)
     /// Serial queue for persistence encoding + atomic writes, keeping that work
     /// off the main thread. Serial so saves never race or interleave on disk.
@@ -388,7 +386,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var activeTerminalContextMenuController: TerminalContextMenuController?
     private var workspaceContentStatesByWorkspaceID: [WorkspaceID: WorkspaceContentRuntimeState] = [:]
     private var workspaceFileBufferSnapshotsByTabID: [String: WorkspaceFileBufferSnapshot] = [:]
-    private var restoredTerminalIDs: Set<TerminalID> = []
     private var suppressWorkspaceAssignmentPersistence = false
     private var selectedWorkspaceID: WorkspaceID {
         didSet { applyOcclusion() }
@@ -414,23 +411,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private static let automaticUpdateMaximumIntervalNanoseconds: UInt64 = 21_600_000_000_000
 
     init() {
-        let persisted = persistence.load()
-        self.sessionRestoreReport = persistence.lastLoadReport
-        var persistedWorkspaces = persisted?.workspaces ?? [WorkspaceState()]
-        for index in persistedWorkspaces.indices {
-            persistedWorkspaces[index].reconcileSplitTreeWithPanes()
-            persistedWorkspaces[index].normalizeMixedSplitLayout()
-        }
-        let selectedID = persisted?.selectedWorkspaceID ?? persistedWorkspaces[0].id
-        self.workspaces = persistedWorkspaces
-        self.restoredTerminalIDs = Self.restoredTerminalIDs(
-            in: persistedWorkspaces,
-            report: persistence.lastLoadReport
-        )
-        self.selectedWorkspaceID = selectedID
-        self.workspace = persistedWorkspaces.first { $0.id == selectedID } ?? persistedWorkspaces[0]
-        self.theme = persisted?.theme ?? .codexDark
-        let resolvedAppearance = persisted?.appearance ?? AppearancePreferences()
+        let initialWorkspace = WorkspaceState()
+        self.workspaces = [initialWorkspace]
+        self.selectedWorkspaceID = initialWorkspace.id
+        self.workspace = initialWorkspace
+        self.theme = .codexDark
+        let resolvedAppearance = AppearancePreferences()
         self.appearance = resolvedAppearance
         self.recentShellCommandIDs = Self.loadRecentShellCommandIDs()
         self.appearanceCoordinator = AppearanceCoordinator(appearance: resolvedAppearance)
@@ -439,49 +425,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.updatePreferences = updatePreferencesStore.load()
         self.updateState = ConductorUpdateState(currentVersion: ConductorAppVersion.current())
         self.attentionEvents = attentionStore.events(limit: 80)
-        let validWorkspaceIDs = Set(persistedWorkspaces.map(\.id))
-        var restoredContentStates = Self.restoredWorkspaceContentStates(
-            persisted?.workspaceContentStates ?? [],
-            validWorkspaceIDs: validWorkspaceIDs
-        )
-        if restoredContentStates[selectedID] == nil {
-            restoredContentStates[selectedID] = WorkspaceContentRuntimeState(
-                webTabs: persisted?.workspaceWebTabs ?? [],
-                fileTabs: Self.restoredFileTabs(persisted?.workspaceFileTabs ?? []),
-                selectedContentTabID: Self.restoredWorkspaceContentSelection(
-                    persisted?.selectedWorkspaceContentTabID,
-                    workspace: self.workspace,
-                    webTabs: persisted?.workspaceWebTabs ?? [],
-                    fileTabIDs: Set(Self.restoredFileTabs(persisted?.workspaceFileTabs ?? []).map(\.id))
-                )
-            )
-        }
-        // Hand restored back/forward blobs to the web surface store and strip
-        // them from in-memory tabs so frequent debounced saves stay small.
-        var seededInteractionStates: [WebTabID: Data] = [:]
-        for workspaceID in restoredContentStates.keys {
-            guard var state = restoredContentStates[workspaceID] else { continue }
-            for index in state.webTabs.indices {
-                if let interactionState = state.webTabs[index].interactionState {
-                    seededInteractionStates[state.webTabs[index].id] = interactionState
-                    state.webTabs[index].interactionState = nil
-                }
-            }
-            restoredContentStates[workspaceID] = state
-        }
-        ConductorWebKitSurfaceStore.shared.seedPendingInteractionStates(seededInteractionStates)
-        self.workspaceContentStatesByWorkspaceID = restoredContentStates
-        let selectedContentState = restoredContentStates[selectedID] ?? WorkspaceContentRuntimeState()
-        self.workspaceWebTabs = selectedContentState.webTabs
-        self.workspaceFileTabs = selectedContentState.fileTabs
-        self.dirtyWorkspaceFileTabIDs = selectedContentState.dirtyFileTabIDs
-        self.externallyChangedWorkspaceFileTabIDs = selectedContentState.externallyChangedFileTabIDs
-        self.selectedWorkspaceContentTabID = Self.restoredWorkspaceContentSelection(
-            Self.persistedWorkspaceContentSelection(selectedContentState.selectedContentTabID),
-            workspace: self.workspace,
-            webTabs: self.workspaceWebTabs,
-            fileTabIDs: Set(self.workspaceFileTabs.map(\.id))
-        )
+        self.workspaceContentStatesByWorkspaceID = [:]
+        self.workspaceWebTabs = []
+        self.workspaceFileTabs = []
+        self.dirtyWorkspaceFileTabIDs = []
+        self.externallyChangedWorkspaceFileTabIDs = []
+        self.selectedWorkspaceContentTabID = nil
         syncPanelCoordinatorFromPublished()
         syncFileWorkspaceCoordinatorFromPublished()
         ConductorAppearanceRuntime.apply(self.appearance)
@@ -490,7 +439,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
         configureNotificationDeliveryIssueHandler()
-        surfaceSessionRestoreReportIfNeeded()
         startAgentRuntimePolling()
         scheduleWorkspaceMetadataRefresh(reason: "launch", debounceNanoseconds: 300_000_000)
     }
@@ -577,27 +525,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
 
-    var canRestorePreviousSessionSnapshot: Bool {
-        persistence.hasPreviousSnapshot
-    }
-
-    @discardableResult
-    func restorePreviousSessionSnapshot() -> Bool {
-        guard let restored = persistence.loadPreviousSnapshot() else {
-            sessionRestoreReport = persistence.lastLoadReport
-            showShellToast(
-                title: L("无法恢复上一份会话", "Cannot Restore Previous Session"),
-                body: sessionRestoreReport.message,
-                systemImage: "exclamationmark.triangle",
-                tone: .warning,
-                duration: 7
-            )
-            return false
-        }
-        applyRestoredSession(restored, report: persistence.lastLoadReport)
-        return true
-    }
-
     private func syncPanelCoordinatorFromPublished() {
         panelCoordinator.commandPaletteVisible = commandPaletteVisible
         panelCoordinator.settingsVisible = settingsPanelVisible
@@ -658,13 +585,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspaceContentStatesByWorkspaceID[workspace.id] = currentWorkspaceContentState()
     }
 
-    private func restoreWorkspaceContentState(for workspaceID: WorkspaceID) {
+    private func applyWorkspaceContentState(for workspaceID: WorkspaceID) {
         let state = workspaceContentStatesByWorkspaceID[workspaceID] ?? WorkspaceContentRuntimeState()
         workspaceWebTabs = state.webTabs
         workspaceFileTabs = state.fileTabs
         dirtyWorkspaceFileTabIDs = state.dirtyFileTabIDs
         externallyChangedWorkspaceFileTabIDs = state.externallyChangedFileTabIDs
-        selectedWorkspaceContentTabID = Self.restoredWorkspaceContentSelection(
+        selectedWorkspaceContentTabID = Self.validatedWorkspaceContentSelection(
             Self.persistedWorkspaceContentSelection(state.selectedContentTabID),
             workspace: workspace,
             webTabs: state.webTabs,
@@ -722,247 +649,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             fileTabs: source.fileTabs,
             selectedContentTabID: selection
         )
-    }
-
-    private func applyRestoredSession(_ persisted: PersistedWindowState, report: WorkspacePersistenceLoadReport) {
-        pendingPersistence?.cancel()
-        pendingPersistence = nil
-        closeAllSurfaces()
-        ConductorWebKitSurfaceStore.shared.keepOnly(Set<WebTabID>())
-
-        var restoredWorkspaces = persisted.workspaces
-        for index in restoredWorkspaces.indices {
-            restoredWorkspaces[index].reconcileSplitTreeWithPanes()
-            restoredWorkspaces[index].normalizeMixedSplitLayout()
-        }
-        guard !restoredWorkspaces.isEmpty else { return }
-        let selectedID = restoredWorkspaces.contains(where: { $0.id == persisted.selectedWorkspaceID })
-            ? persisted.selectedWorkspaceID
-            : restoredWorkspaces[0].id
-        let selectedWorkspace = restoredWorkspaces.first { $0.id == selectedID } ?? restoredWorkspaces[0]
-        let validWorkspaceIDs = Set(restoredWorkspaces.map(\.id))
-        var restoredContentStates = Self.restoredWorkspaceContentStates(
-            persisted.workspaceContentStates,
-            validWorkspaceIDs: validWorkspaceIDs
-        )
-        if restoredContentStates[selectedID] == nil {
-            let fileTabs = Self.restoredFileTabs(persisted.workspaceFileTabs)
-            restoredContentStates[selectedID] = WorkspaceContentRuntimeState(
-                webTabs: persisted.workspaceWebTabs,
-                fileTabs: fileTabs,
-                selectedContentTabID: Self.restoredWorkspaceContentSelection(
-                    persisted.selectedWorkspaceContentTabID,
-                    workspace: selectedWorkspace,
-                    webTabs: persisted.workspaceWebTabs,
-                    fileTabIDs: Set(fileTabs.map(\.id))
-                )
-            )
-        }
-
-        var seededInteractionStates: [WebTabID: Data] = [:]
-        for workspaceID in restoredContentStates.keys {
-            guard var state = restoredContentStates[workspaceID] else { continue }
-            for index in state.webTabs.indices {
-                if let interactionState = state.webTabs[index].interactionState {
-                    seededInteractionStates[state.webTabs[index].id] = interactionState
-                    state.webTabs[index].interactionState = nil
-                }
-            }
-            restoredContentStates[workspaceID] = state
-        }
-        ConductorWebKitSurfaceStore.shared.seedPendingInteractionStates(seededInteractionStates)
-
-        workspaceContentStatesByWorkspaceID = restoredContentStates
-        workspaces = restoredWorkspaces
-        restoredTerminalIDs = Self.restoredTerminalIDs(
-            in: restoredWorkspaces,
-            report: report
-        )
-        selectedWorkspaceID = selectedID
-        skipPreviousWorkspaceSyncForNextAssignment = true
-        suppressWorkspaceAssignmentPersistence = true
-        workspace = selectedWorkspace
-        suppressWorkspaceAssignmentPersistence = false
-
-        let selectedContentState = restoredContentStates[selectedID] ?? WorkspaceContentRuntimeState()
-        workspaceWebTabs = selectedContentState.webTabs
-        workspaceFileTabs = selectedContentState.fileTabs
-        dirtyWorkspaceFileTabIDs = selectedContentState.dirtyFileTabIDs
-        externallyChangedWorkspaceFileTabIDs = selectedContentState.externallyChangedFileTabIDs
-        selectedWorkspaceContentTabID = Self.restoredWorkspaceContentSelection(
-            Self.persistedWorkspaceContentSelection(selectedContentState.selectedContentTabID),
-            workspace: selectedWorkspace,
-            webTabs: workspaceWebTabs,
-            fileTabIDs: Set(workspaceFileTabs.map(\.id))
-        )
-
-        theme = persisted.theme
-        appearance = persisted.appearance
-        syncAppearanceCoordinatorFromPublished()
-        syncPanelCoordinatorFromPublished()
-        syncFileWorkspaceCoordinatorFromPublished()
-        closeWorkspaceTransientPanels()
-        sessionRestoreReport = report
-        surfaceSessionRestoreReportIfNeeded()
-        scheduleWorkspaceMetadataRefresh(reason: "restore-previous-session", debounceNanoseconds: 150_000_000)
-        persist()
-    }
-
-    private func surfaceSessionRestoreReportIfNeeded() {
-        switch sessionRestoreReport.state {
-        case .restoredFromJournal:
-            let body = sessionRestoreSummaryBody(
-                fallback: L("会话快照不可用，已从事件记录恢复工作台骨架。", "Session snapshots were unavailable, so Conductor rebuilt a workspace skeleton from the event journal.")
-            )
-            controlCreateAttentionEvent(
-                title: L("已从会话记录恢复", "Restored From Session Journal"),
-                body: body,
-                kind: .sessionRecovery,
-                severity: .warning,
-                workspaceID: controlSelectedWorkspaceID,
-                source: "session-restore",
-                details: [
-                    "state": sessionRestoreReport.state.rawValue,
-                    "sourcePath": sessionRestoreReport.sourcePath ?? "",
-                    "failedPathCount": String(sessionRestoreReport.failedPaths.count),
-                    "restoredWorkspaceCount": String(sessionRestoreReport.restoredWorkspaceCount),
-                    "droppedWorkspaceCount": String(sessionRestoreReport.droppedWorkspaceCount),
-                    "originalWebTabCount": String(sessionRestoreReport.originalWebTabCount),
-                    "restoredWebTabCount": String(sessionRestoreReport.restoredWebTabCount),
-                    "droppedWebTabCount": String(sessionRestoreReport.droppedWebTabCount),
-                    "originalFileTabCount": String(sessionRestoreReport.originalFileTabCount),
-                    "restoredFileTabCount": String(sessionRestoreReport.restoredFileTabCount),
-                    "droppedFileTabCount": String(sessionRestoreReport.droppedFileTabCount),
-                    "missingFilePaths": sessionRestoreReport.missingFilePaths.joined(separator: "\n")
-                ]
-            )
-            showShellToast(
-                title: L("已从记录恢复会话", "Session Journal Restored"),
-                body: body,
-                systemImage: "list.bullet.rectangle",
-                tone: .warning,
-                duration: 9
-            )
-        case .restoredFromPrevious:
-            let body = sessionRestoreSummaryBody(
-                fallback: L("最新版会话不可用，已使用上一份有效快照。", "The latest session was unavailable, so Conductor used the previous valid snapshot.")
-            )
-            controlCreateAttentionEvent(
-                title: L("已从上一份会话恢复", "Restored Previous Session"),
-                body: body,
-                kind: .sessionRecovery,
-                severity: .warning,
-                workspaceID: controlSelectedWorkspaceID,
-                source: "session-restore",
-                details: [
-                    "state": sessionRestoreReport.state.rawValue,
-                    "sourcePath": sessionRestoreReport.sourcePath ?? "",
-                    "failedPathCount": String(sessionRestoreReport.failedPaths.count),
-                    "restoredWorkspaceCount": String(sessionRestoreReport.restoredWorkspaceCount),
-                    "droppedWorkspaceCount": String(sessionRestoreReport.droppedWorkspaceCount),
-                    "originalWebTabCount": String(sessionRestoreReport.originalWebTabCount),
-                    "restoredWebTabCount": String(sessionRestoreReport.restoredWebTabCount),
-                    "droppedWebTabCount": String(sessionRestoreReport.droppedWebTabCount),
-                    "originalFileTabCount": String(sessionRestoreReport.originalFileTabCount),
-                    "restoredFileTabCount": String(sessionRestoreReport.restoredFileTabCount),
-                    "droppedFileTabCount": String(sessionRestoreReport.droppedFileTabCount),
-                    "missingFilePaths": sessionRestoreReport.missingFilePaths.joined(separator: "\n")
-                ]
-            )
-            showShellToast(
-                title: L("已恢复上一份会话", "Previous Session Restored"),
-                body: body,
-                systemImage: "clock.arrow.circlepath",
-                tone: .warning,
-                duration: 9
-            )
-        case .failed:
-            let body = sessionRestoreFailureBody()
-            controlCreateAttentionEvent(
-                title: L("会话恢复失败", "Session Restore Failed"),
-                body: body,
-                kind: .sessionRecovery,
-                severity: .error,
-                workspaceID: controlSelectedWorkspaceID,
-                source: "session-restore",
-                details: [
-                    "state": sessionRestoreReport.state.rawValue,
-                    "failedPaths": sessionRestoreReport.failedPaths.joined(separator: "\n"),
-                    "failedPathCount": String(sessionRestoreReport.failedPaths.count),
-                    "missingFilePaths": sessionRestoreReport.missingFilePaths.joined(separator: "\n")
-                ]
-            )
-            showShellToast(
-                title: L("会话恢复失败", "Session Restore Failed"),
-                body: body,
-                systemImage: "exclamationmark.triangle",
-                tone: .error,
-                duration: 12
-            )
-        case .disabled, .reset, .missing, .restored:
-            break
-        }
-    }
-
-    private func sessionRestoreSummaryBody(fallback: String) -> String {
-        let restored = L(
-            "已恢复 \(sessionRestoreReport.restoredWorkspaceCount) 个工作区、\(sessionRestoreReport.restoredWebTabCount) 个网页、\(sessionRestoreReport.restoredFileTabCount) 个文件。",
-            "Restored \(sessionRestoreReport.restoredWorkspaceCount) workspaces, \(sessionRestoreReport.restoredWebTabCount) web tabs, and \(sessionRestoreReport.restoredFileTabCount) files."
-        )
-        var parts = [fallback, restored]
-        if sessionRestoreReport.droppedWorkspaceCount > 0 {
-            parts.append(L(
-                "\(sessionRestoreReport.droppedWorkspaceCount) 个无效工作区已跳过。",
-                "\(sessionRestoreReport.droppedWorkspaceCount) invalid workspaces were skipped."
-            ))
-        }
-        if sessionRestoreReport.droppedFileTabCount > 0 || sessionRestoreReport.droppedWebTabCount > 0 {
-            parts.append(L(
-                "\(sessionRestoreReport.droppedWebTabCount) 个网页、\(sessionRestoreReport.droppedFileTabCount) 个文件未恢复。",
-                "\(sessionRestoreReport.droppedWebTabCount) web tabs and \(sessionRestoreReport.droppedFileTabCount) files were not restored."
-            ))
-        }
-        if let missingFilesSummary = sessionRestoreMissingFilesSummary() {
-            parts.append(missingFilesSummary)
-        }
-        if !sessionRestoreReport.failedPaths.isEmpty {
-            parts.append(L(
-                "\(sessionRestoreReport.failedPaths.count) 个状态文件不可用。",
-                "\(sessionRestoreReport.failedPaths.count) state files were unavailable."
-            ))
-        }
-        if parts.count > 1 {
-            return parts.joined(separator: " ")
-        }
-        return fallback
-    }
-
-    private func sessionRestoreMissingFilesSummary() -> String? {
-        guard let firstMissingPath = sessionRestoreReport.missingFilePaths.first else {
-            return nil
-        }
-        let filename = URL(fileURLWithPath: firstMissingPath).lastPathComponent
-        let displayName = filename.isEmpty ? firstMissingPath : filename
-        if sessionRestoreReport.missingFilePaths.count > 1 {
-            return L(
-                "未恢复文件: \(displayName) 等 \(sessionRestoreReport.missingFilePaths.count) 个。",
-                "\(sessionRestoreReport.missingFilePaths.count) missing files were not restored, including \(displayName)."
-            )
-        }
-        return L(
-            "未恢复文件: \(displayName)。",
-            "Missing file not restored: \(displayName)."
-        )
-    }
-
-    private func sessionRestoreFailureBody() -> String {
-        if !sessionRestoreReport.failedPaths.isEmpty {
-            return L(
-                "\(sessionRestoreReport.failedPaths.count) 个状态文件不可用，已打开新的工作区。",
-                "\(sessionRestoreReport.failedPaths.count) state files were unavailable, so Conductor opened a new workspace."
-            )
-        }
-        return L("没有找到可用会话，已打开新的工作区。", "No usable session was found, so Conductor opened a new workspace.")
     }
 
     @discardableResult
@@ -2183,10 +1869,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             if !controlAttentionEvents(includeRead: false).isEmpty {
                 reasons.append(ConductorLocalization.text(zh: "有未读", en: "Unread"))
             }
-        case .restorePreviousSession:
-            if canRestorePreviousSessionSnapshot {
-                reasons.append(ConductorLocalization.text(zh: "可恢复", en: "Recoverable"))
-            }
         case .resumeCurrentWorkspaceAgents:
             if !controlResumableTerminalAgents(workspaceID: controlSelectedWorkspaceID).isEmpty {
                 reasons.append(ConductorLocalization.text(zh: "可续接", en: "Resumable"))
@@ -2460,12 +2142,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 self?.installTerminalSurfaceHandlers(surface)
             }
         )
-        // Paint the prior session's output (read-only) into the fresh surface,
-        // then consume the snapshot so it never replays twice.
-        if let snapshot = persistence.loadTerminalSnapshot(id: tab.id) {
-            surface.setSnapshotReplay(snapshot)
-            persistence.removeTerminalSnapshot(id: tab.id)
-        }
         applyOcclusion()
         return surface
     }
@@ -2509,12 +2185,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         )
         markTerminalInteractionFocus()
         selectedWorkspaceContentTabID = .terminal(terminalID)
-        recordSessionEvent(
-            kind: .terminalCreated,
-            paneID: workspace.focusedPaneID,
-            terminalID: terminalID,
-            details: ["workingDirectory": workingDirectory ?? ""]
-        )
         return terminalID
     }
 
@@ -2608,14 +2278,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         if url != nil {
             workspaceWebTabNavigationGenerationByID[id, default: 0] += 1
         }
-        recordSessionEvent(
-            kind: .browserTabOpened,
-            webTabID: id,
-            details: [
-                "input": initialInput,
-                "url": url?.absoluteString ?? ""
-            ]
-        )
         persist()
     }
 
@@ -2644,7 +2306,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         applyWorkspaceContentSelection(result.nextContentSelection)
         if let closedTabID = result.closedTabID {
             ConductorWebKitSurfaceStore.shared.remove(closedTabID)
-            recordSessionEvent(kind: .browserTabClosed, webTabID: closedTabID)
         }
         pruneWorkspaceWebTabCommands(keeping: Set(workspaceWebTabs.map(\.id)))
         persist()
@@ -2661,14 +2322,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             tab.estimatedProgress = 0
         }
         workspaceWebTabNavigationGenerationByID[tabID, default: 0] += 1
-        recordSessionEvent(
-            kind: .browserTabNavigated,
-            webTabID: tabID,
-            details: [
-                "input": input,
-                "url": url.absoluteString
-            ]
-        )
         persist()
     }
 
@@ -2828,13 +2481,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         panelCoordinator.workspaceOverviewVisible = false
         fileManagerKeyboardFocused = false
         publishPanelState()
-        recordSessionEvent(
-            kind: .fileTabOpened,
-            details: [
-                "path": standardizedFile.path,
-                "root": resolvedRoot.path
-            ]
-        )
         if changed {
             persist()
         }
@@ -3092,10 +2738,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 selectedWorkspaceContentTabID = .file(workspaceFileTabs[min(index, workspaceFileTabs.count - 1)].id)
             }
         }
-        recordSessionEvent(
-            kind: .fileTabClosed,
-            details: ["path": tab.fileURL.path]
-        )
     }
 
     private func pruneWorkspaceFileTabState(keeping retainedIDs: Set<String>) {
@@ -4016,11 +3658,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let next = WorkspaceState(title: nextWorkspaceTitle())
         workspaces.append(next)
         activateWorkspace(next.id, source: .newWorkspace)
-        recordSessionEvent(
-            kind: .workspaceCreated,
-            workspaceID: next.id,
-            details: ["title": next.title]
-        )
     }
 
     @discardableResult
@@ -4046,17 +3683,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         activateWorkspace(next.id, source: source)
         selectedWorkspaceContentTabID = .terminal(terminal.id)
         markTerminalInteractionFocus()
-        recordSessionEvent(
-            kind: .workspaceCreated,
-            workspaceID: next.id,
-            paneID: pane.id,
-            terminalID: terminal.id,
-            details: [
-                "title": next.title,
-                "workingDirectory": standardized.path,
-                "source": "directory"
-            ]
-        )
         return next.id
     }
 
@@ -4073,14 +3699,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
         workspaces.insert(duplicate, at: index + 1)
         activateWorkspace(duplicate.id, source: .duplicateWorkspace)
-        recordSessionEvent(
-            kind: .workspaceDuplicated,
-            workspaceID: duplicate.id,
-            details: [
-                "sourceWorkspaceID": workspaceID.description,
-                "title": duplicate.title
-            ]
-        )
     }
 
     func selectWorkspace(_ workspaceID: WorkspaceID) {
@@ -4133,7 +3751,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             suppressWorkspaceAssignmentPersistence = true
             workspace = target
             suppressWorkspaceAssignmentPersistence = false
-            restoreWorkspaceContentState(for: target.id)
+            applyWorkspaceContentState(for: target.id)
             persist()
         } else {
             selectedWorkspaceID = workspace.id
@@ -4190,7 +3808,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         markTerminalInteractionFocus()
         if shouldSelectTerminalOnWorkspaceActivation(source: source) {
             selectedWorkspaceContentTabID = .terminal(terminalID)
-        } else if Self.restoredWorkspaceContentSelection(
+        } else if Self.validatedWorkspaceContentSelection(
             Self.persistedWorkspaceContentSelection(selectedWorkspaceContentTabID),
             workspace: workspace,
             webTabs: workspaceWebTabs,
@@ -4241,18 +3859,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 "reason": reason
             ]
         )
-        if committed, previousWorkspaceID != nextWorkspaceID {
-            recordSessionEvent(
-                kind: .workspaceSelected,
-                workspaceID: nextWorkspaceID,
-                terminalID: terminalID,
-                details: [
-                    "source": source.rawValue,
-                    "from": previousWorkspaceID.description,
-                    "reason": reason
-                ]
-            )
-        }
+        _ = committed
+        _ = previousWorkspaceID
+        _ = nextWorkspaceID
+        _ = terminalID
     }
 
     func renameWorkspace(_ workspaceID: WorkspaceID, title: String) {
@@ -4264,11 +3874,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         } else {
             persist()
         }
-        recordSessionEvent(
-            kind: .workspaceRenamed,
-            workspaceID: workspaceID,
-            details: ["title": cleanTitle]
-        )
     }
 
     func requestRenameCurrentWorkspace() {
@@ -4289,7 +3894,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return
         }
         let closingWorkspace = workspaces[index]
-        let closingTitle = closingWorkspace.title
         closeSurfaces(for: terminalIDs(in: closingWorkspace))
         removeWorkspaceContentState(for: workspaceID)
         workspaces.remove(at: index)
@@ -4299,11 +3903,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         } else {
             persist()
         }
-        recordSessionEvent(
-            kind: .workspaceClosed,
-            workspaceID: workspaceID,
-            details: ["title": closingTitle]
-        )
     }
 
     func closeOtherWorkspaces(keeping workspaceID: WorkspaceID) {
@@ -4376,13 +3975,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func duplicateTab(_ terminalID: TerminalID, in paneID: PaneID) {
-        guard let duplicateID = workspace.duplicateTab(terminalID, in: paneID) else { return }
-        recordSessionEvent(
-            kind: .terminalDuplicated,
-            paneID: paneID,
-            terminalID: duplicateID,
-            details: ["sourceTerminalID": terminalID.description]
-        )
+        _ = workspace.duplicateTab(terminalID, in: paneID)
     }
 
     func duplicateSelectedTab() {
@@ -4403,13 +3996,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         defer { ConductorSignpost.end("close-tab", signpost) }
         let result = workspace.closeTab(terminalID, in: paneID)
         closeSurfaces(for: result.closedTerminalIDs)
-        for closedTerminalID in result.closedTerminalIDs {
-            recordSessionEvent(
-                kind: .terminalClosed,
-                paneID: paneID,
-                terminalID: closedTerminalID
-            )
-        }
     }
 
     func closePane(_ paneID: PaneID) {
@@ -4417,11 +4003,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         defer { ConductorSignpost.end("close-pane", signpost) }
         let result = workspace.closePane(paneID)
         closeSurfaces(for: result.closedTerminalIDs)
-        recordSessionEvent(
-            kind: .paneClosed,
-            paneID: paneID,
-            details: ["closedTerminalCount": "\(result.closedTerminalIDs.count)"]
-        )
     }
 
     func closeSelectedTab() {
@@ -4437,12 +4018,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
         let result = workspace.closeSelectedTab()
         closeSurfaces(for: result.closedTerminalIDs)
-        for closedTerminalID in result.closedTerminalIDs {
-            recordSessionEvent(
-                kind: .terminalClosed,
-                terminalID: closedTerminalID
-            )
-        }
     }
 
     func closeOtherTabs(in paneID: PaneID? = nil) {
@@ -4980,17 +4555,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         )
         reconcileSurfaceFocus()
         refreshSurfacesAfterSplit(visibleTerminalIDs)
-        if let terminalID = workspace.panes[newPaneID]?.selectedTabID {
-            recordSessionEvent(
-                kind: .terminalCreated,
-                paneID: newPaneID,
-                terminalID: terminalID,
-                details: [
-                    "source": "split",
-                    "direction": direction.rawValue
-                ]
-            )
-        }
         return newPaneID
     }
 
@@ -5093,8 +4657,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         pendingPersistence = nil
         syncSelectedWorkspace()
         saveSelectedWorkspaceContentState()
-        captureWebInteractionStates()
-        captureTerminalSnapshots()
         let workspaceContentStates = persistedWorkspaceContentStates()
         let selectedContent = workspaceContentStates.first { $0.workspaceID == selectedWorkspaceID }
         persistence.save(
@@ -5107,53 +4669,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             selectedWorkspaceContentTabID: selectedContent?.selectedWorkspaceContentTabID,
             workspaceContentStates: workspaceContentStates
         )
-        recordSessionEvent(
-            kind: .snapshotSaved,
-            details: ["source": "flush-persistence"]
-        )
-    }
-
-    /// Captures each live terminal's on-screen scrollback to a sidecar file so it
-    /// can be replayed (read-only) on next launch. Stale snapshots are pruned.
-    private func captureTerminalSnapshots() {
-        var capturedIDs = Set<TerminalID>()
-        for entry in surfaceCoordinator.allSurfaces {
-            // Prefer VT-format capture (color + layout); fall back to plain text.
-            if let text = entry.surface.capturedScrollbackVT()
-                ?? entry.surface.capturedScrollbackText() {
-                persistence.saveTerminalSnapshot(id: entry.id, text: text)
-                capturedIDs.insert(entry.id)
-            }
-        }
-        persistence.pruneTerminalSnapshots(keeping: capturedIDs)
-    }
-
-    /// Snapshots each live web surface's back/forward history into its tab model.
-    /// Done only at flush (quit) time because the blob is large and would bloat
-    /// the frequent debounced saves.
-    private func captureWebInteractionStates() {
-        for workspaceID in workspaceContentStatesByWorkspaceID.keys {
-            guard var contentState = workspaceContentStatesByWorkspaceID[workspaceID] else { continue }
-            for index in contentState.webTabs.indices {
-                let tabID = contentState.webTabs[index].id
-                if let webView = ConductorWebKitSurfaceStore.shared.existingWebView(for: tabID) {
-                    let entries = ConductorWebKitSurfaceStore.navigationEntries(for: webView)
-                    if entries.count > 1, let currentIndex = ConductorWebKitSurfaceStore.currentNavigationIndex(for: webView) {
-                        contentState.webTabs[index].navigationEntries = entries
-                        contentState.webTabs[index].currentNavigationIndex = currentIndex
-                        contentState.webTabs[index].canGoBack = currentIndex > 0
-                        contentState.webTabs[index].canGoForward = currentIndex < entries.count - 1
-                    }
-                }
-                if let state = ConductorWebKitSurfaceStore.shared.interactionState(for: tabID) {
-                    contentState.webTabs[index].interactionState = state
-                }
-            }
-            workspaceContentStatesByWorkspaceID[workspaceID] = contentState
-            if workspaceID == workspace.id {
-                workspaceWebTabs = contentState.webTabs
-            }
-        }
     }
 
     func resetWorkspace() {
@@ -5577,14 +5092,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         saveSelectedWorkspaceContentState()
         let workspaceContentStates = persistedWorkspaceContentStates()
         let selectedContent = workspaceContentStates.first { $0.workspaceID == selectedWorkspaceID }
-        let journalEvent = makeSessionJournalEvent(
-            kind: .snapshotSaved,
-            details: ["source": "debounced-persistence"]
-        )
         let item = Self.makePersistenceSaveWorkItem(
             persistence: persistence,
-            sessionJournal: sessionJournal,
-            journalEvent: journalEvent,
             workspaces: workspaces,
             selectedWorkspaceID: selectedWorkspaceID,
             theme: theme,
@@ -5612,8 +5121,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     /// item run safely on any queue.
     private nonisolated static func makePersistenceSaveWorkItem(
         persistence: WorkspacePersistence,
-        sessionJournal: ConductorSessionJournal,
-        journalEvent: ConductorSessionJournalEvent,
         workspaces: [WorkspaceState],
         selectedWorkspaceID: WorkspaceID,
         theme: TerminalTheme,
@@ -5636,53 +5143,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 selectedWorkspaceContentTabID: selectedWorkspaceContentTabID,
                 workspaceContentStates: workspaceContentStates
             )
-            sessionJournal.append(journalEvent)
         }
-    }
-
-    private func recordSessionEvent(
-        kind: ConductorSessionJournalEvent.Kind,
-        workspaceID: WorkspaceID? = nil,
-        paneID: PaneID? = nil,
-        terminalID: TerminalID? = nil,
-        webTabID: WebTabID? = nil,
-        details: [String: String] = [:]
-    ) {
-        sessionJournal.append(
-            makeSessionJournalEvent(
-                kind: kind,
-                workspaceID: workspaceID,
-                paneID: paneID,
-                terminalID: terminalID,
-                webTabID: webTabID,
-                details: details
-            )
-        )
-    }
-
-    private func makeSessionJournalEvent(
-        kind: ConductorSessionJournalEvent.Kind,
-        workspaceID: WorkspaceID? = nil,
-        paneID: PaneID? = nil,
-        terminalID: TerminalID? = nil,
-        webTabID: WebTabID? = nil,
-        details: [String: String] = [:]
-    ) -> ConductorSessionJournalEvent {
-        ConductorSessionJournalEvent(
-            kind: kind,
-            selectedWorkspaceID: controlSelectedWorkspaceID,
-            workspaceID: workspaceID ?? controlSelectedWorkspaceID,
-            paneID: paneID,
-            terminalID: terminalID,
-            webTabID: webTabID,
-            workspaceCount: workspaces.count,
-            terminalCount: workspaces.reduce(0) { partial, workspace in
-                partial + workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
-            },
-            webTabCount: workspaceContentStatesByWorkspaceID.values.reduce(0) { $0 + $1.webTabs.count },
-            fileTabCount: workspaceContentStatesByWorkspaceID.values.reduce(0) { $0 + $1.fileTabs.count },
-            details: details
-        )
     }
 
     private func persistedFileTabs() -> [PersistedFileTab] {
@@ -5708,43 +5169,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 )
             }
             .sorted { $0.workspaceID.description < $1.workspaceID.description }
-    }
-
-    private static func restoredFileTabs(_ persisted: [PersistedFileTab]) -> [ConductorWorkspaceFileTab] {
-        var seen = Set<String>()
-        return persisted.compactMap { tab in
-            guard !tab.filePath.isEmpty,
-                  FileManager.default.fileExists(atPath: tab.filePath) else {
-                return nil
-            }
-            let fileURL = URL(fileURLWithPath: tab.filePath)
-            let rootURL = tab.rootPath.isEmpty
-                ? fileURL.deletingLastPathComponent()
-                : URL(fileURLWithPath: tab.rootPath)
-            let restored = ConductorWorkspaceFileTab(fileURL: fileURL, rootURL: rootURL)
-            return seen.insert(restored.id).inserted ? restored : nil
-        }
-    }
-
-    private static func restoredWorkspaceContentStates(
-        _ persisted: [PersistedWorkspaceContentState],
-        validWorkspaceIDs: Set<WorkspaceID>
-    ) -> [WorkspaceID: WorkspaceContentRuntimeState] {
-        var result: [WorkspaceID: WorkspaceContentRuntimeState] = [:]
-        for state in persisted where validWorkspaceIDs.contains(state.workspaceID) {
-            let fileTabs = restoredFileTabs(state.workspaceFileTabs)
-            result[state.workspaceID] = WorkspaceContentRuntimeState(
-                webTabs: state.workspaceWebTabs,
-                fileTabs: fileTabs,
-                selectedContentTabID: restoredWorkspaceContentSelection(
-                    state.selectedWorkspaceContentTabID,
-                    workspace: WorkspaceState(),
-                    webTabs: state.workspaceWebTabs,
-                    fileTabIDs: Set(fileTabs.map(\.id))
-                )
-            )
-        }
-        return result
     }
 
     private func nextTerminalTitle(prefix: String) -> String {
@@ -5793,7 +5217,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         return String(trimmed.prefix(280))
     }
 
-    private static func restoredWorkspaceContentSelection(
+    private static func validatedWorkspaceContentSelection(
         _ selection: PersistedWorkspaceContentTabID?,
         workspace: WorkspaceState,
         webTabs: [WorkspaceWebTabState],
@@ -5891,155 +5315,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     var controlSelectedWorkspaceID: WorkspaceID {
         selectedWorkspaceID
-    }
-
-    var controlSessionJournalURL: URL {
-        sessionJournal.url
-    }
-
-    var controlSessionJournalSummary: ConductorSessionJournalSummary {
-        sessionJournal.summary()
-    }
-
-    func controlSessionJournalEntries(limit: Int = 12) -> [ConductorSessionJournalEvent] {
-        sessionJournal.recentEntries(limit: limit)
-    }
-
-    var controlSessionRestoreReport: WorkspacePersistenceLoadReport {
-        sessionRestoreReport
-    }
-
-    func controlSessionSurfaceInspection() -> SessionSurfaceInspectionSnapshot {
-        saveSelectedWorkspaceContentState()
-        let selectedID = controlSelectedWorkspaceID
-        let workspaces = workspaces.map { workspace in
-            let selected = workspace.id == selectedID
-            let contentState = selected
-                ? currentWorkspaceContentState()
-                : (workspaceContentStatesByWorkspaceID[workspace.id] ?? WorkspaceContentRuntimeState())
-            let selectedFileTabID: String? = {
-                guard case .file(let tabID) = contentState.selectedContentTabID else { return nil }
-                return tabID
-            }()
-            let selectedWebTabID: WebTabID? = {
-                guard case .web(let tabID) = contentState.selectedContentTabID else { return nil }
-                return tabID
-            }()
-            let terminals = workspace.root.leaves.flatMap { paneID -> [SessionSurfaceInspectionSnapshot.Terminal] in
-                guard let pane = workspace.panes[paneID] else { return [] }
-                return pane.tabs.map { tab in
-                    let displayMetadata = metadata(for: tab.id)
-                    let workingDirectory = displayMetadata.workingDirectory ?? tab.workingDirectory
-                    var issues: [String] = []
-                    if workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-                        issues.append("missing_working_directory")
-                    }
-                    if tab.agentSnapshot?.state == .active,
-                       tab.agentSnapshot?.resumeCommand == nil,
-                       tab.agentSnapshot?.sessionIdentifier == nil {
-                        issues.append("agent_resume_metadata_missing")
-                    }
-                    let restoredFromSession = restoredTerminalIDs.contains(tab.id)
-                    let hasUsefulRuntimeContext = tab.agentSnapshot != nil || tab.lastCommandSnapshot != nil
-                    if restoredFromSession && hasUsefulRuntimeContext {
-                        issues.append("terminal_process_restarted")
-                    }
-                    return SessionSurfaceInspectionSnapshot.Terminal(
-                        id: tab.id,
-                        paneID: pane.id,
-                        title: tab.title,
-                        workingDirectory: workingDirectory,
-                        selected: pane.selectedTabID == tab.id,
-                        focused: selected && focusedTerminalID == tab.id,
-                        userTitle: tab.userTitle,
-                        hasAgentSnapshot: tab.agentSnapshot != nil,
-                        agentDisplayName: tab.agentSnapshot?.displayName,
-                        agentState: tab.agentSnapshot?.state.rawValue,
-                        agentSessionIdentifier: tab.agentSnapshot?.sessionIdentifier,
-                        agentResumeCommand: tab.agentSnapshot?.resumeCommand,
-                        lastCommandExitCode: displayMetadata.lastCommandExitCode ?? tab.lastCommandSnapshot?.exitCode,
-                        lastCommandFinishedAt: tab.lastCommandSnapshot?.finishedAt,
-                        searchActive: displayMetadata.search.active || (tab.searchSnapshot?.active ?? false),
-                        searchNeedle: displayMetadata.search.needle ?? tab.searchSnapshot?.needle,
-                        restoredFromSession: restoredFromSession,
-                        processReattached: false,
-                        issues: issues
-                    )
-                }
-            }
-            let webTabs = contentState.webTabs.map { tab in
-                var issues: [String] = []
-                if tab.url == nil && tab.pendingAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    issues.append("blank_web_tab")
-                }
-                if tab.errorMessage != nil {
-                    issues.append("web_error")
-                }
-                if tab.url != nil && tab.navigationEntries.isEmpty {
-                    issues.append("history_missing")
-                }
-                if tab.scrollY == nil && tab.navigationEntries.count > 1 {
-                    issues.append("scroll_position_missing")
-                }
-                if tab.runtimeEvents.contains(where: { event in
-                    event.kind == .pageError ||
-                        event.kind == .unhandledRejection ||
-                        (event.kind == .console && event.level == "error")
-                }) {
-                    issues.append("web_runtime_error")
-                }
-                return SessionSurfaceInspectionSnapshot.WebTab(
-                    id: tab.id,
-                    title: tab.displayTitle,
-                    url: tab.url?.absoluteString,
-                    pendingAddress: tab.pendingAddress,
-                    selected: tab.id == selectedWebTabID,
-                    loading: tab.isLoading,
-                    errorMessage: tab.errorMessage,
-                    historyCount: tab.navigationEntries.count,
-                    currentHistoryIndex: tab.currentNavigationIndex,
-                    canGoBack: tab.canGoBack,
-                    canGoForward: tab.canGoForward,
-                    scrollY: tab.scrollY,
-                    hasInteractionState: tab.interactionState != nil,
-                    runtimeEventCount: tab.runtimeEvents.count,
-                    latestRuntimeEvent: tab.runtimeEvents.last,
-                    issues: issues
-                )
-            }
-            let files = contentState.fileTabs.map { tab in
-                let exists = FileManager.default.fileExists(atPath: tab.fileURL.path)
-                let dirty = contentState.dirtyFileTabIDs.contains(tab.id)
-                let externallyChanged = contentState.externallyChangedFileTabIDs.contains(tab.id)
-                var issues: [String] = []
-                if !exists {
-                    issues.append("file_missing")
-                }
-                if externallyChanged {
-                    issues.append("file_changed_on_disk")
-                }
-                return SessionSurfaceInspectionSnapshot.FileTab(
-                    id: tab.id,
-                    title: tab.title,
-                    path: tab.fileURL.path,
-                    rootPath: tab.rootURL.path,
-                    selected: tab.id == selectedFileTabID,
-                    dirty: dirty,
-                    externallyChanged: externallyChanged,
-                    exists: exists,
-                    issues: issues
-                )
-            }
-            return SessionSurfaceInspectionSnapshot.Workspace(
-                id: workspace.id,
-                title: workspace.title,
-                selected: selected,
-                terminals: terminals,
-                webTabs: webTabs,
-                files: files
-            )
-        }
-        return SessionSurfaceInspectionSnapshot(workspaces: workspaces)
     }
 
     func controlWorkspaceMetadataContexts() -> [ConductorWorkspaceMetadataContext] {
@@ -6963,19 +6238,4 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
 
-    private static func restoredTerminalIDs(
-        in workspaces: [WorkspaceState],
-        report: WorkspacePersistenceLoadReport
-    ) -> Set<TerminalID> {
-        switch report.state {
-        case .restored, .restoredFromPrevious, .restoredFromJournal:
-            return Set(workspaces.flatMap { workspace in
-                workspace.panes.values.flatMap { pane in
-                    pane.tabs.map(\.id)
-                }
-            })
-        case .failed, .missing, .reset, .disabled:
-            return []
-        }
-    }
 }

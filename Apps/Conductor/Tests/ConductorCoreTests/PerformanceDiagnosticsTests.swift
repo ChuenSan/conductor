@@ -38,7 +38,7 @@ import Testing
     #expect(ids.contains("terminal.tab-switch"))
     #expect(ids.contains("terminal.scroll-frame"))
     #expect(ids.contains("update.check"))
-    #expect(ids.contains("browser.restore"))
+    #expect(ids.contains("browser.open"))
     #expect(budgets.allSatisfy { $0.targetMilliseconds > 0 })
 }
 

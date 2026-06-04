@@ -113,30 +113,6 @@ Error response:
 .build/debug/ConductorCLI quit
 ```
 
-### Session
-
-```bash
-.build/debug/ConductorCLI session inspect
-.build/debug/ConductorCLI session restore-previous
-```
-
-`session inspect` returns the current recovery state, live workspace/surface
-counts, restore-health report, recent session journal events, detected issues,
-structured `surfaceIssues`, per-surface terminal/browser/file checks, severity
-counts, target IDs, process status for restored terminals, user-impact text,
-and a `primaryAction` object for each surface issue. The action object describes
-the repair intent, label, icon, and whether the action is destructive, so UI and
-scripts can explain the next click instead of only listing a raw diagnostic. Use
-it first when a relaunch falls back, drops tabs, opens a fresh workspace, or
-needs to explain that a terminal came back as a fresh process rather than a
-reattached shell.
-
-`session restore-previous` replaces the current workbench with the previous
-valid compact snapshot. The current snapshot is preserved as the new previous
-snapshot during the next save, so the command is a recovery action rather than a
-one-way destructive reset. The response includes the same restore-health summary
-used by `status` and `diagnostics`.
-
 ### AI Channels
 
 ```bash
@@ -281,8 +257,7 @@ asking the user to remember which terminal started which local server.
 .build/debug/ConductorCLI terminal visible-text
 ```
 
-Browser rows in `surface list` include restore-oriented state for scripts and
-diagnostics:
+Browser rows in `surface list` include runtime state for scripts and diagnostics:
 
 ```json
 {
@@ -300,8 +275,7 @@ diagnostics:
 `surface focus` can select terminal, browser, and file surfaces. Use
 `--target <terminal-id>` for terminals, `--web-tab <web-tab-id>` for browser
 tabs, and `--file-tab <file-tab-id>` for file tabs. Pair browser/file focus with
-`--workspace <workspace-id>` when selecting a restored surface in another
-workspace.
+`--workspace <workspace-id>` when selecting a surface in another workspace.
 
 `terminal agent` returns the terminal's persisted agent snapshot. When a
 supported hook provides a session ID, or the terminal output contains a clear
@@ -343,13 +317,8 @@ not execute resume commands automatically.
 
 `browser select` makes an existing web tab the active browser surface. It can
 select a tab in the current workspace, or use `--workspace <workspace-id>` to
-jump to a restored tab in another workspace before running snapshot, wait,
-back/forward, or DOM automation commands.
-
-Browser tabs persist an explicit navigation list and scroll position in addition
-to WebKit's opaque interaction state. After relaunch, `browser back` and
-`browser forward` use WebKit history when available and fall back to the explicit
-history when WebKit returns an inconsistent restored list.
+jump to a tab in another workspace before running snapshot, wait, back/forward,
+or DOM automation commands.
 
 `browser snapshot` returns bounded page data from the currently selected web tab
 or `--target <web-tab-id>`:
@@ -593,11 +562,6 @@ The smoke script checks:
   advanced wait states, runtime-error diagnostics, downloads, same-origin frame
   snapshots, frame actions, frame-local find/evaluate, and inaccessible-frame
   error paths
-- dogfood browser relaunch restore for URL, page text, scroll position, and explicit back/forward fallback
-- dogfood terminal relaunch restore for user title, cwd, and readable visible output
-- dogfood agent resume-command capture and relaunch persistence for restored terminals
-- dogfood `session inspect` restore verification that focuses restored terminal, browser, and file surfaces
-- dogfood restored-terminal process explanation: `process.status == fresh-after-restore` plus a `terminal_process_restarted` surface issue
 - workspace metadata for the selected workspace, including counts and health
 - file open/snapshot/save/reveal against a temporary local file, plus typed file failure paths
 - command list
@@ -606,7 +570,7 @@ The smoke script checks:
 `./Scripts/check-conductor.sh` also runs `./Scripts/performance-gate.sh` against
 the dogfood diagnostics bundle. By default it requires sampled budgets for
 workspace switching, terminal tab switching, terminal scroll frames, browser
-restore, settings open, and command palette open, and fails if any enforced
+open, settings open, and command palette open, and fails if any enforced
 budget is over target. Use `CONDUCTOR_CHECK_SKIP_PERF_GATE=1` only for local
 triage when performance data is intentionally noisy.
 

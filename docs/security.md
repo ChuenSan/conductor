@@ -37,8 +37,6 @@ Conductor stores app state under:
 Important files:
 
 - `window-state.yaml`
-- `session-journal.ndjson`
-- `session-snapshots/`
 - `attention-events.json`
 - `control.sock` while running
 

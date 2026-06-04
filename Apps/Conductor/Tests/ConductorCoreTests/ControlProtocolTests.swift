@@ -70,8 +70,6 @@ import Testing
         ConductorControlMethod.appDiagnostics,
         ConductorControlMethod.appDiagnosticsExport,
         ConductorControlMethod.appQuit,
-        ConductorControlMethod.sessionInspect,
-        ConductorControlMethod.sessionRestorePrevious,
         ConductorControlMethod.workspaceList,
         ConductorControlMethod.workspaceCreate,
         ConductorControlMethod.workspaceSelect,

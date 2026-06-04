@@ -36,11 +36,7 @@ struct AppearanceSettingsPanel: View {
             agentCLIStatuses: model.agentCLIStatuses,
             terminalFontDownloadStates: model.terminalFontDownloadStates,
             updatePreferences: model.updatePreferences,
-            updateState: model.updateState,
-            sessionRestoreReport: model.controlSessionRestoreReport,
-            sessionJournalSummary: model.controlSessionJournalSummary,
-            sessionJournalRecentEvents: model.controlSessionJournalEntries(limit: 5),
-            sessionSurfaceInspection: model.controlSessionSurfaceInspection()
+            updateState: model.updateState
         )
         return ZStack {
             VStack(spacing: 0) {
@@ -201,11 +197,7 @@ struct AppearanceSettingsPanel: View {
                 agentCLIStatuses: snapshot.agentCLIStatuses,
                 terminalFontDownloadStates: snapshot.terminalFontDownloadStates,
                 updatePreferences: snapshot.updatePreferences,
-                updateState: snapshot.updateState,
-                sessionRestoreReport: snapshot.sessionRestoreReport,
-                sessionJournalSummary: snapshot.sessionJournalSummary,
-                sessionJournalRecentEvents: snapshot.sessionJournalRecentEvents,
-                sessionSurfaceInspection: snapshot.sessionSurfaceInspection
+                updateState: snapshot.updateState
             )
             selectedSectionBody(snapshot: contentSnapshot)
         } else {

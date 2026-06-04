@@ -4,7 +4,7 @@ Conductor is split into a small core model and a macOS app shell.
 
 ## Boundaries
 
-- `ConductorCore` owns testable workspace, pane, split, terminal-tab state, control protocol models, session journal models, and attention event storage.
+- `ConductorCore` owns testable workspace, pane, split, terminal-tab state, control protocol models, and attention event storage.
 - `Conductor` owns SwiftUI/AppKit shell, GhosttyKit integration, web tabs, settings, notifications, updater UI, and the local control server.
 - `ConductorCLI` owns the source-built command line entry point for the local control API.
 - GhosttyKit/libghostty owns terminal character rendering, PTY behavior, selection, scrollback, IME, and Metal presentation.
@@ -23,7 +23,7 @@ SwiftUI state must stay compact. It should not store terminal transcript, scroll
 - Settings and theming
 - GitHub Release updater
 - Local control socket and CLI routing
-- Session journal and terminal sidecar snapshots
+- Terminal sidecar snapshots
 - In-app attention event store
 
 ## State And Runtime
@@ -31,8 +31,6 @@ SwiftUI state must stay compact. It should not store terminal transcript, scroll
 Conductor separates durable state from runtime surfaces:
 
 - `window-state.yaml`: compact persisted window/workspace state.
-- `session-journal.ndjson`: append-only semantic session events.
-- `session-snapshots/`: bounded terminal sidecar snapshots.
 - `attention-events.json`: in-app notification and attention event store.
 - `control.sock`: local socket while the app is running.
 
@@ -60,7 +58,6 @@ The protocol and UI mutate the same model. There should not be a hidden automati
 - [Getting started](getting-started.md)
 - [Local control API](api.md)
 - [Notifications](notifications.md)
-- [Session restore](session-restore.md)
 - [Updating](updating.md)
 - [Security](security.md)
 - [Troubleshooting](troubleshooting.md)

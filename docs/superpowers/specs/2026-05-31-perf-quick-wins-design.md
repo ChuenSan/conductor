@@ -45,8 +45,7 @@ visible panels. We adopt the same shape.
   can layer on later in a separate sub-project.
 - **D5 — Visibility logic lives in `ConductorCore` as a pure function.** Keeps
   `WorkspaceState`'s value-type discipline intact and makes the rule
-  unit-testable; consistent with the session-restore sub-project's split of
-  pure logic vs. libghostty-bound shims.
+  unit-testable and separate from libghostty-bound shims.
 
 ## 3. Goals & Success Criteria
 
@@ -156,10 +155,8 @@ private func applyOcclusion() {
 - in `workspaces` `didSet` (covers tab selection / pane focus / zoom toggle —
   all of those mutate a `WorkspaceState` inside the array, which already
   re-publishes `workspaces`).
-- once on first attach of each surface, **after** `setSnapshotReplay` is
-  invoked (so the surface's first frame is already in the correct occlusion
-  state). The exact site is `surface(for:)` in `ConductorWindowModel`, after
-  the existing `setSnapshotReplay` call and before returning the surface.
+- once on first attach of each surface, before returning the surface from
+  `surface(for:)` in `ConductorWindowModel`.
 
 ### 5.4 Out of scope
 
