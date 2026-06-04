@@ -250,7 +250,7 @@ struct ConductorToolbar: View {
         if toolbarSnapshot.canOpenLocalService {
             return toolbarSnapshot.localServiceTitle ?? L("服务", "Service")
         }
-        return L("恢复", "Recover")
+        return L("操作", "Actions")
     }
 
     private var primaryWorkspaceActionIcon: String {
@@ -260,7 +260,7 @@ struct ConductorToolbar: View {
         if toolbarSnapshot.canOpenLocalService {
             return "network"
         }
-        return "clock.arrow.circlepath"
+        return "ellipsis.circle"
     }
 
     private var primaryWorkspaceActionTooltip: String {
@@ -270,7 +270,7 @@ struct ConductorToolbar: View {
         if toolbarSnapshot.canOpenLocalService {
             return L("打开当前工作区检测到的本地服务", "Open the detected local service for this workspace")
         }
-        return L("恢复上一份有效会话", "Restore the previous valid session")
+        return L("工作区操作", "Workspace actions")
     }
 
     private func beginRenameWorkspace(_ row: WorkspaceChromeDisplayModel) {

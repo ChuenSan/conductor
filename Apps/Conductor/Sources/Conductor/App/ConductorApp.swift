@@ -1354,7 +1354,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
                 model.workspace.focusedPane?.selectedTab != nil
             model.openFileInWorkspace(regressionFileURL)
             let crossWorkspaceActivationSucceeded = model.activateWorkspace(startingWorkspaceID, source: .sidebar)
-            let workspaceSwitchRestoredTerminalStage = model.workspace.id == startingWorkspaceID &&
+            let workspaceSwitchReturnedTerminalStage = model.workspace.id == startingWorkspaceID &&
                 model.selectedWorkspaceFileTab == nil &&
                 model.workspace.focusedPane?.selectedTab != nil
             model.closeWorkspace(createdWorkspaceID)
@@ -1379,15 +1379,15 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             model.toggleZoom()
 
             let workspaceValid = self.workspaceIsValid(model.workspace)
-            let navigationRestoredTerminalStage = fileTabSelectedBeforeWorkspaceSwitch &&
+            let navigationReturnedTerminalStage = fileTabSelectedBeforeWorkspaceSwitch &&
                 sameWorkspaceActivationReturnedTerminalStage &&
                 crossWorkspaceActivationSucceeded &&
                 newWorkspaceOpenedTerminalStage &&
-                workspaceSwitchRestoredTerminalStage
+                workspaceSwitchReturnedTerminalStage
             let summary = [
-                "status=\(workspaceValid && navigationRestoredTerminalStage ? "ok" : "invalid")",
+                "status=\(workspaceValid && navigationReturnedTerminalStage ? "ok" : "invalid")",
                 "workspace=operations",
-                "workspaceNavigationRestoresTerminal=\(navigationRestoredTerminalStage)",
+                "workspaceNavigationReturnsTerminal=\(navigationReturnedTerminalStage)",
                 "sameWorkspaceActivationReturnsTerminal=\(sameWorkspaceActivationReturnedTerminalStage)",
                 "crossWorkspaceActivationSucceeded=\(crossWorkspaceActivationSucceeded)",
                 "panes=\(model.workspace.panes.count)",

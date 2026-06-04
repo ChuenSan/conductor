@@ -186,8 +186,9 @@ in Conductor's own model. Only compact tab metadata is persisted:
 - Pending address text.
 - Loading flags are not persisted.
 
-The first implementation restores compact web-tab metadata. A future settings pass can
-choose between restore web tabs, open blanks, or close web tabs on launch.
+The first implementation persists compact web-tab metadata for in-process
+workspace state. A future settings pass can choose whether new launches open
+blank browser tabs or no browser tabs.
 
 ## Architecture
 
