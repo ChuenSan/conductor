@@ -9,6 +9,13 @@ enum ConductorDiagnostics {
             .appendingPathComponent("diagnostics.log")
     }()
 
+    static var logURLs: [URL] {
+        [
+            logURL,
+            logURL.deletingPathExtension().appendingPathExtension("previous.log")
+        ]
+    }
+
     private static let maxLogBytes: UInt64 = 2_000_000
     private static let queue = DispatchQueue(label: "app.conductor.diagnostics")
 

@@ -57,6 +57,19 @@ struct ShellRootView: View {
         .animation(model.shellAnimation(ConductorMotion.panel), value: model.terminalSearchVisible)
         .onAppear {
             synchronizeFileManagerPresentation(animated: false)
+            model.scheduleWorkspaceMetadataRefresh(reason: "shell-appear", debounceNanoseconds: 250_000_000)
+        }
+        .onChange(of: model.workspace.id) { _, _ in
+            model.scheduleWorkspaceMetadataRefresh(reason: "workspace-selected", debounceNanoseconds: 250_000_000)
+        }
+        .onChange(of: model.workspaces.map(\.id)) { _, _ in
+            model.scheduleWorkspaceMetadataRefresh(reason: "workspace-list")
+        }
+        .onChange(of: model.workspaceFileTabs.map(\.id)) { _, _ in
+            model.scheduleWorkspaceMetadataRefresh(reason: "file-tabs")
+        }
+        .onChange(of: model.workspaceWebTabs.map(\.id)) { _, _ in
+            model.scheduleWorkspaceMetadataRefresh(reason: "web-tabs")
         }
         .onChange(of: model.terminalSearchFocusGeneration) { _, _ in
             focusTerminalSearchField()
@@ -119,6 +132,34 @@ struct ShellRootView: View {
                 .transition(ConductorMotion.settingsPanelTransition)
                 .zIndex(30)
             }
+            if let toast = model.shellToast {
+                ShellToastView(
+                    toast: toast,
+                    onAction: performShellToastAction,
+                    onDismiss: { model.dismissShellToast(id: toast.id) }
+                )
+                .environment(\.conductorTheme, model.theme)
+                .environment(\.conductorFontScale, model.appearance.fontScale)
+                .environment(\.conductorFontFamily, model.appearance.fontFamily)
+                .environment(\.locale, model.appearance.language.locale)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.top, 64)
+                .padding(.trailing, 26)
+                .transition(ConductorMotion.panelTransition)
+                .zIndex(60)
+            }
+        }
+    }
+
+    private func performShellToastAction(_ action: ConductorShellToastAction?) {
+        model.dismissShellToast()
+        switch action {
+        case .openNotificationSettings:
+            model.openSystemNotificationSettings()
+        case .checkNotificationPermission:
+            model.checkNotificationPermissionFromToolbar()
+        case .none:
+            break
         }
     }
 
@@ -318,7 +359,7 @@ private struct TerminalSearchBar: View {
                 .focused(focus)
                 .frame(width: 220)
                 .onSubmit {
-                    model.navigateTerminalSearch(previous: false)
+                    model.performCommand(.findNext)
                 }
             Text(statusText)
                 .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
@@ -326,10 +367,10 @@ private struct TerminalSearchBar: View {
                 .monospacedDigit()
                 .frame(minWidth: 38, alignment: .trailing)
             terminalSearchButton("chevron.up", help: L("上一个搜索结果", "Previous Search Result")) {
-                model.navigateTerminalSearch(previous: true)
+                model.performCommand(.findPrevious)
             }
             terminalSearchButton("chevron.down", help: L("下一个搜索结果", "Next Search Result")) {
-                model.navigateTerminalSearch(previous: false)
+                model.performCommand(.findNext)
             }
             terminalSearchButton("xmark", help: L("关闭搜索", "Close Search")) {
                 model.closeTerminalSearch()
@@ -494,12 +535,15 @@ private struct CommandPaletteSnapshot: Equatable {
     let subtitle: String
     let chromeClarity: ChromeClarity
     let commands: [CommandPaletteItem]
+    let jumpTargetCount: Int
 
     @MainActor
     init(model: ConductorWindowModel) {
         self.subtitle = model.workspace.title
         self.chromeClarity = model.appearance.chromeClarity
-        self.commands = ConductorCommandCatalog.items(model: model)
+        let commands = ConductorCommandCatalog.items(model: model)
+        self.commands = commands
+        self.jumpTargetCount = commands.filter(\.isJumpTarget).count
     }
 }
 
@@ -568,7 +612,9 @@ private struct CommandPaletteView: View {
 
     private var commandHeader: some View {
         CommandPaletteHeader(
+            title: L("命令与跳转", "Commands and Jumps"),
             subtitle: snapshot.subtitle,
+            detail: L("\(snapshot.jumpTargetCount) 个可跳转目标", "\(snapshot.jumpTargetCount) jump targets"),
             closeHelp: L("关闭命令面板", "Close Command Palette")
         ) {
             model.hideCommandPalette()
@@ -581,7 +627,7 @@ private struct CommandPaletteView: View {
                 .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .accessibilityHidden(true)
-            TextField(L("搜索命令", "Search commands"), text: $query)
+            TextField(L("搜索命令、工作区、终端或网页", "Search commands, workspaces, terminals, or web"), text: $query)
                 .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 12.4, weight: .medium, scale: fontScale))
                 .focused($searchFocused)
@@ -606,7 +652,7 @@ private struct CommandPaletteView: View {
                     Image(systemName: "command")
                         .font(.conductorSystem(size: 22, weight: .medium, scale: fontScale))
                         .foregroundStyle(ConductorDesign.tertiaryText)
-                    Text(L("没有匹配的命令", "No matching commands"))
+                    Text(L("没有匹配的结果", "No matching results"))
                         .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
                         .foregroundStyle(ConductorDesign.secondaryText)
                 }
@@ -675,7 +721,18 @@ private struct CommandPaletteView: View {
         guard !command.disabled else {
             return
         }
-        _ = model.performCommand(command.command)
+        switch command.action {
+        case .command(let shellCommand):
+            _ = model.performCommand(shellCommand)
+        case .workspace(let workspaceID):
+            ConductorMotion.withoutAnimation {
+                _ = model.activateWorkspace(workspaceID, source: .commandPalette)
+            }
+        case .terminal(let terminalID):
+            _ = model.controlFocusTerminal(terminalID)
+        case .webTab(let workspaceID, let tabID):
+            model.selectWorkspaceWebTab(tabID, in: workspaceID)
+        }
         model.hideCommandPalette()
     }
 
@@ -757,44 +814,63 @@ private struct CommandPaletteFilteredRow: Identifiable, Equatable {
     let presentationIndex: Int
 }
 
+private enum CommandPaletteAction: Equatable {
+    case command(ConductorShellCommand)
+    case workspace(WorkspaceID)
+    case terminal(TerminalID)
+    case webTab(workspaceID: WorkspaceID, tabID: WebTabID)
+}
+
 private struct CommandPaletteItem: Identifiable, Equatable {
     let id: String
-    let command: ConductorShellCommand
+    let action: CommandPaletteAction
     let section: String
     let title: String
+    let outcome: String
     let shortcut: String
     let disabled: Bool
     let disabledReason: String?
+    let rankingBadge: String?
+    let rankingHint: String?
     let keywords: String
     let searchText: String
+    let systemImage: String
 
     init(
         id: String,
-        command: ConductorShellCommand,
+        action: CommandPaletteAction,
         section: String,
         title: String,
+        outcome: String,
         shortcut: String,
+        systemImage: String,
         disabled: Bool = false,
         disabledReason: String? = nil,
+        rankingBadge: String? = nil,
+        rankingHint: String? = nil,
         keywords: String = ""
     ) {
         self.id = id
-        self.command = command
+        self.action = action
         self.section = section
         self.title = title
+        self.outcome = outcome
         self.shortcut = shortcut
         self.disabled = disabled
         self.disabledReason = disabledReason
+        self.rankingBadge = rankingBadge
+        self.rankingHint = rankingHint
         self.keywords = keywords
-        self.searchText = "\(title) \(shortcut) \(section) \(keywords)".lowercased()
+        self.systemImage = systemImage
+        self.searchText = "\(title) \(outcome) \(shortcut) \(section) \(keywords)".lowercased()
     }
 
     var searchCandidate: ConductorSearchCandidate {
         ConductorSearchCandidate(
             id: id,
             title: title,
-            subtitle: shortcut,
-            keywords: [keywords, section, shortcut],
+            subtitle: disabled ? (disabledReason ?? outcome) : outcome,
+            keywords: [keywords, section, shortcut, outcome],
             section: section,
             systemImage: systemImage,
             isEnabled: !disabled,
@@ -802,92 +878,33 @@ private struct CommandPaletteItem: Identifiable, Equatable {
         )
     }
 
+    var isJumpTarget: Bool {
+        switch action {
+        case .workspace, .terminal, .webTab:
+            return true
+        case .command:
+            return false
+        }
+    }
+
     func resolvingShortcut(using preferences: KeyboardShortcutPreferences) -> CommandPaletteItem {
+        guard case .command(let command) = action else { return self }
         let resolvedShortcut = preferences.displayShortcut(for: command, fallback: shortcut)
         guard resolvedShortcut != shortcut else { return self }
         return CommandPaletteItem(
             id: id,
-            command: command,
+            action: action,
             section: section,
             title: title,
+            outcome: outcome,
             shortcut: resolvedShortcut,
+            systemImage: systemImage,
             disabled: disabled,
             disabledReason: disabledReason,
+            rankingBadge: rankingBadge,
+            rankingHint: rankingHint,
             keywords: keywords
         )
-    }
-
-    var systemImage: String {
-        switch id {
-        case "new-workspace":
-            WorkspaceChromeGlyph.systemName(selected: false)
-        case "new-terminal":
-            "plus.rectangle.on.rectangle"
-        case "new-web-tab":
-            "globe"
-        case "web-address":
-            "link"
-        case "web-reload":
-            "arrow.clockwise"
-        case "web-open-external":
-            "arrow.up.right.square"
-        case "web-copy-url":
-            "link.badge.plus"
-        case "web-copy-reference":
-            "doc.on.clipboard"
-        case "new-terminal-current-directory":
-            "arrow.turn.down.right"
-        case "open-current-directory":
-            "folder"
-        case "file-manager":
-            "folder"
-        case "copy-current-directory":
-            "doc.on.doc"
-        case "duplicate-tab", "duplicate-workspace":
-            "plus.square.on.square"
-        case "split-right":
-            "rectangle.split.2x1"
-        case "split-down":
-            "rectangle.split.1x2"
-        case "next-tab", "next-pane", "focus-right":
-            "arrow.right"
-        case "previous-tab", "previous-pane", "focus-left":
-            "arrow.left"
-        case "focus-up":
-            "arrow.up"
-        case "focus-down":
-            "arrow.down"
-        case "resize-left", "resize-right":
-            "arrow.left.and.right"
-        case "resize-up", "resize-down":
-            "arrow.up.and.down"
-        case "close-tab", "close-pane":
-            "xmark"
-        case "move-tab-left":
-            "arrow.left.to.line"
-        case "move-tab-right":
-            "arrow.right.to.line"
-        case "move-tab-next-pane":
-            "arrowshape.turn.up.right"
-        case "move-tab-new-split":
-            "rectangle.split.2x1"
-        case "toggle-zoom":
-            "arrow.up.left.and.arrow.down.right"
-        case "toggle-fullscreen":
-            "arrow.up.left.and.arrow.down.right.circle"
-        case "flash-focused-pane":
-            "scope"
-        case "equalize-splits":
-            "equal.square"
-        case "workspace-overview":
-            WorkspaceChromeGlyph.systemName(selected: false)
-        case "appearance-settings":
-            "slider.horizontal.3"
-        case "reset-workspace":
-            "arrow.counterclockwise"
-        default:
-            "command"
-        }
     }
 
     var discoveryShortcut: String {
@@ -896,193 +913,279 @@ private struct CommandPaletteItem: Identifiable, Equatable {
         }
         return L("命令面板", "Command Palette")
     }
+
+    static func rankingHint(for ranking: ConductorWindowModel.ShellCommandRanking) -> String? {
+        var parts: [String] = []
+        if let recentRank = ranking.recentRank {
+            parts.append(
+                ConductorLocalization.text(
+                    zh: recentRank == 0 ? "刚刚使用过" : "最近使用过",
+                    en: recentRank == 0 ? "Used just now" : "Used recently"
+                )
+            )
+        }
+        parts.append(contentsOf: ranking.contextReasons)
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 }
 
 private enum ConductorCommandCatalog {
     @MainActor
     static func items(model: ConductorWindowModel) -> [CommandPaletteItem] {
-        func canPerform(_ command: ConductorShellCommand) -> Bool {
-            model.canPerformCommand(command)
+        quickSwitchItems(model: model) + commandItems(model: model)
+    }
+
+    @MainActor
+    private static func commandItems(model: ConductorWindowModel) -> [CommandPaletteItem] {
+        model.shellCommandsForPalette().map { command in
+            let descriptor = command.descriptor
+            let disabled = !model.canPerformCommand(command)
+            let ranking = model.shellCommandRanking(for: command)
+            return CommandPaletteItem(
+                id: descriptor.id,
+                action: .command(command),
+                section: descriptor.category,
+                title: command.displayTitle(model: model),
+                outcome: descriptor.outcome,
+                shortcut: descriptor.shortcutFallback,
+                systemImage: descriptor.systemImage,
+                disabled: disabled,
+                disabledReason: disabled ? command.disabledReason(model: model) : nil,
+                rankingBadge: ranking.badge,
+                rankingHint: CommandPaletteItem.rankingHint(for: ranking),
+                keywords: descriptor.keywords
+            )
+            .resolvingShortcut(using: model.appearance.keyboardShortcuts)
+        }
+    }
+
+    @MainActor
+    private static func quickSwitchItems(model: ConductorWindowModel) -> [CommandPaletteItem] {
+        let section = L("快速切换", "Quick Switch")
+        var items: [CommandPaletteItem] = []
+        items.reserveCapacity(model.workspaces.count * 3)
+
+        for workspace in orderedWorkspaces(model: model) {
+            let metadata = model.workspaceMetadataSnapshots[workspace.id]
+            let workspaceSelected = workspace.id == model.workspace.id &&
+                model.selectedWorkspaceFileTabID == nil &&
+                model.selectedWorkspaceWebTabID == nil
+
+            items.append(CommandPaletteItem(
+                id: "jump-workspace-\(workspace.id.description)",
+                action: .workspace(workspace.id),
+                section: section,
+                title: workspaceSelected ? L("当前工作区：\(workspace.title)", "Current Workspace: \(workspace.title)") : workspace.title,
+                outcome: quickWorkspaceSubtitle(workspace: workspace, metadata: metadata),
+                shortcut: L("跳转", "Jump"),
+                systemImage: WorkspaceChromeGlyph.systemName(selected: workspaceSelected),
+                rankingBadge: workspaceSelected ? L("当前", "Current") : nil,
+                rankingHint: metadata?.rootPath ?? quickWorkspaceSubtitle(workspace: workspace, metadata: metadata),
+                keywords: quickWorkspaceKeywords(workspace: workspace, metadata: metadata)
+            ))
+
+            let terminalSummaries = orderedTerminalSummaries(
+                quickTerminalSummaries(workspace: workspace, metadata: metadata)
+            )
+            for terminal in terminalSummaries.prefix(12) {
+                items.append(CommandPaletteItem(
+                    id: "jump-terminal-\(terminal.id.description)",
+                    action: .terminal(terminal.id),
+                    section: section,
+                    title: terminal.title,
+                    outcome: quickTerminalSubtitle(workspace: workspace, terminal: terminal),
+                    shortcut: L("终端", "Terminal"),
+                    systemImage: terminal.activeAgentTitle?.isEmpty == false ? "sparkles" : "terminal",
+                    rankingBadge: terminal.selected ? L("选中", "Selected") : nil,
+                    rankingHint: terminal.workingDirectory ?? workspace.title,
+                    keywords: [
+                        workspace.title,
+                        terminal.workingDirectory,
+                        terminal.activeAgentTitle,
+                        terminal.agentState,
+                        "terminal shell pane jump switch"
+                    ]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+                ))
+            }
+
+            for webTab in orderedWebSummaries(metadata?.webTabs ?? []).prefix(10) {
+                let title = webTab.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let url = webTab.url?.trimmingCharacters(in: .whitespacesAndNewlines)
+                items.append(CommandPaletteItem(
+                    id: "jump-web-\(webTab.id.rawValue.uuidString)",
+                    action: .webTab(workspaceID: workspace.id, tabID: webTab.id),
+                    section: section,
+                    title: title?.isEmpty == false ? title! : (url?.isEmpty == false ? url! : L("未命名网页", "Untitled Web Tab")),
+                    outcome: quickWebSubtitle(workspace: workspace, webTab: webTab),
+                    shortcut: L("网页", "Web"),
+                    systemImage: webTab.loading ? "globe.badge.chevron.backward" : "globe",
+                    rankingBadge: webTab.selected ? L("选中", "Selected") : nil,
+                    rankingHint: url ?? webTab.pendingAddress,
+                    keywords: [
+                        workspace.title,
+                        title,
+                        url,
+                        webTab.pendingAddress,
+                        "web browser tab jump switch"
+                    ]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+                ))
+            }
         }
 
-        let items = [
-            CommandPaletteItem(id: "new-workspace", command: .newWorkspace, section: L("创建", "Create"), title: L("新建工作区", "New Workspace"), shortcut: "Cmd-N", keywords: "workspace new"),
-            CommandPaletteItem(id: "new-terminal", command: .newTerminal, section: L("创建", "Create"), title: L("新开终端", "New Terminal"), shortcut: "Cmd-T", keywords: "terminal pane shell"),
-            CommandPaletteItem(id: "new-web-tab", command: .newWebTab, section: L("创建", "Create"), title: L("新建网页标签", "New Web Tab"), shortcut: "Cmd-Shift-T", keywords: "web browser tab url docs preview localhost"),
-            CommandPaletteItem(
-                id: "web-address",
-                command: .focusWebAddress,
-                section: L("网页", "Web"),
-                title: L("聚焦网页地址栏", "Focus Web Address"),
-                shortcut: "Cmd-L",
-                disabled: !canPerform(.focusWebAddress),
-                disabledReason: L("当前没有网页标签", "No web tab is selected"),
-                keywords: "web url address location search"
-            ),
-            CommandPaletteItem(
-                id: "web-reload",
-                command: .reloadSelectedWebTab,
-                section: L("网页", "Web"),
-                title: model.selectedWorkspaceWebTab?.isLoading == true ? L("停止载入网页", "Stop Loading Web Page") : L("重新载入网页", "Reload Web Page"),
-                shortcut: "Cmd-R",
-                disabled: !canPerform(.reloadSelectedWebTab),
-                disabledReason: L("当前网页还没有地址", "Current web tab has no address"),
-                keywords: "web reload refresh stop"
-            ),
-            CommandPaletteItem(
-                id: "web-open-external",
-                command: .openSelectedWebTabExternally,
-                section: L("网页", "Web"),
-                title: L("在浏览器中打开当前网页", "Open Current Web Page in Browser"),
-                shortcut: "Browser",
-                disabled: !canPerform(.openSelectedWebTabExternally),
-                disabledReason: L("当前网页还没有地址", "Current web tab has no address"),
-                keywords: "web external browser open"
-            ),
-            CommandPaletteItem(
-                id: "web-copy-url",
-                command: .copySelectedWebTabURL,
-                section: L("网页", "Web"),
-                title: L("复制当前网页链接", "Copy Current Web URL"),
-                shortcut: "Copy",
-                disabled: !canPerform(.copySelectedWebTabURL),
-                disabledReason: L("当前网页还没有地址", "Current web tab has no address"),
-                keywords: "web url copy link"
-            ),
-            CommandPaletteItem(
-                id: "web-copy-reference",
-                command: .copySelectedWebTabReference,
-                section: L("网页", "Web"),
-                title: L("复制当前网页引用", "Copy Current Web Reference"),
-                shortcut: "Markdown",
-                disabled: !canPerform(.copySelectedWebTabReference),
-                disabledReason: L("当前网页还没有地址", "Current web tab has no address"),
-                keywords: "web markdown reference copy link"
-            ),
-            CommandPaletteItem(
-                id: "new-terminal-current-directory",
-                command: .newTerminalAtFocusedDirectory,
-                section: L("创建", "Create"),
-                title: L("从当前目录新开终端", "New Terminal at Current Directory"),
-                shortcut: "Current CWD",
-                disabled: !canPerform(.newTerminalAtFocusedDirectory),
-                disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
-                keywords: "terminal cwd current directory folder"
-            ),
-            CommandPaletteItem(id: "duplicate-tab", command: .duplicateSelectedTab, section: L("创建", "Create"), title: L("复制当前标签", "Duplicate Current Tab"), shortcut: "Duplicate", keywords: "copy tab duplicate"),
-            CommandPaletteItem(
-                id: "open-current-directory",
-                command: .openFocusedDirectory,
-                section: L("上下文", "Context"),
-                title: L("打开当前目录", "Open Current Directory"),
-                shortcut: "Finder",
-                disabled: !canPerform(.openFocusedDirectory),
-                disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
-                keywords: "open reveal finder cwd folder directory"
-            ),
-            CommandPaletteItem(
-                id: "copy-current-directory",
-                command: .copyFocusedDirectory,
-                section: L("上下文", "Context"),
-                title: L("复制当前目录路径", "Copy Current Directory Path"),
-                shortcut: "Copy",
-                disabled: !canPerform(.copyFocusedDirectory),
-                disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
-                keywords: "copy path cwd folder directory"
-            ),
-            CommandPaletteItem(
-                id: "file-manager",
-                command: .toggleFileManager,
-                section: L("上下文", "Context"),
-                title: L("文件管理器", "File Manager"),
-                shortcut: "Files",
-                disabled: !canPerform(.toggleFileManager),
-                disabledReason: L("当前终端还没有可用目录", "Current terminal has no available directory"),
-                keywords: "file files browser manager cwd folder directory preview"
-            ),
-            CommandPaletteItem(
-                id: "context-search",
-                command: .showTerminalSearch,
-                section: L("上下文", "Context"),
-                title: L("搜索当前上下文", "Search Current Context"),
-                shortcut: "Cmd-F",
-                disabled: !canPerform(.showTerminalSearch),
-                disabledReason: L("当前没有可搜索的终端、文件或文件面板", "No searchable terminal, file, or file panel is active"),
-                keywords: "search find terminal file document context"
-            ),
-            CommandPaletteItem(
-                id: "find-next",
-                command: .findNext,
-                section: L("上下文", "Context"),
-                title: L("下一个搜索结果", "Next Search Result"),
-                shortcut: "Cmd-G",
-                disabled: !canPerform(.findNext),
-                disabledReason: L("先打开搜索", "Open search first"),
-                keywords: "search find next match"
-            ),
-            CommandPaletteItem(
-                id: "find-previous",
-                command: .findPrevious,
-                section: L("上下文", "Context"),
-                title: L("上一个搜索结果", "Previous Search Result"),
-                shortcut: "Cmd-Shift-G",
-                disabled: !canPerform(.findPrevious),
-                disabledReason: L("先打开搜索", "Open search first"),
-                keywords: "search find previous match"
-            ),
-            CommandPaletteItem(id: "split-right", command: .splitRight, section: L("创建", "Create"), title: L("向右分屏", "Split Right"), shortcut: "Cmd-D", disabled: !canPerform(.splitRight), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split right vertical"),
-            CommandPaletteItem(id: "split-down", command: .splitDown, section: L("创建", "Create"), title: L("向下分屏", "Split Down"), shortcut: "Cmd-Shift-D", disabled: !canPerform(.splitDown), disabledReason: L("当前布局已到可用分屏上限", "Current layout has reached the split limit"), keywords: "split down horizontal"),
-            CommandPaletteItem(id: "next-tab", command: .selectNextTab, section: L("导航", "Navigate"), title: L("下一个标签", "Next Tab"), shortcut: "Cmd-]", keywords: "next tab"),
-            CommandPaletteItem(id: "previous-tab", command: .selectPreviousTab, section: L("导航", "Navigate"), title: L("上一个标签", "Previous Tab"), shortcut: "Cmd-[", keywords: "previous tab"),
-            CommandPaletteItem(id: "next-pane", command: .focusNextPane, section: L("导航", "Navigate"), title: L("下一个分屏", "Next Pane"), shortcut: "Cmd-Shift-]", keywords: "next pane focus"),
-            CommandPaletteItem(id: "previous-pane", command: .focusPreviousPane, section: L("导航", "Navigate"), title: L("上一个分屏", "Previous Pane"), shortcut: "Cmd-Shift-[", keywords: "previous pane focus"),
-            CommandPaletteItem(id: "focus-left", command: .focusPaneLeft, section: L("导航", "Navigate"), title: L("聚焦左侧分屏", "Focus Pane Left"), shortcut: "Cmd-Opt-←", keywords: "focus pane left"),
-            CommandPaletteItem(id: "focus-right", command: .focusPaneRight, section: L("导航", "Navigate"), title: L("聚焦右侧分屏", "Focus Pane Right"), shortcut: "Cmd-Opt-→", keywords: "focus pane right"),
-            CommandPaletteItem(id: "focus-up", command: .focusPaneUp, section: L("导航", "Navigate"), title: L("聚焦上方分屏", "Focus Pane Up"), shortcut: "Cmd-Opt-↑", keywords: "focus pane up"),
-            CommandPaletteItem(id: "focus-down", command: .focusPaneDown, section: L("导航", "Navigate"), title: L("聚焦下方分屏", "Focus Pane Down"), shortcut: "Cmd-Opt-↓", keywords: "focus pane down"),
-            CommandPaletteItem(id: "close-tab", command: .closeSelectedTab, section: L("整理", "Organize"), title: L("关闭标签", "Close Tab"), shortcut: "Cmd-W", keywords: "close tab"),
-            CommandPaletteItem(id: "close-pane", command: .closeFocusedPane, section: L("整理", "Organize"), title: L("关闭分屏", "Close Pane"), shortcut: "Cmd-Shift-W", disabled: !canPerform(.closeFocusedPane), disabledReason: L("至少保留一个分屏", "Keep at least one pane"), keywords: "close pane split"),
-            CommandPaletteItem(id: "move-tab-left", command: .moveTabLeft, section: L("整理", "Organize"), title: L("标签左移", "Move Tab Left"), shortcut: "Cmd-Shift-,", disabled: !canPerform(.moveTabLeft), disabledReason: L("已经在最左侧", "Already on the left"), keywords: "move tab left"),
-            CommandPaletteItem(id: "move-tab-right", command: .moveTabRight, section: L("整理", "Organize"), title: L("标签右移", "Move Tab Right"), shortcut: "Cmd-Shift-.", disabled: !canPerform(.moveTabRight), disabledReason: L("已经在最右侧", "Already on the right"), keywords: "move tab right"),
-            CommandPaletteItem(id: "move-tab-next-pane", command: .moveTabToNextPane, section: L("整理", "Organize"), title: L("移到下一个分屏", "Move to Next Pane"), shortcut: "Cmd-Opt-M", disabled: !canPerform(.moveTabToNextPane), disabledReason: L("需要另一个分屏", "Requires another pane"), keywords: "move tab pane"),
-            CommandPaletteItem(id: "move-tab-new-split", command: .moveTabToNewRightSplit, section: L("整理", "Organize"), title: L("移到右侧新分屏", "Move to New Right Split"), shortcut: "Cmd-Opt-Shift-M", disabled: !canPerform(.moveTabToNewRightSplit), disabledReason: L("需要可移动标签和可用分屏空间", "Requires a movable tab and split space"), keywords: "move tab new split"),
-            CommandPaletteItem(id: "resize-left", command: .resizePaneLeft, section: L("整理", "Organize"), title: L("向左调整分屏", "Resize Pane Left"), shortcut: "Cmd-Shift-←", disabled: !canPerform(.resizePaneLeft), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split left"),
-            CommandPaletteItem(id: "resize-right", command: .resizePaneRight, section: L("整理", "Organize"), title: L("向右调整分屏", "Resize Pane Right"), shortcut: "Cmd-Shift-→", disabled: !canPerform(.resizePaneRight), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split right"),
-            CommandPaletteItem(id: "resize-up", command: .resizePaneUp, section: L("整理", "Organize"), title: L("向上调整分屏", "Resize Pane Up"), shortcut: "Cmd-Shift-↑", disabled: !canPerform(.resizePaneUp), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split up"),
-            CommandPaletteItem(id: "resize-down", command: .resizePaneDown, section: L("整理", "Organize"), title: L("向下调整分屏", "Resize Pane Down"), shortcut: "Cmd-Shift-↓", disabled: !canPerform(.resizePaneDown), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "resize split down"),
-            CommandPaletteItem(
-                id: "toggle-zoom",
-                command: .toggleZoom,
-                section: L("视图", "View"),
-                title: model.workspace.isZoomed ? L("还原当前分屏", "Restore Current Pane") : L("放大当前分屏", "Zoom Current Pane"),
-                shortcut: "Cmd-Opt-Z",
-                disabled: !canPerform(.toggleZoom),
-                disabledReason: L("需要多个分屏", "Requires multiple panes"),
-                keywords: "zoom pane"
-            ),
-            CommandPaletteItem(id: "equalize-splits", command: .equalizeSplits, section: L("视图", "View"), title: L("均分分屏", "Equalize Splits"), shortcut: "Cmd-Shift-=", disabled: !canPerform(.equalizeSplits), disabledReason: L("需要多个分屏", "Requires multiple panes"), keywords: "equalize split layout"),
-            CommandPaletteItem(id: "flash-focused-pane", command: .flashFocusedPane, section: L("视图", "View"), title: L("闪烁当前分屏", "Flash Focused Pane"), shortcut: "Cmd-Shift-H", keywords: "flash highlight focused pane"),
-            CommandPaletteItem(id: "workspace-overview", command: .toggleWorkspaceOverview, section: L("视图", "View"), title: L("工作区总览", "Workspace Overview"), shortcut: "Cmd-O", keywords: "workspace overview mission control"),
-            CommandPaletteItem(id: "toggle-fullscreen", command: .toggleFullScreen, section: L("视图", "View"), title: L("切换全屏", "Toggle Full Screen"), shortcut: "Ctrl-Cmd-F", keywords: "fullscreen window mac"),
-            CommandPaletteItem(id: "appearance-settings", command: .toggleSettings, section: L("视图", "View"), title: L("外观设置", "Appearance Settings"), shortcut: "Cmd-,", keywords: "appearance theme settings"),
-            CommandPaletteItem(id: "duplicate-workspace", command: .duplicateWorkspace, section: L("视图", "View"), title: L("复制工作区", "Duplicate Workspace"), shortcut: "Duplicate", keywords: "workspace duplicate"),
-            CommandPaletteItem(id: "reset-workspace", command: .resetWorkspace, section: L("视图", "View"), title: L("重置工作区", "Reset Workspace"), shortcut: "Reset", keywords: "workspace reset")
-        ]
-        return items.map { $0.resolvingShortcut(using: model.appearance.keyboardShortcuts) }
+        return items
+    }
+
+    @MainActor
+    private static func orderedWorkspaces(model: ConductorWindowModel) -> [WorkspaceState] {
+        model.workspaces.enumerated()
+            .sorted { lhs, rhs in
+                let lhsCurrent = lhs.element.id == model.workspace.id
+                let rhsCurrent = rhs.element.id == model.workspace.id
+                if lhsCurrent != rhsCurrent {
+                    return lhsCurrent
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
+    private static func orderedTerminalSummaries(
+        _ terminals: [WorkspaceMetadataSnapshot.TerminalSummary]
+    ) -> [WorkspaceMetadataSnapshot.TerminalSummary] {
+        terminals.enumerated()
+            .sorted { lhs, rhs in
+                if lhs.element.selected != rhs.element.selected {
+                    return lhs.element.selected
+                }
+                let lhsActive = lhs.element.activeAgentTitle?.isEmpty == false
+                let rhsActive = rhs.element.activeAgentTitle?.isEmpty == false
+                if lhsActive != rhsActive {
+                    return lhsActive
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
+    private static func orderedWebSummaries(
+        _ webTabs: [WorkspaceMetadataSnapshot.WebSummary]
+    ) -> [WorkspaceMetadataSnapshot.WebSummary] {
+        webTabs.enumerated()
+            .sorted { lhs, rhs in
+                if lhs.element.selected != rhs.element.selected {
+                    return lhs.element.selected
+                }
+                if lhs.element.loading != rhs.element.loading {
+                    return lhs.element.loading
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
+    private static func quickTerminalSummaries(
+        workspace: WorkspaceState,
+        metadata: WorkspaceMetadataSnapshot?
+    ) -> [WorkspaceMetadataSnapshot.TerminalSummary] {
+        if let terminals = metadata?.terminals, !terminals.isEmpty {
+            return terminals
+        }
+        return workspace.panes.values.flatMap { pane in
+            pane.tabs.map { tab in
+                WorkspaceMetadataSnapshot.TerminalSummary(
+                    id: tab.id,
+                    paneID: pane.id,
+                    title: tab.title,
+                    workingDirectory: tab.workingDirectory,
+                    selected: workspace.focusedPaneID == pane.id && pane.selectedTabID == tab.id,
+                    activeAgentTitle: tab.agentSnapshot?.displayName,
+                    readonly: false
+                )
+            }
+        }
+    }
+
+    private static func quickWorkspaceSubtitle(
+        workspace: WorkspaceState,
+        metadata: WorkspaceMetadataSnapshot?
+    ) -> String {
+        if let rootPath = metadata?.rootPath, !rootPath.isEmpty {
+            return abbreviatedPath(rootPath)
+        }
+        let terminalCount = metadata?.counts.terminalCount ?? workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+        return L("\(workspace.panes.count) 个分屏 · \(terminalCount) 个终端", "\(workspace.panes.count) panes · \(terminalCount) terminals")
+    }
+
+    private static func quickWorkspaceKeywords(
+        workspace: WorkspaceState,
+        metadata: WorkspaceMetadataSnapshot?
+    ) -> String {
+        var parts = [workspace.title, metadata?.projectName, metadata?.rootPath, ]
+        parts.append(contentsOf: metadata?.terminals.map(\.title) ?? [])
+        parts.append(contentsOf: metadata?.webTabs.compactMap(\.title) ?? [])
+        parts.append(contentsOf: metadata?.webTabs.compactMap(\.url) ?? [])
+        parts.append("workspace project switch jump")
+        return parts.compactMap { $0 }.joined(separator: " ")
+    }
+
+    private static func quickTerminalSubtitle(
+        workspace: WorkspaceState,
+        terminal: WorkspaceMetadataSnapshot.TerminalSummary
+    ) -> String {
+        if let agent = terminal.activeAgentTitle, !agent.isEmpty {
+            return L("\(workspace.title) · \(agent) 运行中", "\(workspace.title) · \(agent) running")
+        }
+        if let workingDirectory = terminal.workingDirectory, !workingDirectory.isEmpty {
+            return "\(workspace.title) · \(abbreviatedPath(workingDirectory))"
+        }
+        return workspace.title
+    }
+
+    private static func quickWebSubtitle(
+        workspace: WorkspaceState,
+        webTab: WorkspaceMetadataSnapshot.WebSummary
+    ) -> String {
+        if let error = webTab.errorMessage, !error.isEmpty {
+            return "\(workspace.title) · \(error)"
+        }
+        if webTab.loading {
+            return L("\(workspace.title) · 正在载入", "\(workspace.title) · Loading")
+        }
+        if let url = webTab.url, !url.isEmpty {
+            return "\(workspace.title) · \(url)"
+        }
+        return workspace.title
+    }
+
+    private static func abbreviatedPath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let normalized = path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
+        let components = normalized.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        guard components.count > 3 else { return normalized }
+        if normalized.hasPrefix("~/") {
+            return "~/" + components.suffix(3).joined(separator: "/")
+        }
+        return ".../" + components.suffix(3).joined(separator: "/")
     }
 
     @MainActor
     static func shortcutGuideItems(model: ConductorWindowModel) -> [CommandShortcutGuideItem] {
-        items(model: model)
+        commandItems(model: model)
             .filter { $0.section != L("调试", "Debug") }
-            .map { command in
-                CommandShortcutGuideItem(
+            .compactMap { command -> CommandShortcutGuideItem? in
+                guard case .command(let shellCommand) = command.action else { return nil }
+                return CommandShortcutGuideItem(
                     id: command.id,
-                    command: command.command,
+                    command: shellCommand,
                     section: command.section,
                     title: command.title,
                     shortcut: command.discoveryShortcut,
-                    systemImage: command.systemImage
+                    systemImage: command.systemImage,
+                    shortcutStatus: model.shortcutAssignmentTitle(for: shellCommand)
                 )
             }
     }
@@ -1109,6 +1212,7 @@ struct CommandShortcutGuideItem: Identifiable, Equatable {
     let title: String
     let shortcut: String
     let systemImage: String
+    let shortcutStatus: String
 }
 
 struct CommandShortcutGuideRowModel: Identifiable, Equatable {
@@ -1119,7 +1223,9 @@ struct CommandShortcutGuideRowModel: Identifiable, Equatable {
 }
 
 private struct CommandPaletteHeader: View {
+    let title: String
     let subtitle: String
+    let detail: String
     let closeHelp: String
     let onClose: () -> Void
     @Environment(\.conductorTheme) private var theme
@@ -1133,12 +1239,12 @@ private struct CommandPaletteHeader: View {
                 .frame(width: 16, height: 18)
                 .accessibilityHidden(true)
 
-            Text(L("命令", "Commands"))
+            Text(title)
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.primaryText)
                 .lineLimit(1)
 
-            Text(subtitle)
+            Text("\(subtitle) · \(detail)")
                 .font(.conductorSystem(size: 9.8, weight: .medium, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .lineLimit(1)
@@ -1214,15 +1320,23 @@ private struct CommandButton: View {
                         .font(.conductorSystem(size: 11.8, weight: selected ? .semibold : .medium, scale: fontScale))
                         .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.primaryText)
                         .lineLimit(1)
-                    if let disabledReason = command.disabledReason, command.disabled {
-                        Text(disabledReason)
-                            .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.tertiaryText)
-                            .lineLimit(1)
-                    }
+                    Text(command.disabled ? (command.disabledReason ?? command.outcome) : command.outcome)
+                        .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
                 }
 
                 Spacer(minLength: 8)
+
+                if let rankingBadge = command.rankingBadge {
+                    Text(rankingBadge)
+                        .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : theme.floatingEmphasis.opacity(0.9))
+                        .padding(.horizontal, 6)
+                        .frame(height: 17)
+                        .background(theme.floatingSelectedFill.opacity(command.disabled ? 0.24 : 0.5))
+                        .clipShape(Capsule())
+                }
 
                 Text(command.shortcut)
                     .font(.conductorSystem(size: 9.8, weight: .medium, scale: fontScale))
@@ -1233,7 +1347,7 @@ private struct CommandButton: View {
                     .clipShape(Capsule())
             }
             .padding(.horizontal, 7)
-            .frame(height: command.disabledReason != nil && command.disabled ? 38 : 30)
+            .frame(height: 38)
             .background(rowBackground)
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -1241,6 +1355,7 @@ private struct CommandButton: View {
         .buttonStyle(.plain)
         .disabled(command.disabled)
         .opacity(command.disabled ? 0.62 : 1)
+        .macNativeTooltip(command.rankingHint ?? command.outcome)
         .onHover { value in
             guard hovering != value else { return }
             hovering = value
@@ -1285,7 +1400,15 @@ private struct WorkspaceOverviewSnapshot: Equatable {
     @MainActor
     init(model: ConductorWindowModel) {
         self.chromeClarity = model.appearance.chromeClarity
-        self.items = model.workspaces.map(WorkspaceOverviewItemSnapshot.init(workspace:))
+        self.items = model.workspaces.map { workspace in
+            WorkspaceOverviewItemSnapshot(
+                workspace: workspace,
+                metadataByTerminalID: model.metadataByTerminalID,
+                workspaceMetadata: model.workspaceMetadataSnapshots[workspace.id],
+                unreadCount: model.attentionUnreadCount(for: workspace.id),
+                resumableAgents: model.controlResumableTerminalAgents(workspaceID: workspace.id)
+            )
+        }
         self.selectedWorkspaceID = model.workspace.id
     }
 
@@ -1296,43 +1419,134 @@ private struct WorkspaceOverviewSnapshot: Equatable {
 
 private struct WorkspaceOverviewItemSnapshot: Identifiable, Equatable {
     let workspace: WorkspaceState
+    let workspaceMetadata: WorkspaceMetadataSnapshot?
+    let terminalSummaries: [WorkspaceOverviewTerminalSummary]
+    let fileSummaries: [WorkspaceMetadataSnapshot.FileSummary]
+    let webSummaries: [WorkspaceMetadataSnapshot.WebSummary]
+    let unreadCount: Int
+    let resumableAgents: [TerminalAgentResumeBatchTarget]
 
     var id: WorkspaceID {
         workspace.id
     }
 
-    init(workspace: WorkspaceState) {
+    init(
+        workspace: WorkspaceState,
+        metadataByTerminalID: [TerminalID: TerminalDisplayMetadata],
+        workspaceMetadata: WorkspaceMetadataSnapshot?,
+        unreadCount: Int,
+        resumableAgents: [TerminalAgentResumeBatchTarget]
+    ) {
         self.workspace = workspace
+        self.workspaceMetadata = workspaceMetadata
+        self.unreadCount = unreadCount
+        self.resumableAgents = resumableAgents
+        self.fileSummaries = workspaceMetadata?.files ?? []
+        self.webSummaries = workspaceMetadata?.webTabs ?? []
+        self.terminalSummaries = workspace.panes.values
+            .flatMap(\.tabs)
+            .map { tab in
+                let metadata = metadataByTerminalID[tab.id]
+                return WorkspaceOverviewTerminalSummary(
+                    id: tab.id,
+                    title: tab.title,
+                    workingDirectory: metadata?.workingDirectory ?? tab.workingDirectory,
+                    activeAgentTitle: metadata?.activeAgentTitle
+                )
+            }
     }
 
     var searchCandidate: ConductorSearchCandidate {
         ConductorSearchCandidate(
             id: workspace.id.description,
             title: workspace.title,
-            subtitle: Self.subtitle(for: workspace),
-            keywords: Self.keywords(for: workspace),
+            subtitle: subtitle,
+            keywords: keywords,
             section: L("工作区", "Workspaces"),
             systemImage: WorkspaceChromeGlyph.systemName(selected: false)
         )
     }
 
-    private static func subtitle(for workspace: WorkspaceState) -> String {
-        let terminalCount = workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+    var terminalCount: Int {
+        terminalSummaries.count
+    }
+
+    var activeAgentCount: Int {
+        workspaceMetadata?.activeAgentCount ?? terminalSummaries.filter { $0.activeAgentTitle?.isEmpty == false }.count
+    }
+
+    var subtitle: String {
+        if let projectName = workspaceMetadata?.projectName,
+           projectName != workspace.title {
+            return projectName
+        }
         return L("\(workspace.panes.count) 个分屏 · \(terminalCount) 个终端", "\(workspace.panes.count) panes · \(terminalCount) terminals")
     }
 
-    private static func keywords(for workspace: WorkspaceState) -> [String] {
-        var parts: [String] = []
-        for pane in workspace.panes.values {
-            for tab in pane.tabs {
-                parts.append(tab.title)
-                if let workingDirectory = tab.workingDirectory {
-                    parts.append(workingDirectory)
-                }
-            }
+    var rootDisplay: String {
+        guard let root = workspaceMetadata?.rootPath else {
+            return terminalSummaries.compactMap(\.workingDirectory).first ?? L("未检测到项目根目录", "Project root not detected")
         }
+        return Self.abbreviatedPath(root)
+    }
+
+    var portDisplay: String {
+        guard let metadata = workspaceMetadata else { return L("等待刷新", "Refreshing") }
+        if !metadata.devServers.isEmpty {
+            return metadata.devServers.prefix(2).map { ":\($0.port)" }.joined(separator: " ")
+        }
+        guard !metadata.runningPorts.isEmpty else { return L("无端口", "No ports") }
+        return metadata.runningPorts.prefix(2).map { ":\($0)" }.joined(separator: " ")
+    }
+
+    var healthDisplay: String {
+        guard let health = workspaceMetadata?.health else {
+            return L("刷新中", "Refreshing")
+        }
+        switch health {
+        case "ok":
+            return L("正常", "Healthy")
+        case "metadata_partial":
+            return L("部分信息不可用", "Partial metadata")
+        case "root_unknown":
+            return L("未识别根目录", "Root unknown")
+        default:
+            return health
+        }
+    }
+
+    var keywords: [String] {
+        var parts = [workspace.title, subtitle, rootDisplay, portDisplay]
+        parts.append(contentsOf: terminalSummaries.map(\.title))
+        parts.append(contentsOf: terminalSummaries.compactMap(\.workingDirectory))
+        parts.append(contentsOf: terminalSummaries.compactMap(\.activeAgentTitle))
+        parts.append(contentsOf: fileSummaries.map(\.title))
+        parts.append(contentsOf: fileSummaries.map(\.path))
+        parts.append(contentsOf: webSummaries.compactMap(\.title))
+        parts.append(contentsOf: webSummaries.compactMap(\.url))
+        parts.append(contentsOf: workspaceMetadata?.devServers.map(\.label) ?? [])
+        parts.append(contentsOf: workspaceMetadata?.devServers.map(\.url) ?? [])
+        parts.append(contentsOf: workspaceMetadata?.runningPorts.map(String.init) ?? [])
         return parts
     }
+
+    private static func abbreviatedPath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let normalized = path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
+        let components = normalized.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        guard components.count > 3 else { return normalized }
+        if normalized.hasPrefix("~/") {
+            return "~/" + components.suffix(3).joined(separator: "/")
+        }
+        return ".../" + components.suffix(3).joined(separator: "/")
+    }
+}
+
+private struct WorkspaceOverviewTerminalSummary: Identifiable, Equatable {
+    let id: TerminalID
+    let title: String
+    let workingDirectory: String?
+    let activeAgentTitle: String?
 }
 
 private struct WorkspaceOverviewFilterResult: Equatable {
@@ -1358,53 +1572,71 @@ private struct WorkspaceOverviewPanel: View {
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 214, maximum: 236), spacing: 10)
-    ]
-
     private var filteredResult: WorkspaceOverviewFilterResult {
         WorkspaceOverviewFilterResult(items: snapshot.items, query: query)
     }
 
     var body: some View {
         let result = filteredResult
+        let selectedItem = inspectorItem(in: result)
         ZStack {
             ConductorGlassSurface(style: .panel, clarity: snapshot.chromeClarity, interactive: true) {
                 VStack(alignment: .leading, spacing: 11) {
                     header
                     FloatingPanelDivider()
-                    searchField
 
-                    if result.items.isEmpty {
-                        emptyState
-                    } else {
-                        ScrollView {
-                            LazyVGrid(columns: columns, alignment: .center, spacing: 10) {
-                                ForEach(result.items) { item in
-                                    WorkspaceOverviewCard(
-                                        workspace: item.workspace,
-                                        theme: theme,
-                                        selected: item.id == snapshot.selectedWorkspaceID,
-                                        highlighted: item.id == highlightedWorkspaceID
-                                    ) {
-                                        openWorkspace(item.id)
-                                    } onHover: {
-                                        highlightedWorkspaceID = item.id
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            searchField
+
+                            if result.items.isEmpty {
+                                emptyState
+                            } else {
+                                ScrollView {
+                                    LazyVStack(alignment: .leading, spacing: 6) {
+                                        ForEach(result.items) { item in
+                                            WorkspaceOverviewListRow(
+                                                item: item,
+                                                selected: item.id == snapshot.selectedWorkspaceID,
+                                                highlighted: item.id == highlightedWorkspaceID
+                                            ) {
+                                                highlightedWorkspaceID = item.id
+                                            } open: {
+                                                openWorkspace(item.id)
+                                            } openRoot: {
+                                                openWorkspaceRoot(item.id)
+                                            } openFirstService: {
+                                                openWorkspaceFirstService(item.id)
+                                            }
+                                            .transition(ConductorMotion.rowTransition(itemCount: result.items.count))
+                                        }
                                     }
-                                    .transition(ConductorMotion.workspaceSpreadTransition(itemCount: result.items.count))
+                                    .padding(.vertical, 1)
+                                    .animation(ConductorMotion.list(itemCount: result.items.count), value: result.ids)
                                 }
+                                .scrollIndicators(.visible)
+                                .frame(maxHeight: .infinity)
                             }
-                            .padding(.horizontal, 2)
-                            .padding(.bottom, 2)
-                            .animation(ConductorMotion.list(itemCount: result.items.count), value: result.ids)
                         }
-                        .scrollIndicators(.visible)
-                        .frame(maxHeight: .infinity)
+                        .frame(width: 286)
+
+                        Rectangle()
+                            .fill(theme.floatingSeparator.opacity(0.82))
+                            .frame(width: 1)
+                            .frame(maxHeight: .infinity)
+
+                        WorkspaceInspectorPane(
+                            model: model,
+                            item: selectedItem,
+                            selectedWorkspaceID: snapshot.selectedWorkspaceID,
+                            openWorkspace: openWorkspace
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
                 .padding(12)
             }
-            .frame(width: 690, height: 486)
+            .frame(width: 760, height: 510)
             .onAppear {
                 highlightedWorkspaceID = snapshot.selectedWorkspaceID
                 focusSearchField()
@@ -1443,9 +1675,9 @@ private struct WorkspaceOverviewPanel: View {
     private var header: some View {
         FloatingPanelHeader(
             systemImage: WorkspaceChromeGlyph.systemName(selected: false),
-            title: L("工作区总览", "Workspace Overview"),
-            subtitle: L("\(snapshot.workspaceCount) 个工作区", "\(snapshot.workspaceCount) workspaces"),
-            closeHelp: L("关闭总览", "Close Overview")
+            title: L("工作区", "Workspaces"),
+            subtitle: L("\(snapshot.workspaceCount) 个工作区 · 状态检查器", "\(snapshot.workspaceCount) workspaces · inspector"),
+            closeHelp: L("关闭工作区面板", "Close Workspace Panel")
         ) {
             model.hideWorkspaceOverview()
         }
@@ -1486,6 +1718,17 @@ private struct WorkspaceOverviewPanel: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 220)
+    }
+
+    private func inspectorItem(in result: WorkspaceOverviewFilterResult) -> WorkspaceOverviewItemSnapshot? {
+        if let highlightedWorkspaceID,
+           let item = result.items.first(where: { $0.id == highlightedWorkspaceID }) {
+            return item
+        }
+        if let item = result.items.first(where: { $0.id == snapshot.selectedWorkspaceID }) {
+            return item
+        }
+        return result.items.first
     }
 
     private func ensureHighlight() {
@@ -1530,6 +1773,20 @@ private struct WorkspaceOverviewPanel: View {
         }
     }
 
+    private func openWorkspaceRoot(_ workspaceID: WorkspaceID) {
+        ConductorMotion.withoutAnimation {
+            model.activateWorkspace(workspaceID, source: .overview)
+        }
+        model.performCommand(.openCurrentWorkspaceRoot)
+    }
+
+    private func openWorkspaceFirstService(_ workspaceID: WorkspaceID) {
+        ConductorMotion.withoutAnimation {
+            model.activateWorkspace(workspaceID, source: .overview)
+        }
+        model.performCommand(.openCurrentWorkspaceFirstService)
+    }
+
     private func focusSearchField() {
         Task { @MainActor in
             searchFocused = true
@@ -1537,274 +1794,812 @@ private struct WorkspaceOverviewPanel: View {
     }
 }
 
-private struct WorkspaceOverviewCard: View {
-    let workspace: WorkspaceState
-    let theme: TerminalTheme
+private struct WorkspaceOverviewListRow: View {
+    let item: WorkspaceOverviewItemSnapshot
     let selected: Bool
     let highlighted: Bool
-    let action: () -> Void
-    let onHover: () -> Void
+    let inspect: () -> Void
+    let open: () -> Void
+    let openRoot: () -> Void
+    let openFirstService: () -> Void
     @State private var hovering = false
+    @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
-    private var terminalCount: Int {
-        workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
-    }
-
-    private var focusedTerminalTitle: String {
-        workspace.focusedPane?.selectedTab?.title ?? L("终端", "Terminal")
-    }
-
-    private var accessibilityTitle: String {
-        var parts = [
-            workspace.title,
-            L("\(workspace.panes.count) 个分屏", "\(workspace.panes.count) panes"),
-            L("\(terminalCount) 个终端", "\(terminalCount) terminals"),
-            focusedTerminalTitle
-        ]
-        if workspace.isZoomed {
-            parts.append(L("已放大", "Zoomed"))
-        }
-        return parts.joined(separator: "，")
-    }
-
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 9) {
-                WorkspaceMiniLayout(
-                    workspace: workspace,
-                    theme: theme
-                )
-                .frame(height: 114)
+        Button(action: inspect) {
+            HStack(spacing: 8) {
+                Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
+                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
+                    .frame(width: 22, height: 22)
+                    .background(iconFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(spacing: 7) {
-                        Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
-                            .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
-                            .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
-                            .frame(width: 16)
-                        Text(workspace.title)
-                            .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        Text(item.workspace.title)
+                            .font(.conductorSystem(size: 11.8, weight: highlighted ? .semibold : .medium, scale: fontScale))
                             .foregroundStyle(ConductorDesign.primaryText)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        Spacer(minLength: 0)
-                    }
-
-                    HStack(spacing: 6) {
-                        WorkspaceOverviewMetric(systemImage: "square.split.2x2", value: "\(workspace.panes.count)")
-                        WorkspaceOverviewMetric(systemImage: "terminal", value: "\(terminalCount)")
-                        if workspace.isZoomed {
-                            WorkspaceOverviewMetric(systemImage: "arrow.up.left.and.arrow.down.right", value: L("放大", "Zoom"))
+                        if item.unreadCount > 0 {
+                            WorkspaceInspectorPill(systemImage: "bell.fill", value: "\(item.unreadCount)", tone: .attention)
+                        }
+                        if item.activeAgentCount > 0 {
+                            WorkspaceInspectorPill(systemImage: "sparkles", value: "\(item.activeAgentCount)", tone: .accent)
                         }
                     }
 
-                    Text(focusedTerminalTitle)
-                        .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
+                    Text(item.rootDisplay)
+                        .font(.conductorSystem(size: 9.6, weight: .medium, scale: fontScale))
                         .foregroundStyle(ConductorDesign.tertiaryText)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+
+                Spacer(minLength: 4)
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(item.portDisplay)
+                        .font(.conductorSystem(size: 9.2, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
+                .frame(width: 58, alignment: .trailing)
             }
-            .padding(9)
-            .background(cardFill)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 8)
+            .frame(height: 48)
+            .background(rowFill)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(borderColor, lineWidth: selected || highlighted ? 1.5 : 1)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(borderColor, lineWidth: highlighted || selected ? 0.9 : 0.6)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityTitle)
-        .accessibilityAddTraits(.isButton)
-        .onHover { value in
-            guard hovering != value else { return }
-            hovering = value
-            if value {
-                onHover()
+        .contextMenu {
+            Button(L("切到工作区", "Switch to Workspace"), action: open)
+            if item.workspaceMetadata?.rootPath != nil {
+                Button(L("在 Finder 打开根目录", "Open Root in Finder")) {
+                    openRoot()
+                }
+            }
+            if let port = item.workspaceMetadata?.runningPorts.first {
+                Button(L("打开端口 :\(port)", "Open Port :\(port)")) {
+                    openFirstService()
+                }
             }
         }
-        .animation(ConductorMotion.standard, value: selected)
-        .animation(ConductorMotion.feedback, value: highlighted)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(item.workspace.title), \(item.rootDisplay), \(item.portDisplay)")
+        .macNativeTooltip(L("查看工作区状态", "Inspect workspace status"))
+        .onHover { value in
+            hovering = value
+            if value {
+                inspect()
+            }
+        }
     }
 
-    private var cardFill: Color {
-        if selected {
-            return theme.floatingSelectedFill
+    private var rowFill: Color {
+        if highlighted || selected {
+            return theme.floatingSelectedFill.opacity(selected ? 0.84 : 0.62)
         }
-        if highlighted || hovering {
-            return theme.floatingHoverFill
-        }
-        return theme.floatingControlFill.opacity(0.76)
+        return hovering ? theme.floatingHoverFill.opacity(0.66) : theme.floatingControlFill.opacity(0.42)
+    }
+
+    private var iconFill: Color {
+        selected ? theme.floatingControlFill.opacity(0.82) : theme.floatingControlFill.opacity(0.42)
     }
 
     private var borderColor: Color {
-        if selected {
-            return theme.floatingSelectedStroke
+        if selected || highlighted {
+            return theme.floatingSelectedStroke.opacity(0.80)
         }
-        if highlighted {
-            return theme.floatingSelectedStroke.opacity(0.78)
-        }
-        return theme.floatingStroke
+        return theme.floatingStroke.opacity(0.64)
     }
 }
 
-private struct WorkspaceOverviewMetric: View {
+private struct WorkspaceInspectorPane: View {
+    let model: ConductorWindowModel
+    let item: WorkspaceOverviewItemSnapshot?
+    let selectedWorkspaceID: WorkspaceID
+    let openWorkspace: (WorkspaceID) -> Void
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        Group {
+            if let item {
+                VStack(alignment: .leading, spacing: 10) {
+                    inspectorHeader(item)
+                    HStack(spacing: 6) {
+                        WorkspaceInspectorPill(systemImage: "square.split.2x2", value: "\(item.workspace.panes.count)", tone: .neutral)
+                        WorkspaceInspectorPill(systemImage: "terminal", value: "\(item.terminalCount)", tone: .neutral)
+                        WorkspaceInspectorPill(systemImage: "doc.text", value: "\(item.fileSummaries.count)", tone: item.fileSummaries.isEmpty ? .neutral : .accent)
+                        WorkspaceInspectorPill(systemImage: "globe", value: "\(item.webSummaries.count)", tone: item.webSummaries.isEmpty ? .neutral : .accent)
+                        WorkspaceInspectorPill(systemImage: "network", value: item.portDisplay, tone: item.workspaceMetadata?.runningPorts.isEmpty == false ? .accent : .neutral)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    WorkspaceInspectorSection(title: L("项目", "Project")) {
+                        WorkspaceInspectorFact(label: L("根目录", "Root"), value: item.rootDisplay, systemImage: "folder")
+                        WorkspaceInspectorFact(label: L("健康", "Health"), value: item.healthDisplay, systemImage: "waveform.path.ecg")
+                        if let refreshedAt = item.workspaceMetadata?.refreshedAt {
+                            WorkspaceInspectorFact(label: L("刷新", "Refreshed"), value: relativeTime(refreshedAt), systemImage: "clock")
+                        }
+                    }
+
+                    WorkspaceInspectorSection(title: L("接续", "Continuity")) {
+                        HStack(spacing: 6) {
+                            WorkspaceInspectorActionButton(
+                                title: item.resumableAgents.isEmpty ? L("无可续接", "No Agents") : L("续接全部", "Resume All"),
+                                systemImage: "arrow.triangle.2.circlepath",
+                                disabled: item.resumableAgents.isEmpty
+                            ) {
+                                resumeAgents(in: item.id)
+                            }
+                            WorkspaceInspectorActionButton(
+                                title: model.canRestorePreviousSessionSnapshot ? L("恢复上一份", "Restore Previous") : L("无快照", "No Snapshot"),
+                                systemImage: "clock.arrow.circlepath",
+                                disabled: !model.canRestorePreviousSessionSnapshot
+                            ) {
+                                restorePreviousSession()
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if item.resumableAgents.isEmpty {
+                            WorkspaceInspectorEmptyLine(text: L("这个工作区暂时没有可续接的 Agent", "No resumable agents in this workspace"))
+                        } else {
+                            ForEach(item.resumableAgents.prefix(3), id: \.terminalID) { agent in
+                                WorkspaceInspectorResumeAgentLine(
+                                    agent: agent,
+                                    focus: { focusResumableAgent(agent) },
+                                    resume: { resumeAgent(agent) },
+                                    copyCommand: { copyResumeCommand(agent.resumeCommand) }
+                                )
+                            }
+                            if item.resumableAgents.count > 3 {
+                                WorkspaceInspectorEmptyLine(text: L("还有 \(item.resumableAgents.count - 3) 个可续接 Agent", "\(item.resumableAgents.count - 3) more resumable agents"))
+                            }
+                        }
+                    }
+
+                    WorkspaceInspectorSection(title: L("本地服务", "Local Services")) {
+                        let servers = item.workspaceMetadata?.devServers ?? []
+                        if servers.isEmpty {
+                            WorkspaceInspectorEmptyLine(text: L("没有检测到本地服务", "No local services detected"))
+                        } else {
+                            ForEach(servers.prefix(3), id: \.url) { server in
+                                WorkspaceInspectorDevServerLine(server: server) {
+                                    openDevServer(server, in: item.id)
+                                }
+                            }
+                            if servers.count > 3 {
+                                WorkspaceInspectorEmptyLine(text: L("还有 \(servers.count - 3) 个服务", "\(servers.count - 3) more services"))
+                            }
+                        }
+                    }
+
+                    WorkspaceInspectorSection(title: L("终端", "Terminals")) {
+                        if item.terminalSummaries.isEmpty {
+                            WorkspaceInspectorEmptyLine(text: L("这个工作区还没有终端", "This workspace has no terminals"))
+                        } else {
+                            ForEach(item.terminalSummaries.prefix(4)) { terminal in
+                                WorkspaceInspectorTerminalLine(terminal: terminal)
+                            }
+                            if item.terminalSummaries.count > 4 {
+                                WorkspaceInspectorEmptyLine(text: L("还有 \(item.terminalSummaries.count - 4) 个终端", "\(item.terminalSummaries.count - 4) more terminals"))
+                            }
+                        }
+                    }
+
+                    WorkspaceInspectorSection(title: L("文件", "Files")) {
+                        if item.fileSummaries.isEmpty {
+                            WorkspaceInspectorEmptyLine(text: L("当前没有打开的文件", "No open files"))
+                        } else {
+                            ForEach(item.fileSummaries.prefix(4), id: \.id) { file in
+                                WorkspaceInspectorFileLine(file: file) {
+                                    model.selectWorkspaceFileTab(file.id, in: item.id)
+                                }
+                            }
+                            if item.fileSummaries.count > 4 {
+                                WorkspaceInspectorEmptyLine(text: L("还有 \(item.fileSummaries.count - 4) 个文件", "\(item.fileSummaries.count - 4) more files"))
+                            }
+                        }
+                    }
+
+                    WorkspaceInspectorSection(title: L("网页", "Web")) {
+                        if item.webSummaries.isEmpty {
+                            WorkspaceInspectorEmptyLine(text: L("当前没有打开的网页", "No open web tabs"))
+                        } else {
+                            ForEach(item.webSummaries.prefix(4), id: \.id) { webTab in
+                                WorkspaceInspectorWebLine(webTab: webTab) {
+                                    model.selectWorkspaceWebTab(webTab.id, in: item.id)
+                                }
+                            }
+                            if item.webSummaries.count > 4 {
+                                WorkspaceInspectorEmptyLine(text: L("还有 \(item.webSummaries.count - 4) 个网页", "\(item.webSummaries.count - 4) more web tabs"))
+                            }
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+
+                    inspectorActions(item)
+                }
+            } else {
+                VStack(spacing: 8) {
+                    Image(systemName: "sidebar.leading")
+                        .font(.conductorSystem(size: 24, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                    Text(L("选择一个工作区", "Select a workspace"))
+                        .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.secondaryText)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .padding(.leading, 2)
+    }
+
+    private func inspectorHeader(_ item: WorkspaceOverviewItemSnapshot) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: WorkspaceChromeGlyph.systemName(selected: item.id == selectedWorkspaceID))
+                .font(.conductorSystem(size: 13, weight: .bold, scale: fontScale))
+                .foregroundStyle(item.id == selectedWorkspaceID ? theme.floatingEmphasis : ConductorDesign.secondaryText)
+                .frame(width: 28, height: 28)
+                .background(theme.floatingControlFill.opacity(0.70))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.workspace.title)
+                    .font(.conductorSystem(size: 15, weight: .bold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(item.rootDisplay)
+                    .font(.conductorSystem(size: 10.4, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 8)
+
+            if item.id == selectedWorkspaceID {
+                WorkspaceInspectorPill(systemImage: "checkmark", value: L("当前", "Current"), tone: .accent)
+            }
+        }
+    }
+
+    private func inspectorActions(_ item: WorkspaceOverviewItemSnapshot) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                WorkspaceInspectorActionButton(
+                    title: item.id == selectedWorkspaceID ? L("已打开", "Current") : L("切到工作区", "Switch"),
+                    systemImage: item.id == selectedWorkspaceID ? "checkmark" : "arrow.right",
+                    disabled: item.id == selectedWorkspaceID
+                ) {
+                    openWorkspace(item.id)
+                }
+
+                if let server = item.workspaceMetadata?.devServers.first {
+                    WorkspaceInspectorActionButton(title: L("打开 :\(server.port)", "Open :\(server.port)"), systemImage: "network") {
+                        openFirstLocalService(in: item.id)
+                    }
+                } else if let port = item.workspaceMetadata?.runningPorts.first {
+                    WorkspaceInspectorActionButton(title: L("打开 :\(port)", "Open :\(port)"), systemImage: "network") {
+                        openFirstLocalService(in: item.id)
+                    }
+                }
+
+                if item.workspaceMetadata?.rootPath != nil {
+                    WorkspaceInspectorActionButton(title: L("Finder", "Finder"), systemImage: "folder") {
+                        openRoot(in: item.id)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func openDevServer(_ server: WorkspaceMetadataSnapshot.DevServerSummary, in workspaceID: WorkspaceID) {
+        ConductorMotion.withoutAnimation {
+            model.activateWorkspace(workspaceID, source: .overview)
+        }
+        model.newWorkspaceWebTab(initialInput: server.url)
+    }
+
+    private func openFirstLocalService(in workspaceID: WorkspaceID) {
+        ConductorMotion.withoutAnimation {
+            model.activateWorkspace(workspaceID, source: .overview)
+        }
+        model.performCommand(.openCurrentWorkspaceFirstService)
+    }
+
+    private func openRoot(in workspaceID: WorkspaceID) {
+        ConductorMotion.withoutAnimation {
+            model.activateWorkspace(workspaceID, source: .overview)
+        }
+        model.performCommand(.openCurrentWorkspaceRoot)
+    }
+
+    private func resumeAgents(in workspaceID: WorkspaceID) {
+        ConductorMotion.withoutAnimation {
+            model.activateWorkspace(workspaceID, source: .overview)
+        }
+        model.performCommand(.resumeCurrentWorkspaceAgents)
+    }
+
+    private func restorePreviousSession() {
+        model.performCommand(.restorePreviousSession)
+    }
+
+    private func focusResumableAgent(_ agent: TerminalAgentResumeBatchTarget) {
+        ConductorMotion.withoutAnimation {
+            model.activateWorkspace(agent.workspaceID, source: .overview)
+        }
+        _ = model.controlFocusTerminal(agent.terminalID)
+    }
+
+    private func resumeAgent(_ agent: TerminalAgentResumeBatchTarget) {
+        focusResumableAgent(agent)
+        _ = model.controlResumeTerminalAgent(terminalID: agent.terminalID)
+    }
+
+    private func copyResumeCommand(_ command: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+        model.showShellToast(
+            title: L("已复制续接命令", "Resume Command Copied"),
+            body: command,
+            systemImage: "doc.on.doc",
+            duration: 3
+        )
+    }
+
+    private func relativeTime(_ date: Date) -> String {
+        let seconds = max(0, Int(Date().timeIntervalSince(date)))
+        if seconds < 60 {
+            return L("\(seconds) 秒前", "\(seconds)s ago")
+        }
+        let minutes = seconds / 60
+        if minutes < 60 {
+            return L("\(minutes) 分钟前", "\(minutes)m ago")
+        }
+        return L("\(minutes / 60) 小时前", "\(minutes / 60)h ago")
+    }
+}
+
+private struct WorkspaceInspectorSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                Rectangle()
+                    .fill(theme.floatingSeparator.opacity(0.70))
+                    .frame(height: 1)
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                content
+            }
+        }
+    }
+}
+
+private struct WorkspaceInspectorFact: View {
+    let label: String
+    let value: String
+    let systemImage: String
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .frame(width: 14)
+            Text(label)
+                .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .frame(width: 44, alignment: .leading)
+            Text(value)
+                .font(.conductorSystem(size: 10.6, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct WorkspaceInspectorResumeAgentLine: View {
+    let agent: TerminalAgentResumeBatchTarget
+    let focus: () -> Void
+    let resume: () -> Void
+    let copyCommand: () -> Void
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "sparkles")
+                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis)
+                .frame(width: 18, height: 18)
+                .background(theme.floatingControlFill.opacity(0.54))
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .accessibilityHidden(true)
+
+            Button(action: focus) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(agent.displayName)
+                        .font(.conductorSystem(size: 10.7, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.secondaryText)
+                        .lineLimit(1)
+                    Text(agent.terminalTitle)
+                        .font(.conductorSystem(size: 9.4, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .macNativeTooltip(L("定位到这个 Agent 终端", "Focus this agent terminal"))
+
+            HStack(spacing: 4) {
+                iconButton(systemImage: "paperplane", tooltip: L("发送续接命令", "Send resume command"), action: resume)
+                iconButton(systemImage: "doc.on.doc", tooltip: L("复制续接命令", "Copy resume command"), action: copyCommand)
+            }
+        }
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func iconButton(systemImage: String, tooltip: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .frame(width: 22, height: 22)
+                .background(theme.floatingControlFill.opacity(0.62))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.94, pressedOpacity: 0.88))
+        .accessibilityLabel(tooltip)
+        .macNativeTooltip(tooltip)
+    }
+}
+
+private struct WorkspaceInspectorTerminalLine: View {
+    let terminal: WorkspaceOverviewTerminalSummary
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: terminal.activeAgentTitle == nil ? "terminal" : "sparkles")
+                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(terminal.activeAgentTitle == nil ? ConductorDesign.tertiaryText : theme.floatingEmphasis)
+                .frame(width: 16, height: 16)
+                .background(theme.floatingControlFill.opacity(0.46))
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(terminal.title)
+                    .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .lineLimit(1)
+                Text(terminal.activeAgentTitle ?? terminal.workingDirectory ?? L("等待目录", "Waiting for directory"))
+                    .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct WorkspaceInspectorDevServerLine: View {
+    let server: WorkspaceMetadataSnapshot.DevServerSummary
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: "network")
+                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis)
+                    .frame(width: 16, height: 16)
+                    .background(theme.floatingSelectedFill.opacity(0.48))
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(server.label)
+                        .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(server.workingDirectory.map(workspaceInspectorAbbreviatedPath) ?? server.url)
+                        .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer(minLength: 4)
+
+                Text(":\(server.port)")
+                    .font(.conductorSystem(size: 9.4, weight: .bold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 6)
+            .frame(height: 34)
+            .background(hovering ? theme.floatingHoverFill.opacity(0.52) : theme.floatingControlFill.opacity(0.24))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+        .macNativeTooltip(L("打开 \(server.url)", "Open \(server.url)"))
+        .onHover { hovering = $0 }
+    }
+}
+
+private struct WorkspaceInspectorFileLine: View {
+    let file: WorkspaceMetadataSnapshot.FileSummary
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: file.dirty ? "doc.text.fill" : "doc.text")
+                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 16, height: 16)
+                    .background(iconFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        Text(file.title)
+                            .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.secondaryText)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if file.dirty {
+                            Text(L("未保存", "Unsaved"))
+                                .font(.conductorSystem(size: 8.7, weight: .bold, scale: fontScale))
+                                .foregroundStyle(theme.usesDarkChrome ? Color.orange.opacity(0.94) : Color.orange.opacity(0.82))
+                                .lineLimit(1)
+                        }
+                    }
+                    Text(workspaceInspectorAbbreviatedPath(file.path))
+                        .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer(minLength: 4)
+
+                if file.selected {
+                    Image(systemName: "checkmark")
+                        .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
+                        .foregroundStyle(theme.floatingEmphasis)
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(.horizontal, 6)
+            .frame(height: 34)
+            .background(rowFill)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+        .macNativeTooltip(L("打开文件标签", "Open file tab"))
+        .onHover { hovering = $0 }
+    }
+
+    private var iconColor: Color {
+        file.dirty || file.selected ? theme.floatingEmphasis : ConductorDesign.tertiaryText
+    }
+
+    private var iconFill: Color {
+        file.selected ? theme.floatingSelectedFill.opacity(0.56) : theme.floatingControlFill.opacity(0.46)
+    }
+
+    private var rowFill: Color {
+        if file.selected {
+            return theme.floatingSelectedFill.opacity(0.34)
+        }
+        return hovering ? theme.floatingHoverFill.opacity(0.52) : theme.floatingControlFill.opacity(0.24)
+    }
+}
+
+private struct WorkspaceInspectorPill: View {
     let systemImage: String
     let value: String
+    let tone: WorkspaceInspectorPillTone
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: systemImage)
-                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                .font(.conductorSystem(size: 8.8, weight: .semibold, scale: fontScale))
+                .accessibilityHidden(true)
             Text(value)
-                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                .font(.conductorSystem(size: 9.4, weight: .semibold, scale: fontScale))
                 .lineLimit(1)
         }
-        .foregroundStyle(ConductorDesign.secondaryText)
-        .padding(.horizontal, 6)
-        .frame(height: 18)
-        .background(theme.floatingControlFill)
+        .foregroundStyle(foreground)
+        .padding(.horizontal, 5)
+        .frame(height: 17)
+        .background(background)
         .clipShape(Capsule())
     }
-}
 
-private struct WorkspaceMiniLayout: View {
-    let workspace: WorkspaceState
-    let theme: TerminalTheme
+    private var foreground: Color {
+        switch tone {
+        case .neutral:
+            return ConductorDesign.secondaryText
+        case .accent:
+            return theme.floatingEmphasis
+        case .attention:
+            return theme.usesDarkChrome ? Color.orange.opacity(0.94) : Color.orange.opacity(0.82)
+        }
+    }
 
-    var body: some View {
-        WorkspaceMiniNode(
-            node: workspace.root,
-            workspace: workspace,
-            theme: theme
-        )
-        .padding(5)
-        .background(
-            LinearGradient(
-                colors: [
-                    theme.terminalChrome.opacity(0.96),
-                    theme.terminalRaisedBackground.opacity(0.98)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+    private var background: Color {
+        switch tone {
+        case .neutral:
+            return theme.floatingControlFill.opacity(0.54)
+        case .accent:
+            return theme.floatingSelectedFill.opacity(0.68)
+        case .attention:
+            return Color.orange.opacity(theme.usesDarkChrome ? 0.16 : 0.10)
         }
     }
 }
 
-private struct WorkspaceMiniNode: View {
-    let node: SplitNode
-    let workspace: WorkspaceState
-    let theme: TerminalTheme
+private enum WorkspaceInspectorPillTone {
+    case neutral
+    case accent
+    case attention
+}
+
+private func workspaceInspectorAbbreviatedPath(_ path: String) -> String {
+    let expanded = (path as NSString).expandingTildeInPath
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    if expanded == home {
+        return "~"
+    }
+    if expanded.hasPrefix(home + "/") {
+        return "~/" + String(expanded.dropFirst(home.count + 1))
+    }
+    return expanded
+}
+
+private struct WorkspaceInspectorEmptyLine: View {
+    let text: String
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
-        GeometryReader { proxy in
-            nodeView(node, size: proxy.size)
-        }
+        Text(text)
+            .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
+            .foregroundStyle(ConductorDesign.tertiaryText)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 2)
     }
+}
 
-    @ViewBuilder
-    private func nodeView(_ node: SplitNode, size: CGSize) -> some View {
-        switch node {
-        case let .leaf(paneID):
-            WorkspaceMiniPane(
-                pane: workspace.panes[paneID],
-                focused: paneID == workspace.focusedPaneID,
-                theme: theme
-            )
-        case let .split(axis, first, second, fraction):
-            let gap: CGFloat = 4
-            if axis == .horizontal {
-                HStack(spacing: gap) {
-                    WorkspaceMiniNode(node: first, workspace: workspace, theme: theme)
-                        .frame(width: max(1, (size.width - gap) * fraction))
-                    WorkspaceMiniNode(node: second, workspace: workspace, theme: theme)
-                        .frame(width: max(1, (size.width - gap) * (1 - fraction)))
+private struct WorkspaceInspectorWebLine: View {
+    let webTab: WorkspaceMetadataSnapshot.WebSummary
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: webTab.loading ? "arrow.triangle.2.circlepath" : "globe")
+                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(webTab.selected ? theme.floatingEmphasis : ConductorDesign.tertiaryText)
+                    .frame(width: 16, height: 16)
+                    .background(webTab.selected ? theme.floatingSelectedFill.opacity(0.56) : theme.floatingControlFill.opacity(0.46))
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(webTab.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? webTab.title! : webTab.pendingAddress)
+                        .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(webTab.url ?? webTab.pendingAddress)
+                        .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-            } else {
-                VStack(spacing: gap) {
-                    WorkspaceMiniNode(node: first, workspace: workspace, theme: theme)
-                        .frame(height: max(1, (size.height - gap) * fraction))
-                    WorkspaceMiniNode(node: second, workspace: workspace, theme: theme)
-                        .frame(height: max(1, (size.height - gap) * (1 - fraction)))
+
+                Spacer(minLength: 4)
+
+                if webTab.selected {
+                    Image(systemName: "checkmark")
+                        .font(.conductorSystem(size: 9, weight: .bold, scale: fontScale))
+                        .foregroundStyle(theme.floatingEmphasis)
+                        .accessibilityHidden(true)
                 }
             }
+            .padding(.horizontal, 6)
+            .frame(height: 34)
+            .background(hovering ? theme.floatingHoverFill.opacity(0.52) : theme.floatingControlFill.opacity(0.24))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+        .macNativeTooltip(L("打开网页标签", "Open web tab"))
+        .onHover { hovering = $0 }
     }
 }
 
-private struct WorkspaceMiniPane: View {
-    let pane: PaneState?
-    let focused: Bool
-    let theme: TerminalTheme
-
-    private var title: String {
-        pane?.selectedTab?.title ?? "终端"
-    }
-
-    private var tabCount: Int {
-        pane?.tabs.count ?? 0
-    }
+private struct WorkspaceInspectorActionButton: View {
+    let title: String
+    let systemImage: String
+    var disabled = false
+    let action: () -> Void
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(theme.terminalBackground)
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(theme.terminalChrome.opacity(0.92))
-                        .frame(height: 13)
-                }
-
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(focused ? theme.floatingEmphasis : Color.white.opacity(0.32))
-                    .frame(width: 4.5, height: 4.5)
+        Button(action: {
+            guard !disabled else { return }
+            action()
+        }) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                    .accessibilityHidden(true)
                 Text(title)
-                    .font(.system(size: 7.5, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(focused ? 0.86 : 0.58))
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 0)
-                if tabCount > 1 {
-                    Text("\(tabCount)")
-                        .font(.system(size: 7, weight: .bold))
-                        .foregroundStyle(Color.white.opacity(0.70))
-                }
             }
-            .padding(.horizontal, 5)
-            .frame(height: 13)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Spacer(minLength: 13)
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(Color.white.opacity(0.30))
-                    .frame(width: 32, height: 2)
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(theme.floatingEmphasis.opacity(focused ? 0.76 : 0.34))
-                    .frame(width: focused ? 44 : 25, height: 2)
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(Color.white.opacity(0.18))
-                    .frame(width: 22, height: 2)
-            }
-            .padding(6)
-
+            .foregroundStyle(disabled ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .background(disabled ? theme.floatingControlFill.opacity(0.28) : theme.floatingControlFill.opacity(0.64))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(focused ? theme.floatingSelectedStroke : Color.white.opacity(0.14), lineWidth: focused ? 1.3 : 1)
-        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.97, pressedOpacity: 0.94))
+        .disabled(disabled)
+        .accessibilityLabel(title)
+        .macNativeTooltip(title)
     }
 }
 

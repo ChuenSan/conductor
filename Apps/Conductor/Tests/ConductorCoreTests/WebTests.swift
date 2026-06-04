@@ -51,3 +51,53 @@ import Foundation
     let emptyClose = list.close(WebTabID(), fallbackFileTabID: "file.swift", fallbackTerminalID: terminalID)
     #expect(emptyClose.nextContentSelection == .file("file.swift"), "missing web close should fall back to provided file")
 }
+
+@Test func workspaceWebDownloadStatePersistsWithTab() throws {
+    let tab = WorkspaceWebTabState(
+        url: URL(string: "https://example.com/archive.zip")!,
+        title: "Archive",
+        downloadState: WorkspaceWebDownloadState(
+            phase: .finished,
+            filename: "archive.zip",
+            destinationPath: "/Users/example/Downloads/archive.zip",
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+    )
+
+    let encoded = try JSONEncoder().encode(tab)
+    let decoded = try JSONDecoder().decode(WorkspaceWebTabState.self, from: encoded)
+
+    #expect(decoded.downloadState?.phase == .finished, "download phase should survive persistence")
+    #expect(decoded.downloadState?.filename == "archive.zip", "download filename should survive persistence")
+    #expect(
+        decoded.downloadState?.destinationPath == "/Users/example/Downloads/archive.zip",
+        "download destination should survive persistence"
+    )
+}
+
+@Test func workspaceWebRuntimeEventsPersistWithTab() throws {
+    let tab = WorkspaceWebTabState(
+        url: URL(string: "https://example.com")!,
+        title: "Runtime",
+        runtimeEvents: [
+            WorkspaceWebRuntimeEvent(
+                kind: .console,
+                level: "error",
+                message: "fixture console error",
+                sourceURL: "https://example.com/app.js",
+                lineNumber: 12,
+                columnNumber: 8,
+                occurredAt: Date(timeIntervalSince1970: 1_800_000_010)
+            )
+        ]
+    )
+
+    let encoded = try JSONEncoder().encode(tab)
+    let decoded = try JSONDecoder().decode(WorkspaceWebTabState.self, from: encoded)
+
+    #expect(decoded.runtimeEvents.count == 1, "runtime events should survive persistence")
+    #expect(decoded.runtimeEvents.first?.kind == .console, "runtime event kind should persist")
+    #expect(decoded.runtimeEvents.first?.level == "error", "runtime event level should persist")
+    #expect(decoded.runtimeEvents.first?.message == "fixture console error", "runtime event message should persist")
+    #expect(decoded.runtimeEvents.first?.lineNumber == 12, "runtime event location should persist")
+}

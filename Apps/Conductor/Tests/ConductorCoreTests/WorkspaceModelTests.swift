@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import ConductorCore
 
@@ -50,6 +51,51 @@ extension SplitNode {
     #expect(workspace.root.leaves == [paneID], "new terminal should add a tab, not split")
     #expect(workspace.panes[paneID]?.tabs.map(\.title) == ["zsh", "server"], "pane should contain zsh and server tabs")
     #expect(workspace.panes[paneID]?.selectedTabID == terminalID, "new terminal tab should become selected")
+}
+
+@Test func terminalRuntimeSnapshotsPersistAndDuplicate() throws {
+    var workspace = WorkspaceState(title: "Runtime")
+    guard let terminalID = workspace.focusedPane?.selectedTabID else {
+        Issue.record("workspace should have an initial terminal"); return
+    }
+    let startedAt = Date(timeIntervalSince1970: 1_720_000_000)
+    let finishedAt = Date(timeIntervalSince1970: 1_720_000_030)
+    let updatedAgent = workspace.updateTerminalAgentSnapshot(
+        terminalID,
+        snapshot: TerminalAgentSnapshot(
+            providerID: "codex",
+            displayName: "Codex",
+            state: .active,
+            startedAt: startedAt,
+            updatedAt: startedAt,
+            lastEvent: "session-start",
+            resumeCommand: "codex resume abc",
+            sessionIdentifier: "abc"
+        )
+    )
+    let updatedCommand = workspace.updateTerminalCommandSnapshot(
+        terminalID,
+        snapshot: TerminalCommandSnapshot(exitCode: 0, durationNanoseconds: 500_000_000, finishedAt: finishedAt)
+    )
+    let updatedSearch = workspace.updateTerminalSearchSnapshot(
+        terminalID,
+        snapshot: TerminalSearchSnapshot(active: true, needle: "failure", total: 3, selected: 1, updatedAt: finishedAt)
+    )
+    #expect(updatedAgent && updatedCommand && updatedSearch, "terminal runtime snapshots should update the model")
+
+    let encoded = try JSONEncoder().encode(workspace)
+    let restored = try JSONDecoder().decode(WorkspaceState.self, from: encoded)
+    let restoredTab = restored.panes.values.flatMap { $0.tabs }.first { $0.id == terminalID }
+    #expect(restoredTab?.agentSnapshot?.displayName == "Codex", "agent identity should survive coding")
+    #expect(restoredTab?.agentSnapshot?.resumeCommand == "codex resume abc", "resume command should survive coding")
+    #expect(restoredTab?.lastCommandSnapshot?.exitCode == 0, "last command exit should survive coding")
+    #expect(restoredTab?.searchSnapshot?.needle == "failure", "search context should survive coding")
+
+    let duplicate = restored.duplicated(title: "Runtime Copy")
+    let duplicateTab = duplicate.panes.values.flatMap { $0.tabs }.first
+    #expect(duplicateTab?.agentSnapshot?.state == .active, "duplicated workspace should preserve agent state")
+    #expect(duplicateTab?.lastCommandSnapshot?.finishedAt == finishedAt, "duplicated workspace should preserve command state")
+    #expect(duplicateTab?.searchSnapshot?.total == 3, "duplicated workspace should preserve search state")
 }
 
 @Test func splitRightAppendsPane() {

@@ -23,7 +23,6 @@ struct ConductorUpdateManifest: Codable, Equatable, Sendable {
     var version: String
     var build: String
     var createdAt: String
-    var gitRevision: String?
     var minimumSystemVersion: String?
     var full: ConductorUpdateArtifact
     var delta: ConductorUpdateArtifact?

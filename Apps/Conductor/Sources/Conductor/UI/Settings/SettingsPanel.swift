@@ -14,6 +14,7 @@ struct AppearanceSettingsPanel: View {
     @State private var renderGeneration = 0
     @State var selectedTerminalSettingsSection: TerminalSettingsSection = .typography
     @State var recordingShortcutCommand: ConductorShellCommand?
+    @State var shortcutRecordingMessage: String?
     @Namespace private var settingsSelectionNamespace
     @Environment(\.conductorTheme) var theme
     @Environment(\.conductorFontScale) var fontScale
@@ -30,10 +31,16 @@ struct AppearanceSettingsPanel: View {
             theme: model.theme,
             appearance: model.appearance,
             agentHookSettingsMessage: model.agentHookSettingsMessage,
+            notificationAuthorizationState: model.notificationAuthorizationState,
+            notificationDeliveryTestMessage: model.notificationDeliveryTestMessage,
             agentCLIStatuses: model.agentCLIStatuses,
             terminalFontDownloadStates: model.terminalFontDownloadStates,
             updatePreferences: model.updatePreferences,
-            updateState: model.updateState
+            updateState: model.updateState,
+            sessionRestoreReport: model.controlSessionRestoreReport,
+            sessionJournalSummary: model.controlSessionJournalSummary,
+            sessionJournalRecentEvents: model.controlSessionJournalEntries(limit: 5),
+            sessionSurfaceInspection: model.controlSessionSurfaceInspection()
         )
         return ZStack {
             VStack(spacing: 0) {
@@ -189,10 +196,16 @@ struct AppearanceSettingsPanel: View {
                 theme: snapshot.theme,
                 appearance: snapshot.appearance,
                 agentHookSettingsMessage: snapshot.agentHookSettingsMessage,
+                notificationAuthorizationState: snapshot.notificationAuthorizationState,
+                notificationDeliveryTestMessage: snapshot.notificationDeliveryTestMessage,
                 agentCLIStatuses: snapshot.agentCLIStatuses,
                 terminalFontDownloadStates: snapshot.terminalFontDownloadStates,
                 updatePreferences: snapshot.updatePreferences,
-                updateState: snapshot.updateState
+                updateState: snapshot.updateState,
+                sessionRestoreReport: snapshot.sessionRestoreReport,
+                sessionJournalSummary: snapshot.sessionJournalSummary,
+                sessionJournalRecentEvents: snapshot.sessionJournalRecentEvents,
+                sessionSurfaceInspection: snapshot.sessionSurfaceInspection
             )
             selectedSectionBody(snapshot: contentSnapshot)
         } else {

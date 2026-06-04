@@ -8,6 +8,8 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     private static let legacyFilenamesPboardType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
     private static let internalTerminalTabDragType = NSPasteboard.PasteboardType("app.conductor.terminal-tab")
     private static let internalTerminalTabDragPrefix = "terminal:"
+    private static let scrollBudgetSampleMinimumIntervalNanoseconds: UInt64 = 250_000_000
+    private static let scrollBudgetOverBudgetNanoseconds: UInt64 = 16_000_000
     private static let dropTypes: Set<NSPasteboard.PasteboardType> = [
         internalTerminalTabDragType,
         .string,
@@ -27,6 +29,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     private var markedText = NSMutableAttributedString()
     private var markedSelectedRange = NSRange(location: NSNotFound, length: 0)
     private var consumedRightMouseForMenu = false
+    private var lastScrollBudgetSampleAt: UInt64 = 0
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 900, height: 620))
@@ -162,12 +165,28 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        surface?.recordUserActivity()
-        surface?.scroll(
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        guard let surface else { return }
+        surface.recordUserActivity()
+        surface.scroll(
             deltaX: event.scrollingDeltaX,
             deltaY: event.scrollingDeltaY,
             precise: event.hasPreciseScrollingDeltas,
             momentumPhase: event.momentumPhase
+        )
+        recordScrollFrameSampleIfNeeded(startedAt: startedAt, surface: surface)
+    }
+
+    private func recordScrollFrameSampleIfNeeded(startedAt: UInt64, surface: TerminalSurface) {
+        let finishedAt = DispatchTime.now().uptimeNanoseconds
+        let elapsed = finishedAt - startedAt
+        let intervalElapsed = lastScrollBudgetSampleAt == 0 ||
+            finishedAt - lastScrollBudgetSampleAt >= Self.scrollBudgetSampleMinimumIntervalNanoseconds
+        guard intervalElapsed || elapsed >= Self.scrollBudgetOverBudgetNanoseconds else { return }
+        lastScrollBudgetSampleAt = finishedAt
+        surface.recordScrollFrameSample(
+            durationNanoseconds: elapsed,
+            source: "ui.terminal.scroll-wheel"
         )
     }
 

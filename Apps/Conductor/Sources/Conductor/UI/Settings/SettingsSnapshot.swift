@@ -27,7 +27,7 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
         case .usage:
             ConductorLocalization.text(zh: "用量", en: "Usage")
         case .automation:
-            ConductorLocalization.text(zh: "AI/通知", en: "AI")
+            ConductorLocalization.text(zh: "自动化/通知", en: "Automation")
         case .updates:
             ConductorLocalization.text(zh: "更新", en: "Updates")
         case .commands:
@@ -50,7 +50,7 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
         case .usage:
             ConductorLocalization.text(zh: "Token 记录和本地用量", en: "Token records and local usage")
         case .automation:
-            ConductorLocalization.text(zh: "Agent 安装检测与回复提醒", en: "Agent checks and reply alerts")
+            ConductorLocalization.text(zh: "安装检测、任务提醒和通知", en: "Install checks, task alerts, and notifications")
         case .updates:
             ConductorLocalization.text(zh: "检查、下载、替换运行时", en: "Check, download, and replace runtime")
         case .commands:
@@ -89,28 +89,46 @@ struct SettingsSnapshot: Equatable {
     let theme: TerminalTheme
     let appearance: AppearancePreferences
     let agentHookSettingsMessage: String?
+    let notificationAuthorizationState: AgentReplyNotificationAuthorizationState
+    let notificationDeliveryTestMessage: String?
     let agentCLIStatuses: [AgentHookProvider: AgentCLIStatus]
     let terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
     let updatePreferences: ConductorUpdatePreferences
     let updateState: ConductorUpdateState
+    let sessionRestoreReport: WorkspacePersistenceLoadReport
+    let sessionJournalSummary: ConductorSessionJournalSummary
+    let sessionJournalRecentEvents: [ConductorSessionJournalEvent]
+    let sessionSurfaceInspection: SessionSurfaceInspectionSnapshot
 
     init(
         selectedSection: SettingsSectionID,
         theme: TerminalTheme,
         appearance: AppearancePreferences,
         agentHookSettingsMessage: String?,
+        notificationAuthorizationState: AgentReplyNotificationAuthorizationState,
+        notificationDeliveryTestMessage: String?,
         agentCLIStatuses: [AgentHookProvider: AgentCLIStatus],
         terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState],
         updatePreferences: ConductorUpdatePreferences,
-        updateState: ConductorUpdateState
+        updateState: ConductorUpdateState,
+        sessionRestoreReport: WorkspacePersistenceLoadReport,
+        sessionJournalSummary: ConductorSessionJournalSummary,
+        sessionJournalRecentEvents: [ConductorSessionJournalEvent],
+        sessionSurfaceInspection: SessionSurfaceInspectionSnapshot
     ) {
         self.selectedSection = selectedSection
         self.theme = theme
         self.appearance = appearance
         self.agentHookSettingsMessage = agentHookSettingsMessage
+        self.notificationAuthorizationState = notificationAuthorizationState
+        self.notificationDeliveryTestMessage = notificationDeliveryTestMessage
         self.agentCLIStatuses = agentCLIStatuses
         self.terminalFontDownloadStates = terminalFontDownloadStates
         self.updatePreferences = updatePreferences
         self.updateState = updateState
+        self.sessionRestoreReport = sessionRestoreReport
+        self.sessionJournalSummary = sessionJournalSummary
+        self.sessionJournalRecentEvents = sessionJournalRecentEvents
+        self.sessionSurfaceInspection = sessionSurfaceInspection
     }
 }

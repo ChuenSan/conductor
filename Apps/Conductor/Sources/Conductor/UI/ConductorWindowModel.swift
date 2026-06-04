@@ -117,6 +117,51 @@ private struct TerminalContextMenuTarget {
     let tab: TerminalTabState
 }
 
+struct WorkspaceFileBufferSnapshot: Equatable {
+    var text: String
+    var savedText: String
+    var canSave: Bool
+    var isEditable: Bool
+    var isReadOnly: Bool
+    var updatedAt: Date
+    var savedRevision: Int
+
+    var isDirty: Bool {
+        text != savedText
+    }
+}
+
+struct TerminalAgentResumeBatchTarget: Equatable {
+    var workspaceID: WorkspaceID
+    var paneID: PaneID
+    var terminalID: TerminalID
+    var terminalTitle: String
+    var providerID: String?
+    var displayName: String
+    var resumeCommand: String
+    var agentSnapshot: TerminalAgentSnapshot?
+}
+
+struct TerminalAgentResumeBatchResult: Equatable {
+    var target: TerminalAgentResumeBatchTarget
+    var sent: Bool
+    var dryRun: Bool
+    var failureReason: String?
+}
+
+struct WorkspaceRenameRequest: Equatable {
+    var id = UUID()
+    var workspaceID: WorkspaceID
+}
+
+private struct WorkspaceContentRuntimeState: Equatable {
+    var webTabs: [WorkspaceWebTabState] = []
+    var fileTabs: [ConductorWorkspaceFileTab] = []
+    var dirtyFileTabIDs: Set<String> = []
+    var externallyChangedFileTabIDs: Set<String> = []
+    var selectedContentTabID: ConductorWorkspaceContentTabID?
+}
+
 struct ConductorWorkspaceFileTab: Identifiable, Equatable, Hashable, Sendable {
     var id: String { fileURL.standardizedFileURL.path }
     let fileURL: URL
@@ -152,11 +197,19 @@ enum WorkspaceNavigationSource: String {
     case sidebar
     case tabStrip
     case overview
+    case commandPalette
     case terminalFocus
     case newWorkspace
     case duplicateWorkspace
     case listMutation
     case programmatic
+}
+
+private enum ConductorUpdateCheckOutcome {
+    case success
+    case failure(String)
+    case skipped
+    case cancelled
 }
 
 @MainActor
@@ -174,7 +227,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                     syncWorkspace(previousWorkspace)
                 }
             }
-            persist()
+            if !suppressWorkspaceAssignmentPersistence {
+                persist()
+            }
         }
     }
     @Published private(set) var workspaces: [WorkspaceState] {
@@ -202,19 +257,25 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
     @Published private(set) var metadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
+    @Published private(set) var workspaceMetadataSnapshots: [WorkspaceID: WorkspaceMetadataSnapshot] = [:]
     @Published private(set) var applicationActive = NSApp.isActive
     @Published var sidebarVisible = true
     @Published var commandPaletteVisible = false
     @Published var settingsPanelVisible = false
     @Published var requestedSettingsSection: SettingsSectionID?
     @Published var workspaceOverviewVisible = false
-    @Published var terminalSearchVisible = false
     @Published var fileManagerPanelRequest: FileManagerPanelRequest?
+    @Published private(set) var workspaceRenameRequest: WorkspaceRenameRequest?
+    @Published private(set) var shellToast: ConductorShellToast?
+    @Published private(set) var recentShellCommandIDs: [String] = []
+    @Published private(set) var attentionEvents: [ConductorAttentionEvent] = []
+    @Published private(set) var sessionRestoreReport = WorkspacePersistenceLoadReport.initial()
     @Published private(set) var workspaceFileTabs: [ConductorWorkspaceFileTab] = []
     @Published private(set) var dirtyWorkspaceFileTabIDs: Set<String> = []
     @Published private(set) var externallyChangedWorkspaceFileTabIDs: Set<String> = []
     @Published private(set) var workspaceFileEditorSaveRequestTokensByTabID: [String: Int] = [:]
     @Published private(set) var workspaceFileEditorSaveAndCloseRequestTokensByTabID: [String: Int] = [:]
+    @Published private(set) var workspaceFileEditorSavedRevisionByTabID: [String: Int] = [:]
     @Published private(set) var workspaceFileSearchFocusGeneration = 0
     @Published private(set) var workspaceFileSearchNextGeneration = 0
     @Published private(set) var workspaceFileSearchPreviousGeneration = 0
@@ -234,12 +295,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     @Published private(set) var workspaceWebFindNextGenerationByID: [WebTabID: Int] = [:]
     @Published private(set) var workspaceWebFindPreviousGenerationByID: [WebTabID: Int] = [:]
     @Published private(set) var selectedWorkspaceContentTabID: ConductorWorkspaceContentTabID?
+    @Published var terminalSearchVisible = false
     @Published var terminalSearchQuery = ""
     @Published private(set) var agentHookSettingsMessage: String?
+    @Published private(set) var notificationAuthorizationState: AgentReplyNotificationAuthorizationState = .unknown
+    @Published private(set) var notificationDeliveryTestMessage: String?
     @Published private(set) var agentCLIStatuses: [AgentHookProvider: AgentCLIStatus]
     @Published private(set) var terminalFontDownloadStates: [TerminalFontPreset: TerminalFontDownloadState]
     @Published var updatePreferences = ConductorUpdatePreferences.defaults()
     @Published private(set) var updateState = ConductorUpdateState()
+    @Published private(set) var automaticUpdateDiagnostics = ConductorAutomaticUpdateDiagnostics()
     @Published private(set) var terminalSearchFocusGeneration = 0
     @Published private(set) var terminalSearchTargetID: TerminalID?
     @Published private(set) var paneFlashTokens: [PaneID: UInt64] = [:]
@@ -284,6 +349,18 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspace.focusedPane?.selectedTab.map { [$0] } ?? []
     }
 
+    var workspaceContentWebTabCount: Int {
+        var states = workspaceContentStatesByWorkspaceID
+        states[workspace.id] = currentWorkspaceContentState()
+        return states.values.reduce(0) { $0 + $1.webTabs.count }
+    }
+
+    var workspaceContentFileTabCount: Int {
+        var states = workspaceContentStatesByWorkspaceID
+        states[workspace.id] = currentWorkspaceContentState()
+        return states.values.reduce(0) { $0 + $1.fileTabs.count }
+    }
+
     private func markTerminalInteractionFocus() {
         if fileManagerKeyboardFocused {
             fileManagerKeyboardFocused = false
@@ -299,6 +376,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private let persistence = WorkspacePersistence()
+    private let sessionJournal = ConductorSessionJournal(isEnabled: WorkspacePersistence.isEnabledByDefault)
+    private let attentionStore = ConductorAttentionStore(isEnabled: WorkspacePersistence.isEnabledByDefault)
     /// Serial queue for persistence encoding + atomic writes, keeping that work
     /// off the main thread. Serial so saves never race or interleave on disk.
     private let persistenceQueue = DispatchQueue(label: "app.conductor.persistence", qos: .utility)
@@ -307,6 +386,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private var pendingMetadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
     private var pendingMetadataPublish: DispatchWorkItem?
     private var activeTerminalContextMenuController: TerminalContextMenuController?
+    private var workspaceContentStatesByWorkspaceID: [WorkspaceID: WorkspaceContentRuntimeState] = [:]
+    private var workspaceFileBufferSnapshotsByTabID: [String: WorkspaceFileBufferSnapshot] = [:]
+    private var restoredTerminalIDs: Set<TerminalID> = []
+    private var suppressWorkspaceAssignmentPersistence = false
     private var selectedWorkspaceID: WorkspaceID {
         didSet { applyOcclusion() }
     }
@@ -319,11 +402,20 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private let updateService = ConductorUpdateService()
     private let agentReplyNotificationService = AgentReplyNotificationService()
     private var updateTask: Task<Void, Never>?
-    private var automaticUpdateCheckStarted = false
+    private var automaticUpdateCheckTask: Task<Void, Never>?
+    private var automaticUpdateCheckGeneration: UInt64 = 0
     private var agentRuntimePollTask: Task<Void, Never>?
+    private var workspaceMetadataRefreshTask: Task<Void, Never>?
+    private var workspaceMetadataRefreshGeneration: UInt64 = 0
+    private var shellToastDismissTask: Task<Void, Never>?
+    private static let commandFinishedAttentionThresholdNanoseconds: UInt64 = 30_000_000_000
+    private static let automaticUpdateInitialDelayNanoseconds: UInt64 = 1_500_000_000
+    private static let automaticUpdateCheckIntervalNanoseconds: UInt64 = 3_600_000_000_000
+    private static let automaticUpdateMaximumIntervalNanoseconds: UInt64 = 21_600_000_000_000
 
     init() {
         let persisted = persistence.load()
+        self.sessionRestoreReport = persistence.lastLoadReport
         var persistedWorkspaces = persisted?.workspaces ?? [WorkspaceState()]
         for index in persistedWorkspaces.indices {
             persistedWorkspaces[index].reconcileSplitTreeWithPanes()
@@ -331,36 +423,64 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
         let selectedID = persisted?.selectedWorkspaceID ?? persistedWorkspaces[0].id
         self.workspaces = persistedWorkspaces
+        self.restoredTerminalIDs = Self.restoredTerminalIDs(
+            in: persistedWorkspaces,
+            report: persistence.lastLoadReport
+        )
         self.selectedWorkspaceID = selectedID
         self.workspace = persistedWorkspaces.first { $0.id == selectedID } ?? persistedWorkspaces[0]
         self.theme = persisted?.theme ?? .codexDark
         let resolvedAppearance = persisted?.appearance ?? AppearancePreferences()
         self.appearance = resolvedAppearance
+        self.recentShellCommandIDs = Self.loadRecentShellCommandIDs()
         self.appearanceCoordinator = AppearanceCoordinator(appearance: resolvedAppearance)
         self.agentCLIStatuses = Dictionary(uniqueKeysWithValues: AgentHookProvider.allCases.map { ($0, .unknown(provider: $0)) })
         self.terminalFontDownloadStates = [:]
         self.updatePreferences = updatePreferencesStore.load()
         self.updateState = ConductorUpdateState(currentVersion: ConductorAppVersion.current())
-        let restoredWebTabs = persisted?.workspaceWebTabs ?? []
-        // Hand the restored back/forward blobs to the web surface store and strip
-        // them from the in-memory tabs so frequent debounced saves stay small.
+        self.attentionEvents = attentionStore.events(limit: 80)
+        let validWorkspaceIDs = Set(persistedWorkspaces.map(\.id))
+        var restoredContentStates = Self.restoredWorkspaceContentStates(
+            persisted?.workspaceContentStates ?? [],
+            validWorkspaceIDs: validWorkspaceIDs
+        )
+        if restoredContentStates[selectedID] == nil {
+            restoredContentStates[selectedID] = WorkspaceContentRuntimeState(
+                webTabs: persisted?.workspaceWebTabs ?? [],
+                fileTabs: Self.restoredFileTabs(persisted?.workspaceFileTabs ?? []),
+                selectedContentTabID: Self.restoredWorkspaceContentSelection(
+                    persisted?.selectedWorkspaceContentTabID,
+                    workspace: self.workspace,
+                    webTabs: persisted?.workspaceWebTabs ?? [],
+                    fileTabIDs: Set(Self.restoredFileTabs(persisted?.workspaceFileTabs ?? []).map(\.id))
+                )
+            )
+        }
+        // Hand restored back/forward blobs to the web surface store and strip
+        // them from in-memory tabs so frequent debounced saves stay small.
         var seededInteractionStates: [WebTabID: Data] = [:]
-        var leanWebTabs = restoredWebTabs
-        for index in leanWebTabs.indices {
-            if let state = leanWebTabs[index].interactionState {
-                seededInteractionStates[leanWebTabs[index].id] = state
-                leanWebTabs[index].interactionState = nil
+        for workspaceID in restoredContentStates.keys {
+            guard var state = restoredContentStates[workspaceID] else { continue }
+            for index in state.webTabs.indices {
+                if let interactionState = state.webTabs[index].interactionState {
+                    seededInteractionStates[state.webTabs[index].id] = interactionState
+                    state.webTabs[index].interactionState = nil
+                }
             }
+            restoredContentStates[workspaceID] = state
         }
         ConductorWebKitSurfaceStore.shared.seedPendingInteractionStates(seededInteractionStates)
-        self.workspaceWebTabs = leanWebTabs
-        let restoredFileTabs = Self.restoredFileTabs(persisted?.workspaceFileTabs ?? [])
-        self.workspaceFileTabs = restoredFileTabs
+        self.workspaceContentStatesByWorkspaceID = restoredContentStates
+        let selectedContentState = restoredContentStates[selectedID] ?? WorkspaceContentRuntimeState()
+        self.workspaceWebTabs = selectedContentState.webTabs
+        self.workspaceFileTabs = selectedContentState.fileTabs
+        self.dirtyWorkspaceFileTabIDs = selectedContentState.dirtyFileTabIDs
+        self.externallyChangedWorkspaceFileTabIDs = selectedContentState.externallyChangedFileTabIDs
         self.selectedWorkspaceContentTabID = Self.restoredWorkspaceContentSelection(
-            persisted?.selectedWorkspaceContentTabID,
+            Self.persistedWorkspaceContentSelection(selectedContentState.selectedContentTabID),
             workspace: self.workspace,
             webTabs: self.workspaceWebTabs,
-            fileTabIDs: Set(restoredFileTabs.map(\.id))
+            fileTabIDs: Set(self.workspaceFileTabs.map(\.id))
         )
         syncPanelCoordinatorFromPublished()
         syncFileWorkspaceCoordinatorFromPublished()
@@ -369,7 +489,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         ConductorUsageFeature.configureHostMenuStyle(Self.usageMenuStyle(for: self.theme))
         TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
+        configureNotificationDeliveryIssueHandler()
+        surfaceSessionRestoreReportIfNeeded()
         startAgentRuntimePolling()
+        scheduleWorkspaceMetadataRefresh(reason: "launch", debounceNanoseconds: 300_000_000)
     }
 
     #if DEBUG
@@ -390,11 +513,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.workspace = resolvedWorkspaces.first { $0.id == selectedID } ?? resolvedWorkspaces[0]
         self.theme = theme
         self.appearance = appearance
+        self.recentShellCommandIDs = Self.loadRecentShellCommandIDs()
         self.appearanceCoordinator = AppearanceCoordinator(appearance: appearance)
         self.agentCLIStatuses = Dictionary(uniqueKeysWithValues: AgentHookProvider.allCases.map { ($0, .unknown(provider: $0)) })
         self.terminalFontDownloadStates = [:]
         self.updatePreferences = updatePreferencesStore.load()
         self.updateState = ConductorUpdateState(currentVersion: ConductorAppVersion.current())
+        self.attentionEvents = attentionStore.events(limit: 80)
         self.sidebarVisible = sidebarVisible
         self.commandPaletteVisible = commandPaletteVisible
         self.settingsPanelVisible = settingsPanelVisible
@@ -406,7 +531,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         ConductorUsageFeature.configureHostMenuStyle(Self.usageMenuStyle(for: self.theme))
         TerminalAppearanceRuntime.apply(self.appearance)
         ConductorMotion.setReducedMotion(self.appearance.reducedMotion)
+        configureNotificationDeliveryIssueHandler()
         startAgentRuntimePolling()
+        scheduleWorkspaceMetadataRefresh(reason: "debug-init", debounceNanoseconds: 300_000_000)
     }
     #endif
 
@@ -423,6 +550,52 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             secondaryText: theme.shellChromeTextMuted.opacity(0.86),
             tertiaryText: theme.shellChromeTextMuted.opacity(0.64),
             usesDarkChrome: theme.usesDarkChrome)
+    }
+
+    private static let recentShellCommandsDefaultsKey = "conductor.shell.recentCommands"
+    private static let maxRecentShellCommandCount = 12
+
+    private static func loadRecentShellCommandIDs() -> [String] {
+        let knownCommands = Set(ConductorShellCommand.allCases.map(\.rawValue))
+        let stored = UserDefaults.standard.stringArray(forKey: recentShellCommandsDefaultsKey) ?? []
+        var unique: [String] = []
+        for commandID in stored where knownCommands.contains(commandID) && !unique.contains(commandID) {
+            unique.append(commandID)
+        }
+        return Array(unique.prefix(maxRecentShellCommandCount))
+    }
+
+    private static func saveRecentShellCommandIDs(_ commandIDs: [String]) {
+        UserDefaults.standard.set(Array(commandIDs.prefix(maxRecentShellCommandCount)), forKey: recentShellCommandsDefaultsKey)
+    }
+
+    func openTokenRecordsPanel() {
+        ConductorMotion.perform(ConductorMotion.panel) {
+            ConductorUsageFeature.openTokenRecords(
+                style: Self.usageMenuStyle(for: self.theme),
+                languageIdentifier: self.appearance.language.usageFeatureLanguageIdentifier)
+        }
+    }
+
+    var canRestorePreviousSessionSnapshot: Bool {
+        persistence.hasPreviousSnapshot
+    }
+
+    @discardableResult
+    func restorePreviousSessionSnapshot() -> Bool {
+        guard let restored = persistence.loadPreviousSnapshot() else {
+            sessionRestoreReport = persistence.lastLoadReport
+            showShellToast(
+                title: L("无法恢复上一份会话", "Cannot Restore Previous Session"),
+                body: sessionRestoreReport.message,
+                systemImage: "exclamationmark.triangle",
+                tone: .warning,
+                duration: 7
+            )
+            return false
+        }
+        applyRestoredSession(restored, report: persistence.lastLoadReport)
+        return true
     }
 
     private func syncPanelCoordinatorFromPublished() {
@@ -469,6 +642,327 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             externallyChangedTabIDs: externallyChangedWorkspaceFileTabIDs,
             selectedContentTabID: selectedWorkspaceContentTabID
         )
+    }
+
+    private func currentWorkspaceContentState() -> WorkspaceContentRuntimeState {
+        WorkspaceContentRuntimeState(
+            webTabs: workspaceWebTabs,
+            fileTabs: workspaceFileTabs,
+            dirtyFileTabIDs: dirtyWorkspaceFileTabIDs,
+            externallyChangedFileTabIDs: externallyChangedWorkspaceFileTabIDs,
+            selectedContentTabID: selectedWorkspaceContentTabID
+        )
+    }
+
+    private func saveSelectedWorkspaceContentState() {
+        workspaceContentStatesByWorkspaceID[workspace.id] = currentWorkspaceContentState()
+    }
+
+    private func restoreWorkspaceContentState(for workspaceID: WorkspaceID) {
+        let state = workspaceContentStatesByWorkspaceID[workspaceID] ?? WorkspaceContentRuntimeState()
+        workspaceWebTabs = state.webTabs
+        workspaceFileTabs = state.fileTabs
+        dirtyWorkspaceFileTabIDs = state.dirtyFileTabIDs
+        externallyChangedWorkspaceFileTabIDs = state.externallyChangedFileTabIDs
+        selectedWorkspaceContentTabID = Self.restoredWorkspaceContentSelection(
+            Self.persistedWorkspaceContentSelection(state.selectedContentTabID),
+            workspace: workspace,
+            webTabs: state.webTabs,
+            fileTabIDs: Set(state.fileTabs.map(\.id))
+        )
+        pruneWorkspaceWebTabCommands(keeping: Set(state.webTabs.map(\.id)))
+        syncFileWorkspaceCoordinatorFromPublished()
+        syncPanelCoordinatorFromPublished()
+    }
+
+    private func removeWorkspaceContentState(for workspaceID: WorkspaceID) {
+        workspaceContentStatesByWorkspaceID.removeValue(forKey: workspaceID)
+        ConductorWebKitSurfaceStore.shared.keepOnly(retainedWebTabIDsForSurfaceStore(excluding: [workspaceID]))
+    }
+
+    private func removeWorkspaceContentStates(for workspaceIDs: Set<WorkspaceID>) {
+        guard !workspaceIDs.isEmpty else { return }
+        for workspaceID in workspaceIDs {
+            workspaceContentStatesByWorkspaceID.removeValue(forKey: workspaceID)
+        }
+        ConductorWebKitSurfaceStore.shared.keepOnly(retainedWebTabIDsForSurfaceStore(excluding: workspaceIDs))
+    }
+
+    private func duplicatedContentState(from source: WorkspaceContentRuntimeState) -> WorkspaceContentRuntimeState {
+        var webIDMap: [WebTabID: WebTabID] = [:]
+        let webTabs = source.webTabs.map { tab in
+            let copiedID = WebTabID()
+            webIDMap[tab.id] = copiedID
+            return WorkspaceWebTabState(
+                id: copiedID,
+                url: tab.url,
+                pendingAddress: tab.pendingAddress,
+                title: tab.title,
+                faviconURL: tab.faviconURL,
+                isLoading: false,
+                estimatedProgress: 0,
+                canGoBack: false,
+                canGoForward: false,
+                errorMessage: tab.errorMessage
+            )
+        }
+
+        let selection: ConductorWorkspaceContentTabID?
+        switch source.selectedContentTabID {
+        case .file(let tabID):
+            selection = source.fileTabs.contains(where: { $0.id == tabID }) ? .file(tabID) : nil
+        case .web(let tabID):
+            selection = webIDMap[tabID].map { .web($0) }
+        case .terminal, nil:
+            selection = nil
+        }
+
+        return WorkspaceContentRuntimeState(
+            webTabs: webTabs,
+            fileTabs: source.fileTabs,
+            selectedContentTabID: selection
+        )
+    }
+
+    private func applyRestoredSession(_ persisted: PersistedWindowState, report: WorkspacePersistenceLoadReport) {
+        pendingPersistence?.cancel()
+        pendingPersistence = nil
+        closeAllSurfaces()
+        ConductorWebKitSurfaceStore.shared.keepOnly(Set<WebTabID>())
+
+        var restoredWorkspaces = persisted.workspaces
+        for index in restoredWorkspaces.indices {
+            restoredWorkspaces[index].reconcileSplitTreeWithPanes()
+            restoredWorkspaces[index].normalizeMixedSplitLayout()
+        }
+        guard !restoredWorkspaces.isEmpty else { return }
+        let selectedID = restoredWorkspaces.contains(where: { $0.id == persisted.selectedWorkspaceID })
+            ? persisted.selectedWorkspaceID
+            : restoredWorkspaces[0].id
+        let selectedWorkspace = restoredWorkspaces.first { $0.id == selectedID } ?? restoredWorkspaces[0]
+        let validWorkspaceIDs = Set(restoredWorkspaces.map(\.id))
+        var restoredContentStates = Self.restoredWorkspaceContentStates(
+            persisted.workspaceContentStates,
+            validWorkspaceIDs: validWorkspaceIDs
+        )
+        if restoredContentStates[selectedID] == nil {
+            let fileTabs = Self.restoredFileTabs(persisted.workspaceFileTabs)
+            restoredContentStates[selectedID] = WorkspaceContentRuntimeState(
+                webTabs: persisted.workspaceWebTabs,
+                fileTabs: fileTabs,
+                selectedContentTabID: Self.restoredWorkspaceContentSelection(
+                    persisted.selectedWorkspaceContentTabID,
+                    workspace: selectedWorkspace,
+                    webTabs: persisted.workspaceWebTabs,
+                    fileTabIDs: Set(fileTabs.map(\.id))
+                )
+            )
+        }
+
+        var seededInteractionStates: [WebTabID: Data] = [:]
+        for workspaceID in restoredContentStates.keys {
+            guard var state = restoredContentStates[workspaceID] else { continue }
+            for index in state.webTabs.indices {
+                if let interactionState = state.webTabs[index].interactionState {
+                    seededInteractionStates[state.webTabs[index].id] = interactionState
+                    state.webTabs[index].interactionState = nil
+                }
+            }
+            restoredContentStates[workspaceID] = state
+        }
+        ConductorWebKitSurfaceStore.shared.seedPendingInteractionStates(seededInteractionStates)
+
+        workspaceContentStatesByWorkspaceID = restoredContentStates
+        workspaces = restoredWorkspaces
+        restoredTerminalIDs = Self.restoredTerminalIDs(
+            in: restoredWorkspaces,
+            report: report
+        )
+        selectedWorkspaceID = selectedID
+        skipPreviousWorkspaceSyncForNextAssignment = true
+        suppressWorkspaceAssignmentPersistence = true
+        workspace = selectedWorkspace
+        suppressWorkspaceAssignmentPersistence = false
+
+        let selectedContentState = restoredContentStates[selectedID] ?? WorkspaceContentRuntimeState()
+        workspaceWebTabs = selectedContentState.webTabs
+        workspaceFileTabs = selectedContentState.fileTabs
+        dirtyWorkspaceFileTabIDs = selectedContentState.dirtyFileTabIDs
+        externallyChangedWorkspaceFileTabIDs = selectedContentState.externallyChangedFileTabIDs
+        selectedWorkspaceContentTabID = Self.restoredWorkspaceContentSelection(
+            Self.persistedWorkspaceContentSelection(selectedContentState.selectedContentTabID),
+            workspace: selectedWorkspace,
+            webTabs: workspaceWebTabs,
+            fileTabIDs: Set(workspaceFileTabs.map(\.id))
+        )
+
+        theme = persisted.theme
+        appearance = persisted.appearance
+        syncAppearanceCoordinatorFromPublished()
+        syncPanelCoordinatorFromPublished()
+        syncFileWorkspaceCoordinatorFromPublished()
+        closeWorkspaceTransientPanels()
+        sessionRestoreReport = report
+        surfaceSessionRestoreReportIfNeeded()
+        scheduleWorkspaceMetadataRefresh(reason: "restore-previous-session", debounceNanoseconds: 150_000_000)
+        persist()
+    }
+
+    private func surfaceSessionRestoreReportIfNeeded() {
+        switch sessionRestoreReport.state {
+        case .restoredFromJournal:
+            let body = sessionRestoreSummaryBody(
+                fallback: L("会话快照不可用，已从事件记录恢复工作台骨架。", "Session snapshots were unavailable, so Conductor rebuilt a workspace skeleton from the event journal.")
+            )
+            controlCreateAttentionEvent(
+                title: L("已从会话记录恢复", "Restored From Session Journal"),
+                body: body,
+                kind: .sessionRecovery,
+                severity: .warning,
+                workspaceID: controlSelectedWorkspaceID,
+                source: "session-restore",
+                details: [
+                    "state": sessionRestoreReport.state.rawValue,
+                    "sourcePath": sessionRestoreReport.sourcePath ?? "",
+                    "failedPathCount": String(sessionRestoreReport.failedPaths.count),
+                    "restoredWorkspaceCount": String(sessionRestoreReport.restoredWorkspaceCount),
+                    "droppedWorkspaceCount": String(sessionRestoreReport.droppedWorkspaceCount),
+                    "originalWebTabCount": String(sessionRestoreReport.originalWebTabCount),
+                    "restoredWebTabCount": String(sessionRestoreReport.restoredWebTabCount),
+                    "droppedWebTabCount": String(sessionRestoreReport.droppedWebTabCount),
+                    "originalFileTabCount": String(sessionRestoreReport.originalFileTabCount),
+                    "restoredFileTabCount": String(sessionRestoreReport.restoredFileTabCount),
+                    "droppedFileTabCount": String(sessionRestoreReport.droppedFileTabCount),
+                    "missingFilePaths": sessionRestoreReport.missingFilePaths.joined(separator: "\n")
+                ]
+            )
+            showShellToast(
+                title: L("已从记录恢复会话", "Session Journal Restored"),
+                body: body,
+                systemImage: "list.bullet.rectangle",
+                tone: .warning,
+                duration: 9
+            )
+        case .restoredFromPrevious:
+            let body = sessionRestoreSummaryBody(
+                fallback: L("最新版会话不可用，已使用上一份有效快照。", "The latest session was unavailable, so Conductor used the previous valid snapshot.")
+            )
+            controlCreateAttentionEvent(
+                title: L("已从上一份会话恢复", "Restored Previous Session"),
+                body: body,
+                kind: .sessionRecovery,
+                severity: .warning,
+                workspaceID: controlSelectedWorkspaceID,
+                source: "session-restore",
+                details: [
+                    "state": sessionRestoreReport.state.rawValue,
+                    "sourcePath": sessionRestoreReport.sourcePath ?? "",
+                    "failedPathCount": String(sessionRestoreReport.failedPaths.count),
+                    "restoredWorkspaceCount": String(sessionRestoreReport.restoredWorkspaceCount),
+                    "droppedWorkspaceCount": String(sessionRestoreReport.droppedWorkspaceCount),
+                    "originalWebTabCount": String(sessionRestoreReport.originalWebTabCount),
+                    "restoredWebTabCount": String(sessionRestoreReport.restoredWebTabCount),
+                    "droppedWebTabCount": String(sessionRestoreReport.droppedWebTabCount),
+                    "originalFileTabCount": String(sessionRestoreReport.originalFileTabCount),
+                    "restoredFileTabCount": String(sessionRestoreReport.restoredFileTabCount),
+                    "droppedFileTabCount": String(sessionRestoreReport.droppedFileTabCount),
+                    "missingFilePaths": sessionRestoreReport.missingFilePaths.joined(separator: "\n")
+                ]
+            )
+            showShellToast(
+                title: L("已恢复上一份会话", "Previous Session Restored"),
+                body: body,
+                systemImage: "clock.arrow.circlepath",
+                tone: .warning,
+                duration: 9
+            )
+        case .failed:
+            let body = sessionRestoreFailureBody()
+            controlCreateAttentionEvent(
+                title: L("会话恢复失败", "Session Restore Failed"),
+                body: body,
+                kind: .sessionRecovery,
+                severity: .error,
+                workspaceID: controlSelectedWorkspaceID,
+                source: "session-restore",
+                details: [
+                    "state": sessionRestoreReport.state.rawValue,
+                    "failedPaths": sessionRestoreReport.failedPaths.joined(separator: "\n"),
+                    "failedPathCount": String(sessionRestoreReport.failedPaths.count),
+                    "missingFilePaths": sessionRestoreReport.missingFilePaths.joined(separator: "\n")
+                ]
+            )
+            showShellToast(
+                title: L("会话恢复失败", "Session Restore Failed"),
+                body: body,
+                systemImage: "exclamationmark.triangle",
+                tone: .error,
+                duration: 12
+            )
+        case .disabled, .reset, .missing, .restored:
+            break
+        }
+    }
+
+    private func sessionRestoreSummaryBody(fallback: String) -> String {
+        let restored = L(
+            "已恢复 \(sessionRestoreReport.restoredWorkspaceCount) 个工作区、\(sessionRestoreReport.restoredWebTabCount) 个网页、\(sessionRestoreReport.restoredFileTabCount) 个文件。",
+            "Restored \(sessionRestoreReport.restoredWorkspaceCount) workspaces, \(sessionRestoreReport.restoredWebTabCount) web tabs, and \(sessionRestoreReport.restoredFileTabCount) files."
+        )
+        var parts = [fallback, restored]
+        if sessionRestoreReport.droppedWorkspaceCount > 0 {
+            parts.append(L(
+                "\(sessionRestoreReport.droppedWorkspaceCount) 个无效工作区已跳过。",
+                "\(sessionRestoreReport.droppedWorkspaceCount) invalid workspaces were skipped."
+            ))
+        }
+        if sessionRestoreReport.droppedFileTabCount > 0 || sessionRestoreReport.droppedWebTabCount > 0 {
+            parts.append(L(
+                "\(sessionRestoreReport.droppedWebTabCount) 个网页、\(sessionRestoreReport.droppedFileTabCount) 个文件未恢复。",
+                "\(sessionRestoreReport.droppedWebTabCount) web tabs and \(sessionRestoreReport.droppedFileTabCount) files were not restored."
+            ))
+        }
+        if let missingFilesSummary = sessionRestoreMissingFilesSummary() {
+            parts.append(missingFilesSummary)
+        }
+        if !sessionRestoreReport.failedPaths.isEmpty {
+            parts.append(L(
+                "\(sessionRestoreReport.failedPaths.count) 个状态文件不可用。",
+                "\(sessionRestoreReport.failedPaths.count) state files were unavailable."
+            ))
+        }
+        if parts.count > 1 {
+            return parts.joined(separator: " ")
+        }
+        return fallback
+    }
+
+    private func sessionRestoreMissingFilesSummary() -> String? {
+        guard let firstMissingPath = sessionRestoreReport.missingFilePaths.first else {
+            return nil
+        }
+        let filename = URL(fileURLWithPath: firstMissingPath).lastPathComponent
+        let displayName = filename.isEmpty ? firstMissingPath : filename
+        if sessionRestoreReport.missingFilePaths.count > 1 {
+            return L(
+                "未恢复文件: \(displayName) 等 \(sessionRestoreReport.missingFilePaths.count) 个。",
+                "\(sessionRestoreReport.missingFilePaths.count) missing files were not restored, including \(displayName)."
+            )
+        }
+        return L(
+            "未恢复文件: \(displayName)。",
+            "Missing file not restored: \(displayName)."
+        )
+    }
+
+    private func sessionRestoreFailureBody() -> String {
+        if !sessionRestoreReport.failedPaths.isEmpty {
+            return L(
+                "\(sessionRestoreReport.failedPaths.count) 个状态文件不可用，已打开新的工作区。",
+                "\(sessionRestoreReport.failedPaths.count) state files were unavailable, so Conductor opened a new workspace."
+            )
+        }
+        return L("没有找到可用会话，已打开新的工作区。", "No usable session was found, so Conductor opened a new workspace.")
     }
 
     @discardableResult
@@ -771,8 +1265,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         if enabled {
             agentReplyNotificationService.requestAuthorization { [weak self] granted in
                 guard let self else { return }
+                self.notificationAuthorizationState = granted ? .authorized : .denied
                 self.agentHookSettingsMessage = granted
-                    ? L("AI 回复通知已开启，正在配置终端 Hook。", "AI reply notifications enabled. Configuring terminal hooks.")
+                    ? L("工作完成通知已开启，正在配置终端 Hook。", "Work completion notifications enabled. Configuring terminal hooks.")
                     : L("通知权限未开启，请在系统设置里允许 Conductor 发送通知。", "Notifications are not allowed. Enable Conductor notifications in System Settings.")
                 if granted {
                     self.installAgentReplyNotificationHooks()
@@ -796,22 +1291,67 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         appearance.agentReplyNotifications.playSound = playSound
     }
 
+    private func configureNotificationDeliveryIssueHandler() {
+        agentReplyNotificationService.deliveryIssueHandler = { [weak self] issue in
+            self?.handleAgentNotificationDeliveryIssue(issue)
+        }
+    }
+
+    private func handleAgentNotificationDeliveryIssue(_ issue: AgentReplyNotificationDeliveryIssue) {
+        switch issue {
+        case .permissionUnavailable:
+            showShellToast(
+                title: L("系统通知没有显示", "System Notification Not Shown"),
+                body: L(
+                    "若要看到横幅，请在系统设置里允许 Conductor 通知。",
+                    "Allow Conductor notifications in System Settings to show banners."
+                ),
+                systemImage: "bell.slash",
+                tone: .warning,
+                actionTitle: L("打开系统设置", "Open Settings"),
+                action: .openNotificationSettings,
+                duration: 7
+            )
+        case .deliveryFailed(let message):
+            showShellToast(
+                title: L("通知发送失败", "Notification Delivery Failed"),
+                body: message.isEmpty
+                    ? L("系统通知暂时没有投递成功，可以稍后重试。", "The system notification was not delivered. Try again later.")
+                    : String(message.prefix(160)),
+                systemImage: "exclamationmark.triangle",
+                tone: .error,
+                actionTitle: L("检查权限", "Check Permission"),
+                action: .checkNotificationPermission,
+                duration: 7
+            )
+        }
+    }
+
+    func refreshNotificationAuthorizationState() {
+        agentReplyNotificationService.checkAuthorizationStatus { [weak self] state in
+            self?.notificationAuthorizationState = state
+        }
+    }
+
     func checkNotificationPermissionFromToolbar() {
         showSettingsPanel(section: .automation)
+        notificationDeliveryTestMessage = nil
         agentHookSettingsMessage = L("正在检测 macOS 通知权限...", "Checking macOS notification permission...")
         agentReplyNotificationService.checkAuthorizationStatus { [weak self] state in
             guard let self else { return }
+            self.notificationAuthorizationState = state
             switch state {
             case .authorized:
                 self.appearance.agentReplyNotifications.enabled = true
                 self.agentHookSettingsMessage = L(
-                    "通知权限已开启，AI 回复通知会在 Agent 完成回复后发送。",
-                    "Notifications are allowed. AI reply notifications will be sent when an agent finishes replying."
+                    "通知权限已开启，后台命令、终端提醒和任务回复会尝试发送系统横幅。",
+                    "Notifications are allowed. Background commands, terminal alerts, and task replies can send system banners."
                 )
                 self.installAgentReplyNotificationHooks()
             case .notDetermined:
                 self.agentReplyNotificationService.requestAuthorization { [weak self] granted in
                     guard let self else { return }
+                    self.notificationAuthorizationState = granted ? .authorized : .denied
                     self.appearance.agentReplyNotifications.enabled = granted
                     self.agentHookSettingsMessage = granted
                         ? L("通知权限已开启，正在配置终端 Hook。", "Notifications are allowed. Configuring terminal hooks.")
@@ -843,8 +1383,90 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
 
-    func installAgentReplyNotificationActivationHandler(_ handler: @escaping (TerminalID) -> Void) {
-        agentReplyNotificationService.activateTerminal = handler
+    func sendTestSystemNotificationFromSettings() {
+        notificationDeliveryTestMessage = L(
+            "正在发送测试通知...",
+            "Sending a test notification..."
+        )
+        let title = L("Conductor 测试通知", "Conductor Test Notification")
+        let body = L(
+            "如果你看到这条横幅，系统通知投递正常。",
+            "If you see this banner, system notification delivery is working."
+        )
+        agentReplyNotificationService.sendTestNotification(
+            title: title,
+            body: body,
+            playSound: appearance.agentReplyNotifications.playSound
+        ) { [weak self] result in
+            guard let self else { return }
+            self.notificationAuthorizationState = result.authorizationState
+            if result.status == .delivered {
+                self.appearance.agentReplyNotifications.enabled = true
+            }
+            self.notificationDeliveryTestMessage = self.notificationTestMessage(for: result)
+        }
+    }
+
+    func controlSendSystemNotificationTest(
+        title: String,
+        body: String,
+        playSound: Bool?
+    ) async -> AgentReplyNotificationTestResult {
+        await withCheckedContinuation { continuation in
+            agentReplyNotificationService.sendTestNotification(
+                title: title,
+                body: body,
+                playSound: playSound ?? appearance.agentReplyNotifications.playSound
+            ) { [weak self] result in
+                guard let self else {
+                    continuation.resume(returning: result)
+                    return
+                }
+                self.notificationAuthorizationState = result.authorizationState
+                self.notificationDeliveryTestMessage = self.notificationTestMessage(for: result)
+                continuation.resume(returning: result)
+            }
+        }
+    }
+
+    private func notificationTestMessage(for result: AgentReplyNotificationTestResult) -> String {
+        switch result.status {
+        case .delivered:
+            return L(
+                "测试通知已交给 Notification Center。如果仍然没有横幅，请检查专注模式和系统横幅样式。",
+                "The test notification was handed to Notification Center. If no banner appeared, check Focus mode and banner style."
+            )
+        case .permissionUnavailable:
+            if !result.launchSupportsSystemNotifications {
+                return L(
+                    "当前启动方式不能显示系统横幅；请从正式 Conductor.app 启动后再测试。",
+                    "This launch mode cannot show system banners; start from Conductor.app and test again."
+                )
+            }
+            if result.authorizationState == .denied {
+                return L(
+                    "macOS 已拒绝通知权限；请在系统设置里允许 Conductor。",
+                    "macOS denied notification permission; allow Conductor in System Settings."
+                )
+            }
+            return result.errorMessage ?? L(
+                "系统通知当前不可用，请检查 macOS 通知设置。",
+                "System notifications are unavailable. Check macOS notification settings."
+            )
+        case .deliveryFailed:
+            let message = result.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let message, !message.isEmpty {
+                return L("测试通知发送失败：\(message)", "Test notification failed: \(message)")
+            }
+            return L(
+                "测试通知发送失败，请检查 macOS 通知设置。",
+                "Test notification failed. Check macOS notification settings."
+            )
+        }
+    }
+
+    func installAgentReplyNotificationActivationHandler(_ handler: @escaping (UUID?, TerminalID?) -> Void) {
+        agentReplyNotificationService.activateNotificationTarget = handler
     }
 
     func openSystemNotificationSettings() {
@@ -902,19 +1524,40 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
 
-    func setUpdateManifestURL(_ value: String) {
+    func setUpdateManifestURL(_ value: String, persist: Bool = true) {
         guard updatePreferences.manifestURLString != value else { return }
         updatePreferences.manifestURLString = value
-        updatePreferencesStore.save(updatePreferences)
+        if persist {
+            updatePreferencesStore.save(updatePreferences)
+            synchronizeAutomaticUpdateChecks()
+        }
+    }
+
+    func cancelUpdateOperation() {
+        updateTask?.cancel()
+        updateTask = nil
+
+        switch updateState.phase {
+        case .checking:
+            updateState = ConductorUpdateState(
+                currentVersion: ConductorAppVersion.current(),
+                lastCheckedAt: updateState.lastCheckedAt
+            )
+        case .downloading:
+            var availableState = updateState
+            availableState.phase = updateState.manifest == nil ? .idle : .available
+            availableState.downloadProgress = nil
+            updateState = availableState
+        default:
+            break
+        }
     }
 
     func setAutomaticUpdateChecksEnabled(_ enabled: Bool) {
         guard updatePreferences.automaticChecksEnabled != enabled else { return }
         updatePreferences.automaticChecksEnabled = enabled
         updatePreferencesStore.save(updatePreferences)
-        if enabled {
-            startUpdateChecksIfNeeded()
-        }
+        synchronizeAutomaticUpdateChecks()
     }
 
     func setPrefersDeltaUpdates(_ enabled: Bool) {
@@ -924,38 +1567,120 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func startUpdateChecksIfNeeded() {
-        guard !automaticUpdateCheckStarted else { return }
+        synchronizeAutomaticUpdateChecks()
+    }
+
+    private func synchronizeAutomaticUpdateChecks() {
+        automaticUpdateDiagnostics.isEnabled = updatePreferences.automaticChecksEnabled
         guard updatePreferences.automaticChecksEnabled,
               updatePreferences.manifestURL != nil else {
+            stopAutomaticUpdateChecks()
             return
         }
-        automaticUpdateCheckStarted = true
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            self?.checkForUpdates(manual: false)
+        guard automaticUpdateCheckTask == nil else { return }
+        automaticUpdateCheckGeneration &+= 1
+        let generation = automaticUpdateCheckGeneration
+        scheduleAutomaticUpdateCheck(after: Self.automaticUpdateInitialDelayNanoseconds)
+        automaticUpdateCheckTask = Task { @MainActor [weak self] in
+            await self?.runAutomaticUpdateChecks(generation: generation)
+        }
+    }
+
+    private func stopAutomaticUpdateChecks() {
+        automaticUpdateCheckGeneration &+= 1
+        automaticUpdateCheckTask?.cancel()
+        automaticUpdateCheckTask = nil
+        automaticUpdateDiagnostics.isEnabled = updatePreferences.automaticChecksEnabled
+        automaticUpdateDiagnostics.isRunning = false
+        automaticUpdateDiagnostics.currentIntervalSeconds = nil
+        automaticUpdateDiagnostics.nextCheckAt = nil
+    }
+
+    private func runAutomaticUpdateChecks(generation: UInt64) async {
+        var sleepNanoseconds = Self.automaticUpdateInitialDelayNanoseconds
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(nanoseconds: sleepNanoseconds)
+            } catch {
+                break
+            }
+
+            guard generation == automaticUpdateCheckGeneration else { break }
+            guard updatePreferences.automaticChecksEnabled,
+                  updatePreferences.manifestURL != nil else {
+                break
+            }
+
+            let outcome: ConductorUpdateCheckOutcome
+            if updateState.canCheck {
+                automaticUpdateDiagnostics.lastAttemptAt = Date()
+                automaticUpdateDiagnostics.currentIntervalSeconds = nil
+                automaticUpdateDiagnostics.nextCheckAt = nil
+                outcome = await withCheckedContinuation { continuation in
+                    var didResume = false
+                    _ = startUpdateCheck(manual: false) { checkOutcome in
+                        guard !didResume else { return }
+                        didResume = true
+                        continuation.resume(returning: checkOutcome)
+                    }
+                }
+            } else {
+                outcome = .skipped
+            }
+            sleepNanoseconds = nextAutomaticUpdateDelay(after: outcome)
+            scheduleAutomaticUpdateCheck(after: sleepNanoseconds)
+        }
+
+        if generation == automaticUpdateCheckGeneration {
+            automaticUpdateCheckTask = nil
+            automaticUpdateDiagnostics.isRunning = false
+            automaticUpdateDiagnostics.nextCheckAt = nil
+            automaticUpdateDiagnostics.currentIntervalSeconds = nil
         }
     }
 
     func checkForUpdates(manual: Bool = true) {
-        guard updateState.canCheck else { return }
+        _ = startUpdateCheck(manual: manual, completion: nil)
+    }
+
+    @discardableResult
+    private func startUpdateCheck(
+        manual: Bool = true,
+        completion: (@MainActor (ConductorUpdateCheckOutcome) -> Void)?
+    ) -> Bool {
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        let sampleSource = manual ? "ui.update.manual" : "ui.update.automatic"
+        guard updateState.canCheck else {
+            completion?(.skipped)
+            return false
+        }
         guard let manifestURL = updatePreferences.manifestURL else {
             if manual {
                 updateState = ConductorUpdateState(
                     phase: .failed(L("请先填写更新清单地址。", "Enter an update manifest URL first.")),
                     currentVersion: ConductorAppVersion.current()
                 )
+                recordPerformanceBudgetSample(
+                    budgetID: "update.check",
+                    startedAt: startedAt,
+                    source: sampleSource
+                )
             }
-            return
+            completion?(.skipped)
+            return false
         }
 
         updateTask?.cancel()
         let preferences = updatePreferences
         let currentVersion = ConductorAppVersion.current()
-        updateState = ConductorUpdateState(
-            phase: .checking,
-            currentVersion: currentVersion,
-            lastCheckedAt: updateState.lastCheckedAt
-        )
+        let previousState = updateState
+        if manual {
+            updateState = ConductorUpdateState(
+                phase: .checking,
+                currentVersion: currentVersion,
+                lastCheckedAt: updateState.lastCheckedAt
+            )
+        }
         updateTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
@@ -973,15 +1698,86 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                     selectedArtifact: isAvailable ? selected.artifact : nil,
                     lastCheckedAt: Date()
                 )
-            } catch is CancellationError {
-            } catch {
-                updateState = ConductorUpdateState(
-                    phase: .failed(localizedUpdateError(error)),
-                    currentVersion: currentVersion,
-                    lastCheckedAt: Date()
+                recordPerformanceBudgetSample(
+                    budgetID: "update.check",
+                    startedAt: startedAt,
+                    source: sampleSource
                 )
+                completion?(.success)
+            } catch is CancellationError {
+                completion?(.cancelled)
+            } catch {
+                let message = localizedUpdateError(error)
+                if manual {
+                    updateState = ConductorUpdateState(
+                        phase: .failed(message),
+                        currentVersion: currentVersion,
+                        lastCheckedAt: Date()
+                    )
+                } else {
+                    var restoredState = previousState
+                    restoredState.lastCheckedAt = Date()
+                    updateState = restoredState
+                }
+                recordPerformanceBudgetSample(
+                    budgetID: "update.check",
+                    startedAt: startedAt,
+                    source: sampleSource
+                )
+                completion?(.failure(message))
             }
         }
+        return true
+    }
+
+    private func scheduleAutomaticUpdateCheck(after delayNanoseconds: UInt64) {
+        automaticUpdateDiagnostics.isEnabled = updatePreferences.automaticChecksEnabled
+        automaticUpdateDiagnostics.isRunning = true
+        automaticUpdateDiagnostics.currentIntervalSeconds = Double(delayNanoseconds) / 1_000_000_000
+        automaticUpdateDiagnostics.nextCheckAt = Date().addingTimeInterval(
+            Double(delayNanoseconds) / 1_000_000_000
+        )
+    }
+
+    private func nextAutomaticUpdateDelay(after outcome: ConductorUpdateCheckOutcome) -> UInt64 {
+        let completedAt = Date()
+        automaticUpdateDiagnostics.lastCompletedAt = completedAt
+        switch outcome {
+        case .success:
+            if automaticUpdateDiagnostics.consecutiveFailures > 0 {
+                ConductorDiagnostics.record("update-automatic-check-recovered", fields: [
+                    "failures": automaticUpdateDiagnostics.consecutiveFailures
+                ])
+            }
+            automaticUpdateDiagnostics.consecutiveFailures = 0
+            automaticUpdateDiagnostics.lastSuccessAt = completedAt
+            automaticUpdateDiagnostics.lastFailureDescription = nil
+            return Self.automaticUpdateCheckIntervalNanoseconds
+        case .failure(let message):
+            automaticUpdateDiagnostics.consecutiveFailures += 1
+            automaticUpdateDiagnostics.lastFailureAt = completedAt
+            automaticUpdateDiagnostics.lastFailureDescription = message
+            let delay = automaticUpdateBackoffDelay(
+                consecutiveFailures: automaticUpdateDiagnostics.consecutiveFailures
+            )
+            ConductorDiagnostics.record("update-automatic-check-failed", fields: [
+                "failures": automaticUpdateDiagnostics.consecutiveFailures,
+                "nextDelaySeconds": Int(delay / 1_000_000_000),
+                "reason": message
+            ])
+            return delay
+        case .skipped, .cancelled:
+            return Self.automaticUpdateCheckIntervalNanoseconds
+        }
+    }
+
+    private func automaticUpdateBackoffDelay(consecutiveFailures: Int) -> UInt64 {
+        guard consecutiveFailures > 0 else {
+            return Self.automaticUpdateCheckIntervalNanoseconds
+        }
+        let multiplier = min(1 << min(consecutiveFailures, 3), 6)
+        let delay = Self.automaticUpdateCheckIntervalNanoseconds * UInt64(multiplier)
+        return min(delay, Self.automaticUpdateMaximumIntervalNanoseconds)
     }
 
     func downloadAvailableUpdate() {
@@ -1073,6 +1869,32 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
 
+    func rehearseDownloadedUpdateInstall() async throws -> ConductorInstallRehearsalResult {
+        guard updateState.canInstall,
+              let manifest = updateState.manifest,
+              let selectedKind = updateState.selectedPackageKind,
+              let selectedArtifact = updateState.selectedArtifact,
+              let packageURL = updateState.downloadedPackageURL,
+              let manifestURL = updatePreferences.manifestURL else {
+            throw ConductorUpdateError.missingDownloadedPackage
+        }
+
+        let downloadedUpdate = ConductorDownloadedUpdate(
+            packageURL: packageURL,
+            artifactURL: manifestURL.deletingLastPathComponent().appendingPathComponent(selectedArtifact.filename),
+            kind: selectedKind,
+            manifest: manifest,
+            artifact: selectedArtifact
+        )
+        let result = try await updateService.rehearseInstaller(for: downloadedUpdate)
+        ConductorDiagnostics.record("update-install-rehearsal-complete", fields: [
+            "script": result.scriptURL.path,
+            "log": result.logURL.path,
+            "status": result.exitStatus
+        ])
+        return result
+    }
+
     func showUpdatesAndCheck() {
         showSettingsPanel(section: .updates)
         checkForUpdates(manual: true)
@@ -1095,6 +1917,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 return L("找不到已下载的更新包。", "Downloaded update package was not found.")
             case .installerLaunchFailed(let reason):
                 return L("无法启动安装器：\(reason)", "Could not start the installer: \(reason)")
+            case .installerRehearsalFailed(let status, _):
+                return L("安装演练失败，退出码 \(status)。", "Install rehearsal failed with status \(status).")
             }
         }
         return error.localizedDescription
@@ -1246,6 +2070,134 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         command.canPerform(model: self)
     }
 
+    struct ShellCommandRanking: Equatable {
+        var score: Int
+        var recentRank: Int?
+        var contextReasons: [String]
+
+        var isRecent: Bool {
+            recentRank != nil
+        }
+
+        var isContextual: Bool {
+            !contextReasons.isEmpty
+        }
+
+        var badge: String? {
+            if let recentRank, recentRank < 3 {
+                return ConductorLocalization.text(zh: "最近", en: "Recent")
+            }
+            return contextReasons.first
+        }
+    }
+
+    func shellCommandRanking(for command: ConductorShellCommand) -> ShellCommandRanking {
+        let recentRank = recentShellCommandIDs.firstIndex(of: command.rawValue)
+        let contextReasons = shellCommandContextReasons(for: command)
+        var score = canPerformCommand(command) ? 1_000 : -1_000
+        if let recentRank {
+            score += max(0, 420 - recentRank * 42)
+        }
+        score += contextReasons.count * 120
+        return ShellCommandRanking(
+            score: score,
+            recentRank: recentRank,
+            contextReasons: contextReasons
+        )
+    }
+
+    func shellCommandsForPalette() -> [ConductorShellCommand] {
+        let originalIndex = Dictionary(uniqueKeysWithValues: ConductorShellCommand.paletteOrder.enumerated().map { ($0.element, $0.offset) })
+        return ConductorShellCommand.paletteOrder.sorted { lhs, rhs in
+            let lhsRank = shellCommandRanking(for: lhs)
+            let rhsRank = shellCommandRanking(for: rhs)
+            if lhsRank.score != rhsRank.score {
+                return lhsRank.score > rhsRank.score
+            }
+            switch (lhsRank.recentRank, rhsRank.recentRank) {
+            case let (lhsRecent?, rhsRecent?) where lhsRecent != rhsRecent:
+                return lhsRecent < rhsRecent
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            default:
+                return (originalIndex[lhs] ?? 0) < (originalIndex[rhs] ?? 0)
+            }
+        }
+    }
+
+    private func shellCommandContextReasons(for command: ConductorShellCommand) -> [String] {
+        var reasons: [String] = []
+        let contentSelection = selectedWorkspaceContentTabID
+
+        switch command {
+        case .focusWebAddress, .goBackSelectedWebTab, .goForwardSelectedWebTab,
+                .reloadSelectedWebTab, .openSelectedWebTabExternally,
+                .copySelectedWebTabURL, .copySelectedWebTabReference:
+            if case .web = contentSelection {
+                reasons.append(ConductorLocalization.text(zh: "当前网页", en: "Current Web"))
+            }
+        case .openSelectedFileExternally, .revealSelectedFileInFinder:
+            if case .file = contentSelection {
+                reasons.append(ConductorLocalization.text(zh: "当前文件", en: "Current File"))
+            }
+        case .duplicateSelectedTab:
+            switch contentSelection {
+            case .terminal:
+                reasons.append(ConductorLocalization.text(zh: "当前终端", en: "Current Terminal"))
+            case .web:
+                reasons.append(ConductorLocalization.text(zh: "当前网页", en: "Current Web"))
+            case .file:
+                reasons.append(ConductorLocalization.text(zh: "当前文件", en: "Current File"))
+            case nil:
+                break
+            }
+        case .toggleFileManager, .openFocusedDirectory, .copyFocusedDirectory,
+                .newTerminalAtFocusedDirectory:
+            if case .terminal = contentSelection {
+                reasons.append(ConductorLocalization.text(zh: "当前目录", en: "Current CWD"))
+            } else if case .file = contentSelection {
+                reasons.append(ConductorLocalization.text(zh: "当前文件", en: "Current File"))
+            }
+        case .openCurrentWorkspaceRoot:
+            if currentWorkspaceRootURL != nil {
+                reasons.append(ConductorLocalization.text(zh: "当前工作区", en: "Current Workspace"))
+            }
+        case .openCurrentWorkspaceFirstService:
+            if currentWorkspaceFirstLocalServiceURL != nil {
+                reasons.append(ConductorLocalization.text(zh: "本地服务", en: "Local Service"))
+            }
+        case .showTerminalSearch, .findNext, .findPrevious:
+            switch contentSelection {
+            case .terminal:
+                reasons.append(ConductorLocalization.text(zh: "当前终端", en: "Current Terminal"))
+            case .web:
+                reasons.append(ConductorLocalization.text(zh: "当前网页", en: "Current Web"))
+            case .file:
+                reasons.append(ConductorLocalization.text(zh: "当前文件", en: "Current File"))
+            case nil:
+                break
+            }
+        case .jumpLatestUnreadAttention, .markCurrentWorkspaceAttentionRead:
+            if !controlAttentionEvents(includeRead: false).isEmpty {
+                reasons.append(ConductorLocalization.text(zh: "有未读", en: "Unread"))
+            }
+        case .restorePreviousSession:
+            if canRestorePreviousSessionSnapshot {
+                reasons.append(ConductorLocalization.text(zh: "可恢复", en: "Recoverable"))
+            }
+        case .resumeCurrentWorkspaceAgents:
+            if !controlResumableTerminalAgents(workspaceID: controlSelectedWorkspaceID).isEmpty {
+                reasons.append(ConductorLocalization.text(zh: "可续接", en: "Resumable"))
+            }
+        default:
+            break
+        }
+
+        return reasons
+    }
+
     @discardableResult
     func performCommand(_ command: ConductorShellCommand, window: NSWindow? = nil) -> Bool {
         guard !settingsPanelVisible || command.allowsWhenSettingsPanelVisible else {
@@ -1279,7 +2231,56 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 "tabs": workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
             ]
         )
+        if performed {
+            recordRecentShellCommand(command)
+        }
         return performed
+    }
+
+    private func recordRecentShellCommand(_ command: ConductorShellCommand) {
+        guard command != .toggleCommandPalette else { return }
+        var next = recentShellCommandIDs.filter { $0 != command.rawValue }
+        next.insert(command.rawValue, at: 0)
+        next = Array(next.prefix(Self.maxRecentShellCommandCount))
+        guard next != recentShellCommandIDs else { return }
+        recentShellCommandIDs = next
+        Self.saveRecentShellCommandIDs(next)
+    }
+
+    private func schedulePerformanceBudgetSample(
+        budgetID: String,
+        startedAt: UInt64,
+        source: String
+    ) {
+        DispatchQueue.main.async { [weak self] in
+            self?.recordPerformanceBudgetSample(
+                budgetID: budgetID,
+                startedAt: startedAt,
+                source: source
+            )
+        }
+    }
+
+    private func recordPerformanceBudgetSample(
+        budgetID: String,
+        startedAt: UInt64,
+        source: String
+    ) {
+        let elapsed = DispatchTime.now().uptimeNanoseconds - startedAt
+        guard let sample = ConductorPerformanceDiagnostics.shared.recordBudgetSample(
+            budgetID: budgetID,
+            durationNanoseconds: elapsed,
+            source: source
+        ) else {
+            return
+        }
+        ConductorDiagnostics.record("performance-budget-sample", fields: [
+            "budget": sample.budgetID,
+            "durationMS": String(sample.durationMilliseconds),
+            "targetMS": String(sample.targetMilliseconds),
+            "status": sample.status,
+            "source": sample.source
+        ])
     }
 
     func setKeyboardShortcut(_ shortcut: KeyboardShortcutDefinition, for command: ConductorShellCommand) {
@@ -1294,8 +2295,62 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         appearance.keyboardShortcuts.resetAll()
     }
 
+    func exportKeyboardShortcutProfile(to url: URL) throws -> Int {
+        let profile = appearance.keyboardShortcuts.exportProfile()
+        let data = try KeyboardShortcutProfileCodec.encode(profile)
+        try data.write(to: url, options: [.atomic])
+        ConductorDiagnostics.record(
+            "shortcut-profile-export",
+            fields: [
+                "path": url.path,
+                "count": "\(profile.entries.count)"
+            ]
+        )
+        return profile.entries.count
+    }
+
+    func importKeyboardShortcutProfile(from url: URL) throws -> KeyboardShortcutProfileImportResult {
+        let data = try Data(contentsOf: url)
+        let profile = try KeyboardShortcutProfileCodec.decode(data)
+        let result = appearance.keyboardShortcuts.importProfile(profile)
+        ConductorDiagnostics.record(
+            "shortcut-profile-import",
+            fields: [
+                "path": url.path,
+                "imported": "\(result.importedCount)",
+                "unknown": "\(result.ignoredUnknownCommandCount)",
+                "rejected": "\(result.rejectedShortcutCount)",
+                "conflicts": "\(result.replacedConflictCount)"
+            ]
+        )
+        return result
+    }
+
     func shortcutTitle(for command: ConductorShellCommand, fallback: String = "") -> String {
         appearance.keyboardShortcuts.displayShortcut(for: command, fallback: fallback)
+    }
+
+    func shortcutAssignmentTitle(for command: ConductorShellCommand) -> String {
+        if appearance.keyboardShortcuts.hasCustomShortcut(for: command) {
+            return ConductorLocalization.text(zh: "自定义", en: "Custom")
+        }
+        if appearance.keyboardShortcuts.shortcut(for: command) != nil {
+            return ConductorLocalization.text(zh: "默认", en: "Default")
+        }
+        return ConductorLocalization.text(zh: "未设置", en: "Unassigned")
+    }
+
+    func shortcutConflictTitle(
+        for shortcut: KeyboardShortcutDefinition,
+        assigningTo command: ConductorShellCommand
+    ) -> String? {
+        guard let conflict = appearance.keyboardShortcuts.conflictingCommand(
+            for: shortcut,
+            assigningTo: command
+        ) else {
+            return nil
+        }
+        return conflict.displayTitle(model: self)
     }
 
     var runtimeSurfaceCount: Int {
@@ -1312,6 +2367,32 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     var focusedWorkingDirectoryURL: URL? {
         focusedTerminalID.flatMap { workingDirectoryURL(for: $0) }
+    }
+
+    var currentWorkspaceRootURL: URL? {
+        guard let rootPath = workspaceMetadataSnapshots[workspace.id]?.rootPath?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !rootPath.isEmpty else {
+            return nil
+        }
+        let expanded = (rootPath as NSString).expandingTildeInPath
+        let url = URL(fileURLWithPath: expanded, isDirectory: true).standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return nil
+        }
+        return url
+    }
+
+    var currentWorkspaceFirstLocalServiceURL: URL? {
+        guard let metadata = workspaceMetadataSnapshots[workspace.id] else { return nil }
+        if let server = metadata.devServers.first,
+           let url = URL(string: server.url) {
+            return url
+        }
+        guard let port = metadata.runningPorts.first else { return nil }
+        return URL(string: "http://localhost:\(port)")
     }
 
     private func workingDirectoryURL(for terminalID: TerminalID) -> URL? {
@@ -1374,6 +2455,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             for: tab,
             theme: theme,
             terminalFontSize: appearance.terminalFontSize,
+            launchEnvironment: [:],
             handlers: TerminalSurfaceHandlers { [weak self] surface in
                 self?.installTerminalSurfaceHandlers(surface)
             }
@@ -1417,7 +2499,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         createTerminal(workingDirectory: nil, signpostName: "new-terminal")
     }
 
-    private func createTerminal(workingDirectory: String?, signpostName: StaticString) {
+    @discardableResult
+    private func createTerminal(workingDirectory: String?, signpostName: StaticString) -> TerminalID {
         let signpost = ConductorSignpost.begin(signpostName)
         defer { ConductorSignpost.end(signpostName, signpost) }
         let terminalID = workspace.newTerminal(
@@ -1426,6 +2509,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         )
         markTerminalInteractionFocus()
         selectedWorkspaceContentTabID = .terminal(terminalID)
+        recordSessionEvent(
+            kind: .terminalCreated,
+            paneID: workspace.focusedPaneID,
+            terminalID: terminalID,
+            details: ["workingDirectory": workingDirectory ?? ""]
+        )
+        return terminalID
     }
 
     func newTerminalAtFocusedDirectory() {
@@ -1448,6 +2538,30 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func openFocusedDirectory() {
         guard let url = focusedWorkingDirectoryURL else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    func openCurrentWorkspaceRootInFinder() {
+        guard let url = currentWorkspaceRootURL else { return }
+        NSWorkspace.shared.open(url)
+        ConductorDiagnostics.record(
+            "workspace-open-root",
+            fields: [
+                "workspace": workspace.id.description,
+                "path": url.path
+            ]
+        )
+    }
+
+    func openCurrentWorkspaceFirstLocalService() {
+        guard let url = currentWorkspaceFirstLocalServiceURL else { return }
+        newWorkspaceWebTab(initialInput: url.absoluteString)
+        ConductorDiagnostics.record(
+            "workspace-open-service",
+            fields: [
+                "workspace": workspace.id.description,
+                "url": url.absoluteString
+            ]
+        )
     }
 
     func toggleFileManagerPanel() {
@@ -1494,6 +2608,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         if url != nil {
             workspaceWebTabNavigationGenerationByID[id, default: 0] += 1
         }
+        recordSessionEvent(
+            kind: .browserTabOpened,
+            webTabID: id,
+            details: [
+                "input": initialInput,
+                "url": url?.absoluteString ?? ""
+            ]
+        )
         persist()
     }
 
@@ -1502,6 +2624,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         selectedWorkspaceContentTabID = .web(tabID)
         closeWorkspaceTransientPanels()
         persist()
+    }
+
+    func selectWorkspaceWebTab(_ tabID: WebTabID, in workspaceID: WorkspaceID) {
+        if workspaceID != workspace.id {
+            guard activateWorkspace(workspaceID, source: .programmatic) else { return }
+        }
+        selectWorkspaceWebTab(tabID)
     }
 
     func closeWorkspaceWebTab(_ tabID: WebTabID) {
@@ -1515,6 +2644,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         applyWorkspaceContentSelection(result.nextContentSelection)
         if let closedTabID = result.closedTabID {
             ConductorWebKitSurfaceStore.shared.remove(closedTabID)
+            recordSessionEvent(kind: .browserTabClosed, webTabID: closedTabID)
         }
         pruneWorkspaceWebTabCommands(keeping: Set(workspaceWebTabs.map(\.id)))
         persist()
@@ -1526,15 +2656,25 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             tab.url = url
             tab.pendingAddress = input
             tab.errorMessage = nil
+            tab.runtimeEvents.removeAll()
             tab.isLoading = true
             tab.estimatedProgress = 0
         }
         workspaceWebTabNavigationGenerationByID[tabID, default: 0] += 1
+        recordSessionEvent(
+            kind: .browserTabNavigated,
+            webTabID: tabID,
+            details: [
+                "input": input,
+                "url": url.absoluteString
+            ]
+        )
         persist()
     }
 
     func reloadWorkspaceWebTab(_ tabID: WebTabID) {
         guard workspaceWebTabs.contains(where: { $0.id == tabID }) else { return }
+        clearWorkspaceWebRuntimeEvents(tabID, reason: "reload")
         workspaceWebTabReloadGenerationByID[tabID, default: 0] += 1
     }
 
@@ -1565,6 +2705,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func openWorkspaceWebTabExternally(_ tabID: WebTabID) {
         guard let url = workspaceWebTabs.first(where: { $0.id == tabID })?.url else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    func revealWorkspaceWebTabDownload(_ tabID: WebTabID) {
+        guard let path = workspaceWebTabs.first(where: { $0.id == tabID })?.downloadState?.destinationPath else { return }
+        let url = URL(fileURLWithPath: path)
+        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     func openSelectedWorkspaceWebTabExternally() {
@@ -1608,6 +2754,53 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         mutate(&workspaceWebTabs[index])
     }
 
+    func updateWorkspaceWebTabDownload(_ tabID: WebTabID, state: WorkspaceWebDownloadState?) {
+        updateWorkspaceWebTab(tabID) { tab in
+            tab.downloadState = state
+            if state?.phase == .downloading || state?.phase == .requested {
+                tab.errorMessage = nil
+            }
+        }
+        persist()
+    }
+
+    func recordWorkspaceWebRuntimeEvent(_ tabID: WebTabID, event: WorkspaceWebRuntimeEvent) {
+        updateWorkspaceWebTab(tabID) { tab in
+            tab.runtimeEvents.append(event)
+            if tab.runtimeEvents.count > 40 {
+                tab.runtimeEvents.removeFirst(tab.runtimeEvents.count - 40)
+            }
+        }
+        ConductorDiagnostics.record(
+            "browser-runtime-event",
+            fields: [
+                "webTabID": tabID.rawValue.uuidString,
+                "kind": event.kind.rawValue,
+                "level": event.level,
+                "message": String(event.message.prefix(160))
+            ]
+        )
+        persist()
+    }
+
+    func clearWorkspaceWebRuntimeEvents(_ tabID: WebTabID, reason: String) {
+        var removedCount = 0
+        updateWorkspaceWebTab(tabID) { tab in
+            removedCount = tab.runtimeEvents.count
+            tab.runtimeEvents.removeAll()
+        }
+        guard removedCount > 0 else { return }
+        ConductorDiagnostics.record(
+            "browser-runtime-events-cleared",
+            fields: [
+                "webTabID": tabID.rawValue.uuidString,
+                "reason": reason,
+                "count": String(removedCount)
+            ]
+        )
+        persist()
+    }
+
     func persistWorkspaceWebTabs() {
         persist()
     }
@@ -1627,7 +2820,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let resolvedRoot = (rootURL ?? standardizedFile.deletingLastPathComponent()).standardizedFileURL
         syncFileWorkspaceCoordinatorFromPublished()
         fileWorkspaceCoordinator.openFile(standardizedFile, rootURL: resolvedRoot)
-        publishFileWorkspaceState()
+        let changed = publishFileWorkspaceState()
         pruneWorkspaceFileTabState(keeping: Set(workspaceFileTabs.map(\.id)))
         syncFileWorkspaceCoordinatorFromPublished()
         syncPanelCoordinatorFromPublished()
@@ -1635,6 +2828,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         panelCoordinator.workspaceOverviewVisible = false
         fileManagerKeyboardFocused = false
         publishPanelState()
+        recordSessionEvent(
+            kind: .fileTabOpened,
+            details: [
+                "path": standardizedFile.path,
+                "root": resolvedRoot.path
+            ]
+        )
+        if changed {
+            persist()
+        }
     }
 
     func selectWorkspaceFileTab(_ tabID: String) {
@@ -1646,6 +2849,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         panelCoordinator.workspaceOverviewVisible = false
         fileManagerKeyboardFocused = false
         publishPanelState()
+        persist()
+    }
+
+    func selectWorkspaceFileTab(_ tabID: String, in workspaceID: WorkspaceID) {
+        if workspaceID != workspace.id {
+            guard activateWorkspace(workspaceID, source: .programmatic) else { return }
+        }
+        selectWorkspaceFileTab(tabID)
     }
 
     func closeWorkspaceFileTab(_ tab: ConductorWorkspaceFileTab) {
@@ -1671,6 +2882,34 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         default:
             break
         }
+    }
+
+    @discardableResult
+    func openSelectedWorkspaceFileTabExternally() -> Bool {
+        guard let tab = selectedWorkspaceFileTab else { return false }
+        NSWorkspace.shared.open(tab.fileURL)
+        ConductorDiagnostics.record(
+            "file-tab-open-external",
+            fields: [
+                "tab": tab.id,
+                "path": tab.fileURL.path
+            ]
+        )
+        return true
+    }
+
+    @discardableResult
+    func revealSelectedWorkspaceFileTabInFinder() -> Bool {
+        guard let tab = selectedWorkspaceFileTab else { return false }
+        NSWorkspace.shared.activateFileViewerSelecting([tab.fileURL])
+        ConductorDiagnostics.record(
+            "file-tab-reveal-finder",
+            fields: [
+                "tab": tab.id,
+                "path": tab.fileURL.path
+            ]
+        )
+        return true
     }
 
     @discardableResult
@@ -1703,6 +2942,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         var externalIDs = externallyChangedWorkspaceFileTabIDs
         var saveTokens = workspaceFileEditorSaveRequestTokensByTabID
         var saveAndCloseTokens = workspaceFileEditorSaveAndCloseRequestTokensByTabID
+        var savedRevisions = workspaceFileEditorSavedRevisionByTabID
+        var bufferSnapshots = workspaceFileBufferSnapshotsByTabID
         var movedSelectedFileTabID: String?
 
         workspaceFileTabs = workspaceFileTabs.map { tab in
@@ -1722,7 +2963,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 dirtyIDs: &dirtyIDs,
                 externalIDs: &externalIDs,
                 saveTokens: &saveTokens,
-                saveAndCloseTokens: &saveAndCloseTokens
+                saveAndCloseTokens: &saveAndCloseTokens,
+                savedRevisions: &savedRevisions,
+                bufferSnapshots: &bufferSnapshots
             )
             if selectedWorkspaceFileTabID == tab.id {
                 movedSelectedFileTabID = movedTab.id
@@ -1737,6 +2980,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         externallyChangedWorkspaceFileTabIDs = externalIDs
         workspaceFileEditorSaveRequestTokensByTabID = saveTokens
         workspaceFileEditorSaveAndCloseRequestTokensByTabID = saveAndCloseTokens
+        workspaceFileEditorSavedRevisionByTabID = savedRevisions
+        workspaceFileBufferSnapshotsByTabID = bufferSnapshots
     }
 
     func setWorkspaceFileTabDirty(_ tabID: String, isDirty: Bool) {
@@ -1771,6 +3016,53 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspaceFileEditorSaveAndCloseRequestTokensByTabID[tabID] ?? 0
     }
 
+    func workspaceFileEditorSavedRevision(for tabID: String) -> Int {
+        workspaceFileEditorSavedRevisionByTabID[tabID] ?? 0
+    }
+
+    func workspaceFileBufferSnapshot(for tabID: String) -> WorkspaceFileBufferSnapshot? {
+        workspaceFileBufferSnapshotsByTabID[tabID]
+    }
+
+    func updateWorkspaceFileBuffer(
+        tabID: String,
+        text: String,
+        savedText: String,
+        canSave: Bool,
+        isEditable: Bool,
+        isReadOnly: Bool
+    ) {
+        guard workspaceFileTabs.contains(where: { $0.id == tabID }) else { return }
+        let revision = workspaceFileBufferSnapshotsByTabID[tabID]?.savedRevision ?? 0
+        workspaceFileBufferSnapshotsByTabID[tabID] = WorkspaceFileBufferSnapshot(
+            text: text,
+            savedText: savedText,
+            canSave: canSave,
+            isEditable: isEditable,
+            isReadOnly: isReadOnly,
+            updatedAt: Date(),
+            savedRevision: revision
+        )
+    }
+
+    func markWorkspaceFileBufferSaved(tabID: String, text: String) {
+        guard workspaceFileTabs.contains(where: { $0.id == tabID }) else { return }
+        let nextRevision = (workspaceFileEditorSavedRevisionByTabID[tabID] ?? 0) + 1
+        let existing = workspaceFileBufferSnapshotsByTabID[tabID]
+        workspaceFileBufferSnapshotsByTabID[tabID] = WorkspaceFileBufferSnapshot(
+            text: text,
+            savedText: text,
+            canSave: existing?.canSave ?? true,
+            isEditable: existing?.isEditable ?? true,
+            isReadOnly: existing?.isReadOnly ?? false,
+            updatedAt: Date(),
+            savedRevision: nextRevision
+        )
+        workspaceFileEditorSavedRevisionByTabID[tabID] = nextRevision
+        setWorkspaceFileTabDirty(tabID, isDirty: false)
+        setWorkspaceFileTabExternallyChanged(tabID, changed: false)
+    }
+
     @discardableResult
     func requestSaveWorkspaceFileTab(_ tab: ConductorWorkspaceFileTab) -> Bool {
         guard workspaceFileTabs.contains(where: { $0.id == tab.id }) else { return false }
@@ -1791,6 +3083,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         externallyChangedWorkspaceFileTabIDs.remove(tab.id)
         workspaceFileEditorSaveRequestTokensByTabID.removeValue(forKey: tab.id)
         workspaceFileEditorSaveAndCloseRequestTokensByTabID.removeValue(forKey: tab.id)
+        workspaceFileEditorSavedRevisionByTabID.removeValue(forKey: tab.id)
+        workspaceFileBufferSnapshotsByTabID.removeValue(forKey: tab.id)
         if selectedWorkspaceFileTabID == tab.id {
             if workspaceFileTabs.isEmpty {
                 selectedWorkspaceContentTabID = focusedTerminalID.map { .terminal($0) }
@@ -1798,6 +3092,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 selectedWorkspaceContentTabID = .file(workspaceFileTabs[min(index, workspaceFileTabs.count - 1)].id)
             }
         }
+        recordSessionEvent(
+            kind: .fileTabClosed,
+            details: ["path": tab.fileURL.path]
+        )
     }
 
     private func pruneWorkspaceFileTabState(keeping retainedIDs: Set<String>) {
@@ -1805,6 +3103,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         externallyChangedWorkspaceFileTabIDs.formIntersection(retainedIDs)
         workspaceFileEditorSaveRequestTokensByTabID = workspaceFileEditorSaveRequestTokensByTabID.filter { retainedIDs.contains($0.key) }
         workspaceFileEditorSaveAndCloseRequestTokensByTabID = workspaceFileEditorSaveAndCloseRequestTokensByTabID.filter { retainedIDs.contains($0.key) }
+        workspaceFileEditorSavedRevisionByTabID = workspaceFileEditorSavedRevisionByTabID.filter { retainedIDs.contains($0.key) }
+        workspaceFileBufferSnapshotsByTabID = workspaceFileBufferSnapshotsByTabID.filter { retainedIDs.contains($0.key) }
     }
 
     private func applyWorkspaceContentSelection(_ selection: WorkspaceContentSelection?) {
@@ -1825,7 +3125,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func pruneWorkspaceWebTabCommands(keeping retainedIDs: Set<WebTabID>) {
-        ConductorWebKitSurfaceStore.shared.keepOnly(retainedIDs)
+        ConductorWebKitSurfaceStore.shared.keepOnly(retainedWebTabIDsForSurfaceStore())
         workspaceWebTabNavigationGenerationByID = workspaceWebTabNavigationGenerationByID.filter { retainedIDs.contains($0.key) }
         workspaceWebTabReloadGenerationByID = workspaceWebTabReloadGenerationByID.filter { retainedIDs.contains($0.key) }
         workspaceWebTabStopGenerationByID = workspaceWebTabStopGenerationByID.filter { retainedIDs.contains($0.key) }
@@ -1835,6 +3135,18 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         workspaceWebFindFocusGenerationByID = workspaceWebFindFocusGenerationByID.filter { retainedIDs.contains($0.key) }
         workspaceWebFindNextGenerationByID = workspaceWebFindNextGenerationByID.filter { retainedIDs.contains($0.key) }
         workspaceWebFindPreviousGenerationByID = workspaceWebFindPreviousGenerationByID.filter { retainedIDs.contains($0.key) }
+    }
+
+    private func retainedWebTabIDsForSurfaceStore(excluding excludedWorkspaceIDs: Set<WorkspaceID> = []) -> Set<WebTabID> {
+        var retained = Set(workspaceWebTabs.map(\.id))
+        if excludedWorkspaceIDs.contains(workspace.id) {
+            retained.removeAll()
+        }
+        for (workspaceID, contentState) in workspaceContentStatesByWorkspaceID where workspaceID != workspace.id {
+            guard !excludedWorkspaceIDs.contains(workspaceID) else { continue }
+            retained.formUnion(contentState.webTabs.map(\.id))
+        }
+        return retained
     }
 
     private func movedRootURL(for rootURL: URL, oldPath: String, newPath: String, isDirectory: Bool) -> URL {
@@ -1851,7 +3163,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         dirtyIDs: inout Set<String>,
         externalIDs: inout Set<String>,
         saveTokens: inout [String: Int],
-        saveAndCloseTokens: inout [String: Int]
+        saveAndCloseTokens: inout [String: Int],
+        savedRevisions: inout [String: Int],
+        bufferSnapshots: inout [String: WorkspaceFileBufferSnapshot]
     ) {
         guard oldID != newID else { return }
         if dirtyIDs.remove(oldID) != nil {
@@ -1866,10 +3180,17 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         if let token = saveAndCloseTokens.removeValue(forKey: oldID) {
             saveAndCloseTokens[newID] = token
         }
+        if let revision = savedRevisions.removeValue(forKey: oldID) {
+            savedRevisions[newID] = revision
+        }
+        if let snapshot = bufferSnapshots.removeValue(forKey: oldID) {
+            bufferSnapshots[newID] = snapshot
+        }
     }
 
     func selectTerminalStage() {
-        activateTerminalStageForCurrentWorkspace(source: .programmatic)
+        selectedWorkspaceContentTabID = nil
+        activateWorkspaceStageForCurrentWorkspace(source: .programmatic)
     }
 
     func selectWorkspaceTerminalTab(_ terminalID: TerminalID) {
@@ -2089,6 +3410,46 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         true
     }
 
+    func ghosttyRuntimeDidReceiveNotification(terminalID: TerminalID, title: String, body: String) -> Bool {
+        guard containsTerminal(terminalID) else { return false }
+        let normalizedTitle = Self.normalizedTerminalNotificationTitle(title)
+        let normalizedBody = Self.normalizedTerminalNotificationBody(body)
+        let appendResult = controlCreateAttentionEventResult(
+            title: normalizedTitle,
+            body: normalizedBody,
+            kind: .terminalBell,
+            terminalID: terminalID,
+            source: "terminal-escape",
+            details: ["escape": "desktop-notification"],
+            coalescingWindow: 6
+        )
+        ConductorDiagnostics.record(
+            "terminal-notification-received",
+            fields: [
+                "terminal": terminalID.description,
+                "coalesced": String(appendResult.coalesced),
+                "suppressedCount": String(appendResult.suppressedCount)
+            ]
+        )
+        if !appendResult.coalesced {
+            let location = terminalLocation(for: terminalID)
+            let request = TerminalAttentionNotificationRequest(
+                attentionEventID: appendResult.event.id,
+                terminalID: terminalID,
+                kind: .terminalBell,
+                title: normalizedTitle,
+                body: normalizedBody,
+                isUnattended: location.map { isTerminalUnattended(terminalID, location: $0) } ?? true
+            )
+            agentReplyNotificationService.deliverTerminalAttention(
+                request,
+                preferences: appearance.agentReplyNotifications
+            )
+            NSApp.requestUserAttention(.informationalRequest)
+        }
+        return true
+    }
+
     func ghosttyRuntimeDidUpdateProgress(terminalID: TerminalID, kind: TerminalProgressKind, progress: Int?) -> Bool {
         updateMetadata(for: terminalID) { metadata in
             metadata.progressKind = kind == .removed ? nil : kind
@@ -2098,6 +3459,33 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func ghosttyRuntimeDidFinishCommand(terminalID: TerminalID, exitCode: Int?, durationNanoseconds: UInt64) -> Bool {
+        let currentMetadata = metadata(for: terminalID)
+        handleCommandFinishedAttention(
+            terminalID: terminalID,
+            exitCode: exitCode,
+            durationNanoseconds: durationNanoseconds,
+            metadata: currentMetadata
+        )
+        let commandSnapshot = TerminalCommandSnapshot(
+            exitCode: exitCode,
+            durationNanoseconds: durationNanoseconds
+        )
+        _ = updateWorkspace(containing: terminalID) { workspace in
+            var updated = workspace.updateTerminalCommandSnapshot(terminalID, snapshot: commandSnapshot)
+            if let agentTitle = currentMetadata.activeAgentTitle,
+               !agentTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                updated = workspace.updateTerminalAgentSnapshot(
+                    terminalID,
+                    snapshot: TerminalAgentSnapshot(
+                        displayName: agentTitle,
+                        state: .completed,
+                        startedAt: currentMetadata.activeAgentStartedAt,
+                        lastEvent: "command-finished"
+                    )
+                ) || updated
+            }
+            return updated
+        }
         updateMetadata(for: terminalID) { metadata in
             metadata.lastCommandExitCode = exitCode
             metadata.lastCommandDurationNanoseconds = durationNanoseconds
@@ -2109,6 +3497,87 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             }
         }
         return true
+    }
+
+    private func handleCommandFinishedAttention(
+        terminalID: TerminalID,
+        exitCode: Int?,
+        durationNanoseconds: UInt64,
+        metadata: TerminalDisplayMetadata
+    ) {
+        if let agentTitle = metadata.activeAgentTitle,
+           !agentTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return
+        }
+        guard let location = terminalLocation(for: terminalID),
+              isTerminalUnattended(terminalID, location: location) else {
+            return
+        }
+
+        let failed = exitCode.map { $0 != 0 } ?? false
+        let longRunning = durationNanoseconds >= Self.commandFinishedAttentionThresholdNanoseconds
+        guard failed || longRunning else { return }
+
+        let target = terminalContextMenuTarget(for: terminalID)
+        let terminalTitle = target?.tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedTitle = terminalTitle?.isEmpty == false ? terminalTitle! : L("终端", "Terminal")
+        let durationText = Self.commandDurationDescription(durationNanoseconds)
+        let reason = failed ? "exit-nonzero" : "long-running"
+        let eventTitle = failed ? L("命令失败", "Command Failed") : L("命令已完成", "Command Finished")
+        let exitText = exitCode.map { "exit \($0)" } ?? L("退出码未知", "exit unknown")
+        let appendResult = controlCreateAttentionEventResult(
+            title: eventTitle,
+            body: "\(resolvedTitle) · \(exitText) · \(durationText)",
+            kind: .commandFinished,
+            severity: failed ? .warning : .info,
+            workspaceID: location.workspaceID,
+            terminalID: terminalID,
+            source: "terminal-command",
+            details: [
+                "reason": reason,
+                "exitCode": exitCode.map(String.init) ?? "unknown",
+                "durationMilliseconds": String(durationNanoseconds / 1_000_000),
+                "duration": durationText
+            ],
+            coalescingWindow: 8
+        )
+        ConductorDiagnostics.record(
+            "terminal-command-finished-attention",
+            fields: [
+                "terminal": terminalID.description,
+                "exitCode": exitCode.map(String.init) ?? "unknown",
+                "durationMilliseconds": String(durationNanoseconds / 1_000_000),
+                "reason": reason,
+                "coalesced": String(appendResult.coalesced),
+                "suppressedCount": String(appendResult.suppressedCount)
+            ]
+        )
+        if !appendResult.coalesced {
+            let request = TerminalAttentionNotificationRequest(
+                attentionEventID: appendResult.event.id,
+                terminalID: terminalID,
+                kind: .commandFinished,
+                title: eventTitle,
+                body: appendResult.event.body,
+                isUnattended: true
+            )
+            agentReplyNotificationService.deliverTerminalAttention(
+                request,
+                preferences: appearance.agentReplyNotifications
+            )
+            NSApp.requestUserAttention(.informationalRequest)
+        }
+    }
+
+    private static func commandDurationDescription(_ durationNanoseconds: UInt64) -> String {
+        let seconds = Double(durationNanoseconds) / 1_000_000_000
+        if seconds >= 60 {
+            return String(format: "%.1f min", seconds / 60)
+        }
+        if seconds >= 1 {
+            return String(format: "%.1f s", seconds)
+        }
+        return "\(durationNanoseconds / 1_000_000) ms"
     }
 
     func ghosttyRuntimeDidUpdateCellSize(terminalID: TerminalID, width: UInt32, height: UInt32) -> Bool {
@@ -2126,6 +3595,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         total: Int?,
         selected: Int?
     ) -> Bool {
+        _ = updateWorkspace(containing: terminalID) { workspace in
+            workspace.updateTerminalSearchSnapshot(
+                terminalID,
+                snapshot: active
+                    ? TerminalSearchSnapshot(active: true, needle: needle, total: total, selected: selected)
+                    : nil
+            )
+        }
         updateMetadata(for: terminalID) { metadata in
             metadata.search.active = active
             if let needle {
@@ -2539,6 +4016,48 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let next = WorkspaceState(title: nextWorkspaceTitle())
         workspaces.append(next)
         activateWorkspace(next.id, source: .newWorkspace)
+        recordSessionEvent(
+            kind: .workspaceCreated,
+            workspaceID: next.id,
+            details: ["title": next.title]
+        )
+    }
+
+    @discardableResult
+    func openWorkspaceAtDirectory(
+        _ directoryURL: URL,
+        title: String? = nil,
+        source: WorkspaceNavigationSource = .programmatic
+    ) -> WorkspaceID {
+        let standardized = directoryURL.standardizedFileURL
+        let cleanTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let terminal = TerminalTabState(
+            title: "zsh",
+            workingDirectory: standardized.path
+        )
+        let pane = PaneState(tabs: [terminal])
+        let next = WorkspaceState(
+            title: cleanTitle?.isEmpty == false ? cleanTitle! : standardized.lastPathComponent,
+            root: .leaf(pane.id),
+            panes: [pane.id: pane],
+            focusedPaneID: pane.id
+        )
+        workspaces.append(next)
+        activateWorkspace(next.id, source: source)
+        selectedWorkspaceContentTabID = .terminal(terminal.id)
+        markTerminalInteractionFocus()
+        recordSessionEvent(
+            kind: .workspaceCreated,
+            workspaceID: next.id,
+            paneID: pane.id,
+            terminalID: terminal.id,
+            details: [
+                "title": next.title,
+                "workingDirectory": standardized.path,
+                "source": "directory"
+            ]
+        )
+        return next.id
     }
 
     func duplicateWorkspace(_ workspaceID: WorkspaceID) {
@@ -2547,8 +4066,21 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         guard let index = workspaces.firstIndex(where: { $0.id == workspaceID }) else { return }
         let source = workspace.id == workspaceID ? workspace : workspaces[index]
         let duplicate = source.duplicated(title: nextCopyTitle(for: source.title))
+        if let sourceContent = workspace.id == workspaceID
+            ? Optional(currentWorkspaceContentState())
+            : workspaceContentStatesByWorkspaceID[workspaceID] {
+            workspaceContentStatesByWorkspaceID[duplicate.id] = duplicatedContentState(from: sourceContent)
+        }
         workspaces.insert(duplicate, at: index + 1)
         activateWorkspace(duplicate.id, source: .duplicateWorkspace)
+        recordSessionEvent(
+            kind: .workspaceDuplicated,
+            workspaceID: duplicate.id,
+            details: [
+                "sourceWorkspaceID": workspaceID.description,
+                "title": duplicate.title
+            ]
+        )
     }
 
     func selectWorkspace(_ workspaceID: WorkspaceID) {
@@ -2592,17 +4124,22 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
         closeTerminalSearch()
         if target.id != workspace.id {
+            saveSelectedWorkspaceContentState()
             if source != .terminalFocus {
                 suppressCrossWorkspaceTerminalFocusUntil = Date().addingTimeInterval(0.35)
             }
             selectedWorkspaceID = target.id
             skipPreviousWorkspaceSyncForNextAssignment = !syncPreviousWorkspace
+            suppressWorkspaceAssignmentPersistence = true
             workspace = target
+            suppressWorkspaceAssignmentPersistence = false
+            restoreWorkspaceContentState(for: target.id)
+            persist()
         } else {
             selectedWorkspaceID = workspace.id
         }
 
-        let terminalID = activateTerminalStageForCurrentWorkspace(source: source)
+        let terminalID = activateWorkspaceStageForCurrentWorkspace(source: source)
         closeWorkspaceTransientPanels()
         recordWorkspaceNavigation(
             source: source,
@@ -2633,7 +4170,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     @discardableResult
-    private func activateTerminalStageForCurrentWorkspace(source: WorkspaceNavigationSource) -> TerminalID? {
+    private func activateWorkspaceStageForCurrentWorkspace(source: WorkspaceNavigationSource) -> TerminalID? {
         guard let terminalID = workspace.focusedPane?.selectedTabID else {
             let previousContent = selectedWorkspaceContentTabID
             selectedWorkspaceContentTabID = nil
@@ -2651,10 +4188,35 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
 
         markTerminalInteractionFocus()
-        selectedWorkspaceContentTabID = .terminal(terminalID)
+        if shouldSelectTerminalOnWorkspaceActivation(source: source) {
+            selectedWorkspaceContentTabID = .terminal(terminalID)
+        } else if Self.restoredWorkspaceContentSelection(
+            Self.persistedWorkspaceContentSelection(selectedWorkspaceContentTabID),
+            workspace: workspace,
+            webTabs: workspaceWebTabs,
+            fileTabIDs: Set(workspaceFileTabs.map(\.id))
+        ) == nil {
+            selectedWorkspaceContentTabID = .terminal(terminalID)
+        }
         reconcileSurfaceFocus()
         refreshSurfaceAfterNavigation(terminalID)
         return terminalID
+    }
+
+    private func shouldSelectTerminalOnWorkspaceActivation(source: WorkspaceNavigationSource) -> Bool {
+        switch source {
+        case .terminalFocus:
+            return false
+        case .sidebar,
+             .tabStrip,
+             .overview,
+             .commandPalette,
+             .newWorkspace,
+             .duplicateWorkspace,
+             .listMutation,
+             .programmatic:
+            return true
+        }
     }
 
     private func recordWorkspaceNavigation(
@@ -2679,6 +4241,18 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 "reason": reason
             ]
         )
+        if committed, previousWorkspaceID != nextWorkspaceID {
+            recordSessionEvent(
+                kind: .workspaceSelected,
+                workspaceID: nextWorkspaceID,
+                terminalID: terminalID,
+                details: [
+                    "source": source.rawValue,
+                    "from": previousWorkspaceID.description,
+                    "reason": reason
+                ]
+            )
+        }
     }
 
     func renameWorkspace(_ workspaceID: WorkspaceID, title: String) {
@@ -2690,6 +4264,23 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         } else {
             persist()
         }
+        recordSessionEvent(
+            kind: .workspaceRenamed,
+            workspaceID: workspaceID,
+            details: ["title": cleanTitle]
+        )
+    }
+
+    func requestRenameCurrentWorkspace() {
+        closeWorkspaceTransientPanels()
+        workspaceRenameRequest = WorkspaceRenameRequest(workspaceID: workspace.id)
+        ConductorDiagnostics.record(
+            "workspace-rename-request",
+            fields: [
+                "workspace": workspace.id.description,
+                "title": workspace.title
+            ]
+        )
     }
 
     func closeWorkspace(_ workspaceID: WorkspaceID) {
@@ -2698,7 +4289,9 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return
         }
         let closingWorkspace = workspaces[index]
+        let closingTitle = closingWorkspace.title
         closeSurfaces(for: terminalIDs(in: closingWorkspace))
+        removeWorkspaceContentState(for: workspaceID)
         workspaces.remove(at: index)
         if workspace.id == workspaceID {
             let nextIndex = min(index, workspaces.count - 1)
@@ -2706,6 +4299,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         } else {
             persist()
         }
+        recordSessionEvent(
+            kind: .workspaceClosed,
+            workspaceID: workspaceID,
+            details: ["title": closingTitle]
+        )
     }
 
     func closeOtherWorkspaces(keeping workspaceID: WorkspaceID) {
@@ -2714,9 +4312,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return
         }
         let keptWorkspace = workspace.id == workspaceID ? workspace : keptWorkspaceSnapshot
+        let closingWorkspaceIDs = Set(workspaces.map(\.id).filter { $0 != workspaceID })
         for closingWorkspace in workspaces where closingWorkspace.id != workspaceID {
             closeSurfaces(for: terminalIDs(in: closingWorkspace))
         }
+        removeWorkspaceContentStates(for: closingWorkspaceIDs)
         workspaces = [keptWorkspace]
         selectWorkspaceAfterListMutation(keptWorkspace)
         syncPanelCoordinatorFromPublished()
@@ -2730,9 +4330,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return
         }
         let closingWorkspaces = workspaces[(index + 1)...]
+        let closingWorkspaceIDs = Set(closingWorkspaces.map(\.id))
         for closingWorkspace in closingWorkspaces {
             closeSurfaces(for: terminalIDs(in: closingWorkspace))
         }
+        removeWorkspaceContentStates(for: closingWorkspaceIDs)
         workspaces.removeSubrange((index + 1)..<workspaces.count)
         if workspaces.contains(where: { $0.id == selectedWorkspaceID }) {
             syncSelectedWorkspace()
@@ -2774,12 +4376,22 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func duplicateTab(_ terminalID: TerminalID, in paneID: PaneID) {
-        _ = workspace.duplicateTab(terminalID, in: paneID)
+        guard let duplicateID = workspace.duplicateTab(terminalID, in: paneID) else { return }
+        recordSessionEvent(
+            kind: .terminalDuplicated,
+            paneID: paneID,
+            terminalID: duplicateID,
+            details: ["sourceTerminalID": terminalID.description]
+        )
     }
 
     func duplicateSelectedTab() {
         if let tab = selectedWorkspaceWebTab {
             newWorkspaceWebTab(initialInput: tab.url?.absoluteString ?? tab.pendingAddress)
+            return
+        }
+        if let tab = selectedWorkspaceFileTab {
+            openFileInWorkspace(tab.fileURL, rootURL: tab.rootURL)
             return
         }
         guard let pane = workspace.focusedPane else { return }
@@ -2791,6 +4403,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         defer { ConductorSignpost.end("close-tab", signpost) }
         let result = workspace.closeTab(terminalID, in: paneID)
         closeSurfaces(for: result.closedTerminalIDs)
+        for closedTerminalID in result.closedTerminalIDs {
+            recordSessionEvent(
+                kind: .terminalClosed,
+                paneID: paneID,
+                terminalID: closedTerminalID
+            )
+        }
     }
 
     func closePane(_ paneID: PaneID) {
@@ -2798,6 +4417,11 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         defer { ConductorSignpost.end("close-pane", signpost) }
         let result = workspace.closePane(paneID)
         closeSurfaces(for: result.closedTerminalIDs)
+        recordSessionEvent(
+            kind: .paneClosed,
+            paneID: paneID,
+            details: ["closedTerminalCount": "\(result.closedTerminalIDs.count)"]
+        )
     }
 
     func closeSelectedTab() {
@@ -2813,6 +4437,12 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
         let result = workspace.closeSelectedTab()
         closeSurfaces(for: result.closedTerminalIDs)
+        for closedTerminalID in result.closedTerminalIDs {
+            recordSessionEvent(
+                kind: .terminalClosed,
+                terminalID: closedTerminalID
+            )
+        }
     }
 
     func closeOtherTabs(in paneID: PaneID? = nil) {
@@ -2915,6 +4545,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func toggleCommandPalette() {
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        let wasVisible = commandPaletteVisible
         let signpost = ConductorSignpost.begin("palette-toggle")
         defer { ConductorSignpost.end("palette-toggle", signpost) }
         let shouldCloseTerminalSearch = !commandPaletteVisible && terminalSearchVisible
@@ -2924,6 +4556,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         syncPanelCoordinatorFromPublished()
         panelCoordinator.toggleCommandPalette()
         publishPanelState()
+        if !wasVisible, commandPaletteVisible {
+            schedulePerformanceBudgetSample(
+                budgetID: "command-palette.open",
+                startedAt: startedAt,
+                source: "ui.command-palette.toggle"
+            )
+        }
     }
 
     func hideCommandPalette() {
@@ -2933,6 +4572,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     func toggleSettingsPanel() {
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        let wasVisible = settingsPanelVisible
         let signpost = ConductorSignpost.begin("settings-toggle")
         defer { ConductorSignpost.end("settings-toggle", signpost) }
         let shouldCloseTerminalSearch = !settingsPanelVisible && terminalSearchVisible
@@ -2942,9 +4583,18 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         syncPanelCoordinatorFromPublished()
         panelCoordinator.toggleSettings()
         publishPanelState()
+        if !wasVisible, settingsPanelVisible {
+            schedulePerformanceBudgetSample(
+                budgetID: "settings.open",
+                startedAt: startedAt,
+                source: "ui.settings.toggle"
+            )
+        }
     }
 
     func showSettingsPanel(section: SettingsSectionID? = nil) {
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        let wasVisible = settingsPanelVisible
         let signpost = ConductorSignpost.begin("settings-show")
         defer { ConductorSignpost.end("settings-show", signpost) }
         if terminalSearchVisible {
@@ -2957,6 +4607,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         panelCoordinator.workspaceOverviewVisible = false
         panelCoordinator.terminalSearchVisible = false
         publishPanelState()
+        if !wasVisible, settingsPanelVisible {
+            schedulePerformanceBudgetSample(
+                budgetID: "settings.open",
+                startedAt: startedAt,
+                source: "ui.settings.show"
+            )
+        }
     }
 
     func hideSettingsPanel() {
@@ -2981,6 +4638,149 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         syncPanelCoordinatorFromPublished()
         panelCoordinator.workspaceOverviewVisible = false
         publishPanelState()
+    }
+
+    var attentionUnreadCount: Int {
+        attentionEvents.filter(\.isUnread).count
+    }
+
+    func attentionUnreadCount(for workspaceID: WorkspaceID) -> Int {
+        attentionEvents.filter { $0.isUnread && $0.workspaceID == workspaceID }.count
+    }
+
+    func hasUnreadAttentionEvent(in workspaceID: WorkspaceID? = nil) -> Bool {
+        attentionStore.events(includeRead: false).contains { event in
+            workspaceID == nil || event.workspaceID == workspaceID
+        }
+    }
+
+    func refreshAttentionEvents() {
+        attentionEvents = attentionStore.events(limit: 80)
+    }
+
+    func closeTransientPanels() {
+        syncPanelCoordinatorFromPublished()
+        panelCoordinator.closeTransientPanels()
+        publishPanelState()
+    }
+
+    func showShellToast(
+        title: String,
+        body: String,
+        systemImage: String,
+        tone: ConductorShellToastTone = .info,
+        actionTitle: String? = nil,
+        action: ConductorShellToastAction? = nil,
+        duration: TimeInterval = 5
+    ) {
+        shellToastDismissTask?.cancel()
+        let toast = ConductorShellToast(
+            title: title,
+            body: body,
+            systemImage: systemImage,
+            tone: tone,
+            actionTitle: actionTitle,
+            action: action
+        )
+        shellToast = toast
+        guard duration > 0 else { return }
+        shellToastDismissTask = Task { [weak self, toastID = toast.id] in
+            let nanoseconds = UInt64(max(0, duration) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.dismissShellToast(id: toastID)
+            }
+        }
+    }
+
+    func dismissShellToast(id: UUID? = nil) {
+        guard id == nil || shellToast?.id == id else { return }
+        shellToastDismissTask?.cancel()
+        shellToastDismissTask = nil
+        shellToast = nil
+    }
+
+    func focusAttentionEvent(_ id: UUID) {
+        guard controlFocusAttentionEvent(id: id) != nil else { return }
+        closeTransientPanels()
+    }
+
+    func clearAttentionEvent(_ id: UUID) {
+        _ = controlClearAttentionEvent(id: id)
+    }
+
+    func clearAllAttentionEvents() {
+        _ = controlClearAttentionEvent()
+    }
+
+    @discardableResult
+    func focusLatestUnreadAttentionEvent() -> Bool {
+        if controlFocusLatestAttentionEvent(workspaceID: controlSelectedWorkspaceID) != nil {
+            closeTransientPanels()
+            return true
+        }
+        guard controlFocusLatestAttentionEvent() != nil else { return false }
+        closeTransientPanels()
+        return true
+    }
+
+    @discardableResult
+    func focusAttentionNotificationResponse(attentionEventID: UUID?, terminalID: TerminalID?) -> Bool {
+        if let attentionEventID,
+           controlFocusAttentionEvent(id: attentionEventID) != nil {
+            ConductorDiagnostics.record(
+                "attention-notification-response-focused",
+                fields: [
+                    "attentionEvent": attentionEventID.uuidString,
+                    "terminal": terminalID?.description ?? "none",
+                    "mode": "event"
+                ]
+            )
+            return true
+        }
+
+        if let terminalID,
+           let event = attentionEvents.first(where: { $0.isUnread && $0.terminalID == terminalID }),
+           controlFocusAttentionEvent(id: event.id) != nil {
+            ConductorDiagnostics.record(
+                "attention-notification-response-focused",
+                fields: [
+                    "attentionEvent": event.id.uuidString,
+                    "terminal": terminalID.description,
+                    "mode": "latest-terminal-event"
+                ]
+            )
+            return true
+        }
+
+        if let terminalID,
+           containsTerminal(terminalID) {
+            focusTerminal(terminalID)
+            ConductorDiagnostics.record(
+                "attention-notification-response-focused",
+                fields: [
+                    "attentionEvent": attentionEventID?.uuidString ?? "none",
+                    "terminal": terminalID.description,
+                    "mode": "terminal-fallback"
+                ]
+            )
+            return true
+        }
+
+        ConductorDiagnostics.record(
+            "attention-notification-response-missing-target",
+            fields: [
+                "attentionEvent": attentionEventID?.uuidString ?? "none",
+                "terminal": terminalID?.description ?? "none"
+            ]
+        )
+        return false
+    }
+
+    @discardableResult
+    func markCurrentWorkspaceAttentionRead() -> Int {
+        controlMarkAttentionEventsRead(workspaceID: controlSelectedWorkspaceID)
     }
 
     @discardableResult
@@ -3017,6 +4817,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             return
         }
         let agent = userInfo[ConductorAgentHookBridge.Key.agent] ?? ""
+        let resumeMetadata = AgentResumeDetector.metadata(
+            providerID: agent,
+            sessionIdentifier: userInfo[ConductorAgentHookBridge.Key.sessionID]
+        )
 
         let terminalID = TerminalID(uuid)
         let action = userInfo[ConductorAgentHookBridge.Key.action]?.lowercased() ?? ""
@@ -3031,12 +4835,44 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         )
         switch action {
         case "prompt-submit", "session-start":
-            let providerTitle = Self.agentDisplayTitle(for: agent)
+            let providerTitle = resumeMetadata?.displayName ?? Self.agentDisplayTitle(for: agent)
+            let startedAt = Date()
+            _ = updateWorkspace(containing: terminalID) { workspace in
+                workspace.updateTerminalAgentSnapshot(
+                    terminalID,
+                    snapshot: TerminalAgentSnapshot(
+                        providerID: resumeMetadata?.providerID ?? agent,
+                        displayName: providerTitle,
+                        state: .active,
+                        startedAt: startedAt,
+                        updatedAt: startedAt,
+                        lastEvent: action,
+                        resumeCommand: resumeMetadata?.resumeCommand,
+                        sessionIdentifier: resumeMetadata?.sessionIdentifier
+                    )
+                )
+            }
             updateMetadata(for: terminalID) { metadata in
                 metadata.activeAgentTitle = providerTitle
-                metadata.activeAgentStartedAt = Date()
+                metadata.activeAgentStartedAt = startedAt
             }
         case "stop", "agent-response", "subagent-stop":
+            let currentMetadata = metadata(for: terminalID)
+            let existingSnapshot = controlTerminalInfo(terminalID: terminalID)?.tab.agentSnapshot
+            _ = updateWorkspace(containing: terminalID) { workspace in
+                workspace.updateTerminalAgentSnapshot(
+                    terminalID,
+                    snapshot: TerminalAgentSnapshot(
+                        providerID: resumeMetadata?.providerID ?? existingSnapshot?.providerID ?? agent,
+                        displayName: resumeMetadata?.displayName ?? existingSnapshot?.displayName ?? Self.agentDisplayTitle(for: agent),
+                        state: .completed,
+                        startedAt: currentMetadata.activeAgentStartedAt,
+                        lastEvent: action,
+                        resumeCommand: resumeMetadata?.resumeCommand ?? existingSnapshot?.resumeCommand,
+                        sessionIdentifier: resumeMetadata?.sessionIdentifier ?? existingSnapshot?.sessionIdentifier
+                    )
+                )
+            }
             updateMetadata(for: terminalID) { metadata in
                 metadata.activeAgentTitle = nil
                 metadata.activeAgentStartedAt = nil
@@ -3061,7 +4897,28 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             ConductorLog.app.info("Agent reply notification has no open terminal match; delivering without activation target")
             ConductorDiagnostics.record("agent-notification-terminal-missing", fields: ["terminal": terminalID.description])
         }
+        let appendResult = controlCreateAttentionEventResult(
+            title: L("\(agentTitle) 已回复", "\(agentTitle) replied"),
+            body: body,
+            kind: .agentReply,
+            workspaceID: location?.workspaceID,
+            terminalID: terminalID,
+            source: "agent-hook",
+            details: ["agent": agentTitle],
+            coalescingWindow: 8
+        )
+        guard !appendResult.coalesced else {
+            ConductorDiagnostics.record(
+                "agent-notification-coalesced",
+                fields: [
+                    "terminal": terminalID.description,
+                    "suppressedCount": String(appendResult.suppressedCount)
+                ]
+            )
+            return
+        }
         let request = AgentReplyNotificationRequest(
+            attentionEventID: appendResult.event.id,
             terminalID: terminalID,
             agentTitle: agentTitle,
             body: body,
@@ -3123,6 +4980,17 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         )
         reconcileSurfaceFocus()
         refreshSurfacesAfterSplit(visibleTerminalIDs)
+        if let terminalID = workspace.panes[newPaneID]?.selectedTabID {
+            recordSessionEvent(
+                kind: .terminalCreated,
+                paneID: newPaneID,
+                terminalID: terminalID,
+                details: [
+                    "source": "split",
+                    "direction": direction.rawValue
+                ]
+            )
+        }
         return newPaneID
     }
 
@@ -3163,7 +5031,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             if focused,
                !terminalSearchVisible,
                let window = surface.hostView.window,
-               window.firstResponder !== surface.hostView {
+               window.firstResponder !== surface.hostView,
+               !windowHasEditableTextFocus(window) {
                 window.makeFirstResponder(surface.hostView)
             }
         }
@@ -3188,8 +5057,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             surface.syncGeometry(force: true)
             surface.refresh()
             guard self?.terminalSearchVisible != true else { return }
-            if surface.hostView.window?.firstResponder !== surface.hostView {
-                surface.hostView.window?.makeFirstResponder(surface.hostView)
+            guard let window = surface.hostView.window else { return }
+            if window.firstResponder !== surface.hostView,
+               self?.windowHasEditableTextFocus(window) != true {
+                window.makeFirstResponder(surface.hostView)
             }
         }
     }
@@ -3197,6 +5068,18 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private func reconcileSurfaceFocus() {
         let focusedTerminalID = workspace.focusedPane?.selectedTabID
         surfaceCoordinator.setFocusedTerminal(focusedTerminalID)
+    }
+
+    private func windowHasEditableTextFocus(_ window: NSWindow?) -> Bool {
+        guard let responder = window?.firstResponder else { return false }
+        if let textView = responder as? NSTextView {
+            return textView.isFieldEditor || textView.isEditable
+        }
+        if let control = responder as? NSControl,
+           control.currentEditor() != nil {
+            return true
+        }
+        return false
     }
 
     func closeAllSurfaces() {
@@ -3209,16 +5092,24 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         pendingPersistence?.cancel()
         pendingPersistence = nil
         syncSelectedWorkspace()
+        saveSelectedWorkspaceContentState()
         captureWebInteractionStates()
         captureTerminalSnapshots()
+        let workspaceContentStates = persistedWorkspaceContentStates()
+        let selectedContent = workspaceContentStates.first { $0.workspaceID == selectedWorkspaceID }
         persistence.save(
             workspaces: workspaces,
             selectedWorkspaceID: selectedWorkspaceID,
             theme: theme,
             appearance: appearance,
-            workspaceWebTabs: workspaceWebTabs,
-            workspaceFileTabs: persistedFileTabs(),
-            selectedWorkspaceContentTabID: persistedWorkspaceContentSelection()
+            workspaceWebTabs: selectedContent?.workspaceWebTabs ?? [],
+            workspaceFileTabs: selectedContent?.workspaceFileTabs ?? [],
+            selectedWorkspaceContentTabID: selectedContent?.selectedWorkspaceContentTabID,
+            workspaceContentStates: workspaceContentStates
+        )
+        recordSessionEvent(
+            kind: .snapshotSaved,
+            details: ["source": "flush-persistence"]
         )
     }
 
@@ -3241,16 +5132,33 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     /// Done only at flush (quit) time because the blob is large and would bloat
     /// the frequent debounced saves.
     private func captureWebInteractionStates() {
-        for index in workspaceWebTabs.indices {
-            let tabID = workspaceWebTabs[index].id
-            if let state = ConductorWebKitSurfaceStore.shared.interactionState(for: tabID) {
-                workspaceWebTabs[index].interactionState = state
+        for workspaceID in workspaceContentStatesByWorkspaceID.keys {
+            guard var contentState = workspaceContentStatesByWorkspaceID[workspaceID] else { continue }
+            for index in contentState.webTabs.indices {
+                let tabID = contentState.webTabs[index].id
+                if let webView = ConductorWebKitSurfaceStore.shared.existingWebView(for: tabID) {
+                    let entries = ConductorWebKitSurfaceStore.navigationEntries(for: webView)
+                    if entries.count > 1, let currentIndex = ConductorWebKitSurfaceStore.currentNavigationIndex(for: webView) {
+                        contentState.webTabs[index].navigationEntries = entries
+                        contentState.webTabs[index].currentNavigationIndex = currentIndex
+                        contentState.webTabs[index].canGoBack = currentIndex > 0
+                        contentState.webTabs[index].canGoForward = currentIndex < entries.count - 1
+                    }
+                }
+                if let state = ConductorWebKitSurfaceStore.shared.interactionState(for: tabID) {
+                    contentState.webTabs[index].interactionState = state
+                }
+            }
+            workspaceContentStatesByWorkspaceID[workspaceID] = contentState
+            if workspaceID == workspace.id {
+                workspaceWebTabs = contentState.webTabs
             }
         }
     }
 
     func resetWorkspace() {
         closeSurfaces(for: terminalIDs(in: workspace))
+        removeWorkspaceContentState(for: workspace.id)
         let replacement = WorkspaceState(title: workspace.title)
         replaceSelectedWorkspace(with: replacement)
         syncPanelCoordinatorFromPublished()
@@ -3433,6 +5341,39 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         agentRuntimePollTask = nil
     }
 
+    @discardableResult
+    private func updateTerminalAgentResumeMetadata(
+        _ terminalID: TerminalID,
+        metadata resumeMetadata: AgentResumeMetadata,
+        lastEvent: String
+    ) -> Bool {
+        updateWorkspace(containing: terminalID) { workspace in
+            guard let paneID = workspace.paneID(containing: terminalID),
+                  let pane = workspace.panes[paneID],
+                  let tab = pane.tabs.first(where: { $0.id == terminalID }) else {
+                return false
+            }
+            let current = tab.agentSnapshot
+            if current?.sessionIdentifier == resumeMetadata.sessionIdentifier,
+               current?.resumeCommand == resumeMetadata.resumeCommand {
+                return false
+            }
+            return workspace.updateTerminalAgentSnapshot(
+                terminalID,
+                snapshot: TerminalAgentSnapshot(
+                    providerID: current?.providerID ?? resumeMetadata.providerID,
+                    displayName: current?.displayName ?? resumeMetadata.displayName,
+                    state: current?.state ?? .idle,
+                    startedAt: current?.startedAt,
+                    updatedAt: Date(),
+                    lastEvent: lastEvent,
+                    resumeCommand: resumeMetadata.resumeCommand,
+                    sessionIdentifier: resumeMetadata.sessionIdentifier
+                )
+            )
+        }
+    }
+
     /// Pauses the per-terminal agent-state poll while the window is unfocused or
     /// the app is in the background, so an idle window costs nothing. Resumed
     /// when the window becomes key again.
@@ -3455,19 +5396,75 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             }
             // Intentionally NO surface.refresh() here. visibleText() is a cheap
             // viewport read; render cadence is libghostty's responsibility.
-            guard let state = Self.visibleAgentRuntimeState(in: surface.visibleText()) else {
+            let visibleText = surface.visibleText() ?? ""
+            let current = metadata(for: terminalID)
+            let resumeMetadata = AgentResumeDetector.detect(
+                in: visibleText,
+                fallbackProviderID: current.activeAgentTitle
+            )
+            guard let state = Self.visibleAgentRuntimeState(in: visibleText) else {
+                if let resumeMetadata {
+                    updateTerminalAgentResumeMetadata(
+                        terminalID,
+                        metadata: resumeMetadata,
+                        lastEvent: "visible-resume-hint"
+                    )
+                }
                 continue
             }
-            let current = metadata(for: terminalID)
             switch state {
             case .active(let title):
+                if let resumeMetadata {
+                    updateTerminalAgentResumeMetadata(
+                        terminalID,
+                        metadata: resumeMetadata,
+                        lastEvent: "visible-resume-hint"
+                    )
+                }
                 guard current.activeAgentTitle != title else { continue }
+                let startedAt = Date()
+                _ = updateWorkspace(containing: terminalID) { workspace in
+                    workspace.updateTerminalAgentSnapshot(
+                        terminalID,
+                        snapshot: TerminalAgentSnapshot(
+                            providerID: resumeMetadata?.providerID ?? title.lowercased(),
+                            displayName: resumeMetadata?.displayName ?? title,
+                            state: .active,
+                            startedAt: startedAt,
+                            updatedAt: startedAt,
+                            lastEvent: "visible-runtime",
+                            resumeCommand: resumeMetadata?.resumeCommand,
+                            sessionIdentifier: resumeMetadata?.sessionIdentifier
+                        )
+                    )
+                }
                 updateMetadata(for: terminalID) { metadata in
                     metadata.activeAgentTitle = title
-                    metadata.activeAgentStartedAt = Date()
+                    metadata.activeAgentStartedAt = startedAt
                 }
             case .inactive(let title):
+                if let resumeMetadata {
+                    updateTerminalAgentResumeMetadata(
+                        terminalID,
+                        metadata: resumeMetadata,
+                        lastEvent: "visible-resume-hint"
+                    )
+                }
                 guard current.activeAgentTitle == title else { continue }
+                _ = updateWorkspace(containing: terminalID) { workspace in
+                    workspace.updateTerminalAgentSnapshot(
+                        terminalID,
+                        snapshot: TerminalAgentSnapshot(
+                            providerID: resumeMetadata?.providerID ?? title.lowercased(),
+                            displayName: resumeMetadata?.displayName ?? title,
+                            state: .completed,
+                            startedAt: current.activeAgentStartedAt,
+                            lastEvent: "visible-runtime",
+                            resumeCommand: resumeMetadata?.resumeCommand,
+                            sessionIdentifier: resumeMetadata?.sessionIdentifier
+                        )
+                    )
+                }
                 updateMetadata(for: terminalID) { metadata in
                     metadata.activeAgentTitle = nil
                     metadata.activeAgentStartedAt = nil
@@ -3476,18 +5473,17 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
 
-    /// Marks every existing surface occluded ⇔ not in the currently-visible
-    /// terminal set, so libghostty pauses renderers for hidden tabs, hidden
-    /// splits, and background workspaces. Cheap: iterates only attached
-    /// surfaces, and each `setOccluded` call is a no-op when the value is
-    /// unchanged.
+    /// Tells libghostty which surfaces are currently visible so it can pause
+    /// renderers for hidden tabs, hidden splits, and background workspaces.
+    /// Cheap: iterates only attached surfaces, and each `setVisible` call is
+    /// a no-op when the value is unchanged.
     private func applyOcclusion() {
         let visible = WorkspaceVisibility.visibleTerminalIDs(
             workspaces: workspaces,
             selectedWorkspaceID: selectedWorkspaceID
         )
         for entry in surfaceCoordinator.allSurfaces {
-            entry.surface.setOccluded(!visible.contains(entry.id))
+            entry.surface.setVisible(visible.contains(entry.id))
         }
     }
 
@@ -3570,6 +5566,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             self.metadataByTerminalID = next.filter { terminalID, _ in
                 self.containsTerminal(terminalID)
             }
+            self.scheduleWorkspaceMetadataRefresh(reason: "terminal-metadata")
         }
         pendingMetadataPublish = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.10, execute: item)
@@ -3577,15 +5574,25 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     private func persist() {
         pendingPersistence?.cancel()
+        saveSelectedWorkspaceContentState()
+        let workspaceContentStates = persistedWorkspaceContentStates()
+        let selectedContent = workspaceContentStates.first { $0.workspaceID == selectedWorkspaceID }
+        let journalEvent = makeSessionJournalEvent(
+            kind: .snapshotSaved,
+            details: ["source": "debounced-persistence"]
+        )
         let item = Self.makePersistenceSaveWorkItem(
             persistence: persistence,
+            sessionJournal: sessionJournal,
+            journalEvent: journalEvent,
             workspaces: workspaces,
             selectedWorkspaceID: selectedWorkspaceID,
             theme: theme,
             appearance: appearance,
-            workspaceWebTabs: workspaceWebTabs,
-            workspaceFileTabs: persistedFileTabs(),
-            selectedWorkspaceContentTabID: persistedWorkspaceContentSelection()
+            workspaceWebTabs: selectedContent?.workspaceWebTabs ?? [],
+            workspaceFileTabs: selectedContent?.workspaceFileTabs ?? [],
+            selectedWorkspaceContentTabID: selectedContent?.selectedWorkspaceContentTabID,
+            workspaceContentStates: workspaceContentStates
         )
         pendingPersistence = item
         // Debounce on main (so rapid edits coalesce), then encode + write on a
@@ -3605,13 +5612,16 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     /// item run safely on any queue.
     private nonisolated static func makePersistenceSaveWorkItem(
         persistence: WorkspacePersistence,
+        sessionJournal: ConductorSessionJournal,
+        journalEvent: ConductorSessionJournalEvent,
         workspaces: [WorkspaceState],
         selectedWorkspaceID: WorkspaceID,
         theme: TerminalTheme,
         appearance: AppearancePreferences,
         workspaceWebTabs: [WorkspaceWebTabState],
         workspaceFileTabs: [PersistedFileTab],
-        selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID?
+        selectedWorkspaceContentTabID: PersistedWorkspaceContentTabID?,
+        workspaceContentStates: [PersistedWorkspaceContentState]
     ) -> DispatchWorkItem {
         DispatchWorkItem {
             let signpost = ConductorSignpost.begin("persistence-save")
@@ -3623,15 +5633,81 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 appearance: appearance,
                 workspaceWebTabs: workspaceWebTabs,
                 workspaceFileTabs: workspaceFileTabs,
-                selectedWorkspaceContentTabID: selectedWorkspaceContentTabID
+                selectedWorkspaceContentTabID: selectedWorkspaceContentTabID,
+                workspaceContentStates: workspaceContentStates
             )
+            sessionJournal.append(journalEvent)
         }
     }
 
+    private func recordSessionEvent(
+        kind: ConductorSessionJournalEvent.Kind,
+        workspaceID: WorkspaceID? = nil,
+        paneID: PaneID? = nil,
+        terminalID: TerminalID? = nil,
+        webTabID: WebTabID? = nil,
+        details: [String: String] = [:]
+    ) {
+        sessionJournal.append(
+            makeSessionJournalEvent(
+                kind: kind,
+                workspaceID: workspaceID,
+                paneID: paneID,
+                terminalID: terminalID,
+                webTabID: webTabID,
+                details: details
+            )
+        )
+    }
+
+    private func makeSessionJournalEvent(
+        kind: ConductorSessionJournalEvent.Kind,
+        workspaceID: WorkspaceID? = nil,
+        paneID: PaneID? = nil,
+        terminalID: TerminalID? = nil,
+        webTabID: WebTabID? = nil,
+        details: [String: String] = [:]
+    ) -> ConductorSessionJournalEvent {
+        ConductorSessionJournalEvent(
+            kind: kind,
+            selectedWorkspaceID: controlSelectedWorkspaceID,
+            workspaceID: workspaceID ?? controlSelectedWorkspaceID,
+            paneID: paneID,
+            terminalID: terminalID,
+            webTabID: webTabID,
+            workspaceCount: workspaces.count,
+            terminalCount: workspaces.reduce(0) { partial, workspace in
+                partial + workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+            },
+            webTabCount: workspaceContentStatesByWorkspaceID.values.reduce(0) { $0 + $1.webTabs.count },
+            fileTabCount: workspaceContentStatesByWorkspaceID.values.reduce(0) { $0 + $1.fileTabs.count },
+            details: details
+        )
+    }
+
     private func persistedFileTabs() -> [PersistedFileTab] {
-        workspaceFileTabs.map {
+        persistedFileTabs(workspaceFileTabs)
+    }
+
+    private func persistedFileTabs(_ tabs: [ConductorWorkspaceFileTab]) -> [PersistedFileTab] {
+        tabs.map {
             PersistedFileTab(filePath: $0.fileURL.path, rootPath: $0.rootURL.path)
         }
+    }
+
+    private func persistedWorkspaceContentStates() -> [PersistedWorkspaceContentState] {
+        let validWorkspaceIDs = Set(workspaces.map(\.id))
+        return workspaceContentStatesByWorkspaceID
+            .filter { validWorkspaceIDs.contains($0.key) }
+            .map { workspaceID, state in
+                PersistedWorkspaceContentState(
+                    workspaceID: workspaceID,
+                    workspaceWebTabs: state.webTabs,
+                    workspaceFileTabs: persistedFileTabs(state.fileTabs),
+                    selectedWorkspaceContentTabID: Self.persistedWorkspaceContentSelection(state.selectedContentTabID)
+                )
+            }
+            .sorted { $0.workspaceID.description < $1.workspaceID.description }
     }
 
     private static func restoredFileTabs(_ persisted: [PersistedFileTab]) -> [ConductorWorkspaceFileTab] {
@@ -3648,6 +5724,27 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             let restored = ConductorWorkspaceFileTab(fileURL: fileURL, rootURL: rootURL)
             return seen.insert(restored.id).inserted ? restored : nil
         }
+    }
+
+    private static func restoredWorkspaceContentStates(
+        _ persisted: [PersistedWorkspaceContentState],
+        validWorkspaceIDs: Set<WorkspaceID>
+    ) -> [WorkspaceID: WorkspaceContentRuntimeState] {
+        var result: [WorkspaceID: WorkspaceContentRuntimeState] = [:]
+        for state in persisted where validWorkspaceIDs.contains(state.workspaceID) {
+            let fileTabs = restoredFileTabs(state.workspaceFileTabs)
+            result[state.workspaceID] = WorkspaceContentRuntimeState(
+                webTabs: state.workspaceWebTabs,
+                fileTabs: fileTabs,
+                selectedContentTabID: restoredWorkspaceContentSelection(
+                    state.selectedWorkspaceContentTabID,
+                    workspace: WorkspaceState(),
+                    webTabs: state.workspaceWebTabs,
+                    fileTabIDs: Set(fileTabs.map(\.id))
+                )
+            )
+        }
+        return result
     }
 
     private func nextTerminalTitle(prefix: String) -> String {
@@ -3685,6 +5782,17 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         return String(source.prefix(48))
     }
 
+    private static func normalizedTerminalNotificationTitle(_ title: String) -> String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = trimmed.isEmpty ? L("终端提醒", "Terminal Alert") : trimmed
+        return String(source.prefix(80))
+    }
+
+    private static func normalizedTerminalNotificationBody(_ body: String) -> String {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(trimmed.prefix(280))
+    }
+
     private static func restoredWorkspaceContentSelection(
         _ selection: PersistedWorkspaceContentTabID?,
         workspace: WorkspaceState,
@@ -3704,7 +5812,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private func persistedWorkspaceContentSelection() -> PersistedWorkspaceContentTabID? {
-        switch selectedWorkspaceContentTabID {
+        Self.persistedWorkspaceContentSelection(selectedWorkspaceContentTabID)
+    }
+
+    private static func persistedWorkspaceContentSelection(
+        _ selection: ConductorWorkspaceContentTabID?
+    ) -> PersistedWorkspaceContentTabID? {
+        switch selection {
         case .terminal(let terminalID):
             return .terminal(terminalID)
         case .file(let tabID):
@@ -3775,9 +5889,1093 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             workspaces.contains { $0.paneID(containing: terminalID) != nil }
     }
 
+    var controlSelectedWorkspaceID: WorkspaceID {
+        selectedWorkspaceID
+    }
+
+    var controlSessionJournalURL: URL {
+        sessionJournal.url
+    }
+
+    var controlSessionJournalSummary: ConductorSessionJournalSummary {
+        sessionJournal.summary()
+    }
+
+    func controlSessionJournalEntries(limit: Int = 12) -> [ConductorSessionJournalEvent] {
+        sessionJournal.recentEntries(limit: limit)
+    }
+
+    var controlSessionRestoreReport: WorkspacePersistenceLoadReport {
+        sessionRestoreReport
+    }
+
+    func controlSessionSurfaceInspection() -> SessionSurfaceInspectionSnapshot {
+        saveSelectedWorkspaceContentState()
+        let selectedID = controlSelectedWorkspaceID
+        let workspaces = workspaces.map { workspace in
+            let selected = workspace.id == selectedID
+            let contentState = selected
+                ? currentWorkspaceContentState()
+                : (workspaceContentStatesByWorkspaceID[workspace.id] ?? WorkspaceContentRuntimeState())
+            let selectedFileTabID: String? = {
+                guard case .file(let tabID) = contentState.selectedContentTabID else { return nil }
+                return tabID
+            }()
+            let selectedWebTabID: WebTabID? = {
+                guard case .web(let tabID) = contentState.selectedContentTabID else { return nil }
+                return tabID
+            }()
+            let terminals = workspace.root.leaves.flatMap { paneID -> [SessionSurfaceInspectionSnapshot.Terminal] in
+                guard let pane = workspace.panes[paneID] else { return [] }
+                return pane.tabs.map { tab in
+                    let displayMetadata = metadata(for: tab.id)
+                    let workingDirectory = displayMetadata.workingDirectory ?? tab.workingDirectory
+                    var issues: [String] = []
+                    if workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+                        issues.append("missing_working_directory")
+                    }
+                    if tab.agentSnapshot?.state == .active,
+                       tab.agentSnapshot?.resumeCommand == nil,
+                       tab.agentSnapshot?.sessionIdentifier == nil {
+                        issues.append("agent_resume_metadata_missing")
+                    }
+                    let restoredFromSession = restoredTerminalIDs.contains(tab.id)
+                    let hasUsefulRuntimeContext = tab.agentSnapshot != nil || tab.lastCommandSnapshot != nil
+                    if restoredFromSession && hasUsefulRuntimeContext {
+                        issues.append("terminal_process_restarted")
+                    }
+                    return SessionSurfaceInspectionSnapshot.Terminal(
+                        id: tab.id,
+                        paneID: pane.id,
+                        title: tab.title,
+                        workingDirectory: workingDirectory,
+                        selected: pane.selectedTabID == tab.id,
+                        focused: selected && focusedTerminalID == tab.id,
+                        userTitle: tab.userTitle,
+                        hasAgentSnapshot: tab.agentSnapshot != nil,
+                        agentDisplayName: tab.agentSnapshot?.displayName,
+                        agentState: tab.agentSnapshot?.state.rawValue,
+                        agentSessionIdentifier: tab.agentSnapshot?.sessionIdentifier,
+                        agentResumeCommand: tab.agentSnapshot?.resumeCommand,
+                        lastCommandExitCode: displayMetadata.lastCommandExitCode ?? tab.lastCommandSnapshot?.exitCode,
+                        lastCommandFinishedAt: tab.lastCommandSnapshot?.finishedAt,
+                        searchActive: displayMetadata.search.active || (tab.searchSnapshot?.active ?? false),
+                        searchNeedle: displayMetadata.search.needle ?? tab.searchSnapshot?.needle,
+                        restoredFromSession: restoredFromSession,
+                        processReattached: false,
+                        issues: issues
+                    )
+                }
+            }
+            let webTabs = contentState.webTabs.map { tab in
+                var issues: [String] = []
+                if tab.url == nil && tab.pendingAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    issues.append("blank_web_tab")
+                }
+                if tab.errorMessage != nil {
+                    issues.append("web_error")
+                }
+                if tab.url != nil && tab.navigationEntries.isEmpty {
+                    issues.append("history_missing")
+                }
+                if tab.scrollY == nil && tab.navigationEntries.count > 1 {
+                    issues.append("scroll_position_missing")
+                }
+                if tab.runtimeEvents.contains(where: { event in
+                    event.kind == .pageError ||
+                        event.kind == .unhandledRejection ||
+                        (event.kind == .console && event.level == "error")
+                }) {
+                    issues.append("web_runtime_error")
+                }
+                return SessionSurfaceInspectionSnapshot.WebTab(
+                    id: tab.id,
+                    title: tab.displayTitle,
+                    url: tab.url?.absoluteString,
+                    pendingAddress: tab.pendingAddress,
+                    selected: tab.id == selectedWebTabID,
+                    loading: tab.isLoading,
+                    errorMessage: tab.errorMessage,
+                    historyCount: tab.navigationEntries.count,
+                    currentHistoryIndex: tab.currentNavigationIndex,
+                    canGoBack: tab.canGoBack,
+                    canGoForward: tab.canGoForward,
+                    scrollY: tab.scrollY,
+                    hasInteractionState: tab.interactionState != nil,
+                    runtimeEventCount: tab.runtimeEvents.count,
+                    latestRuntimeEvent: tab.runtimeEvents.last,
+                    issues: issues
+                )
+            }
+            let files = contentState.fileTabs.map { tab in
+                let exists = FileManager.default.fileExists(atPath: tab.fileURL.path)
+                let dirty = contentState.dirtyFileTabIDs.contains(tab.id)
+                let externallyChanged = contentState.externallyChangedFileTabIDs.contains(tab.id)
+                var issues: [String] = []
+                if !exists {
+                    issues.append("file_missing")
+                }
+                if externallyChanged {
+                    issues.append("file_changed_on_disk")
+                }
+                return SessionSurfaceInspectionSnapshot.FileTab(
+                    id: tab.id,
+                    title: tab.title,
+                    path: tab.fileURL.path,
+                    rootPath: tab.rootURL.path,
+                    selected: tab.id == selectedFileTabID,
+                    dirty: dirty,
+                    externallyChanged: externallyChanged,
+                    exists: exists,
+                    issues: issues
+                )
+            }
+            return SessionSurfaceInspectionSnapshot.Workspace(
+                id: workspace.id,
+                title: workspace.title,
+                selected: selected,
+                terminals: terminals,
+                webTabs: webTabs,
+                files: files
+            )
+        }
+        return SessionSurfaceInspectionSnapshot(workspaces: workspaces)
+    }
+
+    func controlWorkspaceMetadataContexts() -> [ConductorWorkspaceMetadataContext] {
+        saveSelectedWorkspaceContentState()
+        return workspaces.map { workspace in
+            let selected = workspace.id == controlSelectedWorkspaceID
+            let contentState = selected
+                ? currentWorkspaceContentState()
+                : (workspaceContentStatesByWorkspaceID[workspace.id] ?? WorkspaceContentRuntimeState())
+            let selectedFileTabID: String? = {
+                guard case .file(let tabID) = contentState.selectedContentTabID else { return nil }
+                return tabID
+            }()
+            let selectedWebTabID: WebTabID? = {
+                guard case .web(let tabID) = contentState.selectedContentTabID else { return nil }
+                return tabID
+            }()
+            var candidateRootPaths: [String] = []
+            for paneID in workspace.root.leaves {
+                guard let pane = workspace.panes[paneID] else { continue }
+                if let selectedTab = pane.selectedTab {
+                    candidateRootPaths.append(contentsOf: workspaceRootCandidates(for: selectedTab))
+                }
+                for tab in pane.tabs where tab.id != pane.selectedTabID {
+                    candidateRootPaths.append(contentsOf: workspaceRootCandidates(for: tab))
+                }
+            }
+            if selected {
+                if let focusedWorkingDirectoryURL {
+                    candidateRootPaths.insert(focusedWorkingDirectoryURL.path, at: 0)
+                }
+            }
+            candidateRootPaths.append(contentsOf: contentState.fileTabs.map(\.rootURL.path))
+
+            let terminalSummaries = workspace.root.leaves.flatMap { paneID -> [WorkspaceMetadataSnapshot.TerminalSummary] in
+                guard let pane = workspace.panes[paneID] else { return [] }
+                return pane.tabs.map { tab in
+                    let displayMetadata = metadata(for: tab.id)
+                    let agentSnapshot = tab.agentSnapshot
+                    let commandSnapshot = tab.lastCommandSnapshot
+                    let searchSnapshot = tab.searchSnapshot
+                    let activeAgentTitle = displayMetadata.activeAgentTitle
+                        ?? (agentSnapshot?.state == .active ? agentSnapshot?.displayName : nil)
+                    return WorkspaceMetadataSnapshot.TerminalSummary(
+                        id: tab.id,
+                        paneID: pane.id,
+                        title: tab.title,
+                        workingDirectory: displayMetadata.workingDirectory ?? tab.workingDirectory,
+                        selected: tab.id == pane.selectedTabID,
+                        activeAgentTitle: activeAgentTitle,
+                        activeAgentStartedAt: displayMetadata.activeAgentStartedAt ?? agentSnapshot?.startedAt,
+                        agentState: agentSnapshot?.state.rawValue,
+                        agentUpdatedAt: agentSnapshot?.updatedAt,
+                        lastCommandExitCode: displayMetadata.lastCommandExitCode ?? commandSnapshot?.exitCode,
+                        lastCommandDurationNanoseconds: displayMetadata.lastCommandDurationNanoseconds ?? commandSnapshot?.durationNanoseconds,
+                        lastCommandFinishedAt: commandSnapshot?.finishedAt,
+                        searchActive: displayMetadata.search.active || (searchSnapshot?.active ?? false),
+                        searchNeedle: displayMetadata.search.needle ?? searchSnapshot?.needle,
+                        searchTotal: displayMetadata.search.total ?? searchSnapshot?.total,
+                        searchSelected: displayMetadata.search.selected ?? searchSnapshot?.selected,
+                        readonly: displayMetadata.readonly
+                    )
+                }
+            }
+            let terminals = workspace.panes.values.flatMap(\.tabs)
+            let activeAgentCount = terminals.filter { metadata(for: $0.id).hasActiveAgent }.count
+            return ConductorWorkspaceMetadataContext(
+                workspaceID: workspace.id,
+                title: workspace.title,
+                selected: selected,
+                candidateRootPaths: deduplicatedPaths(candidateRootPaths),
+                counts: WorkspaceMetadataSnapshot.Counts(
+                    paneCount: workspace.panes.count,
+                    terminalCount: terminals.count,
+                    webTabCount: contentState.webTabs.count,
+                    fileTabCount: contentState.fileTabs.count
+                ),
+                activeAgentCount: activeAgentCount,
+                unreadCount: attentionUnreadCount(for: workspace.id),
+                terminals: terminalSummaries,
+                files: contentState.fileTabs.map { tab in
+                    WorkspaceMetadataSnapshot.FileSummary(
+                        id: tab.id,
+                        title: tab.title,
+                        path: tab.fileURL.path,
+                        rootPath: tab.rootURL.path,
+                        selected: tab.id == selectedFileTabID,
+                        dirty: contentState.dirtyFileTabIDs.contains(tab.id)
+                    )
+                },
+                webTabs: contentState.webTabs.map { tab in
+                    WorkspaceMetadataSnapshot.WebSummary(
+                        id: tab.id,
+                        title: tab.title,
+                        url: tab.url?.absoluteString,
+                        pendingAddress: tab.pendingAddress,
+                        selected: tab.id == selectedWebTabID,
+                        loading: tab.isLoading,
+                        errorMessage: tab.errorMessage
+                    )
+                }
+            )
+        }
+    }
+
+    func scheduleWorkspaceMetadataRefresh(
+        reason: String = "ui",
+        debounceNanoseconds: UInt64 = 750_000_000
+    ) {
+        workspaceMetadataRefreshGeneration &+= 1
+        let generation = workspaceMetadataRefreshGeneration
+        workspaceMetadataRefreshTask?.cancel()
+        workspaceMetadataRefreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(nanoseconds: debounceNanoseconds)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  generation == self.workspaceMetadataRefreshGeneration else {
+                return
+            }
+            let contexts = self.controlWorkspaceMetadataContexts()
+            let signpost = ConductorSignpost.begin("workspace-metadata-refresh")
+            let snapshots = await ConductorWorkspaceMetadataService.snapshots(for: contexts)
+            ConductorSignpost.end("workspace-metadata-refresh", signpost)
+            guard !Task.isCancelled,
+                  generation == self.workspaceMetadataRefreshGeneration else {
+                return
+            }
+            self.workspaceMetadataSnapshots = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.workspaceID, $0) })
+            ConductorDiagnostics.record(
+                "workspace-metadata-refreshed",
+                fields: [
+                    "reason": reason,
+                    "count": String(snapshots.count),
+                    "selected": self.controlSelectedWorkspaceID.description
+                ]
+            )
+        }
+    }
+
+    private func workspaceRootCandidates(for tab: TerminalTabState) -> [String] {
+        [
+            metadata(for: tab.id).workingDirectory,
+            tab.workingDirectory
+        ].compactMap { candidate in
+            let trimmed = candidate?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed?.isEmpty == false ? trimmed : nil
+        }
+    }
+
+    private func deduplicatedPaths(_ paths: [String]) -> [String] {
+        var seen = Set<String>()
+        return paths.filter { path in
+            seen.insert(path).inserted
+        }
+    }
+
+    var controlAttentionStoreURL: URL {
+        attentionStore.url
+    }
+
+    func controlAttentionEvents(limit: Int? = nil, includeRead: Bool = true) -> [ConductorAttentionEvent] {
+        attentionStore.events(limit: limit, includeRead: includeRead)
+    }
+
+    @discardableResult
+    func controlCreateAttentionEvent(
+        title: String,
+        body: String,
+        kind: ConductorAttentionEvent.Kind = .manual,
+        severity: ConductorAttentionEvent.Severity = .info,
+        workspaceID: WorkspaceID? = nil,
+        terminalID: TerminalID? = nil,
+        webTabID: WebTabID? = nil,
+        source: String,
+        details: [String: String] = [:]
+    ) -> ConductorAttentionEvent {
+        controlCreateAttentionEventResult(
+            title: title,
+            body: body,
+            kind: kind,
+            severity: severity,
+            workspaceID: workspaceID,
+            terminalID: terminalID,
+            webTabID: webTabID,
+            source: source,
+            details: details
+        ).event
+    }
+
+    @discardableResult
+    private func controlCreateAttentionEventResult(
+        title: String,
+        body: String,
+        kind: ConductorAttentionEvent.Kind = .manual,
+        severity: ConductorAttentionEvent.Severity = .info,
+        workspaceID: WorkspaceID? = nil,
+        terminalID: TerminalID? = nil,
+        webTabID: WebTabID? = nil,
+        source: String,
+        details: [String: String] = [:],
+        coalescingWindow: TimeInterval? = nil
+    ) -> ConductorAttentionAppendResult {
+        let resolvedWorkspaceID = workspaceID
+            ?? terminalID.flatMap { terminalLocation(for: $0)?.workspaceID }
+            ?? controlSelectedWorkspaceID
+        let event = ConductorAttentionEvent(
+            kind: kind,
+            severity: severity,
+            title: title,
+            body: body,
+            workspaceID: resolvedWorkspaceID,
+            terminalID: terminalID,
+            webTabID: webTabID,
+            source: source,
+            details: details
+        )
+        let appendResult: ConductorAttentionAppendResult
+        if let coalescingWindow {
+            appendResult = attentionStore.appendCoalescing(event, window: coalescingWindow)
+        } else {
+            appendResult = ConductorAttentionAppendResult(
+                event: attentionStore.append(event),
+                coalesced: false,
+                suppressedCount: 0
+            )
+        }
+        refreshAttentionEvents()
+        ConductorDiagnostics.record(
+            appendResult.coalesced ? "attention-event-coalesced" : "attention-event-created",
+            fields: [
+                "id": appendResult.event.id.uuidString,
+                "kind": appendResult.event.kind.rawValue,
+                "workspace": resolvedWorkspaceID.description,
+                "terminal": terminalID?.description ?? "none",
+                "source": source,
+                "suppressedCount": String(appendResult.suppressedCount)
+            ]
+        )
+        return appendResult
+    }
+
+    @discardableResult
+    func controlClearAttentionEvent(id: UUID? = nil) -> Int {
+        let count = attentionStore.clear(id: id)
+        refreshAttentionEvents()
+        return count
+    }
+
+    @discardableResult
+    func controlFocusAttentionEvent(id: UUID) -> ConductorAttentionEvent? {
+        guard let event = attentionStore.events().first(where: { $0.id == id }),
+              focusAttentionTarget(event) else {
+            return nil
+        }
+        let focusedEvent = attentionStore.markRead(id: id) ?? event
+        refreshAttentionEvents()
+        return focusedEvent
+    }
+
+    @discardableResult
+    func controlFocusLatestAttentionEvent(workspaceID: WorkspaceID? = nil) -> ConductorAttentionEvent? {
+        let events = attentionStore.events(includeRead: false)
+        guard let event = events.first(where: { workspaceID == nil || $0.workspaceID == workspaceID }),
+              focusAttentionTarget(event) else {
+            return nil
+        }
+        let focusedEvent = attentionStore.markRead(id: event.id) ?? event
+        refreshAttentionEvents()
+        return focusedEvent
+    }
+
+    @discardableResult
+    func controlMarkAttentionEventsRead(workspaceID: WorkspaceID? = nil) -> Int {
+        let unreadIDs = attentionStore.events(includeRead: false)
+            .filter { workspaceID == nil || $0.workspaceID == workspaceID }
+            .map(\.id)
+        let changed = attentionStore.markRead(ids: Set(unreadIDs))
+        refreshAttentionEvents()
+        return changed
+    }
+
+    private func focusAttentionTarget(_ event: ConductorAttentionEvent) -> Bool {
+        if let terminalID = event.terminalID {
+            guard containsTerminal(terminalID) else { return false }
+            focusTerminal(terminalID)
+            return true
+        }
+        if let webTabID = event.webTabID,
+           workspaceWebTabs.contains(where: { $0.id == webTabID }) {
+            if let workspaceID = event.workspaceID {
+                _ = activateWorkspace(workspaceID, source: .programmatic)
+            }
+            selectWorkspaceWebTab(webTabID)
+            return true
+        }
+        if let workspaceID = event.workspaceID {
+            return activateWorkspace(workspaceID, source: .programmatic)
+        }
+        return true
+    }
+
+    @discardableResult
+    func controlCreateWorkspace(title: String?) -> WorkspaceID {
+        newWorkspace()
+        if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            renameWorkspace(workspace.id, title: title)
+        }
+        return workspace.id
+    }
+
+    @discardableResult
+    func controlRenameWorkspace(_ workspaceID: WorkspaceID?, title: String) -> Bool {
+        let targetID = workspaceID ?? controlSelectedWorkspaceID
+        guard workspaces.contains(where: { $0.id == targetID }) else { return false }
+        renameWorkspace(targetID, title: title)
+        return true
+    }
+
+    @discardableResult
+    func controlDuplicateWorkspace(_ workspaceID: WorkspaceID?) -> WorkspaceID? {
+        let sourceID = workspaceID ?? controlSelectedWorkspaceID
+        guard workspaces.contains(where: { $0.id == sourceID }) else { return nil }
+        duplicateWorkspace(sourceID)
+        return workspace.id
+    }
+
+    @discardableResult
+    func controlCloseWorkspace(_ workspaceID: WorkspaceID?) -> Bool {
+        let targetID = workspaceID ?? controlSelectedWorkspaceID
+        guard workspaces.count > 1,
+              workspaces.contains(where: { $0.id == targetID }) else {
+            return false
+        }
+        closeWorkspace(targetID)
+        return true
+    }
+
+    @discardableResult
+    func controlFocusTerminal(_ terminalID: TerminalID?) -> Bool {
+        let targetID = terminalID ?? focusedTerminalID
+        guard let targetID, containsTerminal(targetID) else { return false }
+        focusTerminal(targetID)
+        return focusedTerminalID == targetID
+    }
+
+    @discardableResult
+    func controlSplitSurface(direction: SplitDirection) -> (paneID: PaneID, terminalID: TerminalID)? {
+        guard let paneID = performWorkspaceEdgeSplit(direction),
+              let terminalID = workspace.panes[paneID]?.selectedTabID else {
+            return nil
+        }
+        return (paneID, terminalID)
+    }
+
+    @discardableResult
+    func controlCloseSurface(terminalID: TerminalID?) -> Bool {
+        if let terminalID {
+            guard containsTerminal(terminalID) else { return false }
+            focusTerminal(terminalID)
+        }
+        let selectedWebTabIDBefore = selectedWorkspaceWebTabID
+        let selectedFileTabIDBefore = selectedWorkspaceFileTabID
+        let terminalCountBefore = workspaces.reduce(0) { partial, workspace in
+            partial + workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+        }
+        closeSelectedTab()
+        let terminalCountAfter = workspaces.reduce(0) { partial, workspace in
+            partial + workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+        }
+        return terminalCountAfter != terminalCountBefore ||
+            (selectedWebTabIDBefore != nil && selectedWorkspaceWebTabID != selectedWebTabIDBefore) ||
+            (selectedFileTabIDBefore != nil && selectedWorkspaceFileTabID != selectedFileTabIDBefore)
+    }
+
+    @discardableResult
+    func controlToggleSurfaceZoom() -> Bool {
+        guard workspace.root.leaves.count > 1 else { return false }
+        toggleZoom()
+        return true
+    }
+
+    @discardableResult
+    func controlMoveSurface(mode: String) -> Bool {
+        switch mode {
+        case "left":
+            guard canMoveSelectedTabLeft else { return false }
+            moveSelectedTabLeft()
+        case "right":
+            guard canMoveSelectedTabRight else { return false }
+            moveSelectedTabRight()
+        case "nextPane":
+            guard canMoveSelectedTabToNextPane else { return false }
+            moveSelectedTabToNextPane()
+        case "newRightSplit":
+            guard canMoveSelectedTabToNewSplit else { return false }
+            moveSelectedTabToNewSplit(.right)
+        case "newDownSplit":
+            guard canMoveSelectedTabToNewSplit else { return false }
+            moveSelectedTabToNewSplit(.down)
+        default:
+            return false
+        }
+        return true
+    }
+
+    func controlTerminalInfo(terminalID: TerminalID?) -> (workspaceID: WorkspaceID, paneID: PaneID, tab: TerminalTabState, cwd: URL?)? {
+        let targetID = terminalID ?? focusedTerminalID
+        guard let targetID,
+              let target = terminalContextMenuTarget(for: targetID) else {
+            return nil
+        }
+        return (
+            target.workspaceID,
+            target.paneID,
+            target.tab,
+            workingDirectoryURL(for: target.tab.id)
+        )
+    }
+
+    @discardableResult
+    func controlRefreshTerminalAgentResumeMetadata(terminalID: TerminalID?) -> Bool {
+        guard let info = controlTerminalInfo(terminalID: terminalID),
+              let visibleText = controlVisibleText(terminalID: info.tab.id),
+              let resumeMetadata = AgentResumeDetector.detect(
+                in: visibleText,
+                fallbackProviderID: info.tab.agentSnapshot?.providerID
+              ) else {
+            return false
+        }
+        return updateTerminalAgentResumeMetadata(
+            info.tab.id,
+            metadata: resumeMetadata,
+            lastEvent: "control-visible-resume-hint"
+        )
+    }
+
+    func controlTerminalAgentResumeCommand(terminalID: TerminalID?) -> String? {
+        _ = controlRefreshTerminalAgentResumeMetadata(terminalID: terminalID)
+        guard let info = controlTerminalInfo(terminalID: terminalID),
+              let snapshot = info.tab.agentSnapshot else {
+            return nil
+        }
+        return terminalAgentResumeCommand(snapshot: snapshot)
+    }
+
+    private func terminalAgentResumeCommand(snapshot: TerminalAgentSnapshot?) -> String? {
+        guard let snapshot else { return nil }
+        if let metadata = AgentResumeDetector.metadata(
+            providerID: snapshot.providerID,
+            sessionIdentifier: snapshot.sessionIdentifier
+        ) {
+            return metadata.resumeCommand
+        }
+        if let resumeCommand = snapshot.resumeCommand,
+           let metadata = AgentResumeDetector.detect(in: resumeCommand) {
+            return metadata.resumeCommand
+        }
+        return nil
+    }
+
+    func controlResumableTerminalAgents(
+        workspaceID: WorkspaceID? = nil,
+        includeAllWorkspaces: Bool = false
+    ) -> [TerminalAgentResumeBatchTarget] {
+        syncSelectedWorkspace()
+        let targetWorkspaceID = workspaceID ?? (includeAllWorkspaces ? nil : controlSelectedWorkspaceID)
+        return workspaces.flatMap { workspace -> [TerminalAgentResumeBatchTarget] in
+            guard includeAllWorkspaces || workspace.id == targetWorkspaceID else { return [] }
+            return workspace.root.leaves.flatMap { paneID -> [TerminalAgentResumeBatchTarget] in
+                guard let pane = workspace.panes[paneID] else { return [] }
+                return pane.tabs.compactMap { tab in
+                    let snapshot = tab.agentSnapshot
+                    guard let resumeCommand = terminalAgentResumeCommand(snapshot: snapshot) else {
+                        return nil
+                    }
+                    let cleanDisplayName = snapshot?.displayName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    return TerminalAgentResumeBatchTarget(
+                        workspaceID: workspace.id,
+                        paneID: paneID,
+                        terminalID: tab.id,
+                        terminalTitle: tab.userTitle ?? tab.title,
+                        providerID: snapshot?.providerID,
+                        displayName: cleanDisplayName.isEmpty ? "Agent" : cleanDisplayName,
+                        resumeCommand: resumeCommand,
+                        agentSnapshot: snapshot
+                    )
+                }
+            }
+        }
+    }
+
+    @discardableResult
+    func controlResumeTerminalAgents(
+        workspaceID: WorkspaceID? = nil,
+        includeAllWorkspaces: Bool = false,
+        dryRun: Bool = false
+    ) -> [TerminalAgentResumeBatchResult] {
+        let targets = controlResumableTerminalAgents(
+            workspaceID: workspaceID,
+            includeAllWorkspaces: includeAllWorkspaces
+        )
+        guard !dryRun else {
+            return targets.map {
+                TerminalAgentResumeBatchResult(target: $0, sent: false, dryRun: true, failureReason: nil)
+            }
+        }
+        let originalWorkspaceID = controlSelectedWorkspaceID
+        var results: [TerminalAgentResumeBatchResult] = []
+        for target in targets {
+            let sent = controlResumeTerminalAgent(terminalID: target.terminalID)
+            results.append(TerminalAgentResumeBatchResult(
+                target: target,
+                sent: sent,
+                dryRun: false,
+                failureReason: sent ? nil : "resume_command_not_sent"
+            ))
+        }
+        if originalWorkspaceID != controlSelectedWorkspaceID {
+            _ = activateWorkspace(originalWorkspaceID, source: .programmatic)
+        }
+        if !results.isEmpty {
+            ConductorDiagnostics.record(
+                "terminal-agent-resume-batch",
+                fields: [
+                    "scope": includeAllWorkspaces ? "all" : "workspace",
+                    "workspace": workspaceID?.description ?? (includeAllWorkspaces ? "all" : controlSelectedWorkspaceID.description),
+                    "targetCount": String(results.count),
+                    "sentCount": String(results.filter(\.sent).count),
+                    "dryRun": dryRun ? "true" : "false"
+                ]
+            )
+        }
+        return results
+    }
+
+    @discardableResult
+    func controlResumeTerminalAgent(terminalID: TerminalID?) -> Bool {
+        guard let info = controlTerminalInfo(terminalID: terminalID),
+              let resumeCommand = controlTerminalAgentResumeCommand(terminalID: info.tab.id) else {
+            return false
+        }
+        let commandText = resumeCommand.hasSuffix("\n") ? resumeCommand : "\(resumeCommand)\n"
+        ConductorDiagnostics.record(
+            "terminal-agent-resume",
+            fields: [
+                "terminal": info.tab.id.description,
+                "provider": info.tab.agentSnapshot?.providerID ?? "unknown",
+                "hasSession": info.tab.agentSnapshot?.sessionIdentifier == nil ? "false" : "true"
+            ]
+        )
+        return controlSendText(commandText, terminalID: info.tab.id)
+    }
+
+    @discardableResult
+    func controlRenameTerminal(_ terminalID: TerminalID?, title: String) -> Bool {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty else { return false }
+        let targetID = terminalID ?? focusedTerminalID
+        guard let targetID, containsTerminal(targetID) else { return false }
+        renameTerminal(targetID, title: cleanTitle)
+        return true
+    }
+
+    var controlFocusedWorkingDirectoryURL: URL? {
+        focusedWorkingDirectoryURL
+    }
+
+    func controlResolveFileURL(_ path: String) -> URL {
+        let expanded = (path as NSString).expandingTildeInPath
+        if (expanded as NSString).isAbsolutePath {
+            return URL(fileURLWithPath: expanded).standardizedFileURL
+        }
+        let baseURL = focusedWorkingDirectoryURL ?? FileManager.default.homeDirectoryForCurrentUser
+        return baseURL.appendingPathComponent(expanded).standardizedFileURL
+    }
+
+    @discardableResult
+    func controlOpenFile(_ fileURL: URL, rootURL: URL? = nil) -> ConductorWorkspaceFileTab? {
+        let standardizedFile = fileURL.standardizedFileURL
+        openFileInWorkspace(
+            standardizedFile,
+            rootURL: (rootURL ?? standardizedFile.deletingLastPathComponent()).standardizedFileURL
+        )
+        return workspaceFileTabs.first { $0.id == standardizedFile.path }
+    }
+
+    @discardableResult
+    func controlRevealFile(_ fileURL: URL?, rootURL: URL? = nil) -> FileManagerPanelRequest {
+        let targetURL = fileURL?.standardizedFileURL
+        let values = targetURL.flatMap { try? $0.resourceValues(forKeys: [.isDirectoryKey]) }
+        let root: URL
+        let selected: URL?
+        if let targetURL, values?.isDirectory == true {
+            root = (rootURL ?? targetURL).standardizedFileURL
+            selected = nil
+        } else if let targetURL {
+            root = (rootURL ?? targetURL.deletingLastPathComponent()).standardizedFileURL
+            selected = targetURL
+        } else {
+            root = (rootURL ?? focusedWorkingDirectoryURL ?? FileManager.default.homeDirectoryForCurrentUser).standardizedFileURL
+            selected = nil
+        }
+        showFileManager(rootURL: root, selectedURL: selected)
+        return fileManagerPanelRequest ?? FileManagerPanelRequest(rootURL: root, selectedURL: selected)
+    }
+
+    @discardableResult
+    func controlSendText(_ text: String, terminalID: TerminalID?) -> Bool {
+        guard !text.isEmpty else { return false }
+        let targetID = terminalID ?? focusedTerminalID
+        guard let targetID else { return false }
+        return insertTextIntoTerminal(text, terminalID: targetID)
+    }
+
+    func controlVisibleText(terminalID: TerminalID?) -> String? {
+        let targetID = terminalID ?? focusedTerminalID
+        guard let targetID,
+              let target = terminalContextMenuTarget(for: targetID) else {
+            return nil
+        }
+        if target.workspaceID != workspace.id {
+            _ = activateWorkspace(target.workspaceID, source: .programmatic)
+        }
+        focusTerminal(target.tab.id)
+        return surface(for: target.tab).visibleText()
+    }
+
+    func controlSampleTerminalScroll(terminalID: TerminalID?) -> ConductorPerformanceBudgetSample? {
+        let targetID = terminalID ?? focusedTerminalID
+        guard let targetID,
+              let target = terminalContextMenuTarget(for: targetID) else {
+            return nil
+        }
+        if target.workspaceID != workspace.id {
+            _ = activateWorkspace(target.workspaceID, source: .programmatic)
+        }
+        focusTerminal(target.tab.id)
+        let surface = surface(for: target.tab)
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        if surface.isReadyForInput {
+            _ = surface.performBindingAction("scroll_to_row:0")
+        }
+        let elapsed = DispatchTime.now().uptimeNanoseconds - startedAt
+        return surface.recordScrollFrameSample(
+            durationNanoseconds: elapsed,
+            source: "control.terminal.sampleScroll"
+        )
+    }
+
+    @discardableResult
+    func controlSendKey(_ key: String, terminalID: TerminalID?) -> Bool {
+        let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let syntheticKey: (characters: String, ignoring: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags)
+        switch normalized {
+        case "enter", "return":
+            syntheticKey = ("\r", "\r", 36, [])
+        case "tab":
+            syntheticKey = ("\t", "\t", 48, [])
+        case "escape", "esc":
+            syntheticKey = ("\u{1B}", "\u{1B}", 53, [])
+        case "backspace":
+            syntheticKey = ("\u{7F}", "\u{7F}", 51, [])
+        case "ctrl-c", "control-c":
+            syntheticKey = ("\u{03}", "c", 8, [.control])
+        case "ctrl-d", "control-d":
+            syntheticKey = ("\u{04}", "d", 2, [.control])
+        case "up":
+            syntheticKey = ("\u{F700}", "\u{F700}", 126, [])
+        case "down":
+            syntheticKey = ("\u{F701}", "\u{F701}", 125, [])
+        case "right":
+            syntheticKey = ("\u{F703}", "\u{F703}", 124, [])
+        case "left":
+            syntheticKey = ("\u{F702}", "\u{F702}", 123, [])
+        default:
+            return false
+        }
+        let targetID = terminalID ?? focusedTerminalID
+        guard let targetID,
+              let target = terminalContextMenuTarget(for: targetID) else {
+            return false
+        }
+        if target.workspaceID != workspace.id {
+            _ = activateWorkspace(target.workspaceID, source: .programmatic)
+        }
+        focusTerminal(target.tab.id)
+        let surface = surface(for: target.tab)
+        refreshSurfaceAfterNavigation(target.tab.id)
+        return surface.sendSyntheticKey(
+            characters: syntheticKey.characters,
+            charactersIgnoringModifiers: syntheticKey.ignoring,
+            keyCode: syntheticKey.keyCode,
+            modifierFlags: syntheticKey.modifiers
+        )
+    }
+
+    @discardableResult
+    func controlOpenBrowser(input: String) -> WebTabID? {
+        newWorkspaceWebTab(initialInput: input)
+        return selectedWorkspaceWebTabID
+    }
+
+    @discardableResult
+    func controlSelectBrowser(webTabID: WebTabID, workspaceID: WorkspaceID? = nil) -> Bool {
+        if let workspaceID {
+            selectWorkspaceWebTab(webTabID, in: workspaceID)
+            return controlSelectedWorkspaceID == workspaceID && selectedWorkspaceWebTabID == webTabID
+        }
+        if workspaceWebTabs.contains(where: { $0.id == webTabID }) {
+            selectWorkspaceWebTab(webTabID)
+            return selectedWorkspaceWebTabID == webTabID
+        }
+        if let targetWorkspaceID = workspaceContentStatesByWorkspaceID.first(where: { _, state in
+            state.webTabs.contains { $0.id == webTabID }
+        })?.key {
+            selectWorkspaceWebTab(webTabID, in: targetWorkspaceID)
+            return controlSelectedWorkspaceID == targetWorkspaceID && selectedWorkspaceWebTabID == webTabID
+        }
+        return false
+    }
+
+    @discardableResult
+    func controlSelectFileTab(_ fileTabID: String, workspaceID: WorkspaceID? = nil) -> Bool {
+        if let workspaceID {
+            let resolvedID: String
+            if workspaceID == workspace.id {
+                resolvedID = workspaceFileTabs.first {
+                    $0.id == fileTabID || $0.title == fileTabID || $0.fileURL.path == fileTabID
+                }?.id ?? fileTabID
+            } else {
+                resolvedID = workspaceContentStatesByWorkspaceID[workspaceID]?.fileTabs.first {
+                    $0.id == fileTabID || $0.title == fileTabID || $0.fileURL.path == fileTabID
+                }?.id ?? fileTabID
+            }
+            selectWorkspaceFileTab(resolvedID, in: workspaceID)
+            return controlSelectedWorkspaceID == workspaceID && selectedWorkspaceFileTabID == resolvedID
+        }
+        if let resolvedID = workspaceFileTabs.first(where: { $0.id == fileTabID || $0.title == fileTabID || $0.fileURL.path == fileTabID })?.id {
+            selectWorkspaceFileTab(resolvedID)
+            return selectedWorkspaceFileTabID == resolvedID
+        }
+        if let targetWorkspaceID = workspaceContentStatesByWorkspaceID.first(where: { _, state in
+            state.fileTabs.contains { $0.id == fileTabID || $0.title == fileTabID || $0.fileURL.path == fileTabID }
+        })?.key {
+            let targetState = workspaceContentStatesByWorkspaceID[targetWorkspaceID]
+            let resolvedID = targetState?.fileTabs.first { $0.id == fileTabID || $0.title == fileTabID || $0.fileURL.path == fileTabID }?.id ?? fileTabID
+            selectWorkspaceFileTab(resolvedID, in: targetWorkspaceID)
+            return controlSelectedWorkspaceID == targetWorkspaceID && selectedWorkspaceFileTabID == resolvedID
+        }
+        return false
+    }
+
+    @discardableResult
+    func controlNavigateBrowser(input: String, webTabID: WebTabID?) -> Bool {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID,
+              workspaceWebTabs.contains(where: { $0.id == targetID }) else {
+            return false
+        }
+        navigateWorkspaceWebTab(targetID, input: input)
+        return true
+    }
+
+    func controlBrowserSnapshot(webTabID: WebTabID?) async throws -> ConductorBrowserSnapshot {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID,
+              workspaceWebTabs.contains(where: { $0.id == targetID }) else {
+            throw ConductorBrowserSnapshotError.targetNotFound
+        }
+        var snapshot = try await ConductorWebKitSurfaceStore.shared.snapshot(for: targetID)
+        snapshot.runtimeEvents = workspaceWebTabs.first(where: { $0.id == targetID })?.runtimeEvents ?? []
+        return snapshot
+    }
+
+    func controlBrowserScreenshot(webTabID: WebTabID?) async throws -> ConductorBrowserScreenshot {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID,
+              workspaceWebTabs.contains(where: { $0.id == targetID }) else {
+            throw ConductorBrowserSnapshotError.targetNotFound
+        }
+        return try await ConductorWebKitSurfaceStore.shared.screenshot(for: targetID)
+    }
+
+    func controlBrowserClick(webTabID: WebTabID?, target: String) async throws -> ConductorBrowserAutomationResult {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID,
+              workspaceWebTabs.contains(where: { $0.id == targetID }) else {
+            throw ConductorBrowserSnapshotError.targetNotFound
+        }
+        return try await ConductorWebKitSurfaceStore.shared.click(for: targetID, target: target)
+    }
+
+    func controlBrowserFill(webTabID: WebTabID?, target: String, value: String) async throws -> ConductorBrowserAutomationResult {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID,
+              workspaceWebTabs.contains(where: { $0.id == targetID }) else {
+            throw ConductorBrowserSnapshotError.targetNotFound
+        }
+        return try await ConductorWebKitSurfaceStore.shared.fill(for: targetID, target: target, value: value)
+    }
+
+    func controlBrowserPress(webTabID: WebTabID?, key: String, target: String?) async throws -> ConductorBrowserAutomationResult {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID,
+              workspaceWebTabs.contains(where: { $0.id == targetID }) else {
+            throw ConductorBrowserSnapshotError.targetNotFound
+        }
+        return try await ConductorWebKitSurfaceStore.shared.press(for: targetID, key: key, target: target)
+    }
+
+    func controlBrowserWait(
+        webTabID: WebTabID?,
+        condition: String,
+        target: String,
+        timeoutSeconds: Double
+    ) async throws -> ConductorBrowserAutomationResult {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID,
+              workspaceWebTabs.contains(where: { $0.id == targetID }) else {
+            throw ConductorBrowserSnapshotError.targetNotFound
+        }
+        return try await ConductorWebKitSurfaceStore.shared.wait(
+            for: targetID,
+            condition: condition,
+            target: target,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    func controlBrowserFind(webTabID: WebTabID?, query: String, frameID: String?) async throws -> ConductorBrowserAutomationResult {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID,
+              workspaceWebTabs.contains(where: { $0.id == targetID }) else {
+            throw ConductorBrowserSnapshotError.targetNotFound
+        }
+        return try await ConductorWebKitSurfaceStore.shared.find(for: targetID, query: query, frameID: frameID)
+    }
+
+    func controlBrowserEvaluate(webTabID: WebTabID?, script: String, frameID: String?) async throws -> ConductorBrowserAutomationResult {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID,
+              workspaceWebTabs.contains(where: { $0.id == targetID }) else {
+            throw ConductorBrowserSnapshotError.targetNotFound
+        }
+        let result = try await ConductorWebKitSurfaceStore.shared.evaluate(for: targetID, script: script, frameID: frameID)
+        await captureBrowserRuntimeState(for: targetID, persistAfterCapture: true)
+        return result
+    }
+
+    @discardableResult
+    func controlReloadBrowser(webTabID: WebTabID?) -> Bool {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID,
+              workspaceWebTabs.contains(where: { $0.id == targetID }) else {
+            return false
+        }
+        reloadWorkspaceWebTab(targetID)
+        return true
+    }
+
+    @discardableResult
+    func controlStopBrowser(webTabID: WebTabID?) -> Bool {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID,
+              workspaceWebTabs.contains(where: { $0.id == targetID }) else {
+            return false
+        }
+        stopWorkspaceWebTab(targetID)
+        return true
+    }
+
+    @discardableResult
+    func controlBrowserBack(webTabID: WebTabID?) -> Bool {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID else { return false }
+        goBackWorkspaceWebTab(targetID)
+        return true
+    }
+
+    @discardableResult
+    func controlBrowserForward(webTabID: WebTabID?) -> Bool {
+        let targetID = webTabID ?? selectedWorkspaceWebTabID
+        guard let targetID else { return false }
+        goForwardWorkspaceWebTab(targetID)
+        return true
+    }
+
+    private func captureBrowserRuntimeState(for tabID: WebTabID, persistAfterCapture: Bool) async {
+        guard let state = await ConductorWebKitSurfaceStore.shared.runtimeState(for: tabID) else { return }
+        applyBrowserRuntimeState(state, to: tabID)
+        if persistAfterCapture {
+            persist()
+        }
+    }
+
+    private func applyBrowserRuntimeState(_ state: ConductorWebRuntimeState, to tabID: WebTabID) {
+        updateWorkspaceWebTab(tabID) { tab in
+            if state.entries.count > 1, let currentIndex = state.currentIndex {
+                tab.navigationEntries = state.entries
+                tab.currentNavigationIndex = currentIndex
+            } else if let url = tab.url, tab.navigationEntries.isEmpty {
+                tab.navigationEntries = [WorkspaceWebNavigationEntry(url: url, title: tab.title)]
+                tab.currentNavigationIndex = 0
+            }
+            if let scrollY = state.scrollY, scrollY.isFinite {
+                tab.scrollY = max(0, scrollY)
+            }
+            let currentIndex = tab.currentNavigationIndex ?? 0
+            tab.canGoBack = tab.canGoBack || currentIndex > 0
+            tab.canGoForward = tab.canGoForward || currentIndex < tab.navigationEntries.count - 1
+        }
+    }
+
     private func terminalIDs(in workspace: WorkspaceState) -> [TerminalID] {
         workspace.panes.values.flatMap { pane in
             pane.tabs.map(\.id)
+        }
+    }
+
+    private static func restoredTerminalIDs(
+        in workspaces: [WorkspaceState],
+        report: WorkspacePersistenceLoadReport
+    ) -> Set<TerminalID> {
+        switch report.state {
+        case .restored, .restoredFromPrevious, .restoredFromJournal:
+            return Set(workspaces.flatMap { workspace in
+                workspace.panes.values.flatMap { pane in
+                    pane.tabs.map(\.id)
+                }
+            })
+        case .failed, .missing, .reset, .disabled:
+            return []
         }
     }
 }

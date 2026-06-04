@@ -9,182 +9,235 @@ if [[ -x /usr/local/opt/swift/bin/swift ]]; then
   export PATH="/usr/local/opt/swift/bin:$PATH"
 fi
 
-./Scripts/prepare-ghosttykit.sh
-swift build
-swift run ConductorModelCheck
+CHECK_TMP="${CONDUCTOR_CHECK_TMPDIR:-$(mktemp -d /tmp/conductor-check.XXXXXX)}"
+KEEP_TMP="${CONDUCTOR_CHECK_KEEP_TMP:-0}"
+mkdir -p "$CHECK_TMP"
 
-STATE_FILE="$HOME/Library/Application Support/Conductor/window-state.json"
-state_hash() {
-  if [[ ! -f "$STATE_FILE" ]]; then
-    echo "missing"
-    return
+cleanup() {
+  if [[ "$KEEP_TMP" != "1" && -n "${CHECK_TMP:-}" && -d "$CHECK_TMP" ]]; then
+    rm -rf "$CHECK_TMP"
   fi
-  python3 - "$STATE_FILE" <<'PY' | shasum -a 256 | awk '{print $1}'
-import json
-import sys
+}
+trap cleanup EXIT
 
-with open(sys.argv[1], "r", encoding="utf-8") as handle:
-    data = json.load(handle)
-print(json.dumps(data, sort_keys=True, separators=(",", ":")))
-PY
+section() {
+  printf '\n== %s ==\n' "$*"
 }
 
-wait_for_conductor_exit() {
-  local pattern="$ROOT/.build/.*/debug/Conductor|$ROOT/.build/debug/Conductor|$ROOT/.build/Conductor.app/Contents/MacOS/Conductor"
-  for _ in {1..40}; do
-    if ! pgrep -fl "$pattern" >/tmp/conductor-wait-pids.txt; then
-      return 0
-    fi
-    sleep 0.25
+require_line() {
+  local file="$1"
+  local expected="$2"
+  if ! grep -qx "$expected" "$file"; then
+    echo "check-conductor.sh: expected '$expected' in $file" >&2
+    echo "---- $file ----" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+}
+
+run_autorun() {
+  local label="$1"
+  local autorun_env="$2"
+  local output_env="$3"
+  shift 3
+
+  local output="$CHECK_TMP/$label.txt"
+  local log="$CHECK_TMP/$label.log"
+  local state_dir="$CHECK_TMP/$label-state"
+  local state_path="$state_dir/window-state.yaml"
+  mkdir -p "$state_dir"
+  rm -f "$output" "$log"
+
+  section "autorun: $label"
+  env "$autorun_env=1" "$output_env=$output" "CONDUCTOR_STATE_PATH=$state_path" "$CONDUCTOR_BIN" >"$log" 2>&1
+
+  if [[ ! -s "$output" ]]; then
+    echo "check-conductor.sh: $label did not write $output" >&2
+    echo "---- $log ----" >&2
+    cat "$log" >&2
+    exit 1
+  fi
+
+  cat "$output"
+  echo
+  for expected in "$@"; do
+    require_line "$output" "$expected"
   done
-  cat /tmp/conductor-wait-pids.txt >&2
-  return 1
 }
 
-STATE_BEFORE="$(state_hash)"
+section "prepare dependencies"
+./Scripts/prepare-ghosttykit.sh
 
-rm -f /tmp/conductor-smoke-ok.txt
-CONDUCTOR_SMOKE_AUTORUN=1 \
-CONDUCTOR_SMOKE_OUTPUT=/tmp/conductor-smoke-ok.txt \
-swift run Conductor >/tmp/conductor-smoke-run.log 2>&1
-cat /tmp/conductor-smoke-ok.txt
-echo
-grep -qx 'status=ok' /tmp/conductor-smoke-ok.txt
-grep -qx 'panes=2' /tmp/conductor-smoke-ok.txt
-grep -qx 'terminals=2' /tmp/conductor-smoke-ok.txt
-grep -qx 'zoomed=false' /tmp/conductor-smoke-ok.txt
+section "build"
+if [[ "${CONDUCTOR_CHECK_SKIP_BUILD:-0}" != "1" ]]; then
+  swift build --product Conductor
+  swift build --product ConductorCLI
+  swift build --product ConductorModelCheck
+  BIN_PATH="$(swift build --show-bin-path)"
+  CONDUCTOR_BIN="$BIN_PATH/Conductor"
+  CONDUCTOR_CLI_BIN="$BIN_PATH/ConductorCLI"
+  CONDUCTOR_MODEL_CHECK_BIN="$BIN_PATH/ConductorModelCheck"
+else
+  CONDUCTOR_BIN="${CONDUCTOR_BIN_PATH:-$ROOT/.build/debug/Conductor}"
+  CONDUCTOR_CLI_BIN="${CONDUCTOR_CLI_PATH:-$ROOT/.build/debug/ConductorCLI}"
+  CONDUCTOR_MODEL_CHECK_BIN="${CONDUCTOR_MODEL_CHECK_PATH:-$ROOT/.build/debug/ConductorModelCheck}"
+  echo "reusing Conductor binary: $CONDUCTOR_BIN"
+  echo "reusing ConductorCLI binary: $CONDUCTOR_CLI_BIN"
+  echo "reusing ConductorModelCheck binary: $CONDUCTOR_MODEL_CHECK_BIN"
+fi
 
-rm -f /tmp/conductor-shortcut-ok.txt
-CONDUCTOR_SHORTCUT_AUTORUN=1 \
-CONDUCTOR_SHORTCUT_OUTPUT=/tmp/conductor-shortcut-ok.txt \
-swift run Conductor >/tmp/conductor-shortcut-run.log 2>&1
-cat /tmp/conductor-shortcut-ok.txt
-echo
-grep -qx 'status=ok' /tmp/conductor-shortcut-ok.txt
-grep -qx 'shortcut=perform-key-equivalent' /tmp/conductor-shortcut-ok.txt
-
-rm -f /tmp/conductor-focus-ok.txt
-CONDUCTOR_FOCUS_AUTORUN=1 \
-CONDUCTOR_FOCUS_OUTPUT=/tmp/conductor-focus-ok.txt \
-swift run Conductor >/tmp/conductor-focus-run.log 2>&1
-cat /tmp/conductor-focus-ok.txt
-echo
-grep -qx 'status=ok' /tmp/conductor-focus-ok.txt
-grep -qx 'focus=first-responder' /tmp/conductor-focus-ok.txt
-grep -qx 'mouse-focus=workspace' /tmp/conductor-focus-ok.txt
-grep -qx 'panes=2' /tmp/conductor-focus-ok.txt
-grep -qx 'terminals=3' /tmp/conductor-focus-ok.txt
-grep -qx 'zoomed=false' /tmp/conductor-focus-ok.txt
-
-rm -f /tmp/conductor-layout-ok.txt
-CONDUCTOR_LAYOUT_AUTORUN=1 \
-CONDUCTOR_LAYOUT_OUTPUT=/tmp/conductor-layout-ok.txt \
-swift run Conductor >/tmp/conductor-layout-run.log 2>&1
-cat /tmp/conductor-layout-ok.txt
-echo
-grep -qx 'status=ok' /tmp/conductor-layout-ok.txt
-grep -qx 'layout=resize' /tmp/conductor-layout-ok.txt
-grep -qx 'clamped=true' /tmp/conductor-layout-ok.txt
-grep -qx 'equalized=true' /tmp/conductor-layout-ok.txt
-grep -qx 'panes=3' /tmp/conductor-layout-ok.txt
-grep -qx 'terminals=3' /tmp/conductor-layout-ok.txt
-grep -qx 'zoomed=false' /tmp/conductor-layout-ok.txt
-
-rm -f /tmp/conductor-lifecycle-ok.txt
-CONDUCTOR_LIFECYCLE_AUTORUN=1 \
-CONDUCTOR_LIFECYCLE_OUTPUT=/tmp/conductor-lifecycle-ok.txt \
-swift run Conductor >/tmp/conductor-lifecycle-run.log 2>&1
-cat /tmp/conductor-lifecycle-ok.txt
-echo
-grep -qx 'status=ok' /tmp/conductor-lifecycle-ok.txt
-grep -qx 'lifecycle=close' /tmp/conductor-lifecycle-ok.txt
-grep -qx 'surfaces=0' /tmp/conductor-lifecycle-ok.txt
-grep -qx 'metadata=0' /tmp/conductor-lifecycle-ok.txt
-grep -qx 'panes=1' /tmp/conductor-lifecycle-ok.txt
-grep -qx 'terminals=1' /tmp/conductor-lifecycle-ok.txt
-grep -qx 'zoomed=false' /tmp/conductor-lifecycle-ok.txt
-
-rm -f /tmp/conductor-workspace-ok.txt
-CONDUCTOR_WORKSPACE_AUTORUN=1 \
-CONDUCTOR_WORKSPACE_OUTPUT=/tmp/conductor-workspace-ok.txt \
-swift run Conductor >/tmp/conductor-workspace-run.log 2>&1
-cat /tmp/conductor-workspace-ok.txt
-echo
-grep -qx 'status=ok' /tmp/conductor-workspace-ok.txt
-grep -qx 'workspace=operations' /tmp/conductor-workspace-ok.txt
-grep -qx 'panes=2' /tmp/conductor-workspace-ok.txt
-grep -qx 'terminals=2' /tmp/conductor-workspace-ok.txt
-grep -qx 'zoomed=false' /tmp/conductor-workspace-ok.txt
-
-rm -f /tmp/conductor-shell-panel-ok.txt
-CONDUCTOR_SHELL_PANEL_AUTORUN=1 \
-CONDUCTOR_SHELL_PANEL_OUTPUT=/tmp/conductor-shell-panel-ok.txt \
-swift run Conductor >/tmp/conductor-shell-panel-run.log 2>&1
-cat /tmp/conductor-shell-panel-ok.txt
-echo
-grep -qx 'status=ok' /tmp/conductor-shell-panel-ok.txt
-grep -qx 'shell-panels=dismiss' /tmp/conductor-shell-panel-ok.txt
-grep -qx 'empty=true' /tmp/conductor-shell-panel-ok.txt
-grep -qx 'settings=true' /tmp/conductor-shell-panel-ok.txt
-grep -qx 'command=true' /tmp/conductor-shell-panel-ok.txt
-grep -qx 'overview=true' /tmp/conductor-shell-panel-ok.txt
-
-wait_for_conductor_exit
-
-rm -f /tmp/conductor-notification-ok.txt
-CONDUCTOR_NOTIFICATION_AUTORUN=1 \
-CONDUCTOR_NOTIFICATION_OUTPUT=/tmp/conductor-notification-ok.txt \
-swift run Conductor >/tmp/conductor-notification-run.log 2>&1
-cat /tmp/conductor-notification-ok.txt
-echo
-grep -qx 'status=ok' /tmp/conductor-notification-ok.txt
-grep -qx 'notification=open' /tmp/conductor-notification-ok.txt
-grep -qx 'opened=true' /tmp/conductor-notification-ok.txt
-grep -qx 'panelStayedOpen=true' /tmp/conductor-notification-ok.txt
-grep -qx 'unreadCleared=true' /tmp/conductor-notification-ok.txt
-grep -qx 'targetFocused=true' /tmp/conductor-notification-ok.txt
-
-wait_for_conductor_exit
-
-rm -f /tmp/conductor-stress-ok.txt
-CONDUCTOR_STRESS_AUTORUN=1 \
-CONDUCTOR_STRESS_OUTPUT=/tmp/conductor-stress-ok.txt \
-swift run Conductor >/tmp/conductor-stress-run.log 2>&1
-cat /tmp/conductor-stress-ok.txt
-echo
-grep -qx 'status=ok' /tmp/conductor-stress-ok.txt
-grep -qx 'stress=long-output' /tmp/conductor-stress-ok.txt
-grep -qx 'panes=3' /tmp/conductor-stress-ok.txt
-grep -qx 'terminals=4' /tmp/conductor-stress-ok.txt
-grep -qx 'zoomed=false' /tmp/conductor-stress-ok.txt
-
-wait_for_conductor_exit
-sleep 1
-
-rm -f /tmp/conductor-resize-stress-ok.txt
-CONDUCTOR_RESIZE_STRESS_AUTORUN=1 \
-CONDUCTOR_RESIZE_STRESS_OUTPUT=/tmp/conductor-resize-stress-ok.txt \
-swift run Conductor >/tmp/conductor-resize-stress-run.log 2>&1
-cat /tmp/conductor-resize-stress-ok.txt
-echo
-grep -qx 'status=ok' /tmp/conductor-resize-stress-ok.txt
-grep -qx 'stress=resize-while-output' /tmp/conductor-resize-stress-ok.txt
-grep -qx 'resized=true' /tmp/conductor-resize-stress-ok.txt
-grep -qx 'panes=3' /tmp/conductor-resize-stress-ok.txt
-grep -qx 'terminals=4' /tmp/conductor-resize-stress-ok.txt
-grep -qx 'surfaces=4' /tmp/conductor-resize-stress-ok.txt
-grep -qx 'zoomed=false' /tmp/conductor-resize-stress-ok.txt
-
-STATE_AFTER="$(state_hash)"
-if [[ "$STATE_BEFORE" != "$STATE_AFTER" ]]; then
-  echo "Conductor smoke modified persisted user state" >&2
-  echo "before=$STATE_BEFORE" >&2
-  echo "after=$STATE_AFTER" >&2
+if [[ ! -x "$CONDUCTOR_BIN" || ! -x "$CONDUCTOR_CLI_BIN" || ! -x "$CONDUCTOR_MODEL_CHECK_BIN" ]]; then
+  echo "check-conductor.sh: missing built Conductor or ConductorCLI binary" >&2
+  echo "Conductor: $CONDUCTOR_BIN" >&2
+  echo "ConductorCLI: $CONDUCTOR_CLI_BIN" >&2
+  echo "ConductorModelCheck: $CONDUCTOR_MODEL_CHECK_BIN" >&2
   exit 1
 fi
 
-./Scripts/build-app-bundle.sh >/tmp/conductor-app-bundle-path.txt
+section "model check"
+"$CONDUCTOR_MODEL_CHECK_BIN"
 
+if [[ "${CONDUCTOR_CHECK_SKIP_TESTS:-0}" != "1" ]]; then
+  section "swift tests"
+  ./Scripts/swift-test.sh
+else
+  section "swift tests skipped"
+fi
+
+section "control dogfood"
+CONDUCTOR_DOGFOOD_SKIP_BUILD=1 \
+CONDUCTOR_DOGFOOD_RUN_CONTROL_SMOKE=1 \
+CONDUCTOR_DOGFOOD_TMPDIR="$CHECK_TMP/dogfood" \
+CONDUCTOR_DOGFOOD_KEEP_TMP=1 \
+CONDUCTOR_BIN_PATH="$CONDUCTOR_BIN" \
+CONDUCTOR_CLI_PATH="$CONDUCTOR_CLI_BIN" \
+./Scripts/dogfood-workbench.sh
+
+if [[ "${CONDUCTOR_CHECK_SKIP_PERF_GATE:-0}" != "1" ]]; then
+  section "performance gate"
+  ./Scripts/performance-gate.sh "$CHECK_TMP/dogfood/diagnostics/summary.redacted.json"
+else
+  section "performance gate skipped"
+fi
+
+if [[ "${CONDUCTOR_CHECK_SKIP_STRESS:-0}" != "1" ]]; then
+  section "protocol stress"
+  CONDUCTOR_STRESS_SKIP_BUILD=1 \
+  CONDUCTOR_STRESS_SKIP_AUTORUN=1 \
+  CONDUCTOR_STRESS_TMPDIR="$CHECK_TMP/stress" \
+  CONDUCTOR_STRESS_KEEP_TMP=1 \
+  CONDUCTOR_BIN_PATH="$CONDUCTOR_BIN" \
+  CONDUCTOR_CLI_PATH="$CONDUCTOR_CLI_BIN" \
+  ./Scripts/stress-conductor.sh
+else
+  section "protocol stress skipped"
+fi
+
+if [[ "${CONDUCTOR_CHECK_SKIP_UPDATE_FIXTURE:-0}" != "1" ]]; then
+  section "update fixture"
+  CONDUCTOR_UPDATE_FIXTURE_SKIP_BUILD=1 \
+  CONDUCTOR_UPDATE_FIXTURE_TMPDIR="$CHECK_TMP/update-fixture" \
+  CONDUCTOR_UPDATE_FIXTURE_KEEP_TMP=1 \
+  CONDUCTOR_BIN_PATH="$CONDUCTOR_BIN" \
+  CONDUCTOR_CLI_PATH="$CONDUCTOR_CLI_BIN" \
+  ./Scripts/update-fixture.sh
+else
+  section "update fixture skipped"
+fi
+
+if [[ "${CONDUCTOR_CHECK_SKIP_AUTORUN:-0}" != "1" ]]; then
+  run_autorun smoke CONDUCTOR_SMOKE_AUTORUN CONDUCTOR_SMOKE_OUTPUT \
+    status=ok panes=2 terminals=2 zoomed=false
+
+  run_autorun shortcut CONDUCTOR_SHORTCUT_AUTORUN CONDUCTOR_SHORTCUT_OUTPUT \
+    status=ok shortcut=perform-key-equivalent workspaceValid=true expectedShape=true panes=3 terminals=3 zoomed=true
+
+  run_autorun shortcut-profile CONDUCTOR_SHORTCUT_PROFILE_AUTORUN CONDUCTOR_SHORTCUT_PROFILE_OUTPUT \
+    status=ok shortcut-profile=import-export imported=3 unknown=1 rejected=1 conflicts=1 exported=2
+
+  run_autorun menu CONDUCTOR_MENU_AUTORUN CONDUCTOR_MENU_OUTPUT \
+    status=ok menu=canonical-actions checked=11
+
+  run_autorun focus CONDUCTOR_FOCUS_AUTORUN CONDUCTOR_FOCUS_OUTPUT \
+    status=ok focus=first-responder mouse-focus=workspace panes=2 terminals=3 zoomed=false
+
+  run_autorun layout CONDUCTOR_LAYOUT_AUTORUN CONDUCTOR_LAYOUT_OUTPUT \
+    status=ok layout=resize clamped=true equalized=true panes=3 terminals=3 zoomed=false
+
+  run_autorun lifecycle CONDUCTOR_LIFECYCLE_AUTORUN CONDUCTOR_LIFECYCLE_OUTPUT \
+    status=ok lifecycle=close surfaces=0 metadata=0 panes=1 terminals=1 zoomed=false
+
+  run_autorun workspace CONDUCTOR_WORKSPACE_AUTORUN CONDUCTOR_WORKSPACE_OUTPUT \
+    status=ok workspace=operations panes=2 terminals=2 zoomed=false
+
+  run_autorun shell-panel CONDUCTOR_SHELL_PANEL_AUTORUN CONDUCTOR_SHELL_PANEL_OUTPUT \
+    status=ok shell-panels=dismiss empty=true settings=true shortcut-blocked=true command=true overview=true terminal-search=true
+
+  run_autorun notification CONDUCTOR_NOTIFICATION_AUTORUN CONDUCTOR_NOTIFICATION_OUTPUT \
+    status=ok notification=native eventStored=true nativeDeliveryAttempted=true unreadCleared=true targetFocused=true
+
+  run_autorun stress CONDUCTOR_STRESS_AUTORUN CONDUCTOR_STRESS_OUTPUT \
+    status=ok stress=long-output characters=65536 characters_per_terminal=65536 target_terminals=3 total_characters=196608 completed_terminals=3 panes=3 terminals=4 zoomed=false
+
+  run_autorun resize-stress CONDUCTOR_RESIZE_STRESS_AUTORUN CONDUCTOR_RESIZE_STRESS_OUTPUT \
+    status=ok stress=resize-while-output resized=true panes=3 terminals=4 surfaces=4 zoomed=false
+else
+  section "autorun scenarios skipped"
+fi
+
+if [[ "${CONDUCTOR_CHECK_SKIP_BUNDLE:-0}" != "1" ]]; then
+  section "app bundle"
+  ./Scripts/build-app-bundle.sh >"$CHECK_TMP/app-bundle-path.txt"
+  cat "$CHECK_TMP/app-bundle-path.txt"
+else
+  section "app bundle skipped"
+fi
+
+if [[ "${CONDUCTOR_CHECK_SKIP_SCREENSHOTS:-0}" != "1" ]]; then
+  section "release screenshots"
+  SCREENSHOT_OUTPUT_DIR="${CONDUCTOR_CHECK_SCREENSHOT_OUTPUT_DIR:-$CHECK_TMP/release-screenshots}"
+  CONDUCTOR_SCREENSHOT_SKIP_BUILD=1 \
+  CONDUCTOR_SCREENSHOT_TMPDIR="$CHECK_TMP/screenshot-runtime" \
+  CONDUCTOR_SCREENSHOT_OUTPUT_DIR="$SCREENSHOT_OUTPUT_DIR" \
+  CONDUCTOR_BIN_PATH="$CONDUCTOR_BIN" \
+  CONDUCTOR_CLI_PATH="$CONDUCTOR_CLI_BIN" \
+  ./Scripts/capture-release-screenshots.sh
+
+  python3 - "$SCREENSHOT_OUTPUT_DIR/release-screenshots-manifest.json" "$REPO_ROOT" <<'PY'
+import json
+import os
+import sys
+
+manifest_path = sys.argv[1]
+repo_root = sys.argv[2]
+with open(manifest_path, "r", encoding="utf-8") as handle:
+    manifest = json.load(handle)
+
+screenshots = manifest.get("screenshots", [])
+if len(screenshots) < 6:
+    raise SystemExit(f"expected at least 6 release screenshots, got {len(screenshots)}")
+
+missing = []
+for item in screenshots:
+    path = item.get("path")
+    if not path:
+        missing.append("<missing path>")
+        continue
+    if not os.path.isabs(path):
+        path = os.path.join(repo_root, path)
+    if not os.path.exists(path) or os.path.getsize(path) <= 0:
+        missing.append(path)
+
+if missing:
+    raise SystemExit("missing or empty screenshots: " + ", ".join(missing))
+
+print(f"screenshot_manifest=ok count={len(screenshots)}")
+PY
+else
+  section "release screenshots skipped"
+fi
+
+section "trellis validation"
 cd "$REPO_ROOT"
 if [[ -f ".trellis/scripts/task.py" ]]; then
   python3 .trellis/scripts/task.py validate 05-15-conductor-macos-foundation
@@ -192,9 +245,5 @@ else
   echo "Skipping Trellis validation; .trellis is not present in this checkout."
 fi
 
-if pgrep -fl "$ROOT/.build/.*/debug/Conductor|$ROOT/.build/debug/Conductor|$ROOT/.build/Conductor.app/Contents/MacOS/Conductor" >/tmp/conductor-leftover.txt; then
-  cat /tmp/conductor-leftover.txt >&2
-  exit 1
-fi
-
+section "done"
 echo "Conductor checks passed"

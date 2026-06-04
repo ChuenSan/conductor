@@ -225,6 +225,7 @@ struct ConductorFileWorkspaceView: View {
                     isSelected: true,
                     saveRequestToken: snapshot.saveRequestToken,
                     saveAndCloseRequestToken: snapshot.saveAndCloseRequestToken,
+                    savedTextRevision: snapshot.savedTextRevision,
                     terminalFontSize: snapshot.terminalFontSize,
                     layoutRevision: snapshot.layoutRevision
                 )
@@ -262,6 +263,7 @@ struct ConductorFileWorkspaceSnapshot: Equatable {
     let searchPreviousToken: Int
     let saveRequestToken: Int
     let saveAndCloseRequestToken: Int
+    let savedTextRevision: Int
     let terminalFontSize: CGFloat
     let layoutRevision: Int
 
@@ -274,158 +276,9 @@ struct ConductorFileWorkspaceSnapshot: Equatable {
         self.searchPreviousToken = model.workspaceFileSearchPreviousGeneration
         self.saveRequestToken = selectedTab.map { model.workspaceFileEditorSaveRequestToken(for: $0.id) } ?? 0
         self.saveAndCloseRequestToken = selectedTab.map { model.workspaceFileEditorSaveAndCloseRequestToken(for: $0.id) } ?? 0
+        self.savedTextRevision = selectedTab.map { model.workspaceFileEditorSavedRevision(for: $0.id) } ?? 0
         self.terminalFontSize = model.appearance.terminalFontSize
         self.layoutRevision = model.workspaceFileLayoutRevision
-    }
-}
-
-struct ConductorWorkspaceContentTabBar: View {
-    let model: ConductorWindowModel
-    let snapshot: ConductorWorkspaceContentTabBarSnapshot
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(snapshot.terminalTabs) { tab in
-                    ConductorWorkspaceContentTabPill(
-                        systemImage: "terminal",
-                        title: tab.title,
-                        dirty: false,
-                        isSelected: tab.selected,
-                        close: nil,
-                        action: { model.selectWorkspaceTerminalTab(tab.id) }
-                    )
-                }
-
-                if !snapshot.fileTabs.isEmpty && !snapshot.terminalTabs.isEmpty {
-                    Rectangle()
-                        .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.32))
-                        .frame(width: 1, height: 18)
-                        .padding(.horizontal, 2)
-                }
-
-                ForEach(snapshot.fileTabs) { tab in
-                    ConductorWorkspaceContentTabPill(
-                        systemImage: "doc.text",
-                        title: tab.title,
-                        dirty: tab.dirty,
-                        externallyChanged: tab.externallyChanged,
-                        isSelected: tab.selected,
-                        close: { model.closeWorkspaceFileTab(tab.tab) },
-                        action: { model.selectWorkspaceFileTab(tab.id) }
-                    )
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-        }
-        .frame(height: 39)
-        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.38 : 0.24))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.42 : 0.30))
-                .frame(height: 1)
-        }
-    }
-}
-
-struct ConductorWorkspaceContentTabBarSnapshot: Equatable {
-    let terminalTabs: [ConductorWorkspaceTerminalContentTabDisplay]
-    let fileTabs: [ConductorWorkspaceFileContentTabDisplay]
-
-    @MainActor
-    init(model: ConductorWindowModel) {
-        let selectedTerminalTabID = model.selectedWorkspaceTerminalTabID
-        let selectedFileTabID = model.selectedWorkspaceFileTab?.id
-        self.terminalTabs = model.workspaceTerminalContentTabs.map { tab in
-            ConductorWorkspaceTerminalContentTabDisplay(
-                id: tab.id,
-                title: tab.title,
-                selected: selectedTerminalTabID == tab.id && selectedFileTabID == nil
-            )
-        }
-        self.fileTabs = model.workspaceFileTabs.map { tab in
-            ConductorWorkspaceFileContentTabDisplay(
-                tab: tab,
-                dirty: model.isWorkspaceFileTabDirty(tab.id),
-                externallyChanged: model.isWorkspaceFileTabExternallyChanged(tab.id),
-                selected: selectedFileTabID == tab.id
-            )
-        }
-    }
-}
-
-struct ConductorWorkspaceTerminalContentTabDisplay: Identifiable, Equatable {
-    let id: TerminalID
-    let title: String
-    let selected: Bool
-}
-
-struct ConductorWorkspaceFileContentTabDisplay: Identifiable, Equatable {
-    var id: String { tab.id }
-    let tab: ConductorWorkspaceFileTab
-    let dirty: Bool
-    let externallyChanged: Bool
-    let selected: Bool
-
-    var title: String { tab.title }
-}
-
-private struct ConductorWorkspaceContentTabPill: View {
-    let systemImage: String
-    let title: String
-    let dirty: Bool
-    var externallyChanged = false
-    let isSelected: Bool
-    let close: (() -> Void)?
-    let action: () -> Void
-    @Environment(\.conductorTheme) private var theme
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 11, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Circle()
-                    .fill(externallyChanged ? Color.orange.opacity(0.94) : theme.floatingEmphasis.opacity(0.92))
-                    .frame(width: 5, height: 5)
-                    .opacity((dirty || externallyChanged) ? 1 : 0)
-                    .macNativeTooltip(externallyChanged ? L("文件已被外部修改", "File changed outside Conductor") : L("未保存更改", "Unsaved changes"))
-                if let close {
-                    Button(action: close) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 8, weight: .bold))
-                            .frame(width: 14, height: 14)
-                    }
-                    .buttonStyle(.plain)
-                    .opacity(isHovered || isSelected ? 1 : 0.36)
-                    .accessibilityLabel(L("关闭文件", "Close File"))
-                }
-            }
-            .foregroundStyle(theme.shellChromeText.opacity(isSelected ? 0.94 : 0.62))
-            .padding(.horizontal, 9)
-            .frame(minWidth: 84, maxWidth: 210, minHeight: 27)
-            .background(backgroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .conductorHover($isHovered)
-    }
-
-    private var backgroundColor: Color {
-        if isSelected {
-            return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.68 : 0.78)
-        }
-        if isHovered {
-            return theme.floatingHoverFill.opacity(theme.usesDarkChrome ? 0.55 : 0.70)
-        }
-        return Color.clear
     }
 }
 
@@ -435,6 +288,7 @@ private struct ConductorWorkspaceFileEditorView: View {
     let isSelected: Bool
     let saveRequestToken: Int
     let saveAndCloseRequestToken: Int
+    let savedTextRevision: Int
     let terminalFontSize: CGFloat
     let layoutRevision: Int
     @State private var document: WorkspaceFileDocument
@@ -486,6 +340,7 @@ private struct ConductorWorkspaceFileEditorView: View {
         isSelected: Bool,
         saveRequestToken: Int,
         saveAndCloseRequestToken: Int,
+        savedTextRevision: Int,
         terminalFontSize: CGFloat,
         layoutRevision: Int
     ) {
@@ -494,6 +349,7 @@ private struct ConductorWorkspaceFileEditorView: View {
         self.isSelected = isSelected
         self.saveRequestToken = saveRequestToken
         self.saveAndCloseRequestToken = saveAndCloseRequestToken
+        self.savedTextRevision = savedTextRevision
         self.terminalFontSize = terminalFontSize
         self.layoutRevision = layoutRevision
         let loaded = WorkspaceFileService().loadingDocument(for: tab)
@@ -520,6 +376,28 @@ private struct ConductorWorkspaceFileEditorView: View {
 
     private var canEditSourceText: Bool {
         canSaveText && !usesProtectedTextReader
+    }
+
+    private func syncModelFileBuffer() {
+        model.updateWorkspaceFileBuffer(
+            tabID: tab.id,
+            text: text,
+            savedText: savedText,
+            canSave: canSaveText,
+            isEditable: canEditText,
+            isReadOnly: document.isReadOnly
+        )
+    }
+
+    private func applyModelSavedBufferIfNeeded() {
+        guard let snapshot = model.workspaceFileBufferSnapshot(for: tab.id) else { return }
+        if text != snapshot.text {
+            text = snapshot.text
+        }
+        savedText = snapshot.savedText
+        statusMessage = L("已保存", "Saved")
+        model.setWorkspaceFileTabDirty(tab.id, isDirty: snapshot.isDirty)
+        model.setWorkspaceFileTabExternallyChanged(tab.id, changed: false)
     }
 
     private var isMarkdown: Bool {
@@ -591,6 +469,7 @@ private struct ConductorWorkspaceFileEditorView: View {
         .onAppear {
             model.setWorkspaceFileTabDirty(tab.id, isDirty: isDirty)
             model.setWorkspaceFileTabExternallyChanged(tab.id, changed: externalChangeDetected)
+            syncModelFileBuffer()
             if isSelected {
                 editorFocusToken &+= 1
             }
@@ -601,6 +480,7 @@ private struct ConductorWorkspaceFileEditorView: View {
             }
         }
         .onChange(of: text) {
+            syncModelFileBuffer()
             scheduleTextMetricsRefresh()
             scheduleAutosave()
             refreshSearchMatches(resetSelection: false)
@@ -616,6 +496,10 @@ private struct ConductorWorkspaceFileEditorView: View {
         .onChange(of: saveAndCloseRequestToken) { _, newValue in
             guard newValue > 0 else { return }
             save(closeAfterSave: true)
+        }
+        .onChange(of: savedTextRevision) { _, newValue in
+            guard newValue > 0 else { return }
+            applyModelSavedBufferIfNeeded()
         }
         .onChange(of: searchFocusToken) { _, newValue in
             guard newValue > 0, isSelected else { return }
@@ -709,11 +593,11 @@ private struct ConductorWorkspaceFileEditorView: View {
             }
 
             editorButton("arrow.up.right.square", help: L("系统应用打开", "Open in System App")) {
-                NSWorkspace.shared.open(tab.fileURL)
+                model.performCommand(.openSelectedFileExternally)
             }
 
             editorButton("folder", help: L("在 Finder 中显示", "Reveal in Finder")) {
-                NSWorkspace.shared.activateFileViewerSelecting([tab.fileURL])
+                model.performCommand(.revealSelectedFileInFinder)
             }
         }
         .padding(.horizontal, 16)
@@ -970,38 +854,6 @@ private struct ConductorWorkspaceFileEditorView: View {
         return L("这个文件不能作为文本编辑", "This file cannot be edited as text")
     }
 
-    private func largeFileView(_ byteCount: Int64) -> some View {
-        VStack(spacing: 14) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.conductorSystem(size: 30, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.30))
-            Text(L("文件太大", "File Too Large"))
-                .font(.conductorSystem(size: 14, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.66))
-            Text(L(
-                "大小 \(ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file))，已阻止加载到编辑器。可以用系统应用打开，或在 Finder 中显示。",
-                "Size \(ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file)); loading into the editor was blocked. Open with the system app or reveal it in Finder."
-            ))
-            .font(.conductorSystem(size: 12, weight: .medium, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.50))
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: 420)
-
-            HStack(spacing: 8) {
-                Button(L("系统应用打开", "Open in System App")) {
-                    NSWorkspace.shared.open(tab.fileURL)
-                }
-                Button(L("Finder 中显示", "Reveal in Finder")) {
-                    NSWorkspace.shared.activateFileViewerSelecting([tab.fileURL])
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
-    }
-
     private func messageView(systemImage: String, title: String, message: String) -> some View {
         VStack(spacing: 10) {
             Image(systemName: systemImage)
@@ -1242,6 +1094,7 @@ private struct ConductorWorkspaceFileEditorView: View {
                 externalChangeDetected = false
                 externalDiffState = .idle
                 statusMessage = showStatus ? L("已保存", "Saved") : L("已自动保存", "Autosaved")
+                model.markWorkspaceFileBufferSaved(tabID: tab.id, text: snapshot)
                 model.setWorkspaceFileTabDirty(tab.id, isDirty: false)
                 model.setWorkspaceFileTabExternallyChanged(tab.id, changed: false)
                 if closeAfterSave {
@@ -1303,6 +1156,7 @@ private struct ConductorWorkspaceFileEditorView: View {
         refreshSearchMatches(resetSelection: true)
         model.setWorkspaceFileTabDirty(tab.id, isDirty: false)
         model.setWorkspaceFileTabExternallyChanged(tab.id, changed: false)
+        syncModelFileBuffer()
         statusMessage = nil
         startExternalChangeWatch()
     }

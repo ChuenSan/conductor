@@ -26,6 +26,13 @@ final class TerminalSurface {
         let bytes: Int
     }
 
+    private struct PendingPreciseScroll {
+        var deltaX: Double
+        var deltaY: Double
+        var momentumPhase: NSEvent.Phase
+        var eventCount: Int
+    }
+
     let id: TerminalID
     let hostView: TerminalHostView
     var onFocusRequest: (@MainActor (TerminalID) -> Void)?
@@ -40,7 +47,7 @@ final class TerminalSurface {
     private var lastScale = CGSize(width: -1, height: -1)
     private var lastDisplayID: UInt32 = 0
     private var isFocused = false
-    private var lastSetOccluded: Bool?
+    private var lastSetVisible: Bool?
     private var currentTheme: TerminalTheme
     private var currentTerminalFontSize: CGFloat
     private var appliedTheme: TerminalTheme?
@@ -49,7 +56,9 @@ final class TerminalSurface {
     private var surfaceConfig: ghostty_config_t?
     private var pendingText: [String] = []
     private var pendingSnapshotReplay: String?
+    private var pendingSnapshotReplayTask: Task<Void, Never>?
     private let workingDirectory: String?
+    private let launchEnvironment: [String: String]
     private var lifecycle: TerminalSurfaceLifecycle = .initialized
     private var retainedUserdata: Unmanaged<TerminalSurface>?
     private var retainedInputCStrings: [RetainedCString] = []
@@ -61,12 +70,23 @@ final class TerminalSurface {
     private(set) var cellSize: CGSize = .zero
     private var pendingScrollbarState: TerminalScrollbarState?
     private var scrollbarFlushScheduled = false
+    private var pendingPreciseScroll: PendingPreciseScroll?
+    private var preciseScrollFlushTask: Task<Void, Never>?
+    private var preciseScrollEventCount = 0
+    private let scrollFlushDelayNanoseconds: UInt64 = 8_000_000
 
-    init(id: TerminalID, theme: TerminalTheme, terminalFontSize: CGFloat, workingDirectory: String?) {
+    init(
+        id: TerminalID,
+        theme: TerminalTheme,
+        terminalFontSize: CGFloat,
+        workingDirectory: String?,
+        launchEnvironment: [String: String] = [:]
+    ) {
         self.id = id
         self.currentTheme = theme
         self.currentTerminalFontSize = AppearancePreferences.clampedTerminalFontSize(terminalFontSize)
         self.workingDirectory = workingDirectory
+        self.launchEnvironment = launchEnvironment
         self.hostView = TerminalHostView()
         self.hostView.surface = self
     }
@@ -141,8 +161,11 @@ final class TerminalSurface {
                                     ghostty_env_var_s(key: hookBridgeKeyPointer, value: hookBridgePathPointer)
                                 ]
                                 var proxyStorage: [(UnsafeMutablePointer<CChar>, UnsafeMutablePointer<CChar>)] = []
-                                proxyStorage.reserveCapacity(proxyEnvironment.count)
-                                for (key, value) in proxyEnvironment.sorted(by: { $0.key < $1.key }) {
+                                let combinedEnvironment = proxyEnvironment.merging(launchEnvironment) { _, terminalValue in
+                                    terminalValue
+                                }
+                                proxyStorage.reserveCapacity(combinedEnvironment.count)
+                                for (key, value) in combinedEnvironment.sorted(by: { $0.key < $1.key }) {
                                     guard let keyPointer = strdup(key),
                                           let valuePointer = strdup(value) else {
                                         continue
@@ -180,11 +203,11 @@ final class TerminalSurface {
         syncGeometry(force: true)
         applyAppearance(theme: currentTheme, terminalFontSize: currentTerminalFontSize)
         setFocused(false, force: true)
-        pendingText.forEach { sendText($0) }
-        pendingText.removeAll(keepingCapacity: false)
-        replayPendingSnapshot(into: surface)
         ghostty_surface_refresh(surface)
         lifecycle = .attached
+        pendingText.forEach { sendText($0) }
+        pendingText.removeAll(keepingCapacity: false)
+        schedulePendingSnapshotReplay()
         ConductorLog.terminal.info("Ghostty surface created for \(self.id.description)")
     }
 
@@ -286,16 +309,22 @@ final class TerminalSurface {
         ghostty_surface_refresh(surface)
     }
 
-    /// Tells libghostty whether the surface is hidden so it can pause its
-    /// CVDisplayLink renderer. Idempotent: redundant calls with the same
-    /// value are dropped. Safe to call before the surface is attached —
-    /// the value will be re-applied by the next `applyOcclusion()` after
-    /// attach.
-    func setOccluded(_ occluded: Bool) {
+    /// Tells libghostty whether the surface is currently visible to the user.
+    /// When `false`, libghostty pauses the surface's CVDisplayLink renderer.
+    /// Idempotent: redundant calls with the same value are dropped. Safe to
+    /// call before the surface is attached — the value will be re-applied by
+    /// the next `applyOcclusion()` after attach.
+    ///
+    /// NOTE the underlying C API is named `ghostty_surface_set_occlusion`,
+    /// but its bool argument is `visible`, not `occluded` (verified against
+    /// cmux Sources/GhosttyTerminalView.swift, which is the upstream of this
+    /// vendored libghostty fork). Passing the literal "occluded" value would
+    /// pause the renderer of the surface the user is actually looking at.
+    func setVisible(_ visible: Bool) {
         guard let surface else { return }
-        guard occluded != lastSetOccluded else { return }
-        lastSetOccluded = occluded
-        ghostty_surface_set_occlusion(surface, occluded)
+        guard visible != lastSetVisible else { return }
+        lastSetVisible = visible
+        ghostty_surface_set_occlusion(surface, visible)
     }
 
     func requestWorkspaceFocus() {
@@ -312,6 +341,7 @@ final class TerminalSurface {
         guard !scrollbarFlushScheduled else { return }
         scrollbarFlushScheduled = true
         Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: self?.scrollFlushDelayNanoseconds ?? 8_000_000)
             self?.flushPendingScrollbar()
         }
     }
@@ -486,6 +516,24 @@ final class TerminalSurface {
     func setSnapshotReplay(_ text: String?) {
         guard let text, !text.isEmpty else { return }
         pendingSnapshotReplay = text
+        schedulePendingSnapshotReplay()
+    }
+
+    private func schedulePendingSnapshotReplay() {
+        guard lifecycle == .attached, surface != nil, pendingSnapshotReplay != nil else { return }
+        guard pendingSnapshotReplayTask == nil else { return }
+        pendingSnapshotReplayTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
+            self?.pendingSnapshotReplayTask = nil
+            self?.replayPendingSnapshotIfAttached()
+        }
+    }
+
+    private func replayPendingSnapshotIfAttached() {
+        guard lifecycle == .attached, let surface else { return }
+        replayPendingSnapshot(into: surface)
+        ghostty_surface_refresh(surface)
     }
 
     private func replayPendingSnapshot(into surface: ghostty_surface_t) {
@@ -551,6 +599,48 @@ final class TerminalSurface {
         ghostty_surface_text(surface, UnsafePointer(retained.pointer), UInt(text.utf8.count))
     }
 
+    @discardableResult
+    func sendSyntheticKey(
+        characters: String,
+        charactersIgnoringModifiers: String? = nil,
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags = []
+    ) -> Bool {
+        guard surface != nil else { return false }
+        let flags = modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard let keyDown = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: flags,
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: hostView.window?.windowNumber ?? 0,
+            context: nil,
+            characters: characters,
+            charactersIgnoringModifiers: charactersIgnoringModifiers ?? characters,
+            isARepeat: false,
+            keyCode: keyCode
+        ) else {
+            return false
+        }
+        let keyUp = NSEvent.keyEvent(
+            with: .keyUp,
+            location: .zero,
+            modifierFlags: flags,
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: hostView.window?.windowNumber ?? 0,
+            context: nil,
+            characters: characters,
+            charactersIgnoringModifiers: charactersIgnoringModifiers ?? characters,
+            isARepeat: false,
+            keyCode: keyCode
+        )
+        let pressed = forwardKeyEvent(keyDown, action: GHOSTTY_ACTION_PRESS)
+        if let keyUp {
+            _ = forwardKeyEvent(keyUp, action: GHOSTTY_ACTION_RELEASE)
+        }
+        return pressed
+    }
+
     func sendPreedit(_ text: String?) {
         guard let surface else { return }
         guard let text, !text.isEmpty else {
@@ -588,6 +678,12 @@ final class TerminalSurface {
     func close() {
         guard lifecycle != .closing && lifecycle != .closed else { return }
         lifecycle = .closing
+        pendingSnapshotReplayTask?.cancel()
+        pendingSnapshotReplayTask = nil
+        preciseScrollFlushTask?.cancel()
+        preciseScrollFlushTask = nil
+        pendingPreciseScroll = nil
+        pendingSnapshotReplay = nil
         pendingText.removeAll(keepingCapacity: false)
         onFocusRequest = nil
         onUserActivity = nil
@@ -669,15 +765,120 @@ final class TerminalSurface {
     }
 
     func scroll(deltaX: CGFloat, deltaY: CGFloat, precise: Bool, momentumPhase: NSEvent.Phase) {
-        guard let surface else { return }
-        NotificationCenter.default.post(name: .terminalSurfaceDidReceiveWheelScroll, object: self)
         var x = Double(deltaX)
         var y = Double(deltaY)
         if precise {
             x *= 2
             y *= 2
         }
-        ghostty_surface_mouse_scroll(surface, x, y, Self.scrollMods(precise: precise, momentumPhase: momentumPhase))
+        guard precise else {
+            flushPendingPreciseScroll()
+            sendScroll(deltaX: x, deltaY: y, precise: false, momentumPhase: momentumPhase, eventCount: 1)
+            return
+        }
+        enqueuePreciseScroll(deltaX: x, deltaY: y, momentumPhase: momentumPhase)
+        if momentumPhase == .ended || momentumPhase == .cancelled {
+            flushPendingPreciseScroll()
+        }
+    }
+
+    private func enqueuePreciseScroll(deltaX: Double, deltaY: Double, momentumPhase: NSEvent.Phase) {
+        if var pending = pendingPreciseScroll {
+            pending.deltaX += deltaX
+            pending.deltaY += deltaY
+            pending.momentumPhase = momentumPhase
+            pending.eventCount += 1
+            pendingPreciseScroll = pending
+        } else {
+            pendingPreciseScroll = PendingPreciseScroll(
+                deltaX: deltaX,
+                deltaY: deltaY,
+                momentumPhase: momentumPhase,
+                eventCount: 1
+            )
+        }
+
+        guard preciseScrollFlushTask == nil else { return }
+        preciseScrollFlushTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: self?.scrollFlushDelayNanoseconds ?? 8_000_000)
+            self?.preciseScrollFlushTask = nil
+            self?.flushPendingPreciseScroll()
+        }
+    }
+
+    private func flushPendingPreciseScroll() {
+        preciseScrollFlushTask?.cancel()
+        preciseScrollFlushTask = nil
+        guard let pending = pendingPreciseScroll else { return }
+        pendingPreciseScroll = nil
+        sendScroll(
+            deltaX: pending.deltaX,
+            deltaY: pending.deltaY,
+            precise: true,
+            momentumPhase: pending.momentumPhase,
+            eventCount: pending.eventCount
+        )
+    }
+
+    private func sendScroll(
+        deltaX: Double,
+        deltaY: Double,
+        precise: Bool,
+        momentumPhase: NSEvent.Phase,
+        eventCount: Int
+    ) {
+        guard let surface else { return }
+        NotificationCenter.default.post(name: .terminalSurfaceDidReceiveWheelScroll, object: self)
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        ghostty_surface_mouse_scroll(
+            surface,
+            deltaX,
+            deltaY,
+            Self.scrollMods(precise: precise, momentumPhase: momentumPhase)
+        )
+        guard precise, eventCount > 1 else { return }
+        recordCoalescedPreciseScroll(eventCount: eventCount)
+        let elapsed = DispatchTime.now().uptimeNanoseconds - startedAt
+        _ = recordScrollFrameSample(
+            durationNanoseconds: elapsed,
+            source: "ui.terminal.precise-scroll-flush"
+        )
+    }
+
+    private func recordCoalescedPreciseScroll(eventCount: Int) {
+        preciseScrollEventCount &+= eventCount
+        guard preciseScrollEventCount == eventCount || preciseScrollEventCount.isMultiple(of: 128) else { return }
+        ConductorDiagnostics.record(
+            "terminal-scroll-coalesced",
+            fields: [
+                "terminal": id.description,
+                "events": String(preciseScrollEventCount),
+                "lastBatch": String(eventCount)
+            ]
+        )
+    }
+
+    @discardableResult
+    func recordScrollFrameSample(
+        durationNanoseconds: UInt64,
+        source: String
+    ) -> ConductorPerformanceBudgetSample? {
+        guard let sample = ConductorPerformanceDiagnostics.shared.recordBudgetSample(
+            budgetID: "terminal.scroll-frame",
+            durationNanoseconds: durationNanoseconds,
+            source: source
+        ) else {
+            return nil
+        }
+        ConductorDiagnostics.record("performance-budget-sample", fields: [
+            "budget": sample.budgetID,
+            "durationMS": String(sample.durationMilliseconds),
+            "targetMS": String(sample.targetMilliseconds),
+            "status": sample.status,
+            "source": sample.source,
+            "terminalID": id.description
+        ])
+        return sample
     }
 
     func updateMousePosition(_ point: NSPoint, modifiers: NSEvent.ModifierFlags) {

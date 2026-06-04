@@ -49,47 +49,6 @@ struct GhosttyBooleanOverridePicker: View {
     }
 }
 
-struct GhosttyChoiceOverrideMenu: View {
-    let key: String
-    let value: String
-    let enabled: Bool
-    let choices: [String]
-    let setValue: (String) -> Void
-    let setDefault: () -> Void
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    private var title: String {
-        enabled && !value.isEmpty ? value : L("默认", "Default")
-    }
-
-    var body: some View {
-        Menu {
-            Button(L("默认", "Default")) {
-                setDefault()
-            }
-            Divider()
-            ForEach(choices, id: \.self) { choice in
-                Button(choice) {
-                    setValue(choice)
-                }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .bold))
-                    .accessibilityHidden(true)
-            }
-            .foregroundStyle(theme.floatingEmphasis)
-            .frame(width: 236, alignment: .trailing)
-        }
-        .menuStyle(.button)
-    }
-}
-
 struct GhosttyPresetOption: Hashable {
     let title: String
     let value: String
@@ -891,38 +850,6 @@ struct SettingsSegmentedPicker<Option: Hashable>: View {
     }
 }
 
-struct SettingsMenuPicker<Option: Hashable>: View {
-    let options: [Option]
-    let selection: Option
-    let title: (Option) -> String
-    let action: (Option) -> Void
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        Menu {
-            ForEach(options, id: \.self) { option in
-                Button(title(option)) {
-                    guard option != selection else { return }
-                    action(option)
-                }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Text(title(selection))
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .bold))
-                    .accessibilityHidden(true)
-            }
-            .foregroundStyle(theme.floatingEmphasis)
-            .frame(width: 278, alignment: .trailing)
-        }
-        .menuStyle(.button)
-    }
-}
-
 extension AppearanceFontFamily {
     var systemImage: String {
         switch self {
@@ -948,10 +875,6 @@ struct SettingsSidebarItem: View {
     var body: some View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 8) {
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(selected ? theme.floatingEmphasis : Color.clear)
-                    .frame(width: 3, height: 16)
-
                 Image(systemName: section.systemImage)
                     .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     .foregroundStyle(selected ? ConductorDesign.primaryText : ConductorDesign.secondaryText.opacity(0.86))
@@ -1258,6 +1181,9 @@ private final class NativeCommandShortcutGuideRowView: NSTableCellView {
         resetButton.title = L("默认", "Default")
         resetButton.image = NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: nil)
         resetButton.isHidden = !editable
+        toolTip = "\(row.item.title)\n\(row.item.shortcutStatus) · \(row.item.shortcut)"
+        recordButton.toolTip = L("录制新的快捷键", "Record a new shortcut")
+        resetButton.toolTip = L("恢复默认快捷键", "Restore default shortcut")
         needsLayout = true
         needsDisplay = true
     }
@@ -1312,9 +1238,13 @@ private final class NativeCommandShortcutGuideRowView: NSTableCellView {
             .font: NSFont.systemFont(ofSize: fontScale.size(11), weight: .semibold),
             .foregroundColor: NSColor(ConductorDesign.primaryText)
         ]
-        let trailingWidth: CGFloat = editable ? 205 : 76
+        let trailingWidth: CGFloat = editable ? 250 : 76
         let titleRect = NSRect(x: 32, y: y + 7, width: max(0, bounds.width - trailingWidth - 40), height: 16)
         (row.item.title as NSString).draw(in: titleRect, withAttributes: titleAttrs)
+
+        if editable {
+            drawShortcutStatus(row, y: y, after: titleRect)
+        }
 
         let shortcutAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: fontScale.size(9.5), weight: .semibold),
@@ -1335,6 +1265,47 @@ private final class NativeCommandShortcutGuideRowView: NSTableCellView {
         _ = contentHeight
     }
 
+    private func drawShortcutStatus(_ row: CommandShortcutGuideRowModel, y: CGFloat, after titleRect: NSRect) {
+        let status = row.item.shortcutStatus as NSString
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: fontScale.size(8.2), weight: .semibold),
+            .foregroundColor: NSColor(statusColor(for: row.item.shortcutStatus))
+        ]
+        let size = status.size(withAttributes: attrs)
+        let shortcutAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: fontScale.size(9.5), weight: .semibold)
+        ]
+        let shortcutWidth = min(max((row.item.shortcut as NSString).size(withAttributes: shortcutAttrs).width + 12, 44), 92)
+        let shortcutX = editable ? recordButton.frame.minX - shortcutWidth - 8 : bounds.maxX - shortcutWidth - 8
+        let pillWidth = min(size.width + 10, 58)
+        let x = min(titleRect.maxX + 6, shortcutX - pillWidth - 8)
+        guard x > titleRect.minX + 36 else { return }
+        let rect = NSRect(x: x, y: y + 7, width: pillWidth, height: 16)
+        NSColor(statusBackground(for: row.item.shortcutStatus)).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+        status.draw(
+            at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
+            withAttributes: attrs
+        )
+    }
+
+    private func statusColor(for status: String) -> Color {
+        if status == L("自定义", "Custom") {
+            return theme.floatingEmphasis
+        }
+        if status == L("未设置", "Unassigned") {
+            return ConductorDesign.tertiaryText
+        }
+        return ConductorDesign.secondaryText
+    }
+
+    private func statusBackground(for status: String) -> Color {
+        if status == L("自定义", "Custom") {
+            return theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.18 : 0.12)
+        }
+        return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.35 : 0.42)
+    }
+
     private var shortcutBackground: Color {
         switch style {
         case .card:
@@ -1350,158 +1321,6 @@ private final class NativeCommandShortcutGuideRowView: NSTableCellView {
 
     @objc private func resetShortcut() {
         onReset?()
-    }
-}
-
-struct CommandShortcutSectionDivider: View {
-    let title: String
-    let isFirst: Bool
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-                .textCase(.uppercase)
-            Rectangle()
-                .fill(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.38 : 0.30))
-                .frame(height: 1)
-        }
-        .padding(.top, isFirst ? 0 : 8)
-        .padding(.horizontal, 4)
-    }
-}
-
-struct CommandShortcutGuideRow: View {
-    let item: CommandShortcutGuideItem
-    var style: CommandShortcutGuideStyle = .card
-    var editable = false
-    var isRecording = false
-    var onRecord: () -> Void = {}
-    var onReset: () -> Void = {}
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: item.systemImage)
-                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.secondaryText)
-                .frame(width: 18)
-                .accessibilityHidden(true)
-
-            Text(item.title)
-                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.primaryText)
-                .lineLimit(1)
-
-            Spacer(minLength: 8)
-
-            Text(item.shortcut)
-                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
-                .foregroundStyle(isRecording ? theme.floatingEmphasis : ConductorDesign.secondaryText)
-                .padding(.horizontal, style == .plain ? 5 : 6)
-                .frame(height: style == .plain ? 16 : 17)
-                .background(shortcutBackground)
-                .clipShape(RoundedRectangle(cornerRadius: style == .plain ? 4 : 8, style: .continuous))
-
-            if editable {
-                ShortcutGuideInlineButton(
-                    title: isRecording ? L("按键", "Press") : L("更改", "Change"),
-                    systemImage: isRecording ? "record.circle.fill" : "keyboard",
-                    emphasized: isRecording,
-                    tooltip: L("录制新的快捷键", "Record a new shortcut"),
-                    action: onRecord
-                )
-
-                ShortcutGuideInlineButton(
-                    title: L("默认", "Default"),
-                    systemImage: "arrow.counterclockwise",
-                    tooltip: L("恢复默认快捷键", "Restore default shortcut"),
-                    action: onReset
-                )
-            }
-        }
-        .padding(.horizontal, style == .plain ? 6 : 8)
-        .frame(height: style == .plain ? 30 : 28)
-        .overlay(alignment: .bottom) {
-            if style == .plain {
-                Rectangle()
-                    .fill(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
-                    .frame(height: 1)
-                    .padding(.leading, 30)
-            }
-        }
-    }
-
-    private var shortcutBackground: Color {
-        switch style {
-        case .card:
-            return theme.floatingSelectedFill
-        case .plain:
-            return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.46 : 0.54)
-        }
-    }
-}
-
-private struct ShortcutGuideInlineButton: View {
-    let title: String
-    let systemImage: String
-    var emphasized = false
-    let tooltip: String
-    let action: () -> Void
-    @State private var hovering = false
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: systemImage)
-                    .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 7)
-            .frame(height: 21)
-            .background(background)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(stroke, lineWidth: 1)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        }
-        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.99, pressedOpacity: 0.97))
-        .conductorHover($hovering)
-        .macNativeTooltip(tooltip)
-        .accessibilityLabel(Text(tooltip))
-    }
-
-    private var foreground: Color {
-        if emphasized {
-            return theme.floatingEmphasis
-        }
-        return hovering ? ConductorDesign.primaryText : ConductorDesign.secondaryText
-    }
-
-    private var background: Color {
-        if emphasized {
-            return theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.16 : 0.10)
-        }
-        return hovering ? theme.floatingHoverFill.opacity(0.72) : theme.floatingControlFill.opacity(0.28)
-    }
-
-    private var stroke: Color {
-        if emphasized {
-            return theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.34 : 0.26)
-        }
-        return theme.floatingStroke.opacity(hovering ? 0.40 : 0.18)
     }
 }
 

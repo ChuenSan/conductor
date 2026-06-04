@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Conductor Browser Fixture</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 1800px;
+      display: grid;
+      place-items: start center;
+      background: #f7f7f8;
+      color: #1f2328;
+      font: 16px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    }
+
+    main {
+      width: min(560px, calc(100vw - 48px));
+      margin-top: 120px;
+      padding: 28px;
+      border: 1px solid #d8dce2;
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 18px 50px rgba(31, 35, 40, 0.12);
+    }
+
+    label,
+    button,
+    output {
+      display: block;
+    }
+
+    input,
+    button {
+      box-sizing: border-box;
+      width: 100%;
+      margin-top: 10px;
+      border-radius: 10px;
+      font: inherit;
+    }
+
+    input {
+      border: 1px solid #c7ced8;
+      padding: 12px 14px;
+    }
+
+    button {
+      border: 0;
+      padding: 12px 14px;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 650;
+    }
+
+    output {
+      margin-top: 16px;
+      color: #475569;
+    }
+
+    .scroll-marker {
+      margin-top: 960px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Conductor Browser Fixture</h1>
+    <p>Local page used by the control smoke script.</p>
+    <label for="smoke-query">Smoke value</label>
+    <input id="smoke-query" name="smoke-query" type="text" placeholder="Type smoke value" autocomplete="off">
+    <button id="smoke-run" type="button">Run fixture</button>
+    <output id="smoke-output" aria-live="polite">Waiting for automation.</output>
+    <p id="history-marker">History marker: base</p>
+    <p id="hidden-marker" hidden>Hidden fixture marker.</p>
+    <iframe
+      id="same-origin-frame"
+      title="Same Origin Fixture Frame"
+      srcdoc="<p>Same-origin frame fixture ready.</p><label for='frame-query'>Frame value</label><input id='frame-query' autocomplete='off'><button id='frame-run' onclick=&quot;document.getElementById('frame-output').textContent='Frame completed: '+document.getElementById('frame-query').value&quot;>Frame action</button><output id='frame-output'>Frame waiting.</output>">
+    </iframe>
+    <iframe
+      id="sandboxed-frame"
+      title="Sandboxed Fixture Frame"
+      sandbox
+      srcdoc="<p>Sandboxed frame fixture should not be readable.</p>">
+    </iframe>
+    <p id="scroll-marker" class="scroll-marker">Scroll marker: bottom context</p>
+    <p id="late-ready" hidden>Fixture ready marker.</p>
+  </main>
+  <script>
+    const input = document.getElementById("smoke-query");
+    const button = document.getElementById("smoke-run");
+    const output = document.getElementById("smoke-output");
+    const historyMarker = document.getElementById("history-marker");
+    const ready = document.getElementById("late-ready");
+    const params = new URLSearchParams(window.location.search);
+    historyMarker.textContent = `History marker: ${params.get("history") || "base"}`;
+    console.info("conductor fixture console ready");
+
+    const complete = () => {
+      const value = input.value.trim() || "empty";
+      output.textContent = `Completed: ${value}`;
+      document.body.dataset.smokeState = "complete";
+    };
+
+    button.addEventListener("click", complete);
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        complete();
+      }
+    });
+
+    setTimeout(() => {
+      ready.hidden = false;
+      console.error("conductor fixture console error");
+    }, 150);
+  </script>
+</body>
+</html>

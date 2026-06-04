@@ -63,25 +63,29 @@ struct ConductorWebWorkspaceView: View {
 
                 if let tab = snapshot.tab, tab.url != nil {
                     pageStatusPill(tab)
+                    if let downloadState = tab.downloadState {
+                        downloadStatusPill(tab: tab, state: downloadState)
+                    }
+                    if let runtimeEvent = latestActionableRuntimeEvent(in: tab) {
+                        runtimeEventPill(tab: tab, event: runtimeEvent)
+                    }
                 }
 
                 ConductorPillGroup {
-                    webIconButton("magnifyingglass", help: commandTooltip(L("查找页面", "Find in Page"), command: .showTerminalSearch, fallback: "Cmd-F"), enabled: snapshot.tab?.url != nil) {
-                        showFind()
+                    webIconButton("magnifyingglass", help: commandTooltip(L("查找页面", "Find in Page"), command: .showTerminalSearch, fallback: "Cmd-F"), enabled: model.canPerformCommand(.showTerminalSearch)) {
+                        model.performCommand(.showTerminalSearch)
                     }
 
                     ConductorSegmentDivider()
 
-                    webIconButton("link", help: L("复制链接", "Copy Link"), enabled: snapshot.tab?.url != nil) {
-                        copyCurrentURL()
+                    webIconButton("link", help: commandTooltip(L("复制链接", "Copy Link"), command: .copySelectedWebTabURL, fallback: "Copy"), enabled: model.canPerformCommand(.copySelectedWebTabURL)) {
+                        model.performCommand(.copySelectedWebTabURL)
                     }
 
                     ConductorSegmentDivider()
 
-                    webIconButton("arrow.up.right.square", help: L("在浏览器中打开", "Open in Browser"), enabled: snapshot.tab?.url != nil) {
-                        if let tab = snapshot.tab {
-                            model.openWorkspaceWebTabExternally(tab.id)
-                        }
+                    webIconButton("arrow.up.right.square", help: commandTooltip(L("在浏览器中打开", "Open in Browser"), command: .openSelectedWebTabExternally, fallback: "Browser"), enabled: model.canPerformCommand(.openSelectedWebTabExternally)) {
+                        model.performCommand(.openSelectedWebTabExternally)
                     }
                 }
 
@@ -106,18 +110,14 @@ struct ConductorWebWorkspaceView: View {
 
     private var navigationCluster: some View {
         ConductorPillGroup {
-            webIconButton("chevron.left", help: L("后退", "Back"), enabled: snapshot.tab?.canGoBack == true) {
-                if let tab = snapshot.tab {
-                    model.goBackWorkspaceWebTab(tab.id)
-                }
+            webIconButton("chevron.left", help: commandTooltip(L("后退", "Back"), command: .goBackSelectedWebTab, fallback: "Back"), enabled: model.canPerformCommand(.goBackSelectedWebTab)) {
+                model.performCommand(.goBackSelectedWebTab)
             }
 
             ConductorSegmentDivider()
 
-            webIconButton("chevron.right", help: L("前进", "Forward"), enabled: snapshot.tab?.canGoForward == true) {
-                if let tab = snapshot.tab {
-                    model.goForwardWorkspaceWebTab(tab.id)
-                }
+            webIconButton("chevron.right", help: commandTooltip(L("前进", "Forward"), command: .goForwardSelectedWebTab, fallback: "Forward"), enabled: model.canPerformCommand(.goForwardSelectedWebTab)) {
+                model.performCommand(.goForwardSelectedWebTab)
             }
 
             ConductorSegmentDivider()
@@ -125,9 +125,9 @@ struct ConductorWebWorkspaceView: View {
             webIconButton(
                 snapshot.tab?.isLoading == true ? "xmark" : "arrow.clockwise",
                 help: commandTooltip(snapshot.tab?.isLoading == true ? L("停止载入", "Stop Loading") : L("重新加载", "Reload"), command: .reloadSelectedWebTab, fallback: "Cmd-R"),
-                enabled: snapshot.tab?.url != nil
+                enabled: model.canPerformCommand(.reloadSelectedWebTab)
             ) {
-                reloadOrStop()
+                model.performCommand(.reloadSelectedWebTab)
             }
         }
     }
@@ -182,31 +182,29 @@ struct ConductorWebWorkspaceView: View {
         Menu {
             Section(L("页面", "Page")) {
                 Button(L("查找页面", "Find in Page"), systemImage: "magnifyingglass") {
-                    showFind()
+                    model.performCommand(.showTerminalSearch)
                 }
-                .disabled(snapshot.tab?.url == nil)
+                .disabled(!model.canPerformCommand(.showTerminalSearch))
 
                 Button(L("复制链接", "Copy Link"), systemImage: "link") {
-                    copyCurrentURL()
+                    model.performCommand(.copySelectedWebTabURL)
                 }
-                .disabled(snapshot.tab?.url == nil)
+                .disabled(!model.canPerformCommand(.copySelectedWebTabURL))
 
                 Button(L("复制引用", "Copy Reference"), systemImage: "doc.on.clipboard") {
-                    copyPageReference()
+                    model.performCommand(.copySelectedWebTabReference)
                 }
-                .disabled(snapshot.tab?.url == nil)
+                .disabled(!model.canPerformCommand(.copySelectedWebTabReference))
 
                 Button(L("在浏览器中打开", "Open in Browser"), systemImage: "arrow.up.right.square") {
-                    if let tab = snapshot.tab {
-                        model.openWorkspaceWebTabExternally(tab.id)
-                    }
+                    model.performCommand(.openSelectedWebTabExternally)
                 }
-                .disabled(snapshot.tab?.url == nil)
+                .disabled(!model.canPerformCommand(.openSelectedWebTabExternally))
 
                 Button(L("复制为新标签", "Duplicate Tab"), systemImage: "plus.rectangle.on.rectangle") {
-                    duplicateCurrentTab()
+                    model.performCommand(.duplicateSelectedTab)
                 }
-                .disabled(snapshot.tab == nil)
+                .disabled(!model.canPerformCommand(.duplicateSelectedTab))
             }
 
             Section(L("本地", "Local")) {
@@ -564,16 +562,16 @@ struct ConductorWebWorkspaceView: View {
 
             HStack(spacing: 8) {
                 errorActionButton(L("重试", "Retry"), systemImage: "arrow.clockwise") {
-                    model.reloadWorkspaceWebTab(tab.id)
+                    model.performCommand(.reloadSelectedWebTab)
                 }
                 errorActionButton(L("浏览器", "Browser"), systemImage: "arrow.up.right.square") {
-                    model.openWorkspaceWebTabExternally(tab.id)
+                    model.performCommand(.openSelectedWebTabExternally)
                 }
-                .disabled(tab.url == nil)
+                .disabled(!model.canPerformCommand(.openSelectedWebTabExternally))
                 errorActionButton(L("复制链接", "Copy Link"), systemImage: "link") {
-                    copyCurrentURL()
+                    model.performCommand(.copySelectedWebTabURL)
                 }
-                .disabled(tab.url == nil)
+                .disabled(!model.canPerformCommand(.copySelectedWebTabURL))
             }
         }
         .padding(22)
@@ -666,11 +664,11 @@ struct ConductorWebWorkspaceView: View {
                 .frame(width: 180)
 
             webIconButton("chevron.up", help: commandTooltip(L("上一个", "Previous"), command: .findPrevious, fallback: "Cmd-Shift-G"), enabled: !findText.isEmpty) {
-                runFind(backwards: true)
+                model.performCommand(.findPrevious)
             }
 
             webIconButton("chevron.down", help: commandTooltip(L("下一个", "Next"), command: .findNext, fallback: "Cmd-G"), enabled: !findText.isEmpty) {
-                runFind(backwards: false)
+                model.performCommand(.findNext)
             }
 
             webIconButton("xmark", help: L("关闭查找", "Close Find")) {
@@ -686,33 +684,6 @@ struct ConductorWebWorkspaceView: View {
                 .stroke(theme.shellStroke.opacity(0.18), lineWidth: 0.6)
         }
         .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.06 : 0.025), radius: 4, y: 2)
-    }
-
-    private func quickAction(
-        _ title: String,
-        systemImage: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(theme.shellChromeText.opacity(0.76))
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.42 : 0.24))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(theme.shellStroke.opacity(0.24), lineWidth: 1)
-            }
-        }
-        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
     }
 
     private func webIconButton(
@@ -810,6 +781,93 @@ struct ConductorWebWorkspaceView: View {
         .macNativeTooltip(tab.url?.absoluteString ?? "")
     }
 
+    private func downloadStatusPill(tab: WorkspaceWebTabState, state: WorkspaceWebDownloadState) -> some View {
+        Menu {
+            Section(downloadMenuTitle(state)) {
+                if let path = state.destinationPath {
+                    Button(L("在 Finder 中显示", "Reveal in Finder"), systemImage: "folder") {
+                        model.revealWorkspaceWebTabDownload(tab.id)
+                    }
+                    .disabled(state.phase != .finished)
+
+                    Button(L("复制路径", "Copy Path"), systemImage: "doc.on.clipboard") {
+                        copyToPasteboard(path)
+                    }
+                }
+
+                if let message = state.errorMessage, !message.isEmpty {
+                    Text(message)
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: downloadSystemImage(for: state.phase))
+                    .font(.conductorSystem(size: 9.8, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .accessibilityHidden(true)
+                Text(downloadStatusText(state))
+                    .font(.conductorSystem(size: 10.4, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .foregroundStyle(downloadColor(for: state.phase).opacity(0.90))
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .background(downloadColor(for: state.phase).opacity(theme.usesDarkChrome ? 0.13 : 0.10))
+            .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(downloadColor(for: state.phase).opacity(theme.usesDarkChrome ? 0.24 : 0.20), lineWidth: 1)
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .macNativeTooltip(downloadTooltip(state))
+        .accessibilityLabel(downloadTooltip(state))
+    }
+
+    private func runtimeEventPill(tab: WorkspaceWebTabState, event: WorkspaceWebRuntimeEvent) -> some View {
+        Menu {
+            Section(runtimeEventTitle(event)) {
+                Button(L("复制最近错误", "Copy Latest Error"), systemImage: "doc.on.clipboard") {
+                    copyToPasteboard(runtimeEventCopyText(event))
+                }
+                if let location = runtimeEventLocation(event) {
+                    Text(location)
+                }
+            }
+
+            Section(L("最近事件", "Recent Events")) {
+                ForEach(Array(tab.runtimeEvents.suffix(5).indices).reversed(), id: \.self) { index in
+                    let event = tab.runtimeEvents[index]
+                    Text(runtimeEventMenuLine(event))
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.conductorSystem(size: 9.8, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .accessibilityHidden(true)
+                Text(L("页面错误", "Page Error"))
+                    .font(.conductorSystem(size: 10.4, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .foregroundStyle(Color(nsColor: .systemOrange).opacity(0.92))
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .background(Color(nsColor: .systemOrange).opacity(theme.usesDarkChrome ? 0.13 : 0.10))
+            .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color(nsColor: .systemOrange).opacity(theme.usesDarkChrome ? 0.25 : 0.20), lineWidth: 1)
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .macNativeTooltip(runtimeEventTooltip(event))
+        .accessibilityLabel(runtimeEventTooltip(event))
+    }
+
     private func statusText(for tab: WorkspaceWebTabState) -> String {
         if tab.isLoading {
             return "\(Int((clampedProgress * 100).rounded()))%"
@@ -834,6 +892,108 @@ struct ConductorWebWorkspaceView: View {
             return Color(nsColor: .systemGreen)
         }
         return Color(nsColor: .systemGray)
+    }
+
+    private func downloadStatusText(_ state: WorkspaceWebDownloadState) -> String {
+        switch state.phase {
+        case .requested:
+            return L("准备下载", "Download")
+        case .downloading:
+            return L("下载中", "Downloading")
+        case .finished:
+            return L("已下载", "Downloaded")
+        case .failed:
+            return L("下载失败", "Failed")
+        }
+    }
+
+    private func downloadTooltip(_ state: WorkspaceWebDownloadState) -> String {
+        var parts = [downloadMenuTitle(state)]
+        if let message = state.errorMessage, !message.isEmpty {
+            parts.append(message)
+        }
+        return parts.joined(separator: "\n")
+    }
+
+    private func downloadMenuTitle(_ state: WorkspaceWebDownloadState) -> String {
+        let filename = state.filename.trimmingCharacters(in: .whitespacesAndNewlines)
+        return filename.isEmpty ? downloadStatusText(state) : "\(downloadStatusText(state)) · \(filename)"
+    }
+
+    private func downloadSystemImage(for phase: WorkspaceWebDownloadPhase) -> String {
+        switch phase {
+        case .requested:
+            return "arrow.down.circle"
+        case .downloading:
+            return "arrow.down.circle.fill"
+        case .finished:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func downloadColor(for phase: WorkspaceWebDownloadPhase) -> Color {
+        switch phase {
+        case .requested, .downloading:
+            return theme.floatingEmphasis
+        case .finished:
+            return Color(nsColor: .systemGreen)
+        case .failed:
+            return Color(nsColor: .systemOrange)
+        }
+    }
+
+    private func latestActionableRuntimeEvent(in tab: WorkspaceWebTabState) -> WorkspaceWebRuntimeEvent? {
+        tab.runtimeEvents.last { event in
+            event.kind == .pageError ||
+                event.kind == .unhandledRejection ||
+                event.level.lowercased() == "error"
+        }
+    }
+
+    private func runtimeEventTitle(_ event: WorkspaceWebRuntimeEvent) -> String {
+        switch event.kind {
+        case .console:
+            return event.level.isEmpty ? L("页面控制台", "Page Console") : "console.\(event.level)"
+        case .pageError:
+            return L("页面脚本错误", "Page Script Error")
+        case .unhandledRejection:
+            return L("未处理的 Promise", "Unhandled Promise")
+        }
+    }
+
+    private func runtimeEventMenuLine(_ event: WorkspaceWebRuntimeEvent) -> String {
+        let message = event.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(runtimeEventTitle(event)): \(message.isEmpty ? "..." : message)"
+    }
+
+    private func runtimeEventTooltip(_ event: WorkspaceWebRuntimeEvent) -> String {
+        [runtimeEventTitle(event), event.message]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
+    }
+
+    private func runtimeEventCopyText(_ event: WorkspaceWebRuntimeEvent) -> String {
+        var parts = [runtimeEventTitle(event), event.message]
+        if let location = runtimeEventLocation(event) {
+            parts.append(location)
+        }
+        return parts
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
+    }
+
+    private func runtimeEventLocation(_ event: WorkspaceWebRuntimeEvent) -> String? {
+        guard let sourceURL = event.sourceURL, !sourceURL.isEmpty else { return nil }
+        var location = sourceURL
+        if let lineNumber = event.lineNumber {
+            location += ":\(lineNumber)"
+            if let columnNumber = event.columnNumber {
+                location += ":\(columnNumber)"
+            }
+        }
+        return location
     }
 
     private func isLocalURL(_ url: URL) -> Bool {
@@ -892,15 +1052,6 @@ struct ConductorWebWorkspaceView: View {
         }
     }
 
-    private func reloadOrStop() {
-        guard let tab = snapshot.tab, tab.url != nil else { return }
-        if tab.isLoading {
-            model.stopWorkspaceWebTab(tab.id)
-        } else {
-            model.reloadWorkspaceWebTab(tab.id)
-        }
-    }
-
     private func openQuickAddress(_ input: String) {
         guard let tab = snapshot.tab else {
             model.newWorkspaceWebTab(initialInput: input)
@@ -933,23 +1084,6 @@ struct ConductorWebWorkspaceView: View {
               let text = lines.first,
               text.count <= 300 else { return nil }
         return text
-    }
-
-    private func duplicateCurrentTab() {
-        guard let tab = snapshot.tab else { return }
-        let input = tab.url?.absoluteString ?? tab.pendingAddress
-        model.newWorkspaceWebTab(initialInput: input)
-    }
-
-    private func copyCurrentURL() {
-        guard let url = snapshot.tab?.url else { return }
-        copyToPasteboard(url.absoluteString)
-    }
-
-    private func copyPageReference() {
-        guard let tab = snapshot.tab, let url = tab.url else { return }
-        let title = tab.displayTitle.replacingOccurrences(of: "]", with: "\\]")
-        copyToPasteboard("[\(title)](\(url.absoluteString))")
     }
 
     private func copyToPasteboard(_ text: String) {

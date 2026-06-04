@@ -14,7 +14,10 @@ struct ToolbarChromeSnapshot: Equatable {
     let fileManagerActive: Bool
     let workspaceOverviewVisible: Bool
     let commandPaletteVisible: Bool
-    let replyNotificationsEnabled: Bool
+    let resumableAgentCount: Int
+    let canOpenLocalService: Bool
+    let localServiceTitle: String?
+    let canRestorePreviousSession: Bool
 
     @MainActor
     init(model: ConductorWindowModel) {
@@ -27,7 +30,33 @@ struct ToolbarChromeSnapshot: Equatable {
         self.fileManagerActive = model.fileManagerPanelRequest != nil
         self.workspaceOverviewVisible = model.workspaceOverviewVisible
         self.commandPaletteVisible = model.commandPaletteVisible
-        self.replyNotificationsEnabled = model.appearance.agentReplyNotifications.enabled
+        self.resumableAgentCount = model.controlResumableTerminalAgents(workspaceID: model.workspace.id).count
+        if let serviceURL = model.currentWorkspaceFirstLocalServiceURL {
+            self.canOpenLocalService = model.canPerformCommand(.openCurrentWorkspaceFirstService)
+            self.localServiceTitle = Self.serviceTitle(for: serviceURL)
+        } else {
+            self.canOpenLocalService = false
+            self.localServiceTitle = nil
+        }
+        self.canRestorePreviousSession = model.canPerformCommand(.restorePreviousSession)
+    }
+
+    var workspaceActionCount: Int {
+        [resumableAgentCount > 0, canOpenLocalService, canRestorePreviousSession]
+            .filter { $0 }
+            .count
+    }
+
+    var hasWorkspaceActions: Bool {
+        workspaceActionCount > 0
+    }
+
+    private static func serviceTitle(for url: URL) -> String {
+        if let port = url.port {
+            return ":\(port)"
+        }
+        let host = url.host() ?? url.absoluteString
+        return host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Service" : host
     }
 }
 
@@ -68,6 +97,14 @@ struct ConductorToolbar: View {
         .animation(model.shellAnimation(ConductorMotion.standard), value: theme)
         .animation(model.shellAnimation(ConductorMotion.panel), value: shouldShowUpdateButton)
         .animation(model.shellAnimation(ConductorMotion.panel), value: updateState.phase)
+        .animation(model.shellAnimation(ConductorMotion.panel), value: toolbarSnapshot.workspaceActionCount)
+        .onChange(of: model.workspaceRenameRequest) { _, request in
+            guard let request,
+                  let row = workspaceSnapshot.rows.first(where: { $0.id == request.workspaceID }) else {
+                return
+            }
+            beginRenameWorkspace(row)
+        }
     }
 
     private var toolbarActions: some View {
@@ -78,16 +115,48 @@ struct ConductorToolbar: View {
                 ConductorToolbarActionDivider()
             }
 
-            ConductorIconButton(state: toolbarControlState(
-                id: "check-notifications",
-                systemImage: toolbarSnapshot.replyNotificationsEnabled ? "bell.badge.fill" : "bell",
-                tooltip: L("检测通知权限", "Check Notification Permission"),
-                isActive: toolbarSnapshot.replyNotificationsEnabled
-            )) {
-                finishWorkspaceRenameIfNeeded()
-                model.checkNotificationPermissionFromToolbar()
+            if toolbarSnapshot.hasWorkspaceActions {
+                ConductorToolbarMenuButton(
+                    state: toolbarControlState(
+                        id: "workspace-actions",
+                        systemImage: primaryWorkspaceActionIcon,
+                        tooltip: primaryWorkspaceActionTooltip,
+                        title: primaryWorkspaceActionTitle
+                    )
+                ) {
+                    if toolbarSnapshot.resumableAgentCount > 0 {
+                        Button(
+                            L("恢复当前工作区 Agent", "Resume Workspace Agents"),
+                            systemImage: "arrow.clockwise.circle"
+                        ) {
+                            finishWorkspaceRenameIfNeeded()
+                            model.performCommand(.resumeCurrentWorkspaceAgents)
+                        }
+                    }
+
+                    if toolbarSnapshot.canOpenLocalService {
+                        Button(
+                            L("打开本地服务", "Open Local Service"),
+                            systemImage: "network"
+                        ) {
+                            finishWorkspaceRenameIfNeeded()
+                            model.performCommand(.openCurrentWorkspaceFirstService)
+                        }
+                    }
+
+                    if toolbarSnapshot.canRestorePreviousSession {
+                        Button(
+                            L("恢复上一份会话", "Restore Previous Session"),
+                            systemImage: "clock.arrow.circlepath"
+                        ) {
+                            finishWorkspaceRenameIfNeeded()
+                            model.performCommand(.restorePreviousSession)
+                        }
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                ConductorToolbarActionDivider()
             }
-            ConductorToolbarActionDivider()
 
             ConductorToolbarMenuButton(
                 state: toolbarControlState(
@@ -157,7 +226,7 @@ struct ConductorToolbar: View {
             ConductorIconButton(state: toolbarControlState(
                 id: "toggle-workspace-overview",
                 systemImage: WorkspaceChromeGlyph.systemName(selected: false),
-                tooltip: commandTooltip(L("工作区总览", "Workspace Overview"), command: .toggleWorkspaceOverview, fallback: "Cmd-O"),
+                tooltip: commandTooltip(L("工作区面板", "Workspaces"), command: .toggleWorkspaceOverview, fallback: "Cmd-O"),
                 isActive: toolbarSnapshot.workspaceOverviewVisible
             )) {
                 finishWorkspaceRenameIfNeeded()
@@ -183,6 +252,36 @@ struct ConductorToolbar: View {
         case .idle, .upToDate:
             false
         }
+    }
+
+    private var primaryWorkspaceActionTitle: String {
+        if toolbarSnapshot.resumableAgentCount > 0 {
+            return L("续接", "Resume")
+        }
+        if toolbarSnapshot.canOpenLocalService {
+            return toolbarSnapshot.localServiceTitle ?? L("服务", "Service")
+        }
+        return L("恢复", "Recover")
+    }
+
+    private var primaryWorkspaceActionIcon: String {
+        if toolbarSnapshot.resumableAgentCount > 0 {
+            return "arrow.clockwise.circle"
+        }
+        if toolbarSnapshot.canOpenLocalService {
+            return "network"
+        }
+        return "clock.arrow.circlepath"
+    }
+
+    private var primaryWorkspaceActionTooltip: String {
+        if toolbarSnapshot.resumableAgentCount > 0 {
+            return L("恢复当前工作区可续接的 Agent", "Resume agents in this workspace")
+        }
+        if toolbarSnapshot.canOpenLocalService {
+            return L("打开当前工作区检测到的本地服务", "Open the detected local service for this workspace")
+        }
+        return L("恢复上一份有效会话", "Restore the previous valid session")
     }
 
     private func beginRenameWorkspace(_ row: WorkspaceChromeDisplayModel) {
@@ -310,7 +409,7 @@ private struct ConductorToolbarUpdateButton: View {
         case .available:
             return L("下载可用更新", "Download available update")
         case .downloading:
-            return L("打开更新进度", "Open update progress")
+            return L("打开更新进度，可取消下载", "Open update progress and cancel download")
         case .downloaded:
             return L("安装更新并重新打开", "Install update and reopen")
         case .installing:

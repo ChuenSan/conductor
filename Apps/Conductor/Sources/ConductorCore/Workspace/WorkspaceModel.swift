@@ -65,12 +65,26 @@ public struct TerminalTabState: Identifiable, Equatable, Codable, Sendable {
     public var title: String
     public var userTitle: String?
     public var workingDirectory: String?
+    public var agentSnapshot: TerminalAgentSnapshot?
+    public var lastCommandSnapshot: TerminalCommandSnapshot?
+    public var searchSnapshot: TerminalSearchSnapshot?
 
-    public init(id: TerminalID = TerminalID(), title: String, userTitle: String? = nil, workingDirectory: String? = nil) {
+    public init(
+        id: TerminalID = TerminalID(),
+        title: String,
+        userTitle: String? = nil,
+        workingDirectory: String? = nil,
+        agentSnapshot: TerminalAgentSnapshot? = nil,
+        lastCommandSnapshot: TerminalCommandSnapshot? = nil,
+        searchSnapshot: TerminalSearchSnapshot? = nil
+    ) {
         self.id = id
         self.title = title
         self.userTitle = userTitle
         self.workingDirectory = workingDirectory
+        self.agentSnapshot = agentSnapshot
+        self.lastCommandSnapshot = lastCommandSnapshot
+        self.searchSnapshot = searchSnapshot
     }
 }
 
@@ -704,7 +718,10 @@ public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
         let duplicate = TerminalTabState(
             title: source.title,
             userTitle: source.userTitle,
-            workingDirectory: source.workingDirectory
+            workingDirectory: source.workingDirectory,
+            agentSnapshot: source.agentSnapshot,
+            lastCommandSnapshot: source.lastCommandSnapshot,
+            searchSnapshot: source.searchSnapshot
         )
         pane.tabs.insert(duplicate, at: index + 1)
         pane.selectedTabID = duplicate.id
@@ -732,7 +749,10 @@ public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
                 let duplicate = TerminalTabState(
                     title: tab.title,
                     userTitle: tab.userTitle,
-                    workingDirectory: tab.workingDirectory
+                    workingDirectory: tab.workingDirectory,
+                    agentSnapshot: tab.agentSnapshot,
+                    lastCommandSnapshot: tab.lastCommandSnapshot,
+                    searchSnapshot: tab.searchSnapshot
                 )
                 terminalIDMap[tab.id] = duplicate.id
                 return duplicate
@@ -1036,6 +1056,42 @@ public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
     }
 
     @discardableResult
+    public mutating func updateTerminalAgentSnapshot(_ terminalID: TerminalID, snapshot: TerminalAgentSnapshot?) -> Bool {
+        guard let paneID = paneID(containing: terminalID),
+              var pane = panes[paneID],
+              let tabIndex = pane.tabs.firstIndex(where: { $0.id == terminalID }) else {
+            return false
+        }
+        pane.tabs[tabIndex].agentSnapshot = snapshot
+        panes[paneID] = pane
+        return true
+    }
+
+    @discardableResult
+    public mutating func updateTerminalCommandSnapshot(_ terminalID: TerminalID, snapshot: TerminalCommandSnapshot?) -> Bool {
+        guard let paneID = paneID(containing: terminalID),
+              var pane = panes[paneID],
+              let tabIndex = pane.tabs.firstIndex(where: { $0.id == terminalID }) else {
+            return false
+        }
+        pane.tabs[tabIndex].lastCommandSnapshot = snapshot
+        panes[paneID] = pane
+        return true
+    }
+
+    @discardableResult
+    public mutating func updateTerminalSearchSnapshot(_ terminalID: TerminalID, snapshot: TerminalSearchSnapshot?) -> Bool {
+        guard let paneID = paneID(containing: terminalID),
+              var pane = panes[paneID],
+              let tabIndex = pane.tabs.firstIndex(where: { $0.id == terminalID }) else {
+            return false
+        }
+        pane.tabs[tabIndex].searchSnapshot = snapshot
+        panes[paneID] = pane
+        return true
+    }
+
+    @discardableResult
     public mutating func focusPane(_ paneID: PaneID) -> Bool {
         guard panes[paneID] != nil else { return false }
         guard focusedPaneID != paneID else { return true }
@@ -1136,7 +1192,11 @@ public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
         }
 
         if panes.count == 1 {
-            let replacement = TerminalTabState(title: "zsh", workingDirectory: pane.tabs.first?.workingDirectory)
+            let sourceTab = pane.tabs.first
+            let replacement = TerminalTabState(
+                title: "zsh",
+                workingDirectory: sourceTab?.workingDirectory
+            )
             panes[paneID] = PaneState(id: paneID, tabs: [replacement])
             focusedPaneID = paneID
             root = .leaf(paneID)
@@ -1185,7 +1245,11 @@ public struct WorkspaceState: Identifiable, Equatable, Codable, Sendable {
         let closedTerminals = pane.tabs.map(\.id)
 
         if panes.count == 1 {
-            let replacement = TerminalTabState(title: "zsh", workingDirectory: pane.tabs.first?.workingDirectory)
+            let sourceTab = pane.tabs.first
+            let replacement = TerminalTabState(
+                title: "zsh",
+                workingDirectory: sourceTab?.workingDirectory
+            )
             panes[paneID] = PaneState(id: paneID, tabs: [replacement])
             focusedPaneID = paneID
             root = .leaf(paneID)

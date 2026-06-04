@@ -1,19 +1,94 @@
 # Security Model
 
-Conductor's updater is designed to avoid replacing the running app in-process.
+Conductor is a local macOS workbench. Its security model is built around local-only control, local state, explicit update verification, and honest preview-build signing limits.
 
-## Defaults
+## Local Control API
 
-- Updates are read from a configured manifest URL.
-- Downloaded packages must match the manifest SHA-256.
-- The staged app must match the expected bundle identifier.
-- The staged app must pass `codesign --verify --deep --strict`.
-- Replacement is performed by an external script after Conductor exits.
+Conductor exposes a Unix domain socket while the app is running:
+
+```text
+~/Library/Application Support/Conductor/control.sock
+```
+
+Properties:
+
+- local to the current user
+- no HTTP server
+- no remote network listener
+- request/response JSON only
+- scriptable but not internet-exposed
+
+For isolated tests, the socket path can be overridden:
+
+```bash
+CONDUCTOR_CONTROL_SOCKET_PATH=/tmp/conductor-control.sock
+```
+
+The control API can operate the app, so do not share access to your user account with untrusted scripts.
+
+## Local State
+
+Conductor stores app state under:
+
+```text
+~/Library/Application Support/Conductor/
+```
+
+Important files:
+
+- `window-state.yaml`
+- `session-journal.ndjson`
+- `session-snapshots/`
+- `attention-events.json`
+- `control.sock` while running
+
+Diagnostics and screenshots should be reviewed before sharing publicly. Local paths, email addresses, project names, terminal output, and usage/account data can appear in app state or screenshots.
+
+## Browser And Credentials
+
+Normal browser snapshots should not expose cookies, passwords, or token data. Any future advanced browser storage/cookie commands must be explicit and documented separately.
+
+## Updater Safety
+
+Conductor's updater avoids replacing the running app in-process. It stages a downloaded app, verifies it, then hands replacement to an external installer after Conductor exits.
+
+Update safety checks should include:
+
+- SHA-256 checksum from release metadata
+- expected bundle identifier
+- `codesign --verify --deep --strict`
+- staged app path validation
+
+Normal update UI should hide raw release internals. Diagnostics can include them for maintainers.
 
 ## Repository Policy
 
-The GitHub repository is public so release assets and updater manifests can be downloaded without authentication. The default branch is `main` and should stay protected. Direct write access is limited to the owner account; external contributions should go through issues and pull requests.
+The GitHub repository can be public so release assets and update metadata are downloadable without authentication.
 
-## Notes
+Recommended policy:
 
-The current scripts support ad-hoc signing for local builds. Production distribution should use a Developer ID Application identity and notarization before a public release.
+- protect `main`
+- require pull requests for external contributors
+- allow issues for bug reports and feature requests
+- limit direct write access to the owner account
+- use release assets for app distribution
+
+## Signing And Gatekeeper
+
+Preview releases may be ad-hoc signed unless the release says otherwise. Ad-hoc signing is useful for independent preview distribution, but it is not the same as Developer ID notarization.
+
+What users may see:
+
+- macOS blocks first launch
+- macOS asks the user to confirm opening the app
+- update replacement may require extra trust steps
+
+For broad public distribution, Developer ID Application signing and notarization are recommended.
+
+## Reporting Security Issues
+
+If you find a security issue:
+
+1. Do not post private tokens, local paths, or logs publicly.
+2. Capture the app version, macOS version, and a short reproduction.
+3. Attach diagnostics only after reviewing/redacting sensitive content.

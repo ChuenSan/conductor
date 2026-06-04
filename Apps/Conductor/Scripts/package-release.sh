@@ -75,7 +75,6 @@ fi
 rm -f "$FULL_ZIP"
 ditto -c -k --norsrc --keepParent "$APP_PATH" "$FULL_ZIP"
 
-GIT_REVISION="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
 CREATED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 FULL_SHA="$(shasum -a 256 "$FULL_ZIP" | awk '{print $1}')"
 FULL_SIZE="$(stat -f '%z' "$FULL_ZIP")"
@@ -166,7 +165,6 @@ manifest = {
     "version": "$VERSION",
     "build": "$BUILD",
     "createdAt": "$CREATED_AT",
-    "gitRevision": "$GIT_REVISION",
     "minimumSystemVersion": "$MIN_SYSTEM_VERSION",
     "full": {
         "filename": "$(basename "$FULL_ZIP")",

@@ -1,0 +1,31 @@
+{
+  "createdAt": "2026-06-03T08:48:06.682060+00:00",
+  "privacy": "Captured from an isolated Conductor state path and a Conductor window capture, not the full desktop.",
+  "screenshots": [
+    {
+      "bytes": 2334748,
+      "path": "docs/media/conductor-screenshot-workbench.png"
+    },
+    {
+      "bytes": 3609828,
+      "path": "docs/media/conductor-screenshot-token-records-panel.png"
+    },
+    {
+      "bytes": 2850454,
+      "path": "docs/media/conductor-screenshot-notifications.png"
+    },
+    {
+      "bytes": 3093854,
+      "path": "docs/media/conductor-screenshot-browser.png"
+    },
+    {
+      "bytes": 3975115,
+      "path": "docs/media/conductor-screenshot-command-palette.png"
+    },
+    {
+      "bytes": 3855021,
+      "path": "docs/media/conductor-screenshot-settings.png"
+    }
+  ],
+  "source": "Apps/Conductor/Scripts/capture-release-screenshots.sh"
+}

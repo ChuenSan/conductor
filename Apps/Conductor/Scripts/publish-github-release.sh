@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REPO_ROOT="$(cd "$ROOT/../.." && pwd)"
 cd "$ROOT"
 
 usage() {
@@ -11,7 +10,7 @@ Usage:
   ./Scripts/publish-github-release.sh /path/to/Artifacts/releases/<version>-<build>-macos-<arch> [tag]
 
 Environment:
-  CONDUCTOR_GITHUB_REPO=owner/repo   Override GitHub repo. Defaults to the current git remote.
+  CONDUCTOR_GITHUB_REPO=owner/repo   Required GitHub repository for the release.
   CONDUCTOR_RELEASE_NOTES=path       Optional release notes file.
 USAGE
   exit "${1:-2}"
@@ -57,10 +56,7 @@ tag="${tag:-v${version}-${build}}"
 title="Conductor ${version} (${build})"
 
 repo="${CONDUCTOR_GITHUB_REPO:-}"
-if [[ -z "$repo" ]]; then
-  repo="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null | sed -E 's#^git@github.com:##; s#^https://github.com/##; s#\\.git$##')"
-fi
-[[ -n "$repo" ]] || { echo "Could not infer GitHub repo. Set CONDUCTOR_GITHUB_REPO=owner/repo." >&2; exit 1; }
+[[ -n "$repo" ]] || { echo "Set CONDUCTOR_GITHUB_REPO=owner/repo before publishing." >&2; exit 1; }
 
 assets=()
 while IFS= read -r asset; do

@@ -42,7 +42,10 @@ struct PanelCoordinator: Equatable, Sendable {
 
     @discardableResult
     mutating func dismissVisibleShellPanel() -> Bool {
-        guard commandPaletteVisible || settingsVisible || workspaceOverviewVisible || terminalSearchVisible else {
+        guard commandPaletteVisible ||
+            settingsVisible ||
+            workspaceOverviewVisible ||
+            terminalSearchVisible else {
             return false
         }
         closeTransientPanels()

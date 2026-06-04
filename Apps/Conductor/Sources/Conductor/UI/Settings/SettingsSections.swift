@@ -12,12 +12,88 @@ extension AppearanceSettingsPanel {
     func overviewSettings(snapshot: SettingsSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             SettingsPreferenceGroup(
+                title: L("会话健康", "Session Health")
+            ) {
+                SessionRecoveryOverviewCard(
+                    report: snapshot.sessionRestoreReport,
+                    journalSummary: snapshot.sessionJournalSummary,
+                    recentEvents: snapshot.sessionJournalRecentEvents,
+                    surfaceInspection: snapshot.sessionSurfaceInspection,
+                    canRestorePrevious: model.canRestorePreviousSessionSnapshot,
+                    restorePrevious: { model.restorePreviousSessionSnapshot() },
+                    focusSurface: { focusSessionRecoverySurface($0) },
+                    performIssueAction: { performSessionRecoveryIssueAction($0) }
+                )
+            }
+
+            SettingsPreferenceGroup(
                 title: L("设置入口", "Settings"),
             ) {
                 SettingsOverviewPath(snapshot: snapshot) { section in
                     selectSection(section)
                 }
             }
+        }
+    }
+
+    func focusSessionRecoverySurface(_ target: SessionRecoverySurfaceTarget) {
+        switch target {
+        case .terminal(_, let terminalID):
+            _ = model.controlFocusTerminal(terminalID)
+        case .webTab(let workspaceID, let tabID):
+            model.selectWorkspaceWebTab(tabID, in: workspaceID)
+        case .fileTab(let workspaceID, let tabID):
+            model.selectWorkspaceFileTab(tabID, in: workspaceID)
+        }
+        model.hideSettingsPanel()
+    }
+
+    func performSessionRecoveryIssueAction(_ issue: SessionSurfaceInspectionSnapshot.RecoveryIssue) {
+        guard let target = sessionRecoveryTarget(for: issue) else { return }
+        focusSessionRecoverySurface(target, hidePanel: false)
+        switch issue.primaryAction.kind {
+        case "focus_web_address":
+            model.hideSettingsPanel()
+            model.performCommand(.focusWebAddress)
+        case "reload_web_tab":
+            model.performCommand(.reloadSelectedWebTab)
+            model.hideSettingsPanel()
+        default:
+            model.hideSettingsPanel()
+            break
+        }
+    }
+
+    private func focusSessionRecoverySurface(
+        _ target: SessionRecoverySurfaceTarget,
+        hidePanel: Bool
+    ) {
+        switch target {
+        case .terminal(_, let terminalID):
+            _ = model.controlFocusTerminal(terminalID)
+        case .webTab(let workspaceID, let tabID):
+            model.selectWorkspaceWebTab(tabID, in: workspaceID)
+        case .fileTab(let workspaceID, let tabID):
+            model.selectWorkspaceFileTab(tabID, in: workspaceID)
+        }
+        if hidePanel {
+            model.hideSettingsPanel()
+        }
+    }
+
+    private func sessionRecoveryTarget(
+        for issue: SessionSurfaceInspectionSnapshot.RecoveryIssue
+    ) -> SessionRecoverySurfaceTarget? {
+        switch issue.surfaceKind {
+        case .terminal:
+            guard let terminalID = issue.terminalID else { return nil }
+            return .terminal(workspaceID: issue.workspaceID, terminalID: terminalID)
+        case .browser:
+            guard let webTabID = issue.webTabID else { return nil }
+            return .webTab(workspaceID: issue.workspaceID, tabID: webTabID)
+        case .file:
+            guard let fileTabID = issue.fileTabID else { return nil }
+            return .fileTab(workspaceID: issue.workspaceID, tabID: fileTabID)
         }
     }
 
@@ -231,6 +307,7 @@ extension AppearanceSettingsPanel {
             setPrefersDeltaUpdates: { model.setPrefersDeltaUpdates($0) },
             checkForUpdates: { model.checkForUpdates(manual: true) },
             downloadUpdate: { model.downloadAvailableUpdate() },
+            cancelUpdate: { model.cancelUpdateOperation() },
             installUpdate: { model.installDownloadedUpdateAndRelaunch() }
         )
     }
@@ -1036,15 +1113,23 @@ extension AppearanceSettingsPanel {
             }
 
             SettingsPreferenceGroup(
-                title: L("AI 回复通知", "AI Reply Notifications"),
+                title: L("系统通知", "System Notifications"),
             ) {
                 VStack(alignment: .leading, spacing: 10) {
                     SettingsFormSurface {
+                        NotificationPermissionStatusRow(
+                            state: snapshot.notificationAuthorizationState,
+                            check: model.checkNotificationPermissionFromToolbar,
+                            test: model.sendTestSystemNotificationFromSettings
+                        )
+
+                        SettingsControlDivider()
+
                         SettingsToggleRow(
-                            title: L("回复后通知", "Notify After Reply"),
+                            title: L("工作完成提醒", "Work Completion Alerts"),
                             subtitle: replyNotifications.enabled
-                                ? L("Agent 完成回复后发送系统通知", "Sends a system notification when an agent finishes replying")
-                                : L("不会发送 AI 回复通知", "AI reply notifications are disabled"),
+                                ? L("后台命令、终端提醒和任务回复会尝试发送系统横幅", "Background commands, terminal alerts, and task replies can send system banners")
+                                : L("关闭后不主动发送系统横幅和声音", "Turns off proactive system banners and sounds"),
                             isOn: Binding(
                                 get: { replyNotifications.enabled },
                                 set: { model.setAgentReplyNotificationsEnabled($0) }
@@ -1055,7 +1140,7 @@ extension AppearanceSettingsPanel {
 
                         SettingsToggleRow(
                             title: L("仅在未关注时通知", "Only When Unattended"),
-                            subtitle: L("Conductor 不在前台，或回复终端未被选中时提醒", "Alerts when Conductor is inactive or the replying terminal is not selected"),
+                            subtitle: L("Conductor 不在前台，或相关终端未被选中时提醒", "Alerts when Conductor is inactive or the related terminal is not selected"),
                             isOn: Binding(
                                 get: { replyNotifications.onlyWhenUnattended },
                                 set: { model.setAgentReplyNotificationsOnlyWhenUnattended($0) }
@@ -1065,8 +1150,8 @@ extension AppearanceSettingsPanel {
                         SettingsControlDivider()
 
                         SettingsToggleRow(
-                            title: L("包含回复摘要", "Include Reply Summary"),
-                            subtitle: L("通知正文显示 hook 提供的最后回复摘要", "Shows the last reply summary from the hook in the notification body"),
+                            title: L("包含事件摘要", "Include Event Summary"),
+                            subtitle: L("通知正文显示任务、终端或回复摘要", "Shows task, terminal, or reply details in the notification body"),
                             isOn: Binding(
                                 get: { replyNotifications.includeSummary },
                                 set: { model.setAgentReplyNotificationsIncludeSummary($0) }
@@ -1085,7 +1170,7 @@ extension AppearanceSettingsPanel {
                         )
                     }
 
-                    if let message = snapshot.agentHookSettingsMessage {
+                    if let message = snapshot.notificationDeliveryTestMessage ?? snapshot.agentHookSettingsMessage {
                         HStack(alignment: .center, spacing: 10) {
                             Text(message)
                                 .font(.conductorSystem(size: 10.5, weight: .medium, scale: appearance.fontScale))
@@ -1109,6 +1194,7 @@ extension AppearanceSettingsPanel {
             if agentCLIStatuses.values.allSatisfy({ $0.state == .unknown }) {
                 model.refreshAgentCLIStatuses()
             }
+            model.refreshNotificationAuthorizationState()
         }
     }
 
@@ -1158,9 +1244,11 @@ extension AppearanceSettingsPanel {
                     recordingCommand: recordingShortcutCommand,
                     onRecord: { command in
                         recordingShortcutCommand = command
+                        shortcutRecordingMessage = shortcutRecordingPrompt(for: command)
                     },
                     onReset: { command in
                         model.resetKeyboardShortcut(for: command)
+                        shortcutRecordingMessage = L("已恢复默认快捷键。", "Restored the default shortcut.")
                     })
 
                 if let recordingShortcutCommand {
@@ -1173,16 +1261,88 @@ extension AppearanceSettingsPanel {
                 Button(L("全部恢复默认", "Reset All")) {
                     model.resetKeyboardShortcuts()
                     recordingShortcutCommand = nil
+                    shortcutRecordingMessage = L("全部快捷键已恢复默认。", "All shortcuts were restored to defaults.")
                 }
                 .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
                 .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
 
-                Text(L("录制时按 Esc 取消；必须包含 Cmd，避免抢走正常输入。", "Press Esc to cancel while recording; shortcuts must include Cmd so normal typing stays safe."))
+                Button(L("导入", "Import")) {
+                    importShortcutProfile()
+                }
+                .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+
+                Button(L("导出", "Export")) {
+                    exportShortcutProfile()
+                }
+                .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+
+                Text(shortcutRecordingMessage ?? L("录制时按 Esc 取消；必须包含 Cmd，避免抢走正常输入。", "Press Esc to cancel while recording; shortcuts must include Cmd so normal typing stays safe."))
                     .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
                     .foregroundStyle(ConductorDesign.tertiaryText)
                     .lineLimit(2)
             }
         }
+    }
+
+    private func importShortcutProfile() {
+        recordingShortcutCommand = nil
+        let panel = NSOpenPanel()
+        panel.title = L("导入快捷键配置", "Import Shortcut Profile")
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        guard panel.runModal() == .OK,
+              let url = panel.url else { return }
+        do {
+            let result = try model.importKeyboardShortcutProfile(from: url)
+            shortcutRecordingMessage = shortcutImportMessage(result)
+        } catch {
+            shortcutRecordingMessage = L(
+                "导入失败：\(error.localizedDescription)",
+                "Import failed: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func exportShortcutProfile() {
+        recordingShortcutCommand = nil
+        let panel = NSSavePanel()
+        panel.title = L("导出快捷键配置", "Export Shortcut Profile")
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "conductor-shortcuts.json"
+        guard panel.runModal() == .OK,
+              let url = panel.url else { return }
+        do {
+            let count = try model.exportKeyboardShortcutProfile(to: url)
+            shortcutRecordingMessage = L(
+                "已导出 \(count) 个自定义快捷键。",
+                "Exported \(count) custom shortcuts."
+            )
+        } catch {
+            shortcutRecordingMessage = L(
+                "导出失败：\(error.localizedDescription)",
+                "Export failed: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func shortcutImportMessage(_ result: KeyboardShortcutProfileImportResult) -> String {
+        var parts = [
+            L("已导入 \(result.importedCount) 个快捷键", "Imported \(result.importedCount) shortcuts")
+        ]
+        if result.replacedConflictCount > 0 {
+            parts.append(L("处理 \(result.replacedConflictCount) 个冲突", "resolved \(result.replacedConflictCount) conflicts"))
+        }
+        if result.ignoredUnknownCommandCount > 0 {
+            parts.append(L("忽略 \(result.ignoredUnknownCommandCount) 个未知命令", "ignored \(result.ignoredUnknownCommandCount) unknown commands"))
+        }
+        if result.rejectedShortcutCount > 0 {
+            parts.append(L("拒绝 \(result.rejectedShortcutCount) 个无效快捷键", "rejected \(result.rejectedShortcutCount) invalid shortcuts"))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func shortcutRecorderOverlay(for command: ConductorShellCommand) -> some View {
@@ -1216,17 +1376,40 @@ extension AppearanceSettingsPanel {
         guard event.type == .keyDown else { return false }
         if event.keyCode == 53 {
             recordingShortcutCommand = nil
+            shortcutRecordingMessage = L("已取消录制。", "Recording canceled.")
             return true
         }
         guard let shortcut = KeyboardShortcutDefinition(event: event) else {
+            shortcutRecordingMessage = L("需要包含 Cmd 的组合键。", "Use a shortcut that includes Cmd.")
             return true
         }
         guard !shortcut.isReservedSystemShortcut else {
+            shortcutRecordingMessage = L("Cmd-Q 保留给退出应用，不能覆盖。", "Cmd-Q is reserved for quitting the app.")
             return true
         }
+        let conflictTitle = model.shortcutConflictTitle(for: shortcut, assigningTo: command)
         model.setKeyboardShortcut(shortcut, for: command)
         recordingShortcutCommand = nil
+        if let conflictTitle {
+            shortcutRecordingMessage = L(
+                "已设为 \(shortcut.displayTitle)，并从「\(conflictTitle)」移除同一个快捷键。",
+                "Set to \(shortcut.displayTitle) and removed the same shortcut from \"\(conflictTitle)\"."
+            )
+        } else {
+            shortcutRecordingMessage = L(
+                "已设为 \(shortcut.displayTitle)。",
+                "Set to \(shortcut.displayTitle)."
+            )
+        }
         return true
+    }
+
+    private func shortcutRecordingPrompt(for command: ConductorShellCommand) -> String {
+        let title = command.displayTitle(model: model)
+        return L(
+            "正在为「\(title)」录制；如果按到已有快捷键，会自动让原命令让位。",
+            "Recording \"\(title)\"; choosing an existing shortcut will move it from the old command."
+        )
     }
 
     func themeSettings(snapshot: SettingsSnapshot) -> some View {
@@ -1415,39 +1598,6 @@ struct SettingsSectionLabel: View {
     }
 }
 
-struct SettingsInfoRow: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.floatingEmphasis.opacity(0.88))
-                .frame(width: 18)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 52)
-    }
-}
-
 struct AgentCLIStatusRow: View {
     let provider: AgentHookProvider
     let status: AgentCLIStatus
@@ -1494,6 +1644,120 @@ struct AgentCLIStatusRow: View {
             .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
         case .unknown:
             SettingsStatusPill(title: L("未检测", "Not Checked"), systemImage: "questionmark.circle")
+        }
+    }
+}
+
+struct NotificationPermissionStatusRow: View {
+    let state: AgentReplyNotificationAuthorizationState
+    let check: () -> Void
+    let test: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        SettingsControlRow(
+            title: L("系统通知权限", "System Notification Permission"),
+            subtitle: subtitle
+        ) {
+            HStack(spacing: 8) {
+                permissionPill
+                Button {
+                    test()
+                } label: {
+                    Label(L("测试", "Test"), systemImage: "bell.badge")
+                        .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                }
+                .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+                .macNativeTooltip(L("发送一条测试系统通知", "Send a test system notification"))
+
+                Button {
+                    check()
+                } label: {
+                    Label(L("检查", "Check"), systemImage: "checkmark.shield")
+                        .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                }
+                .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+                .macNativeTooltip(L("检查通知权限", "Check Notification Permission"))
+            }
+        }
+    }
+
+    private var permissionPill: some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
+                .lineLimit(1)
+        }
+        .foregroundStyle(statusColor)
+        .padding(.horizontal, 9)
+        .frame(height: 24)
+        .background(statusColor.opacity(theme.usesDarkChrome ? 0.16 : 0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(statusColor.opacity(0.30), lineWidth: 0.6)
+        }
+    }
+
+    private var title: String {
+        switch state {
+        case .authorized:
+            L("已允许", "Allowed")
+        case .denied:
+            L("已拒绝", "Denied")
+        case .notDetermined:
+            L("未请求", "Not Requested")
+        case .unavailable:
+            L("不可用", "Unavailable")
+        case .unknown:
+            L("未知", "Unknown")
+        }
+    }
+
+    private var subtitle: String {
+        switch state {
+        case .authorized:
+            L("系统横幅和声音可用", "System banners and sound are available")
+        case .denied:
+            L("系统横幅需要在系统设置里允许", "Enable system banners in System Settings")
+        case .notDetermined:
+            L("尚未请求权限；点击检查会向 macOS 申请", "Permission has not been requested; Check asks macOS")
+        case .unavailable:
+            L("当前启动方式无法使用系统横幅；从正式应用启动后再试", "System banners are unavailable in this launch mode; start the app normally and try again")
+        case .unknown:
+            L("暂时无法确认；点击检查会重新读取系统状态", "Could not confirm yet; Check reads system state again")
+        }
+    }
+
+    private var systemImage: String {
+        switch state {
+        case .authorized:
+            "checkmark.circle.fill"
+        case .denied:
+            "xmark.circle.fill"
+        case .notDetermined:
+            "questionmark.circle"
+        case .unavailable:
+            "exclamationmark.triangle"
+        case .unknown:
+            "circle.dotted"
+        }
+    }
+
+    private var statusColor: Color {
+        switch state {
+        case .authorized:
+            Color.green
+        case .denied:
+            Color.red
+        case .notDetermined, .unavailable:
+            Color.orange
+        case .unknown:
+            theme.shellChromeTextMuted.opacity(0.82)
         }
     }
 }

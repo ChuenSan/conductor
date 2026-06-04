@@ -1,3 +1,4 @@
+import ConductorCore
 import Foundation
 
 final class ConductorMainThreadWatchdog: @unchecked Sendable {
@@ -31,6 +32,14 @@ final class ConductorMainThreadWatchdog: @unchecked Sendable {
             if bucket != lastReportedStallBucket {
                 lastReportedStallBucket = bucket
                 ConductorLog.performance.warning("main-thread stall approx \(Double(elapsed) / 1_000_000_000, privacy: .public)s")
+                let record = ConductorPerformanceDiagnostics.shared.recordMainThreadStall(
+                    durationNanoseconds: elapsed,
+                    thresholdNanoseconds: stallThresholdNanoseconds
+                )
+                ConductorDiagnostics.record("main-thread-stall", fields: [
+                    "durationMS": String(record.durationMilliseconds),
+                    "thresholdMS": String(record.thresholdMilliseconds)
+                ])
             }
         }
 

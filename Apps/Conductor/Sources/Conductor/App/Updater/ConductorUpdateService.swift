@@ -10,6 +10,7 @@ enum ConductorUpdateError: LocalizedError {
     case checksumMismatch(expected: String, actual: String)
     case missingDownloadedPackage
     case installerLaunchFailed(String)
+    case installerRehearsalFailed(status: Int32, log: String)
 
     var errorDescription: String? {
         switch self {
@@ -27,6 +28,8 @@ enum ConductorUpdateError: LocalizedError {
             "Downloaded update package was not found."
         case .installerLaunchFailed(let reason):
             "Could not start the updater: \(reason)"
+        case .installerRehearsalFailed(let status, let log):
+            "Update installer rehearsal failed with status \(status): \(log)"
         }
     }
 }
@@ -216,7 +219,10 @@ actor ConductorUpdateService {
         )
     }
 
-    func prepareInstaller(for downloadedUpdate: ConductorDownloadedUpdate) throws -> ConductorPreparedUpdate {
+    func prepareInstaller(
+        for downloadedUpdate: ConductorDownloadedUpdate,
+        dryRun: Bool = false
+    ) throws -> ConductorPreparedUpdate {
         guard fileManager.fileExists(atPath: downloadedUpdate.packageURL.path) else {
             throw ConductorUpdateError.missingDownloadedPackage
         }
@@ -227,17 +233,45 @@ actor ConductorUpdateService {
         try fileManager.createDirectory(at: installerDirectory, withIntermediateDirectories: true)
 
         let scriptURL = installerDirectory.appendingPathComponent("install-update.sh")
+        let logURL = installerDirectory.appendingPathComponent("install.log")
         let script = installerScript(
             currentAppURL: currentAppURL,
             packageURL: downloadedUpdate.packageURL,
             kind: downloadedUpdate.kind,
             workDirectory: installerDirectory,
             bundleIdentifier: Bundle.main.bundleIdentifier ?? downloadedUpdate.manifest.bundleIdentifier,
-            processIdentifier: ProcessInfo.processInfo.processIdentifier
+            processIdentifier: ProcessInfo.processInfo.processIdentifier,
+            dryRun: dryRun
         )
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
-        return ConductorPreparedUpdate(scriptURL: scriptURL)
+        return ConductorPreparedUpdate(scriptURL: scriptURL, logURL: logURL)
+    }
+
+    func rehearseInstaller(for downloadedUpdate: ConductorDownloadedUpdate) throws -> ConductorInstallRehearsalResult {
+        let preparedUpdate = try prepareInstaller(for: downloadedUpdate, dryRun: true)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [preparedUpdate.scriptURL.path]
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            throw ConductorUpdateError.installerLaunchFailed(error.localizedDescription)
+        }
+
+        guard process.terminationStatus == 0 else {
+            let log = (try? String(contentsOf: preparedUpdate.logURL, encoding: .utf8)) ?? ""
+            throw ConductorUpdateError.installerRehearsalFailed(
+                status: process.terminationStatus,
+                log: String(log.suffix(1_500))
+            )
+        }
+        return ConductorInstallRehearsalResult(
+            scriptURL: preparedUpdate.scriptURL,
+            logURL: preparedUpdate.logURL,
+            exitStatus: process.terminationStatus
+        )
     }
 
     @MainActor
@@ -321,7 +355,22 @@ actor ConductorUpdateService {
             try destinationHandle.write(contentsOf: chunk)
             bytesWritten += Int64(chunk.count)
             await progress?(ConductorDownloadProgress(bytesWritten: bytesWritten, expectedBytes: expectedBytes))
+            if let delay = localCopyDelayNanoseconds() {
+                try await Task.sleep(nanoseconds: delay)
+            }
         }
+    }
+
+    private func localCopyDelayNanoseconds() -> UInt64? {
+        guard let value = ProcessInfo.processInfo.environment["CONDUCTOR_UPDATE_LOCAL_COPY_DELAY_MS"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !value.isEmpty,
+            let milliseconds = Double(value),
+            milliseconds > 0 else {
+            return nil
+        }
+        let clampedMilliseconds = min(milliseconds, 5_000)
+        return UInt64(clampedMilliseconds * 1_000_000)
     }
 
     private func resolvedArtifactURL(_ filename: String, relativeTo manifestURL: URL) -> URL {
@@ -334,6 +383,16 @@ actor ConductorUpdateService {
     }
 
     private func updateDirectory() throws -> URL {
+        if let override = ProcessInfo.processInfo.environment["CONDUCTOR_UPDATE_DIRECTORY"],
+           !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let directoryURL = URL(
+                fileURLWithPath: (override as NSString).expandingTildeInPath,
+                isDirectory: true
+            )
+            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            return directoryURL
+        }
+
         let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
         let directoryURL = baseURL
@@ -382,7 +441,8 @@ actor ConductorUpdateService {
         kind: ConductorUpdatePackageKind,
         workDirectory: URL,
         bundleIdentifier: String,
-        processIdentifier: Int32
+        processIdentifier: Int32,
+        dryRun: Bool
     ) -> String {
         """
         #!/bin/bash
@@ -394,17 +454,14 @@ actor ConductorUpdateService {
         WORK_DIR=\(shellQuoted(workDirectory.path))
         EXPECTED_BUNDLE_IDENTIFIER=\(shellQuoted(bundleIdentifier))
         APP_PID=\(processIdentifier)
+        DRY_RUN=\(dryRun ? "1" : "0")
         LOG_FILE="$WORK_DIR/install.log"
 
         exec >>"$LOG_FILE" 2>&1
         echo "Conductor updater started at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-        for _ in $(/usr/bin/seq 1 160); do
-          if ! /bin/kill -0 "$APP_PID" 2>/dev/null; then
-            break
-          fi
-          /bin/sleep 0.25
-        done
+        if [[ "$DRY_RUN" == "1" ]]; then
+          echo "Conductor updater dry run enabled."
+        fi
 
         STAGE="$WORK_DIR/stage"
         DELTA_ROOT="$WORK_DIR/delta"
@@ -469,6 +526,20 @@ actor ConductorUpdateService {
 
         /usr/bin/codesign --verify --deep --strict "$STAGED_APP"
         /usr/bin/xattr -dr com.apple.quarantine "$STAGED_APP" 2>/dev/null || true
+
+        if [[ "$DRY_RUN" == "1" ]]; then
+          echo "Conductor updater dry run verified staged app: $STAGED_APP"
+          /bin/rm -rf "$STAGE" "$DELTA_ROOT" "$BACKUP_ROOT"
+          echo "Conductor updater dry run finished at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          exit 0
+        fi
+
+        for _ in $(/usr/bin/seq 1 160); do
+          if ! /bin/kill -0 "$APP_PID" 2>/dev/null; then
+            break
+          fi
+          /bin/sleep 0.25
+        done
 
         if [[ -d "$CURRENT_APP" ]]; then
           /bin/mv "$CURRENT_APP" "$BACKUP_APP"

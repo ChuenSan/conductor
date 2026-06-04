@@ -17,6 +17,7 @@ protocol GhosttyAppRuntimeActionDelegate: AnyObject {
     func ghosttyRuntimeDidSetTitle(terminalID: TerminalID, title: String) -> Bool
     func ghosttyRuntimeDidSetWorkingDirectory(terminalID: TerminalID, workingDirectory: String) -> Bool
     func ghosttyRuntimeDidRingBell(terminalID: TerminalID) -> Bool
+    func ghosttyRuntimeDidReceiveNotification(terminalID: TerminalID, title: String, body: String) -> Bool
     func ghosttyRuntimeDidUpdateProgress(terminalID: TerminalID, kind: TerminalProgressKind, progress: Int?) -> Bool
     func ghosttyRuntimeDidFinishCommand(terminalID: TerminalID, exitCode: Int?, durationNanoseconds: UInt64) -> Bool
     func ghosttyRuntimeDidUpdateCellSize(terminalID: TerminalID, width: UInt32, height: UInt32) -> Bool
@@ -360,6 +361,14 @@ final class GhosttyAppRuntime {
             }
             return true
         case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
+            guard let terminal = TerminalSurface.fromGhosttySurface(target.target.surface) else { return true }
+            let terminalID = terminal.id
+            let notification = action.action.desktop_notification
+            let title = notification.title.map { String(cString: $0) } ?? ""
+            let body = notification.body.map { String(cString: $0) } ?? ""
+            dispatchToDelegate { delegate in
+                _ = delegate?.ghosttyRuntimeDidReceiveNotification(terminalID: terminalID, title: title, body: body)
+            }
             return true
         case GHOSTTY_ACTION_SCROLLBAR:
             guard let terminal = TerminalSurface.fromGhosttySurface(target.target.surface) else { return true }

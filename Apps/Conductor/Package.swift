@@ -9,6 +9,7 @@ let package = Package(
     ],
     products: [
         .executable(name: "Conductor", targets: ["Conductor"]),
+        .executable(name: "ConductorCLI", targets: ["ConductorCLI"]),
         .executable(name: "ConductorModelCheck", targets: ["ConductorModelCheck"]),
         .library(name: "ConductorCore", targets: ["ConductorCore"])
     ],
@@ -51,6 +52,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "ConductorModelCheck",
+            dependencies: ["ConductorCore"]
+        ),
+        .executableTarget(
+            name: "ConductorCLI",
             dependencies: ["ConductorCore"]
         ),
         .testTarget(

@@ -13,6 +13,7 @@ struct SettingsUpdateSection: View {
     let setPrefersDeltaUpdates: @MainActor (Bool) -> Void
     let checkForUpdates: @MainActor () -> Void
     let downloadUpdate: @MainActor () -> Void
+    let cancelUpdate: @MainActor () -> Void
     let installUpdate: @MainActor () -> Void
 
     var body: some View {
@@ -22,6 +23,7 @@ struct SettingsUpdateSection: View {
                 state: state,
                 checkForUpdates: checkForUpdates,
                 downloadUpdate: downloadUpdate,
+                cancelUpdate: cancelUpdate,
                 installUpdate: installUpdate
             )
 
@@ -46,6 +48,7 @@ private struct UpdateStatusCard: View {
     let state: ConductorUpdateState
     let checkForUpdates: @MainActor () -> Void
     let downloadUpdate: @MainActor () -> Void
+    let cancelUpdate: @MainActor () -> Void
     let installUpdate: @MainActor () -> Void
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
@@ -111,6 +114,7 @@ private struct UpdateStatusCard: View {
                 hasManifestURL: preferences.manifestURL != nil,
                 checkForUpdates: checkForUpdates,
                 downloadUpdate: downloadUpdate,
+                cancelUpdate: cancelUpdate,
                 installUpdate: installUpdate
             )
         }
@@ -154,6 +158,7 @@ private struct UpdateActionRow: View {
     let hasManifestURL: Bool
     let checkForUpdates: @MainActor () -> Void
     let downloadUpdate: @MainActor () -> Void
+    let cancelUpdate: @MainActor () -> Void
     let installUpdate: @MainActor () -> Void
 
     var body: some View {
@@ -166,6 +171,17 @@ private struct UpdateActionRow: View {
                 disabled: primaryDisabled,
                 action: primaryAction
             )
+            if state.phase == .downloading {
+                UpdateActionButton(
+                    title: L("取消下载", "Cancel"),
+                    systemImage: "xmark.circle",
+                    tooltip: L("停止当前下载，保留稍后重试", "Stop this download and keep it ready to retry"),
+                    prominent: false,
+                    disabled: false,
+                    action: cancelUpdate
+                )
+                .frame(width: 112)
+            }
         }
         .frame(height: 36)
     }

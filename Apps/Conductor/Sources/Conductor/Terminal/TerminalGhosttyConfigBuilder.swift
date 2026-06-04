@@ -29,8 +29,11 @@ struct TerminalGhosttyConfigBuilder {
         return """
         macos-background-from-layer = true
         macos-titlebar-proxy-icon = hidden
-        shell-integration = detect
+        shell-integration = zsh
         shell-integration-features = no-cursor
+        notify-on-command-finish = always
+        notify-on-command-finish-action = no-bell,notify
+        notify-on-command-finish-after = 0s
         scrollbar = system
         scrollback-limit = \(defaultScrollbackLimit)
         font-family = \(sanitizedConfigValue(fontFamily))

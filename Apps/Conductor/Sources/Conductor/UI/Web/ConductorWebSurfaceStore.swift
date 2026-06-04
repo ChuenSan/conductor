@@ -1,6 +1,12 @@
 import ConductorCore
 import WebKit
 
+struct ConductorWebRuntimeState: Equatable {
+    var entries: [WorkspaceWebNavigationEntry]
+    var currentIndex: Int?
+    var scrollY: Double?
+}
+
 @MainActor
 final class ConductorWebKitSurfaceStore {
     static let shared = ConductorWebKitSurfaceStore()
@@ -38,6 +44,10 @@ final class ConductorWebKitSurfaceStore {
         return webView
     }
 
+    func existingWebView(for tabID: WebTabID) -> WKWebView? {
+        webViews[tabID]
+    }
+
     /// Restores a webView's back/forward history and scroll position from a
     /// persisted interactionState blob. Returns true when restoration was
     /// applied so callers can skip the initial URL load.
@@ -45,7 +55,7 @@ final class ConductorWebKitSurfaceStore {
     func restoreInteractionState(_ data: Data?, for tabID: WebTabID) -> Bool {
         guard let data, !data.isEmpty else { return false }
         let webView = webView(for: tabID)
-        webView.interactionState = data
+        webView.interactionState = Self.unarchivedInteractionState(from: data) ?? data
         pendingInteractionStates.removeValue(forKey: tabID)
         restoredFromInteractionState.insert(tabID)
         return true
@@ -56,8 +66,33 @@ final class ConductorWebKitSurfaceStore {
     }
 
     func interactionState(for tabID: WebTabID) -> Data? {
+        guard let state = webViews[tabID]?.interactionState else { return nil }
+        if let data = state as? Data {
+            return data
+        }
+        return try? NSKeyedArchiver.archivedData(withRootObject: state, requiringSecureCoding: false)
+    }
+
+    func runtimeState(for tabID: WebTabID) async -> ConductorWebRuntimeState? {
         guard let webView = webViews[tabID] else { return nil }
-        return webView.interactionState as? Data
+        let scrollY = try? await webView.evaluateJavaScript(Self.scrollYScript) as? Double
+        return ConductorWebRuntimeState(
+            entries: Self.navigationEntries(for: webView),
+            currentIndex: Self.currentNavigationIndex(for: webView),
+            scrollY: scrollY
+        )
+    }
+
+    static func navigationEntries(for webView: WKWebView) -> [WorkspaceWebNavigationEntry] {
+        let back = webView.backForwardList.backList.map(Self.navigationEntry)
+        let current = webView.backForwardList.currentItem.map { [Self.navigationEntry($0)] } ?? []
+        let forward = webView.backForwardList.forwardList.map(Self.navigationEntry)
+        return back + current + forward
+    }
+
+    static func currentNavigationIndex(for webView: WKWebView) -> Int? {
+        guard webView.backForwardList.currentItem != nil else { return nil }
+        return webView.backForwardList.backList.count
     }
 
     func remove(_ tabID: WebTabID) {
@@ -84,5 +119,24 @@ final class ConductorWebKitSurfaceStore {
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsMagnification = true
         return webView
+    }
+
+    private static func navigationEntry(_ item: WKBackForwardListItem) -> WorkspaceWebNavigationEntry {
+        WorkspaceWebNavigationEntry(url: item.url, title: item.title)
+    }
+
+    private static let scrollYScript = """
+    (() => {
+      const scroller = document.scrollingElement || document.documentElement || document.body;
+      const y = window.pageYOffset || (scroller ? scroller.scrollTop : 0) || 0;
+      return Number.isFinite(y) ? y : 0;
+    })();
+    """
+
+    private static func unarchivedInteractionState(from data: Data) -> Any? {
+        guard let unarchiver = try? NSKeyedUnarchiver(forReadingFrom: data) else { return nil }
+        unarchiver.requiresSecureCoding = false
+        defer { unarchiver.finishDecoding() }
+        return unarchiver.decodeObject(forKey: NSKeyedArchiveRootObjectKey)
     }
 }

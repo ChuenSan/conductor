@@ -24,6 +24,7 @@ final class TerminalSurfaceCoordinator {
         for tab: TerminalTabState,
         theme: TerminalTheme,
         terminalFontSize: CGFloat,
+        launchEnvironment: [String: String] = [:],
         handlers: TerminalSurfaceHandlers
     ) -> TerminalSurface {
         if let surface = surfaces[tab.id] {
@@ -33,7 +34,8 @@ final class TerminalSurfaceCoordinator {
             id: tab.id,
             theme: theme,
             terminalFontSize: terminalFontSize,
-            workingDirectory: tab.workingDirectory
+            workingDirectory: tab.workingDirectory,
+            launchEnvironment: launchEnvironment
         )
         handlers.install(surface)
         surfaces[tab.id] = surface

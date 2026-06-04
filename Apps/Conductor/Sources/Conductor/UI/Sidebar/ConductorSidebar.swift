@@ -251,28 +251,9 @@ struct ConductorSidebar: View {
         SidebarDockSurface(horizontalPadding: 0) {
             TokenRecordsSidebarCard {
                 finishWorkspaceRenameIfNeeded()
-                ConductorMotion.perform(ConductorMotion.panel) {
-                    ConductorUsageFeature.openTokenRecords(
-                        style: tokenRecordsPanelStyle,
-                        languageIdentifier: appearance.language.usageFeatureLanguageIdentifier)
-                }
+                model.performCommand(.openTokenRecords)
             }
         }
-    }
-
-    private var tokenRecordsPanelStyle: ConductorUsagePanelStyle {
-        ConductorUsagePanelStyle(
-            panelBase: theme.floatingPanelBase,
-            panelWash: theme.floatingPanelWash,
-            controlFill: theme.floatingControlFill,
-            controlStrongFill: theme.floatingControlStrongFill,
-            stroke: theme.floatingStroke,
-            separator: theme.floatingSeparator,
-            emphasis: theme.floatingEmphasis,
-            primaryText: theme.shellChromeText,
-            secondaryText: theme.shellChromeTextMuted.opacity(0.86),
-            tertiaryText: theme.shellChromeTextMuted.opacity(0.64),
-            usesDarkChrome: theme.usesDarkChrome)
     }
 
     private func commandTooltip(_ title: String, command: ConductorShellCommand, fallback: String) -> String {
@@ -350,7 +331,8 @@ struct ConductorSidebar: View {
                             icon: WorkspaceChromeGlyph.systemName(selected: row.selected),
                             selected: row.selected,
                             activeAgentCount: row.activeAgentCount,
-                            help: row.title,
+                            unreadCount: row.unreadCount,
+                            help: workspaceTooltip(for: row),
                             namespace: railSelectionNamespace
                         ) {
                             withoutShellAnimation {
@@ -399,13 +381,11 @@ struct ConductorSidebar: View {
             SidebarRailButton(
                 id: "sidebar-rail.token-records",
                 icon: "chart.bar.fill",
-                help: L("Token 记录", "Token Records"),
+                help: commandTooltip(L("Token 记录", "Token Records"), command: .openTokenRecords, fallback: "Usage"),
                 namespace: railSelectionNamespace
             ) {
                 finishWorkspaceRenameIfNeeded()
-                ConductorUsageFeature.openTokenRecords(
-                    style: tokenRecordsPanelStyle,
-                    languageIdentifier: appearance.language.usageFeatureLanguageIdentifier)
+                model.performCommand(.openTokenRecords)
             }
         }
     }
@@ -447,6 +427,8 @@ struct ConductorSidebar: View {
             splitCount: row.splitCount,
             terminalCount: row.terminalCount,
             activeAgentCount: row.activeAgentCount,
+            unreadCount: row.unreadCount,
+            metadata: row.metadata,
             selected: row.selected,
             visuallySelected: row.selected,
             selectionNamespace: sidebarSelectionNamespace,
@@ -464,6 +446,7 @@ struct ConductorSidebar: View {
             beginRenameWorkspace(row)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .macNativeTooltip(workspaceTooltip(for: row))
         .contextMenu {
             Button(L("重命名工作区...", "Rename Workspace...")) {
                 ConductorMotion.perform(ConductorMotion.selection) {
@@ -474,33 +457,95 @@ struct ConductorSidebar: View {
             Button(L("复制工作区", "Duplicate Workspace")) {
                 ConductorMotion.perform(ConductorMotion.layout) {
                     finishWorkspaceRenameIfNeeded()
-                    model.duplicateWorkspace(row.id)
+                    model.activateWorkspace(row.id, source: .sidebar)
+                    model.performCommand(.duplicateWorkspace)
+                }
+            }
+            if row.metadata?.rootPath != nil || row.metadata?.runningPorts.isEmpty == false {
+                Divider()
+            }
+            if row.metadata?.rootPath != nil {
+                Button(L("在 Finder 打开根目录", "Open Root in Finder")) {
+                    withoutShellAnimation {
+                        finishWorkspaceRenameIfNeeded(except: row.id)
+                        model.activateWorkspace(row.id, source: .sidebar)
+                        model.performCommand(.openCurrentWorkspaceRoot)
+                    }
+                }
+            }
+            if let port = row.metadata?.runningPorts.first {
+                Button(L("打开端口 :\(port)", "Open Port :\(port)")) {
+                    withoutShellAnimation {
+                        finishWorkspaceRenameIfNeeded(except: row.id)
+                        model.activateWorkspace(row.id, source: .sidebar)
+                        model.performCommand(.openCurrentWorkspaceFirstService)
+                    }
                 }
             }
             Divider()
             Button(L("关闭其他工作区", "Close Other Workspaces")) {
                 withoutShellAnimation {
                     finishWorkspaceRenameIfNeeded(except: row.id)
-                    model.closeOtherWorkspaces(keeping: row.id)
+                    model.activateWorkspace(row.id, source: .sidebar)
+                    model.performCommand(.closeOtherWorkspaces)
                 }
             }
             .disabled(!snapshot.canCloseWorkspace)
             Button(L("关闭右侧工作区", "Close Workspaces to the Right")) {
                 withoutShellAnimation {
                     finishWorkspaceRenameIfNeeded()
-                    model.closeWorkspacesToRight(of: row.id)
+                    model.activateWorkspace(row.id, source: .sidebar)
+                    model.performCommand(.closeWorkspacesToRight)
                 }
             }
-            .disabled(!snapshot.canCloseWorkspace)
+            .disabled(!canCloseWorkspacesToRight(of: row.id))
             Divider()
             Button(L("关闭工作区", "Close Workspace")) {
                 withoutShellAnimation {
                     finishWorkspaceRenameIfNeeded()
-                    model.closeWorkspace(row.id)
+                    model.activateWorkspace(row.id, source: .sidebar)
+                    model.performCommand(.closeCurrentWorkspace)
                 }
             }
             .disabled(!snapshot.canCloseWorkspace)
         }
+    }
+
+    private func workspaceTooltip(for row: WorkspaceChromeDisplayModel) -> String {
+        var lines = [row.title]
+        if let project = row.metadata?.projectName,
+           project != row.title {
+            lines.append(L("项目：\(project)", "Project: \(project)"))
+        }
+        if let root = row.metadata?.rootPath {
+            lines.append(L("路径：\(root)", "Path: \(root)"))
+        } else {
+            lines.append(row.subtitle)
+        }
+        lines.append(L("\(row.splitCount) 分屏 · \(row.terminalCount) 终端", "\(row.splitCount) panes · \(row.terminalCount) terminals"))
+        if let metadata = row.metadata {
+            if metadata.runningPorts.isEmpty {
+                lines.append(L("端口：未检测到运行中的服务", "Ports: no running service detected"))
+            } else {
+                let ports = metadata.runningPorts.prefix(4).map { ":\($0)" }.joined(separator: " ")
+                lines.append(L("端口：\(ports)", "Ports: \(ports)"))
+            }
+            if metadata.health != "ok" {
+                lines.append(L("状态：\(metadata.health)", "Health: \(metadata.health)"))
+            }
+        }
+        if row.activeAgentCount > 0 {
+            lines.append(L("\(row.activeAgentCount) 个 AI 终端运行中", "\(row.activeAgentCount) AI terminals running"))
+        }
+        if row.unreadCount > 0 {
+            lines.append(L("\(row.unreadCount) 条未读通知", "\(row.unreadCount) unread notifications"))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func canCloseWorkspacesToRight(of workspaceID: WorkspaceID) -> Bool {
+        guard let index = snapshot.workspaceIDs.firstIndex(of: workspaceID) else { return false }
+        return index < snapshot.workspaceIDs.count - 1
     }
 
     private func beginRenameWorkspace(_ row: WorkspaceChromeDisplayModel) {
@@ -655,14 +700,18 @@ struct WorkspaceChromeSnapshot: Equatable {
         RenderCounter.increment("workspace-chrome-snapshot")
         let selectedWorkspaceID = model.workspace.id
         let metadataSnapshot = model.metadataByTerminalID
+        let workspaceMetadata = model.workspaceMetadataSnapshots
         let rows = model.workspaces.map { workspace in
-            WorkspaceChromeDisplayModel(
+            let metadata = workspaceMetadata[workspace.id]
+            return WorkspaceChromeDisplayModel(
                 id: workspace.id,
                 title: workspace.title,
-                subtitle: Self.workspaceSubtitle(workspace, metadata: metadataSnapshot),
+                subtitle: Self.workspaceSubtitle(workspace, metadata: metadataSnapshot, workspaceMetadata: metadata),
                 splitCount: workspace.panes.count,
                 terminalCount: Self.workspaceTerminalCount(workspace),
                 activeAgentCount: Self.workspaceActiveAgentCount(workspace, metadata: metadataSnapshot),
+                unreadCount: model.attentionUnreadCount(for: workspace.id),
+                metadata: metadata,
                 selected: workspace.id == selectedWorkspaceID
             )
         }
@@ -708,8 +757,13 @@ struct WorkspaceChromeSnapshot: Equatable {
 
     private static func workspaceSubtitle(
         _ workspace: WorkspaceState,
-        metadata: [TerminalID: TerminalDisplayMetadata]
+        metadata: [TerminalID: TerminalDisplayMetadata],
+        workspaceMetadata: WorkspaceMetadataSnapshot?
     ) -> String {
+        if let rootPath = workspaceMetadata?.rootPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rootPath.isEmpty {
+            return abbreviatedPath(rootPath)
+        }
         let selectedTab = workspace.focusedPane?.selectedTab
         if let terminalID = selectedTab?.id,
            let directory = metadata[terminalID]?.workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -748,6 +802,8 @@ struct WorkspaceChromeDisplayModel: Identifiable, Equatable {
     let splitCount: Int
     let terminalCount: Int
     let activeAgentCount: Int
+    let unreadCount: Int
+    let metadata: WorkspaceMetadataSnapshot?
     let selected: Bool
 }
 
@@ -923,18 +979,6 @@ private struct SidebarDockButton: View {
     }
 }
 
-private struct SidebarSeparator: View {
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        Rectangle()
-            .fill(theme.shellStroke.opacity(0.38))
-            .frame(height: 1)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 4)
-    }
-}
-
 private struct CollapsedRailSeparator: View {
     @Environment(\.conductorTheme) private var theme
 
@@ -985,6 +1029,7 @@ private struct SidebarRailButton: View {
     var selected = false
     var disabled = false
     var activeAgentCount = 0
+    var unreadCount = 0
     let help: String
     let namespace: Namespace.ID
     let action: () -> Void
@@ -1028,6 +1073,12 @@ private struct SidebarRailButton: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                         .accessibilityHidden(true)
                 }
+
+                if unreadCount > 0 {
+                    SidebarRailUnreadBadge(count: unreadCount)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .accessibilityHidden(true)
+                }
             }
             .frame(width: 34, height: 34)
             .background {
@@ -1042,6 +1093,36 @@ private struct SidebarRailButton: View {
         .macNativeTooltip(help)
         .accessibilityLabel(help)
         .conductorHover($hovering)
+    }
+}
+
+private struct SidebarRailUnreadBadge: View {
+    let count: Int
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var title: String {
+        count > 99 ? "99+" : "\(count)"
+    }
+
+    private var foreground: Color {
+        theme.usesDarkChrome ? Color.white.opacity(0.95) : theme.floatingEmphasis
+    }
+
+    private var fill: Color {
+        theme.shellPanelBackground.opacity(theme.usesDarkChrome ? 0.98 : 0.94)
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.conductorSystem(size: 7.5, weight: .black, scale: fontScale))
+            .monospacedDigit()
+            .foregroundStyle(foreground)
+            .padding(.horizontal, count > 9 ? 3.5 : 4)
+            .frame(minWidth: 13)
+            .frame(height: 13)
+            .background(Capsule().fill(fill))
+            .overlay(Capsule().stroke(theme.floatingEmphasis.opacity(0.55), lineWidth: 0.7))
     }
 }
 
@@ -1063,36 +1144,14 @@ struct SidebarSectionTitle: View {
     }
 }
 
-private struct SidebarRow: View {
-    let icon: String
-    let title: String
-    let selected: Bool
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: icon)
-                .frame(width: 14)
-                .foregroundStyle(selected ? theme.floatingEmphasis.opacity(0.90) : ConductorDesign.secondaryText)
-            Text(title)
-                .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(selected ? 0.92 : 0.82))
-            Spacer()
-        }
-        .padding(.horizontal, 7)
-        .frame(height: 25)
-        .background(selected ? theme.shellSelectedFill : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.row))
-    }
-}
-
 private struct WorkspaceSidebarRow: View {
     let title: String
     let subtitle: String
     let splitCount: Int
     let terminalCount: Int
     let activeAgentCount: Int
+    let unreadCount: Int
+    let metadata: WorkspaceMetadataSnapshot?
     let selected: Bool
     let visuallySelected: Bool
     let selectionNamespace: Namespace.ID
@@ -1130,6 +1189,7 @@ private struct WorkspaceSidebarRow: View {
         .contentShape(rowShape)
         .animation(nil, value: editing)
         .animation(ConductorMotion.emphasized, value: activeAgentCount)
+        .animation(ConductorMotion.selection, value: unreadCount)
         .frame(maxWidth: .infinity, alignment: .leading)
         .conductorHover($hovering)
     }
@@ -1164,6 +1224,8 @@ private struct WorkspaceSidebarRow: View {
                 splitCount: splitCount,
                 terminalCount: terminalCount,
                 activeAgentCount: activeAgentCount,
+                unreadCount: unreadCount,
+                metadata: metadata,
                 selected: selected,
                 themeID: theme.id,
                 fontScaleID: fontScale.id
@@ -1185,13 +1247,6 @@ private struct WorkspaceSidebarRow: View {
             if visuallySelected {
                 rowShape
                     .fill(theme.shellSelectedFill.opacity(theme.usesDarkChrome ? 0.90 : 0.74))
-                HStack {
-                    RoundedRectangle(cornerRadius: 1.2, style: .continuous)
-                        .fill(theme.shellChromeText.opacity(theme.usesDarkChrome ? 0.32 : 0.22))
-                        .frame(width: 2, height: 24)
-                    Spacer()
-                }
-                .padding(.leading, 1)
             }
         }
         .allowsHitTesting(false)
@@ -1204,6 +1259,8 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
     let splitCount: Int
     let terminalCount: Int
     let activeAgentCount: Int
+    let unreadCount: Int
+    let metadata: WorkspaceMetadataSnapshot?
     let selected: Bool
     let themeID: String
     let fontScaleID: String
@@ -1216,6 +1273,8 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
             lhs.splitCount == rhs.splitCount &&
             lhs.terminalCount == rhs.terminalCount &&
             lhs.activeAgentCount == rhs.activeAgentCount &&
+            lhs.unreadCount == rhs.unreadCount &&
+            lhs.metadata == rhs.metadata &&
             lhs.selected == rhs.selected &&
             lhs.themeID == rhs.themeID &&
             lhs.fontScaleID == rhs.fontScaleID
@@ -1239,8 +1298,15 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 4)
+                    if unreadCount > 0 {
+                        unreadMetric(count: unreadCount)
+                    }
                     if activeAgentCount > 0 {
                         agentMetric(count: activeAgentCount)
+                    }
+                    if let health = metadata?.health,
+                       health != "ok" {
+                        healthMetric(health)
                     }
                 }
                 HStack(spacing: 4) {
@@ -1254,7 +1320,6 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                     Text(workspaceMetaText)
                         .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
                         .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .foregroundStyle(theme.shellChromeTextMuted.opacity(selected ? 0.72 : 0.58))
             }
@@ -1264,7 +1329,24 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
     }
 
     private var workspaceMetaText: String {
-        L("· \(splitCount) 分屏 · \(terminalCount) 终端", "· \(splitCount) panes · \(terminalCount) terminals")
+        var pieces = [
+            L("\(splitCount) 分屏", "\(splitCount) panes"),
+            L("\(terminalCount) 终端", "\(terminalCount) terminals")
+        ]
+        if let port = metadata?.runningPorts.first {
+            pieces.append(":\(port)")
+        }
+        return "· " + pieces.joined(separator: " · ")
+    }
+
+    private func healthMetric(_ health: String) -> some View {
+        Image(systemName: health == "metadata_partial" ? "exclamationmark.circle.fill" : "questionmark.circle.fill")
+            .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
+            .foregroundStyle(theme.usesDarkChrome ? Color.orange.opacity(0.92) : Color.orange.opacity(0.82))
+            .frame(width: 15, height: 15)
+            .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.18 : 0.10))
+            .clipShape(Circle())
+            .accessibilityLabel(L("工作区状态需要检查：\(health)", "Workspace needs attention: \(health)"))
     }
 
     private func agentMetric(count: Int) -> some View {
@@ -1287,45 +1369,23 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L("\(count) 个 AI 终端运行中", "\(count) AI terminals running"))
     }
-}
 
-private struct SidebarActionRow: View {
-    let icon: String
-    let title: String
-    var showsTitle = true
-    var disabled = false
-    var help: String? = nil
-    let action: () -> Void
-    @State private var hovering = false
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        Button {
-            action()
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: icon)
-                    .frame(width: 14)
-                if showsTitle {
-                    Text(title)
-                        .font(.conductorSystem(size: 12, weight: .medium, scale: fontScale))
-                    Spacer()
-                }
+    private func unreadMetric(count: Int) -> some View {
+        Text(count > 99 ? "99+" : "\(count)")
+            .font(.conductorSystem(size: 8.5, weight: .black, scale: fontScale))
+            .monospacedDigit()
+            .foregroundStyle(selected ? Color.white.opacity(0.96) : theme.floatingEmphasis)
+            .padding(.horizontal, 4.5)
+            .frame(height: 15)
+            .background {
+                Capsule()
+                    .fill(selected ? theme.shellHoverFill.opacity(0.44) : theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.18 : 0.11))
             }
-            .foregroundStyle(theme.shellChromeTextMuted.opacity(0.86))
-            .padding(.horizontal, showsTitle ? 8 : 0)
-            .frame(width: showsTitle ? nil : 34, height: showsTitle ? 28 : 34)
-            .background(hovering ? theme.shellHoverFill.opacity(0.56) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: showsTitle ? ConductorTokens.Radius.row : 11))
-            .contentShape(RoundedRectangle(cornerRadius: showsTitle ? ConductorTokens.Radius.row : 11))
-        }
-        .buttonStyle(ConductorPressButtonStyle())
-        .disabled(disabled)
-        .opacity(disabled ? 0.38 : 1)
-        .scaleEffect(hovering && !disabled && !showsTitle ? 1.018 : 1)
-        .animation(ConductorMotion.micro, value: disabled)
-        .conductorHover($hovering, animation: nil)
-        .macNativeTooltip(help ?? title, enabled: !showsTitle)
+            .overlay {
+                Capsule()
+                    .stroke(theme.floatingEmphasis.opacity(selected ? 0.30 : 0.22), lineWidth: 0.6)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(L("\(count) 条未读通知", "\(count) unread notifications"))
     }
 }

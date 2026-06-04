@@ -156,6 +156,34 @@ struct KeyboardShortcutPreferences: Codable, Equatable {
         return defaultShortcut
     }
 
+    func hasCustomShortcut(for command: ConductorShellCommand) -> Bool {
+        customShortcuts[command.rawValue] != nil
+    }
+
+    func defaultShortcut(for command: ConductorShellCommand) -> KeyboardShortcutDefinition? {
+        Self.defaultShortcuts[command]
+    }
+
+    func conflictingCommand(
+        for shortcut: KeyboardShortcutDefinition,
+        assigningTo command: ConductorShellCommand,
+        in commands: [ConductorShellCommand] = ConductorShellCommand.allCases
+    ) -> ConductorShellCommand? {
+        for candidate in commands where candidate != command {
+            if customShortcuts[candidate.rawValue] == shortcut {
+                return candidate
+            }
+        }
+        for candidate in commands where candidate != command && customShortcuts[candidate.rawValue] == nil {
+            if let defaultShortcut = Self.defaultShortcuts[candidate],
+               defaultShortcut == shortcut,
+               !isDefaultShortcutShadowed(defaultShortcut, for: candidate) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
     func displayShortcut(for command: ConductorShellCommand, fallback: String) -> String {
         if let shortcut = shortcut(for: command) {
             return shortcut.displayTitle
@@ -195,6 +223,56 @@ struct KeyboardShortcutPreferences: Codable, Equatable {
 
     mutating func resetAll() {
         customShortcuts.removeAll()
+    }
+
+    func exportProfile() -> KeyboardShortcutProfile {
+        let entries = customShortcuts
+            .compactMap { key, shortcut -> KeyboardShortcutProfile.Entry? in
+                guard ConductorShellCommand(rawValue: key) != nil else { return nil }
+                return KeyboardShortcutProfile.Entry(command: key, shortcut: shortcut)
+            }
+            .sorted { $0.command < $1.command }
+        return KeyboardShortcutProfile(entries: entries)
+    }
+
+    mutating func importProfile(_ profile: KeyboardShortcutProfile) -> KeyboardShortcutProfileImportResult {
+        var next = KeyboardShortcutPreferences()
+        var imported = 0
+        var ignoredUnknownCommands = 0
+        var rejectedShortcuts = 0
+        var replacedConflicts = 0
+        var seenCommands = Set<String>()
+
+        for entry in profile.entries {
+            guard !seenCommands.contains(entry.command) else {
+                rejectedShortcuts += 1
+                continue
+            }
+            seenCommands.insert(entry.command)
+
+            guard let command = ConductorShellCommand(rawValue: entry.command) else {
+                ignoredUnknownCommands += 1
+                continue
+            }
+            guard entry.shortcut.modifiers.contains(.command),
+                  !entry.shortcut.isReservedSystemShortcut else {
+                rejectedShortcuts += 1
+                continue
+            }
+            if next.conflictingCommand(for: entry.shortcut, assigningTo: command) != nil {
+                replacedConflicts += 1
+            }
+            next.set(entry.shortcut, for: command)
+            imported += 1
+        }
+
+        self = next
+        return KeyboardShortcutProfileImportResult(
+            importedCount: imported,
+            ignoredUnknownCommandCount: ignoredUnknownCommands,
+            rejectedShortcutCount: rejectedShortcuts,
+            replacedConflictCount: replacedConflicts
+        )
     }
 
     private func isDefaultShortcutShadowed(
@@ -270,6 +348,72 @@ struct KeyboardShortcutPreferences: Codable, Equatable {
         .findPrevious: shortcut("g", [.command, .shift]),
         .flashFocusedPane: shortcut("h", [.command, .shift])
     ]
+}
+
+struct KeyboardShortcutProfile: Codable, Equatable {
+    static let currentSchemaVersion = 1
+
+    struct Entry: Codable, Equatable {
+        var command: String
+        var shortcut: KeyboardShortcutDefinition
+    }
+
+    var schemaVersion: Int
+    var app: String
+    var exportedAt: Date
+    var entries: [Entry]
+
+    init(
+        schemaVersion: Int = Self.currentSchemaVersion,
+        app: String = "Conductor",
+        exportedAt: Date = Date(),
+        entries: [Entry]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.app = app
+        self.exportedAt = exportedAt
+        self.entries = entries
+    }
+}
+
+struct KeyboardShortcutProfileImportResult: Equatable {
+    var importedCount: Int
+    var ignoredUnknownCommandCount: Int
+    var rejectedShortcutCount: Int
+    var replacedConflictCount: Int
+}
+
+enum KeyboardShortcutProfileError: LocalizedError {
+    case unsupportedSchemaVersion(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedSchemaVersion(let version):
+            ConductorLocalization.text(
+                zh: "不支持的快捷键配置版本：\(version)",
+                en: "Unsupported shortcut profile version: \(version)"
+            )
+        }
+    }
+}
+
+enum KeyboardShortcutProfileCodec {
+    static func encode(_ profile: KeyboardShortcutProfile) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(profile)
+    }
+
+    static func decode(_ data: Data) throws -> KeyboardShortcutProfile {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let profile = try decoder.decode(KeyboardShortcutProfile.self, from: data)
+        guard profile.schemaVersion <= KeyboardShortcutProfile.currentSchemaVersion else {
+            throw KeyboardShortcutProfileError.unsupportedSchemaVersion(profile.schemaVersion)
+        }
+        return profile
+    }
 }
 
 private extension NSEvent {

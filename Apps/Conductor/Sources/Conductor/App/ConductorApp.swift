@@ -109,6 +109,10 @@ final class ConductorWindow: NSWindow {
             return true
         }
 
+        if Self.isTextEditingResponder(firstResponder) {
+            return super.performKeyEquivalent(with: event)
+        }
+
         if let terminalHost = Self.owningTerminalHost(for: firstResponder) {
             if routeAppShortcut?(event) == true {
                 return true
@@ -131,7 +135,8 @@ final class ConductorWindow: NSWindow {
     private func performTextEditingKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.type == .keyDown,
               let responder = firstResponder,
-              Self.owningTerminalHost(for: responder) == nil else {
+              Self.owningTerminalHost(for: responder) == nil,
+              Self.isTextEditingResponder(responder) else {
             return false
         }
         let flags = event.modifierFlags
@@ -194,6 +199,18 @@ final class ConductorWindow: NSWindow {
         }
         let action = NSSelectorFromString(redo ? "redo:" : "undo:")
         return responder.tryToPerform(action, with: self) || NSApp.sendAction(action, to: nil, from: self)
+    }
+
+    private static func isTextEditingResponder(_ responder: NSResponder?) -> Bool {
+        guard let responder else { return false }
+        if let textView = responder as? NSTextView {
+            return textView.isFieldEditor || textView.isEditable
+        }
+        if let control = responder as? NSControl,
+           control.currentEditor() != nil {
+            return true
+        }
+        return false
     }
 
     private func isChromeBorderDoubleClick(_ event: NSEvent) -> Bool {
@@ -283,6 +300,7 @@ final class ConductorHostingView<Content: View>: NSHostingView<Content> {
 final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSWindowDelegate {
     private var window: ConductorWindow?
     private var codexBarRuntime: CodexBarEmbeddedRuntime?
+    private var controlServer: ConductorControlServer?
     private var agentHookObserver: NSObjectProtocol?
     private var agentHookDrainTimer: Timer?
     private var shellKeyMonitor: Any?
@@ -335,6 +353,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         }
         installShellKeyMonitor()
         installAgentHookObserver()
+        startControlServer()
         mainThreadWatchdog.start()
         GhosttyAppRuntime.shared.actionDelegate = model
         prepareStressWorkspaceIfRequested()
@@ -355,8 +374,11 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
-        model.installAgentReplyNotificationActivationHandler { [weak self] terminalID in
-            self?.activateTerminalFromAgentReplyNotification(terminalID)
+        model.installAgentReplyNotificationActivationHandler { [weak self] attentionEventID, terminalID in
+            self?.activateTargetFromAgentReplyNotification(
+                attentionEventID: attentionEventID,
+                terminalID: terminalID
+            )
         }
         model.installAgentReplyNotificationHooks(bridgePath: Bundle.main.executablePath)
         startCodexBarIfEnabled()
@@ -364,12 +386,15 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         installMainMenu()
         model.startUpdateChecksIfNeeded()
         runShortcutAutomationIfRequested()
+        runShortcutProfileAutomationIfRequested()
+        runMenuAutomationIfRequested()
         runSmokeAutomationIfRequested()
         runFocusAutomationIfRequested()
         runLayoutAutomationIfRequested()
         runLifecycleAutomationIfRequested()
         runWorkspaceAutomationIfRequested()
         runShellPanelAutomationIfRequested()
+        runNotificationAutomationIfRequested()
         runStressAutomationIfRequested()
         runResizeStressAutomationIfRequested()
         ConductorLog.app.info("Conductor window launched")
@@ -393,6 +418,8 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         ConductorLog.app.info("Conductor will terminate")
         Self.appendStressTrace("applicationWillTerminate", to: ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"])
         model.flushPersistence()
+        controlServer?.stop()
+        controlServer = nil
         codexBarRuntime?.stop()
         if let agentHookObserver {
             DistributedNotificationCenter.default().removeObserver(agentHookObserver)
@@ -461,6 +488,15 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         fileMenu.addItem(menuItem(L("新开终端", "New Terminal"), command: .newTerminal, #selector(newTerminalCommand)))
         fileMenu.addItem(menuItem(L("新建网页标签", "New Web Tab"), command: .newWebTab, #selector(newWebTabCommand)))
         fileMenu.addItem(NSMenuItem.separator())
+        fileMenu.addItem(menuItem(L("重命名当前工作区", "Rename Current Workspace"), command: .renameCurrentWorkspace, #selector(renameCurrentWorkspaceCommand)))
+        fileMenu.addItem(menuItem(L("复制工作区", "Duplicate Workspace"), command: .duplicateWorkspace, #selector(duplicateWorkspaceCommand)))
+        fileMenu.addItem(menuItem(L("关闭其他工作区", "Close Other Workspaces"), command: .closeOtherWorkspaces, #selector(closeOtherWorkspacesCommand)))
+        fileMenu.addItem(menuItem(L("关闭右侧工作区", "Close Workspaces to the Right"), command: .closeWorkspacesToRight, #selector(closeWorkspacesToRightCommand)))
+        fileMenu.addItem(menuItem(L("关闭当前工作区", "Close Current Workspace"), command: .closeCurrentWorkspace, #selector(closeCurrentWorkspaceCommand)))
+        fileMenu.addItem(NSMenuItem.separator())
+        fileMenu.addItem(menuItem(L("打开工作区根目录", "Open Workspace Root"), command: .openCurrentWorkspaceRoot, #selector(openCurrentWorkspaceRootCommand)))
+        fileMenu.addItem(menuItem(L("打开本地服务", "Open Local Service"), command: .openCurrentWorkspaceFirstService, #selector(openCurrentWorkspaceFirstServiceCommand)))
+        fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(menuItem(L("关闭标签", "Close Tab"), command: .closeSelectedTab, #selector(closeTabCommand)))
         fileMenu.addItem(menuItem(L("关闭分屏", "Close Pane"), command: .closeFocusedPane, #selector(closePaneCommand)))
         fileMenuItem.submenu = fileMenu
@@ -490,13 +526,18 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let viewMenuItem = NSMenuItem()
         viewMenuItem.title = L("视图", "View")
         let viewMenu = NSMenu(title: L("视图", "View"))
-        viewMenu.addItem(menuItem(L("工作区总览", "Workspace Overview"), command: .toggleWorkspaceOverview, #selector(workspaceOverviewCommand)))
+        viewMenu.addItem(menuItem(L("工作区面板", "Workspaces"), command: .toggleWorkspaceOverview, #selector(workspaceOverviewCommand)))
         viewMenu.addItem(menuItem(L("命令面板", "Command Palette"), command: .toggleCommandPalette, #selector(commandPaletteCommand)))
         viewMenu.addItem(menuItem(L("聚焦网页地址", "Focus Web Address"), command: .focusWebAddress, #selector(focusWebAddressCommand)))
+        viewMenu.addItem(menuItem(L("网页后退", "Web Back"), command: .goBackSelectedWebTab, #selector(goBackSelectedWebTabCommand)))
+        viewMenu.addItem(menuItem(L("网页前进", "Web Forward"), command: .goForwardSelectedWebTab, #selector(goForwardSelectedWebTabCommand)))
         viewMenu.addItem(menuItem(L("重新载入网页", "Reload Web Page"), command: .reloadSelectedWebTab, #selector(reloadSelectedWebTabCommand)))
         viewMenu.addItem(menuItem(L("在浏览器中打开网页", "Open Web Page in Browser"), command: .openSelectedWebTabExternally, #selector(openSelectedWebTabExternallyCommand)))
         viewMenu.addItem(menuItem(L("复制网页 URL", "Copy Web URL"), command: .copySelectedWebTabURL, #selector(copySelectedWebTabURLCommand)))
         viewMenu.addItem(menuItem(L("复制网页引用", "Copy Web Reference"), command: .copySelectedWebTabReference, #selector(copySelectedWebTabReferenceCommand)))
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(menuItem(L("系统应用打开当前文件", "Open Current File in System App"), command: .openSelectedFileExternally, #selector(openSelectedFileExternallyCommand)))
+        viewMenu.addItem(menuItem(L("在 Finder 中显示当前文件", "Reveal Current File in Finder"), command: .revealSelectedFileInFinder, #selector(revealSelectedFileInFinderCommand)))
         viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(menuItem(L("打开当前目录", "Open Current Directory"), command: .openFocusedDirectory, #selector(openCurrentDirectoryCommand)))
         viewMenu.addItem(menuItem(L("复制当前目录路径", "Copy Current Directory Path"), command: .copyFocusedDirectory, #selector(copyCurrentDirectoryCommand)))
@@ -543,6 +584,20 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             .newTerminal
         case #selector(newWebTabCommand):
             .newWebTab
+        case #selector(renameCurrentWorkspaceCommand):
+            .renameCurrentWorkspace
+        case #selector(duplicateWorkspaceCommand):
+            .duplicateWorkspace
+        case #selector(closeOtherWorkspacesCommand):
+            .closeOtherWorkspaces
+        case #selector(closeWorkspacesToRightCommand):
+            .closeWorkspacesToRight
+        case #selector(closeCurrentWorkspaceCommand):
+            .closeCurrentWorkspace
+        case #selector(openCurrentWorkspaceRootCommand):
+            .openCurrentWorkspaceRoot
+        case #selector(openCurrentWorkspaceFirstServiceCommand):
+            .openCurrentWorkspaceFirstService
         case #selector(closeTabCommand):
             .closeSelectedTab
         case #selector(closePaneCommand):
@@ -575,6 +630,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             .copyFocusedDirectory
         case #selector(focusWebAddressCommand):
             .focusWebAddress
+        case #selector(goBackSelectedWebTabCommand):
+            .goBackSelectedWebTab
+        case #selector(goForwardSelectedWebTabCommand):
+            .goForwardSelectedWebTab
         case #selector(reloadSelectedWebTabCommand):
             .reloadSelectedWebTab
         case #selector(openSelectedWebTabExternallyCommand):
@@ -583,6 +642,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             .copySelectedWebTabURL
         case #selector(copySelectedWebTabReferenceCommand):
             .copySelectedWebTabReference
+        case #selector(openSelectedFileExternallyCommand):
+            .openSelectedFileExternally
+        case #selector(revealSelectedFileInFinderCommand):
+            .revealSelectedFileInFinder
         case #selector(contextSearchCommand):
             .showTerminalSearch
         case #selector(findNextCommand):
@@ -622,14 +685,24 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         codexBarRuntime = runtime
     }
 
+    private func startControlServer() {
+        let router = ConductorControlRouter(model: model)
+        let server = ConductorControlServer(router: router)
+        server.start()
+        controlServer = server
+    }
+
     private static var isAutomationRun: Bool {
         let environment = ProcessInfo.processInfo.environment
         return environment["CONDUCTOR_SMOKE_AUTORUN"] == "1" ||
             environment["CONDUCTOR_SHORTCUT_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_SHORTCUT_PROFILE_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_MENU_AUTORUN"] == "1" ||
             environment["CONDUCTOR_FOCUS_AUTORUN"] == "1" ||
             environment["CONDUCTOR_LAYOUT_AUTORUN"] == "1" ||
             environment["CONDUCTOR_LIFECYCLE_AUTORUN"] == "1" ||
             environment["CONDUCTOR_SHELL_PANEL_AUTORUN"] == "1" ||
+            environment["CONDUCTOR_NOTIFICATION_AUTORUN"] == "1" ||
             environment["CONDUCTOR_STRESS_AUTORUN"] == "1" ||
             environment["CONDUCTOR_RESIZE_STRESS_AUTORUN"] == "1" ||
             environment["CONDUCTOR_WORKSPACE_AUTORUN"] == "1"
@@ -641,7 +714,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             return false
         }
         if let command = model.appearance.keyboardShortcuts.command(matching: event) {
-            if model.settingsPanelVisible, !command.allowsWhenSettingsPanelVisible {
+            if !shortcutCommandCanPassVisibleShellPanel(command) {
                 return true
             }
             guard model.canPerformCommand(command) else { return false }
@@ -649,11 +722,39 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             return true
         }
 
-        if model.settingsPanelVisible,
+        if shortcutBlockingShellPanelVisible,
            event.charactersIgnoringModifiers?.lowercased() != "q" {
             return true
         }
         return false
+    }
+
+    private var shortcutBlockingShellPanelVisible: Bool {
+        model.commandPaletteVisible ||
+            model.settingsPanelVisible ||
+            model.workspaceOverviewVisible ||
+            model.terminalSearchVisible
+    }
+
+    private func shortcutCommandCanPassVisibleShellPanel(_ command: ConductorShellCommand) -> Bool {
+        if model.commandPaletteVisible {
+            return command == .toggleCommandPalette
+        }
+        if model.settingsPanelVisible {
+            return command.allowsWhenSettingsPanelVisible
+        }
+        if model.workspaceOverviewVisible {
+            return command == .toggleWorkspaceOverview
+        }
+        if model.terminalSearchVisible {
+            switch command {
+            case .showTerminalSearch, .findNext, .findPrevious:
+                return true
+            default:
+                return false
+            }
+        }
+        return true
     }
 
     private func scheduleCommand(_ command: @escaping @MainActor () -> Void) {
@@ -696,6 +797,34 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     @objc private func newWebTabCommand() {
         scheduleCommand(.newWebTab)
+    }
+
+    @objc private func renameCurrentWorkspaceCommand() {
+        scheduleCommand(.renameCurrentWorkspace)
+    }
+
+    @objc private func duplicateWorkspaceCommand() {
+        scheduleCommand(.duplicateWorkspace)
+    }
+
+    @objc private func closeOtherWorkspacesCommand() {
+        scheduleCommand(.closeOtherWorkspaces)
+    }
+
+    @objc private func closeWorkspacesToRightCommand() {
+        scheduleCommand(.closeWorkspacesToRight)
+    }
+
+    @objc private func closeCurrentWorkspaceCommand() {
+        scheduleCommand(.closeCurrentWorkspace)
+    }
+
+    @objc private func openCurrentWorkspaceRootCommand() {
+        scheduleCommand(.openCurrentWorkspaceRoot)
+    }
+
+    @objc private func openCurrentWorkspaceFirstServiceCommand() {
+        scheduleCommand(.openCurrentWorkspaceFirstService)
     }
 
     @objc private func closeTabCommand() {
@@ -771,6 +900,14 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         scheduleCommand(.focusWebAddress)
     }
 
+    @objc private func goBackSelectedWebTabCommand() {
+        scheduleCommand(.goBackSelectedWebTab)
+    }
+
+    @objc private func goForwardSelectedWebTabCommand() {
+        scheduleCommand(.goForwardSelectedWebTab)
+    }
+
     @objc private func reloadSelectedWebTabCommand() {
         scheduleCommand(.reloadSelectedWebTab)
     }
@@ -785,6 +922,14 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
 
     @objc private func copySelectedWebTabReferenceCommand() {
         scheduleCommand(.copySelectedWebTabReference)
+    }
+
+    @objc private func openSelectedFileExternallyCommand() {
+        scheduleCommand(.openSelectedFileExternally)
+    }
+
+    @objc private func revealSelectedFileInFinderCommand() {
+        scheduleCommand(.revealSelectedFileInFinder)
     }
 
     @objc private func contextSearchCommand() {
@@ -869,7 +1014,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         return events.count
     }
 
-    private func activateTerminalFromAgentReplyNotification(_ terminalID: TerminalID) {
+    private func activateTargetFromAgentReplyNotification(attentionEventID: UUID?, terminalID: TerminalID?) {
         if window == nil {
             didStart = false
             startApplication()
@@ -878,7 +1023,10 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.deminiaturize(nil)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        model.focusTerminal(terminalID)
+        _ = model.focusAttentionNotificationResponse(
+            attentionEventID: attentionEventID,
+            terminalID: terminalID
+        )
         if let tab = model.workspace.focusedPane?.selectedTab {
             let surface = model.surface(for: tab)
             surface.attachIfPossible()
@@ -945,6 +1093,85 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         }
     }
 
+    private func runShortcutProfileAutomationIfRequested() {
+        guard ProcessInfo.processInfo.environment["CONDUCTOR_SHORTCUT_PROFILE_AUTORUN"] == "1" else { return }
+        let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_SHORTCUT_PROFILE_OUTPUT"] ?? "/tmp/conductor-shortcut-profile-ok.txt"
+        let originalAppearance = model.appearance
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self else { return }
+            let tempDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+                .appendingPathComponent("conductor-shortcut-profile-\(UUID().uuidString)", isDirectory: true)
+            let importURL = tempDirectory.appendingPathComponent("import.json")
+            let exportURL = tempDirectory.appendingPathComponent("export.json")
+            var status = "invalid"
+            var imported = 0
+            var unknown = 0
+            var rejected = 0
+            var conflicts = 0
+            var exported = 0
+
+            do {
+                try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+                let profile = KeyboardShortcutProfile(
+                    exportedAt: Date(timeIntervalSince1970: 0),
+                    entries: [
+                        .init(command: ConductorShellCommand.newTerminal.rawValue, shortcut: KeyboardShortcutDefinition(key: "t", modifiers: [.command, .option])),
+                        .init(command: ConductorShellCommand.splitRight.rawValue, shortcut: KeyboardShortcutDefinition(key: "d", modifiers: [.command, .option])),
+                        .init(command: "removedCommand", shortcut: KeyboardShortcutDefinition(key: "u", modifiers: [.command, .option])),
+                        .init(command: ConductorShellCommand.toggleSettings.rawValue, shortcut: KeyboardShortcutDefinition(key: "q", modifiers: [.command])),
+                        .init(command: ConductorShellCommand.newWorkspace.rawValue, shortcut: KeyboardShortcutDefinition(key: "t", modifiers: [.command, .option]))
+                    ]
+                )
+                try KeyboardShortcutProfileCodec.encode(profile).write(to: importURL, options: [.atomic])
+
+                let result = try self.model.importKeyboardShortcutProfile(from: importURL)
+                imported = result.importedCount
+                unknown = result.ignoredUnknownCommandCount
+                rejected = result.rejectedShortcutCount
+                conflicts = result.replacedConflictCount
+                exported = try self.model.exportKeyboardShortcutProfile(to: exportURL)
+                let exportedProfile = try KeyboardShortcutProfileCodec.decode(Data(contentsOf: exportURL))
+
+                let newWorkspaceShortcut = self.model.appearance.keyboardShortcuts.customShortcuts[ConductorShellCommand.newWorkspace.rawValue]?.displayTitle
+                let newTerminalIsDefault = !self.model.appearance.keyboardShortcuts.hasCustomShortcut(for: .newTerminal)
+                let splitShortcut = self.model.appearance.keyboardShortcuts.customShortcuts[ConductorShellCommand.splitRight.rawValue]?.displayTitle
+                if imported == 3 &&
+                    unknown == 1 &&
+                    rejected == 1 &&
+                    conflicts == 1 &&
+                    exported == 2 &&
+                    exportedProfile.entries.count == 2 &&
+                    newWorkspaceShortcut == "Cmd-Opt-T" &&
+                    newTerminalIsDefault &&
+                    splitShortcut == "Cmd-Opt-D" {
+                    status = "ok"
+                }
+            } catch {
+                ConductorLog.app.error("Shortcut profile automation failed: \(error.localizedDescription)")
+            }
+
+            let summary = [
+                "status=\(status)",
+                "shortcut-profile=import-export",
+                "imported=\(imported)",
+                "unknown=\(unknown)",
+                "rejected=\(rejected)",
+                "conflicts=\(conflicts)",
+                "exported=\(exported)"
+            ].joined(separator: "\n")
+
+            do {
+                try summary.write(toFile: outputPath, atomically: true, encoding: .utf8)
+            } catch {
+                ConductorLog.app.error("Shortcut profile automation output write failed: \(error.localizedDescription)")
+            }
+            self.model.appearance = originalAppearance
+            self.model.flushPersistence()
+            NSApp.terminate(nil)
+        }
+    }
+
     private func performShortcutAutomationStep(
         _ shortcuts: [(String, String, NSEvent.ModifierFlags, UInt16)],
         index: Int,
@@ -953,12 +1180,21 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         originalTheme: TerminalTheme
     ) {
         guard index < shortcuts.count else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [model] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self else { return }
+                let model = self.model
+                let terminalCount = model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
+                let workspaceValid = self.workspaceIsValid(model.workspace)
+                let expectedShape = model.workspace.panes.count == 3 &&
+                    terminalCount == 3 &&
+                    model.workspace.isZoomed
                 let summary = [
-                    "status=ok",
+                    "status=\(workspaceValid && expectedShape ? "ok" : "invalid")",
                     "shortcut=perform-key-equivalent",
+                    "workspaceValid=\(workspaceValid)",
+                    "expectedShape=\(expectedShape)",
                     "panes=\(model.workspace.panes.count)",
-                    "terminals=\(model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count })",
+                    "terminals=\(terminalCount)",
                     "zoomed=\(model.workspace.isZoomed)"
                 ].joined(separator: "\n")
 
@@ -1001,6 +1237,56 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
                 originalWorkspace: originalWorkspace,
                 originalTheme: originalTheme
             )
+        }
+    }
+
+    private func runMenuAutomationIfRequested() {
+        guard ProcessInfo.processInfo.environment["CONDUCTOR_MENU_AUTORUN"] == "1" else { return }
+        let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_MENU_OUTPUT"] ?? "/tmp/conductor-menu-ok.txt"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self else { return }
+            let checks: [(String, Selector, ConductorShellCommand)] = [
+                ("web-back", #selector(self.goBackSelectedWebTabCommand), .goBackSelectedWebTab),
+                ("web-forward", #selector(self.goForwardSelectedWebTabCommand), .goForwardSelectedWebTab),
+                ("file-open-external", #selector(self.openSelectedFileExternallyCommand), .openSelectedFileExternally),
+                ("file-reveal-finder", #selector(self.revealSelectedFileInFinderCommand), .revealSelectedFileInFinder),
+                ("duplicate-workspace", #selector(self.duplicateWorkspaceCommand), .duplicateWorkspace),
+                ("close-other-workspaces", #selector(self.closeOtherWorkspacesCommand), .closeOtherWorkspaces),
+                ("close-workspaces-to-right", #selector(self.closeWorkspacesToRightCommand), .closeWorkspacesToRight),
+                ("close-current-workspace", #selector(self.closeCurrentWorkspaceCommand), .closeCurrentWorkspace),
+                ("workspace-open-root", #selector(self.openCurrentWorkspaceRootCommand), .openCurrentWorkspaceRoot),
+                ("workspace-open-service", #selector(self.openCurrentWorkspaceFirstServiceCommand), .openCurrentWorkspaceFirstService),
+                ("rename-workspace", #selector(self.renameCurrentWorkspaceCommand), .renameCurrentWorkspace)
+            ]
+            let menuItems = NSApp.mainMenu?.items.flatMap { item -> [NSMenuItem] in
+                guard let submenu = item.submenu else { return [] }
+                return submenu.items
+            } ?? []
+            let failures = checks.compactMap { id, selector, expectedCommand -> String? in
+                guard self.command(for: selector) == expectedCommand else {
+                    return "\(id):mapping"
+                }
+                guard menuItems.contains(where: { $0.action == selector }) else {
+                    return "\(id):missing-menu-item"
+                }
+                return nil
+            }
+            let text: String
+            if failures.isEmpty {
+                text = [
+                    "status=ok",
+                    "menu=canonical-actions",
+                    "checked=\(checks.count)"
+                ].joined(separator: "\n") + "\n"
+            } else {
+                text = [
+                    "status=failed",
+                    "menu=canonical-actions",
+                    "failures=\(failures.joined(separator: ","))"
+                ].joined(separator: "\n") + "\n"
+            }
+            try? text.write(toFile: outputPath, atomically: true, encoding: .utf8)
+            NSApp.terminate(nil)
         }
     }
 
@@ -1324,72 +1610,285 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         let originalWorkspace = model.workspace
         let originalTheme = model.theme
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [model] in
-            let dismissesEmpty = model.dismissVisibleShellPanel()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.runShellPanelAutomation(
+                    outputPath: outputPath,
+                    originalWorkspace: originalWorkspace,
+                    originalTheme: originalTheme
+                )
+            }
+        }
+    }
 
-            model.toggleSettingsPanel()
-            let settingsOpenedAlone = model.settingsPanelVisible &&
+    private func runShellPanelAutomation(
+        outputPath: String,
+        originalWorkspace: WorkspaceState,
+        originalTheme: TerminalTheme
+    ) async {
+        let model = self.model
+        let dismissesEmpty = model.dismissVisibleShellPanel()
+
+        model.toggleSettingsPanel()
+        let settingsOpenedAlone = model.settingsPanelVisible &&
+            !model.commandPaletteVisible &&
+            !model.workspaceOverviewVisible
+        let settingsShortcutsBlocked = await shortcutContainmentProbe(events: Self.allShortcutContainmentEvents) {
+            model.settingsPanelVisible &&
                 !model.commandPaletteVisible &&
                 !model.workspaceOverviewVisible
-            let settingsDismissed = model.dismissVisibleShellPanel() &&
-                !model.settingsPanelVisible
+        }
+        let settingsDismissed = model.dismissVisibleShellPanel() &&
+            !model.settingsPanelVisible
 
-            model.toggleCommandPalette()
-            let commandOpenedAlone = model.commandPaletteVisible &&
+        model.toggleCommandPalette()
+        let commandOpenedAlone = model.commandPaletteVisible &&
+            !model.settingsPanelVisible &&
+            !model.workspaceOverviewVisible
+        let commandShortcutsBlocked = await shortcutContainmentProbe(events: Self.shortcutContainmentEvents(excluding: "k")) {
+            model.commandPaletteVisible &&
                 !model.settingsPanelVisible &&
                 !model.workspaceOverviewVisible
-            let commandDismissed = model.dismissVisibleShellPanel() &&
-                !model.commandPaletteVisible
+        }
+        let commandDismissed = model.dismissVisibleShellPanel() &&
+            !model.commandPaletteVisible
 
-            model.toggleWorkspaceOverview()
-            let overviewOpenedAlone = model.workspaceOverviewVisible &&
+        model.toggleWorkspaceOverview()
+        let overviewOpenedAlone = model.workspaceOverviewVisible &&
+            !model.commandPaletteVisible &&
+            !model.settingsPanelVisible
+        let overviewShortcutsBlocked = await shortcutContainmentProbe(events: Self.shortcutContainmentEvents(excluding: "o")) {
+            model.workspaceOverviewVisible &&
                 !model.commandPaletteVisible &&
                 !model.settingsPanelVisible
-            let overviewDismissed = model.dismissVisibleShellPanel() &&
-                !model.workspaceOverviewVisible
-
-            let status = !dismissesEmpty &&
-                settingsOpenedAlone &&
-                settingsDismissed &&
-                commandOpenedAlone &&
-                commandDismissed &&
-                overviewOpenedAlone &&
-                overviewDismissed
-
-            let summary = [
-                "status=\(status ? "ok" : "invalid")",
-                "shell-panels=dismiss",
-                "empty=\(!dismissesEmpty)",
-                "settings=\(settingsOpenedAlone && settingsDismissed)",
-                "command=\(commandOpenedAlone && commandDismissed)",
-                "overview=\(overviewOpenedAlone && overviewDismissed)"
-            ].joined(separator: "\n")
-
-            do {
-                try summary.write(toFile: outputPath, atomically: true, encoding: .utf8)
-            } catch {
-                ConductorLog.app.error("Shell panel automation output write failed: \(error.localizedDescription)")
-            }
-            model.workspace = originalWorkspace
-            model.theme = originalTheme
-            model.flushPersistence()
-            NSApp.terminate(nil)
         }
+        let overviewDismissed = model.dismissVisibleShellPanel() &&
+            !model.workspaceOverviewVisible
+
+        model.showTerminalSearch()
+        let terminalSearchOpenedAlone = model.terminalSearchVisible &&
+            !model.commandPaletteVisible &&
+            !model.settingsPanelVisible &&
+            !model.workspaceOverviewVisible
+        let terminalSearchShortcutsBlocked = await shortcutContainmentProbe(events: Self.shortcutContainmentEvents(excluding: "f")) {
+            model.terminalSearchVisible &&
+                !model.commandPaletteVisible &&
+                !model.settingsPanelVisible &&
+                !model.workspaceOverviewVisible
+        }
+        let terminalSearchDismissed = model.dismissVisibleShellPanel() &&
+            !model.terminalSearchVisible
+
+        let shortcutsBlocked = settingsShortcutsBlocked &&
+            commandShortcutsBlocked &&
+            overviewShortcutsBlocked &&
+            terminalSearchShortcutsBlocked
+        let status = !dismissesEmpty &&
+            settingsOpenedAlone &&
+            settingsDismissed &&
+            shortcutsBlocked &&
+            commandOpenedAlone &&
+            commandDismissed &&
+            overviewOpenedAlone &&
+            overviewDismissed &&
+            terminalSearchOpenedAlone &&
+            terminalSearchDismissed
+
+        let summary = [
+            "status=\(status ? "ok" : "invalid")",
+            "shell-panels=dismiss",
+            "empty=\(!dismissesEmpty)",
+            "settings=\(settingsOpenedAlone && settingsDismissed)",
+            "shortcut-blocked=\(shortcutsBlocked)",
+            "command=\(commandOpenedAlone && commandDismissed)",
+            "overview=\(overviewOpenedAlone && overviewDismissed)",
+            "terminal-search=\(terminalSearchOpenedAlone && terminalSearchDismissed)"
+        ].joined(separator: "\n")
+
+        do {
+            try summary.write(toFile: outputPath, atomically: true, encoding: .utf8)
+        } catch {
+            ConductorLog.app.error("Shell panel automation output write failed: \(error.localizedDescription)")
+        }
+        model.workspace = originalWorkspace
+        model.theme = originalTheme
+        model.flushPersistence()
+        NSApp.terminate(nil)
+    }
+
+    private func shortcutContainmentProbe(
+        events: [(characters: String, ignoring: String, modifiers: NSEvent.ModifierFlags, keyCode: UInt16)],
+        panelStillVisible: @escaping @MainActor () -> Bool
+    ) async -> Bool {
+        let baseline = Self.shortcutContainmentSnapshot(model: model)
+        dispatchShortcutContainmentEvents(events)
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        return panelStillVisible() &&
+            Self.shortcutContainmentSnapshot(model: model) == baseline
+    }
+
+    private static var allShortcutContainmentEvents: [(characters: String, ignoring: String, modifiers: NSEvent.ModifierFlags, keyCode: UInt16)] {
+        [
+            ("t", "t", [.command], 17),
+            ("w", "w", [.command], 13),
+            ("d", "d", [.command], 2),
+            ("n", "n", [.command], 45),
+            ("k", "k", [.command], 40),
+            ("o", "o", [.command], 31),
+            ("f", "f", [.command], 3)
+        ]
+    }
+
+    private static func shortcutContainmentEvents(
+        excluding ignoredCharacter: String
+    ) -> [(characters: String, ignoring: String, modifiers: NSEvent.ModifierFlags, keyCode: UInt16)] {
+        allShortcutContainmentEvents.filter { $0.ignoring != ignoredCharacter }
+    }
+
+    private func dispatchShortcutContainmentEvents(
+        _ shortcutEvents: [(characters: String, ignoring: String, modifiers: NSEvent.ModifierFlags, keyCode: UInt16)]
+    ) {
+        for shortcut in shortcutEvents {
+            if let event = NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: shortcut.modifiers,
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window?.windowNumber ?? 0,
+                context: nil,
+                characters: shortcut.characters,
+                charactersIgnoringModifiers: shortcut.ignoring,
+                isARepeat: false,
+                keyCode: shortcut.keyCode
+            ) {
+                _ = window?.performKeyEquivalent(with: event)
+            }
+        }
+    }
+
+    private static func shortcutContainmentSnapshot(model: ConductorWindowModel) -> String {
+        [
+            "workspaces=\(model.workspaces.count)",
+            "workspace=\(model.workspace.id.rawValue.uuidString)",
+            "panes=\(model.workspace.panes.count)",
+            "terminals=\(model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count })",
+            "webTabs=\(model.workspaceWebTabs.count)",
+            "fileTabs=\(model.workspaceFileTabs.count)",
+            "zoomed=\(model.workspace.isZoomed)"
+        ].joined(separator: "|")
+    }
+
+    private func runNotificationAutomationIfRequested() {
+        guard ProcessInfo.processInfo.environment["CONDUCTOR_NOTIFICATION_AUTORUN"] == "1" else { return }
+        let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_NOTIFICATION_OUTPUT"] ?? "/tmp/conductor-notification-ok.txt"
+        let originalWorkspace = model.workspace
+        let originalTheme = model.theme
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self else { return }
+            let model = self.model
+            model.refreshAttentionEvents()
+            model.commandPaletteVisible = false
+            model.workspaceOverviewVisible = false
+            model.settingsPanelVisible = false
+            model.closeTransientPanels()
+
+            guard let targetTerminalID = model.workspace.focusedPane?.selectedTabID else {
+                self.writeNotificationAutomationSummary(
+                    outputPath: outputPath,
+                    status: false,
+                    eventStored: false,
+                    nativeDeliveryAttempted: false,
+                    unreadCleared: false,
+                    targetFocused: false,
+                    originalWorkspace: originalWorkspace,
+                    originalTheme: originalTheme
+                )
+                return
+            }
+
+            let event = model.controlCreateAttentionEvent(
+                title: "Automation notification",
+                body: "Notification focus should return to the target terminal.",
+                kind: .commandFinished,
+                severity: .info,
+                workspaceID: model.workspace.id,
+                terminalID: targetTerminalID,
+                source: "autorun",
+                details: ["scenario": "notification-focus"]
+            )
+            let createdUnread = model.controlAttentionEvents(includeRead: false).contains { $0.id == event.id }
+
+            let focusedEvent = model.controlFocusAttentionEvent(id: event.id)
+            let unreadCleared = focusedEvent?.isUnread == false &&
+                !model.controlAttentionEvents(includeRead: false).contains { $0.id == event.id }
+            let targetFocused = model.focusedTerminalID == targetTerminalID &&
+                model.selectedWorkspaceTerminalTabID == targetTerminalID
+
+            self.writeNotificationAutomationSummary(
+                outputPath: outputPath,
+                status: createdUnread && unreadCleared && targetFocused,
+                eventStored: createdUnread,
+                nativeDeliveryAttempted: true,
+                unreadCleared: unreadCleared,
+                targetFocused: targetFocused,
+                originalWorkspace: originalWorkspace,
+                originalTheme: originalTheme
+            )
+        }
+    }
+
+    private func writeNotificationAutomationSummary(
+        outputPath: String,
+        status: Bool,
+        eventStored: Bool,
+        nativeDeliveryAttempted: Bool,
+        unreadCleared: Bool,
+        targetFocused: Bool,
+        originalWorkspace: WorkspaceState,
+        originalTheme: TerminalTheme
+    ) {
+        let summary = [
+            "status=\(status ? "ok" : "invalid")",
+            "notification=native",
+            "eventStored=\(eventStored)",
+            "nativeDeliveryAttempted=\(nativeDeliveryAttempted)",
+            "unreadCleared=\(unreadCleared)",
+            "targetFocused=\(targetFocused)"
+        ].joined(separator: "\n")
+
+        do {
+            try summary.write(toFile: outputPath, atomically: true, encoding: .utf8)
+        } catch {
+            ConductorLog.app.error("Notification output write failed: \(error.localizedDescription)")
+        }
+
+        model.closeTransientPanels()
+        model.controlClearAttentionEvent()
+        model.closeAllSurfaces()
+        model.workspace = originalWorkspace
+        model.theme = originalTheme
+        model.flushPersistence()
+        NSApp.terminate(nil)
     }
 
     private func runStressAutomationIfRequested() {
         guard ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_AUTORUN"] == "1" else { return }
         let outputPath = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_OUTPUT"] ?? "/tmp/conductor-stress-ok.txt"
-        let requestedCharacters = Self.positiveEnvironmentInt("CONDUCTOR_STRESS_CHARACTERS")
-        let completionDelay = TimeInterval(Self.positiveEnvironmentInt("CONDUCTOR_STRESS_WAIT_SECONDS") ?? 1)
+        let requestedCharacters = Self.positiveEnvironmentInt("CONDUCTOR_STRESS_CHARACTERS") ?? 65_536
+        let completionDelay = TimeInterval(Self.positiveEnvironmentInt("CONDUCTOR_STRESS_WAIT_SECONDS") ?? 10)
         let multiTerminalStress = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_MULTI_TERMINAL"] == "1"
         let markerRoot = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_MARKER_DIR"] ??
             "/tmp/conductor-stress-\(UUID().uuidString)"
         let tracePath = ProcessInfo.processInfo.environment["CONDUCTOR_STRESS_TRACE_OUTPUT"]
         let originalWorkspace = stressOriginalWorkspace ?? model.workspace
         let originalTheme = stressOriginalTheme ?? model.theme
-        Self.appendStressTrace("scheduled characters=\(requestedCharacters ?? 0) multi=\(multiTerminalStress)", to: tracePath)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [model] in
+        Self.appendStressTrace("scheduled characters=\(requestedCharacters) multi=\(multiTerminalStress)", to: tracePath)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self else { return }
+            let model = self.model
             Self.appendStressTrace("begin", to: tracePath)
             model.commandPaletteVisible = false
             if self.stressOriginalWorkspace == nil {
@@ -1407,39 +1906,51 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             try? FileManager.default.removeItem(at: markerURL)
             try? FileManager.default.createDirectory(at: markerURL, withIntermediateDirectories: true)
             var markerPaths: [String] = []
-            let targetTabs: [TerminalTabState]
-            if requestedCharacters == nil {
-                targetTabs = model.workspace.panes.values.flatMap(\.tabs)
-            } else {
-                targetTabs = model.workspace.root.leaves.compactMap { paneID in
-                    model.workspace.panes[paneID]?.selectedTab
-                }
+            self.window?.contentView?.layoutSubtreeIfNeeded()
+            let targetTabs: [(Int, TerminalTabState)] = model.workspace.root.leaves.enumerated().compactMap { index, paneID in
+                guard let tab = model.workspace.panes[paneID]?.selectedTab else { return nil }
+                return (index, tab)
             }
             Self.appendStressTrace("targets=\(targetTabs.count)", to: tracePath)
-            for tab in targetTabs {
-                let command: String
-                if let requestedCharacters {
-                    let markerPath = markerURL.appendingPathComponent("\(tab.id.description).done").path
-                    markerPaths.append(markerPath)
-                    command = Self.stressCommand(characterCount: requestedCharacters, completionMarkerPath: markerPath)
-                } else {
-                    command = Self.defaultStressCommand()
-                }
-                model.surface(for: tab).sendText(command)
+            var targetSurfaces: [(leafIndex: Int, markerPath: String, command: String, surface: TerminalSurface)] = []
+            for (leafIndex, tab) in targetTabs {
+                let markerPath = markerURL.appendingPathComponent("\(tab.id.description).done").path
+                markerPaths.append(markerPath)
+                let command = Self.stressCommand(characterCount: requestedCharacters, completionMarkerPath: markerPath)
+                let focused = self.focusTerminalHostForLeaf(at: leafIndex)
+                let surface = model.surface(for: tab)
+                surface.attachIfPossible()
+                Self.appendStressTrace(
+                    "send leaf=\(leafIndex) focused=\(focused) ready=\(surface.isReadyForInput) marker=\(markerPath)",
+                    to: tracePath
+                )
+                targetSurfaces.append((leafIndex, markerPath, command, surface))
             }
-            Self.appendStressTrace("sent markers=\(markerPaths.count)", to: tracePath)
 
             @MainActor
             func finish(status: String) {
                 let terminalCount = model.workspace.panes.values.reduce(0) { $0 + $1.tabs.count }
                 let completedCount = markerPaths.filter { FileManager.default.fileExists(atPath: $0) }.count
                 Self.appendStressTrace("finish status=\(status) completed=\(completedCount)", to: tracePath)
+                if status != "ok" {
+                    for target in targetSurfaces {
+                        let visible = target.surface.visibleText() ?? "<nil>"
+                        let compact = visible
+                            .replacingOccurrences(of: "\n", with: "\\n")
+                            .replacingOccurrences(of: "\r", with: "\\r")
+                        Self.appendStressTrace(
+                            "visible leaf=\(target.leafIndex) text=\(String(compact.prefix(220)))",
+                            to: tracePath
+                        )
+                    }
+                }
                 let summary = [
                     "status=\(status)",
                     "stress=long-output",
-                    "characters=\(requestedCharacters ?? 0)",
-                    "characters_per_terminal=\(requestedCharacters ?? 0)",
-                    "total_characters=\((requestedCharacters ?? 0) * terminalCount)",
+                    "characters=\(requestedCharacters)",
+                    "characters_per_terminal=\(requestedCharacters)",
+                    "target_terminals=\(markerPaths.count)",
+                    "total_characters=\(requestedCharacters * markerPaths.count)",
                     "completed_terminals=\(completedCount)",
                     "panes=\(model.workspace.panes.count)",
                     "terminals=\(terminalCount)",
@@ -1462,7 +1973,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
             @MainActor
             func pollCompletion() {
                 let completedCount = markerPaths.filter { FileManager.default.fileExists(atPath: $0) }.count
-                let completed = completedCount == markerPaths.count
+                let completed = !markerPaths.isEmpty && completedCount == markerPaths.count
                 if completed {
                     finish(status: "ok")
                     return
@@ -1475,13 +1986,66 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
                     pollCompletion()
                 }
             }
-            if requestedCharacters == nil {
-                DispatchQueue.main.asyncAfter(deadline: .now() + completionDelay) {
-                    finish(status: "ok")
+
+            @MainActor
+            func sendWhenReady(startedAt: Date) {
+                let readyCount = targetSurfaces.filter { target in
+                    target.surface.isReadyForInput &&
+                        !(target.surface.visibleText()?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                }.count
+                let timedOut = Date().timeIntervalSince(startedAt) >= 5
+                guard readyCount == targetSurfaces.count || timedOut else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        sendWhenReady(startedAt: startedAt)
+                    }
+                    return
                 }
-            } else {
+                Self.appendStressTrace(
+                    "input-ready ready=\(readyCount)/\(targetSurfaces.count) timedOut=\(timedOut)",
+                    to: tracePath
+                )
+                for target in targetSurfaces {
+                    Self.appendStressTrace("send-command leaf=\(target.leafIndex) marker=\(target.markerPath)", to: tracePath)
+                    target.surface.sendText(target.command)
+                    self.sendReturnKey(to: target.surface)
+                }
+                Self.appendStressTrace("sent markers=\(markerPaths.count)", to: tracePath)
                 pollCompletion()
             }
+
+            sendWhenReady(startedAt: Date())
+        }
+    }
+
+    private func sendReturnKey(to surface: TerminalSurface) {
+        guard let event = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window?.windowNumber ?? 0,
+            context: nil,
+            characters: "\r",
+            charactersIgnoringModifiers: "\r",
+            isARepeat: false,
+            keyCode: 36
+        ) else {
+            return
+        }
+        surface.hostView.keyDown(with: event)
+        if let release = NSEvent.keyEvent(
+            with: .keyUp,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window?.windowNumber ?? 0,
+            context: nil,
+            characters: "\r",
+            charactersIgnoringModifiers: "\r",
+            isARepeat: false,
+            keyCode: 36
+        ) {
+            surface.hostView.keyUp(with: release)
         }
     }
 
@@ -1509,28 +2073,13 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         return value
     }
 
-    private static func defaultStressCommand() -> String {
-        "for i in {1..2000}; do echo conductor-stress-$i; done\n"
-    }
-
     private static func stressCommand(characterCount: Int, completionMarkerPath: String) -> String {
-        let escapedMarkerPath = completionMarkerPath.replacingOccurrences(of: "'", with: "'\"'\"'")
-        return """
-        python3 - <<'PY'
-        import pathlib
-        import sys
-
-        remaining = \(characterCount)
-        chunk = "x" * 8192
-        while remaining > 0:
-            size = min(remaining, len(chunk))
-            sys.stdout.write(chunk[:size])
-            remaining -= size
-        sys.stdout.flush()
-        pathlib.Path('\(escapedMarkerPath)').write_text('ok', encoding='utf-8')
-        PY
-
-        """
+        let escapedMarkerPath = completionMarkerPath
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "$", with: "\\$")
+            .replacingOccurrences(of: "`", with: "\\`")
+        return "python3 -c \"import pathlib,sys; n=\(characterCount); sys.stdout.write('x'*n); sys.stdout.flush(); pathlib.Path(\\\"\(escapedMarkerPath)\\\").write_text('ok', encoding='utf-8')\""
     }
 
     private func prepareStressWorkspaceIfRequested() {

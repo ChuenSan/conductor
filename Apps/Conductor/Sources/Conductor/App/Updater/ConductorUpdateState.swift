@@ -87,6 +87,19 @@ struct ConductorUpdateState: Equatable, Sendable {
     }
 }
 
+struct ConductorAutomaticUpdateDiagnostics: Equatable, Sendable {
+    var isEnabled = false
+    var isRunning = false
+    var currentIntervalSeconds: Double?
+    var nextCheckAt: Date?
+    var lastAttemptAt: Date?
+    var lastCompletedAt: Date?
+    var lastSuccessAt: Date?
+    var lastFailureAt: Date?
+    var consecutiveFailures = 0
+    var lastFailureDescription: String?
+}
+
 struct ConductorDownloadProgress: Equatable, Sendable {
     var bytesWritten: Int64
     var expectedBytes: Int64
@@ -107,4 +120,11 @@ struct ConductorDownloadedUpdate: Equatable, Sendable {
 
 struct ConductorPreparedUpdate: Equatable, Sendable {
     var scriptURL: URL
+    var logURL: URL
+}
+
+struct ConductorInstallRehearsalResult: Equatable, Sendable {
+    var scriptURL: URL
+    var logURL: URL
+    var exitStatus: Int32
 }

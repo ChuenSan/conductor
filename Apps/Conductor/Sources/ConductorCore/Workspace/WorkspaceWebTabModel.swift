@@ -8,6 +8,79 @@ public struct WebTabID: RawRepresentable, Codable, Hashable, Sendable {
     }
 }
 
+public struct WorkspaceWebNavigationEntry: Codable, Equatable, Sendable {
+    public var url: URL
+    public var title: String?
+
+    public init(url: URL, title: String? = nil) {
+        self.url = url
+        self.title = title
+    }
+}
+
+public enum WorkspaceWebDownloadPhase: String, Codable, Equatable, Sendable {
+    case requested
+    case downloading
+    case finished
+    case failed
+}
+
+public struct WorkspaceWebDownloadState: Codable, Equatable, Sendable {
+    public var phase: WorkspaceWebDownloadPhase
+    public var filename: String
+    public var destinationPath: String?
+    public var errorMessage: String?
+    public var updatedAt: Date
+
+    public init(
+        phase: WorkspaceWebDownloadPhase,
+        filename: String,
+        destinationPath: String? = nil,
+        errorMessage: String? = nil,
+        updatedAt: Date = Date()
+    ) {
+        self.phase = phase
+        self.filename = filename
+        self.destinationPath = destinationPath
+        self.errorMessage = errorMessage
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct WorkspaceWebRuntimeEvent: Codable, Equatable, Sendable {
+    public enum Kind: String, Codable, Equatable, Sendable {
+        case console
+        case pageError
+        case unhandledRejection
+    }
+
+    public var kind: Kind
+    public var level: String
+    public var message: String
+    public var sourceURL: String?
+    public var lineNumber: Int?
+    public var columnNumber: Int?
+    public var occurredAt: Date
+
+    public init(
+        kind: Kind,
+        level: String,
+        message: String,
+        sourceURL: String? = nil,
+        lineNumber: Int? = nil,
+        columnNumber: Int? = nil,
+        occurredAt: Date = Date()
+    ) {
+        self.kind = kind
+        self.level = level
+        self.message = String(message.prefix(1_000))
+        self.sourceURL = sourceURL
+        self.lineNumber = lineNumber
+        self.columnNumber = columnNumber
+        self.occurredAt = occurredAt
+    }
+}
+
 public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
     public var id: WebTabID
     public var url: URL?
@@ -19,9 +92,14 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
     public var canGoBack: Bool
     public var canGoForward: Bool
     public var errorMessage: String?
+    public var navigationEntries: [WorkspaceWebNavigationEntry]
+    public var currentNavigationIndex: Int?
+    public var scrollY: Double?
     /// Opaque WKWebView.interactionState blob (back/forward list + scroll
     /// position). Captured only at quit so it never bloats debounced saves.
     public var interactionState: Data?
+    public var downloadState: WorkspaceWebDownloadState?
+    public var runtimeEvents: [WorkspaceWebRuntimeEvent]
 
     public init(
         id: WebTabID = WebTabID(),
@@ -34,7 +112,12 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         canGoBack: Bool = false,
         canGoForward: Bool = false,
         errorMessage: String? = nil,
-        interactionState: Data? = nil
+        navigationEntries: [WorkspaceWebNavigationEntry] = [],
+        currentNavigationIndex: Int? = nil,
+        scrollY: Double? = nil,
+        interactionState: Data? = nil,
+        downloadState: WorkspaceWebDownloadState? = nil,
+        runtimeEvents: [WorkspaceWebRuntimeEvent] = []
     ) {
         self.id = id
         self.url = url
@@ -46,7 +129,12 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         self.canGoBack = canGoBack
         self.canGoForward = canGoForward
         self.errorMessage = errorMessage
+        self.navigationEntries = navigationEntries
+        self.currentNavigationIndex = currentNavigationIndex
+        self.scrollY = scrollY
         self.interactionState = interactionState
+        self.downloadState = downloadState
+        self.runtimeEvents = runtimeEvents
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -60,7 +148,12 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         case canGoBack
         case canGoForward
         case errorMessage
+        case navigationEntries
+        case currentNavigationIndex
+        case scrollY
         case interactionState
+        case downloadState
+        case runtimeEvents
     }
 
     public init(from decoder: Decoder) throws {
@@ -75,7 +168,12 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         canGoBack = try container.decodeIfPresent(Bool.self, forKey: .canGoBack) ?? false
         canGoForward = try container.decodeIfPresent(Bool.self, forKey: .canGoForward) ?? false
         errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
+        navigationEntries = try container.decodeIfPresent([WorkspaceWebNavigationEntry].self, forKey: .navigationEntries) ?? []
+        currentNavigationIndex = try container.decodeIfPresent(Int.self, forKey: .currentNavigationIndex)
+        scrollY = try container.decodeIfPresent(Double.self, forKey: .scrollY)
         interactionState = try container.decodeIfPresent(Data.self, forKey: .interactionState)
+        downloadState = try container.decodeIfPresent(WorkspaceWebDownloadState.self, forKey: .downloadState)
+        runtimeEvents = try container.decodeIfPresent([WorkspaceWebRuntimeEvent].self, forKey: .runtimeEvents) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -90,7 +188,16 @@ public struct WorkspaceWebTabState: Identifiable, Codable, Equatable, Sendable {
         try container.encode(canGoBack, forKey: .canGoBack)
         try container.encode(canGoForward, forKey: .canGoForward)
         try container.encodeIfPresent(errorMessage, forKey: .errorMessage)
+        if !navigationEntries.isEmpty {
+            try container.encode(navigationEntries, forKey: .navigationEntries)
+        }
+        try container.encodeIfPresent(currentNavigationIndex, forKey: .currentNavigationIndex)
+        try container.encodeIfPresent(scrollY, forKey: .scrollY)
         try container.encodeIfPresent(interactionState, forKey: .interactionState)
+        try container.encodeIfPresent(downloadState, forKey: .downloadState)
+        if !runtimeEvents.isEmpty {
+            try container.encode(runtimeEvents, forKey: .runtimeEvents)
+        }
     }
 
     public var displayTitle: String {

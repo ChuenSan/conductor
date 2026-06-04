@@ -542,24 +542,6 @@ struct FileManagerPanel: View {
         return L("\(items.count) 项\(size)", "\(items.count) item(s)\(size)")
     }
 
-    private func statusChip(systemImage: String, title: String, accessibilityLabel: String? = nil) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 9.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                .accessibilityHidden(true)
-            Text(title)
-                .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                .lineLimit(1)
-        }
-        .foregroundStyle(theme.shellChromeText.opacity(0.50))
-        .padding(.horizontal, 7)
-        .frame(height: 19)
-        .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.26 : 0.22))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel ?? title)
-    }
-
     private func operationMessageBar(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle")
@@ -691,80 +673,6 @@ struct FileManagerPanel: View {
         } else if let item = store.selectedItem {
             store.markForDelete(item)
         }
-    }
-
-    private func filePreview(item: FileManagerItem) -> some View {
-        VStack(spacing: 0) {
-            previewToolbar(item: item)
-            divider
-            filePreviewBody(
-                state: store.previewState,
-                rootURL: request.rootURL,
-                currentURL: store.currentURL,
-                theme: theme,
-                terminalFontSize: model.appearance.terminalFontSize,
-                fontFamily: fontFamily,
-                fontScale: fontScale
-            )
-        }
-    }
-
-    private func previewToolbar(item: FileManagerItem) -> some View {
-        HStack(spacing: 8) {
-            panelIconButton("chevron.left", id: "file-manager.preview.back-to-directory", help: L("返回目录", "Back to Directory")) {
-                store.clearSelection()
-            }
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.name)
-                    .font(.conductorSystem(size: 12, weight: .bold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.84))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(item.subtitle)
-                    .font(.conductorSystem(size: 10, weight: .medium, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.48))
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            if !item.isDirectory {
-                panelIconButton("rectangle.split.2x1", id: "file-manager.preview.open-in-workspace", help: L("在工作区打开", "Open in Workspace")) {
-                    openInWorkspace(item)
-                }
-
-                panelIconButton("arrow.up.forward.app", id: "file-manager.preview.open-in-system-app", help: L("系统应用打开", "Open in System App")) {
-                    NSWorkspace.shared.open(item.url)
-                }
-            }
-
-            panelIconButton("terminal", id: "file-manager.preview.insert-path", help: L("插入路径到终端", "Insert Path into Terminal"), disabled: model.focusedTerminalID == nil) {
-                _ = model.insertPathIntoFocusedTerminal(item.url)
-            }
-
-            panelIconButton("textformat", id: "file-manager.preview.copy-name", help: L("复制文件名", "Copy Name")) {
-                copyText(item.name)
-            }
-
-            panelIconButton("doc.on.doc", id: "file-manager.preview.copy-path", help: L("复制路径", "Copy Path")) {
-                copyPath(item.url)
-            }
-
-            panelIconButton("quote.bubble", id: "file-manager.preview.copy-shell-path", help: L("复制 Shell 路径", "Copy Shell Path")) {
-                copyText(shellEscapedPath(item.url.path))
-            }
-
-            panelIconButton("info.circle", id: "file-manager.preview.info", help: L("显示信息", "Get Info")) {
-                infoItem = item
-            }
-
-            panelIconButton("folder", id: "file-manager.preview.reveal-in-finder", help: L("在 Finder 中显示", "Reveal in Finder")) {
-                reveal(item.url)
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 44)
     }
 
     private var divider: some View {

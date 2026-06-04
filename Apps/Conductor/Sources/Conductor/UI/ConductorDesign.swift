@@ -654,22 +654,6 @@ enum ConductorMotion {
         0
     }
 
-    static func magnetic(duration: Double = 0.18, bounce: Double = 0.018) -> Animation? {
-        nil
-    }
-
-    static func cssEaseOut(duration: Double) -> Animation? {
-        nil
-    }
-
-    static func floatingPanelTransition(
-        edge: Edge,
-        distance: CGFloat,
-        scale: CGFloat = 0.986
-    ) -> AnyTransition {
-        .identity
-    }
-
     static func perform(_ action: () -> Void) {
         perform(standard, action)
     }
@@ -699,31 +683,6 @@ enum ConductorMotion {
     private static let animatedCollectionLimit = 48
     private static let signatureCollectionLimit = 24
 
-    private static func transitionOffset(edge: Edge, distance: CGFloat) -> (x: CGFloat, y: CGFloat) {
-        switch edge {
-        case .top:
-            return (0, -distance)
-        case .bottom:
-            return (0, distance)
-        case .leading:
-            return (-distance, 0)
-        case .trailing:
-            return (distance, 0)
-        }
-    }
-
-    private static func opposite(_ edge: Edge) -> Edge {
-        switch edge {
-        case .top:
-            return .bottom
-        case .bottom:
-            return .top
-        case .leading:
-            return .trailing
-        case .trailing:
-            return .leading
-        }
-    }
 }
 
 extension View {
@@ -735,14 +694,6 @@ extension View {
         scale: CGFloat = 0.988
     ) -> some View {
         _ = (index, itemCount, edge, distance, scale)
-        return self
-    }
-
-    func conductorSignalPulse<Value: Equatable>(
-        active: Bool,
-        trigger: Value
-    ) -> some View {
-        _ = (active, trigger)
         return self
     }
 
@@ -782,151 +733,6 @@ private struct ConductorHoverStateModifier: ViewModifier {
                     hovering = value
                 }
             }
-    }
-}
-
-private struct ConductorPanelRevealModifier: ViewModifier {
-    let opacity: Double
-    let x: CGFloat
-    let y: CGFloat
-    let scale: CGFloat
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(opacity)
-            .scaleEffect(scale, anchor: .center)
-            .offset(x: x, y: y)
-    }
-}
-
-private struct ConductorCascadeModifier: ViewModifier {
-    let index: Int
-    let itemCount: Int
-    let edge: Edge
-    let distance: CGFloat
-    let scale: CGFloat
-    @State private var revealed = false
-
-    func body(content: Content) -> some View {
-        let offset = Self.offset(edge: edge, distance: distance)
-        content
-            .opacity(revealed || !ConductorMotion.shouldAnimateDecorative(itemCount: itemCount) ? 1 : 0)
-            .scaleEffect(revealed ? 1 : scale, anchor: .center)
-            .rotation3DEffect(
-                .degrees(revealed ? 0 : Self.rotation(edge: edge)),
-                axis: Self.rotationAxis(edge: edge),
-                perspective: 0.55
-            )
-            .offset(
-                x: revealed ? 0 : offset.x,
-                y: revealed ? 0 : offset.y
-            )
-            .onAppear {
-                guard ConductorMotion.shouldAnimateDecorative(itemCount: itemCount) else {
-                    revealed = true
-                    return
-                }
-                revealed = false
-                let delay = ConductorMotion.cascadeDelay(index: index, itemCount: itemCount)
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    ConductorMotion.perform(ConductorMotion.cascade) {
-                        revealed = true
-                    }
-                }
-            }
-            .onDisappear {
-                revealed = false
-            }
-    }
-
-    private static func offset(edge: Edge, distance: CGFloat) -> (x: CGFloat, y: CGFloat) {
-        switch edge {
-        case .top:
-            return (0, -distance)
-        case .bottom:
-            return (0, distance)
-        case .leading:
-            return (-distance, 0)
-        case .trailing:
-            return (distance, 0)
-        }
-    }
-
-    private static func rotation(edge: Edge) -> Double {
-        switch edge {
-        case .leading:
-            return -2.5
-        case .trailing:
-            return 2.5
-        case .top:
-            return 1.4
-        case .bottom:
-            return -1.4
-        }
-    }
-
-    private static func rotationAxis(edge: Edge) -> (x: CGFloat, y: CGFloat, z: CGFloat) {
-        switch edge {
-        case .leading, .trailing:
-            return (0, 1, 0)
-        case .top, .bottom:
-            return (1, 0, 0)
-        }
-    }
-}
-
-private enum ConductorSignalPhase: CaseIterable {
-    case rest
-    case flare
-    case settle
-
-    var scale: CGFloat {
-        switch self {
-        case .rest:
-            return 0.98
-        case .flare:
-            return 1.12
-        case .settle:
-            return 1.0
-        }
-    }
-
-    var verticalOffset: CGFloat {
-        switch self {
-        case .rest:
-            return 1
-        case .flare:
-            return -1
-        case .settle:
-            return 0
-        }
-    }
-}
-
-private struct ConductorSignalPulseModifier<Value: Equatable>: ViewModifier {
-    let active: Bool
-    let trigger: Value
-
-    func body(content: Content) -> some View {
-        if active, ConductorMotion.shouldAnimateDecorative(itemCount: 1) {
-            content
-                .phaseAnimator(ConductorSignalPhase.allCases, trigger: trigger) { content, phase in
-                    content
-                        .scaleEffect(phase.scale)
-                        .offset(y: phase.verticalOffset)
-                } animation: { phase in
-                    switch phase {
-                    case .rest:
-                        return ConductorMotion.micro
-                    case .flare:
-                        return ConductorMotion.delivery
-                    case .settle:
-                        return ConductorMotion.attention
-                    }
-                }
-        } else {
-            content
-        }
     }
 }
 
@@ -1039,31 +845,6 @@ struct ConductorPressButtonStyle: ButtonStyle {
                 transaction.animation = ConductorMotion.press
                 transaction.disablesAnimations = ConductorMotion.press == nil
             }
-    }
-}
-
-struct ConductorMagneticGlow: View {
-    var cornerRadius: CGFloat
-    var active = true
-    var lineWidth: CGFloat = 1
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .stroke(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(theme.usesDarkChrome ? 0.20 : 0.42),
-                        theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.22 : 0.16),
-                        theme.shellStroke.opacity(theme.usesDarkChrome ? 0.24 : 0.36)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: lineWidth
-            )
-            .opacity(active ? 1 : 0)
-            .allowsHitTesting(false)
     }
 }
 
@@ -1401,27 +1182,6 @@ private final class ConductorNativeTooltipContentViewController: NSViewControlle
     }
 }
 
-struct ConductorHorizontalFadeMask: View {
-    var edgeWidth: CGFloat = 18
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = max(proxy.size.width, 1)
-            let stop = min(edgeWidth / width, 0.45)
-            LinearGradient(
-                stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black, location: stop),
-                    .init(color: .black, location: 1 - stop),
-                    .init(color: .clear, location: 1)
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        }
-    }
-}
-
 struct ConductorVerticalFadeMask: View {
     var edgeHeight: CGFloat = 16
     var fadesTop = true
@@ -1533,7 +1293,7 @@ struct RenameTextField: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
+        let field = ConductorRenameNSTextField()
         field.isBordered = false
         field.isBezeled = false
         field.drawsBackground = false
@@ -1547,10 +1307,13 @@ struct RenameTextField: NSViewRepresentable {
         field.cell?.wraps = false
         field.cell?.isScrollable = true
         context.coordinator.attach(field)
+        field.onAttachedToWindow = { [weak coordinator = context.coordinator] field in
+            coordinator?.focusIfNeeded(selectAll: true)
+            coordinator?.applyTextAppearance(to: field, textColor: textColor)
+        }
         DispatchQueue.main.async {
-            field.window?.makeFirstResponder(field)
-            applyTextAppearance(to: field)
-            field.currentEditor()?.selectAll(nil)
+            context.coordinator.focusIfNeeded(selectAll: true)
+            context.coordinator.applyTextAppearance(to: field, textColor: textColor)
         }
         return field
     }
@@ -1566,6 +1329,8 @@ struct RenameTextField: NSViewRepresentable {
         context.coordinator.onCommit = onCommit
         context.coordinator.onCancel = onCancel
         context.coordinator.attach(field)
+        context.coordinator.applyTextAppearance(to: field, textColor: textColor)
+        context.coordinator.focusIfNeeded(selectAll: false)
     }
 
     private func applyTextAppearance(to field: NSTextField) {
@@ -1576,7 +1341,25 @@ struct RenameTextField: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) {
+        if let field = field as? ConductorRenameNSTextField {
+            field.onAttachedToWindow = nil
+        }
         coordinator.detach()
+    }
+
+    final class ConductorRenameNSTextField: NSTextField {
+        var onAttachedToWindow: ((ConductorRenameNSTextField) -> Void)?
+
+        override var acceptsFirstResponder: Bool { true }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.window != nil else { return }
+                self.onAttachedToWindow?(self)
+            }
+        }
     }
 
     final class Coordinator: NSObject, NSTextFieldDelegate, @unchecked Sendable {
@@ -1584,6 +1367,7 @@ struct RenameTextField: NSViewRepresentable {
         var onCommit: () -> Void
         var onCancel: () -> Void
         private var handledEndEditing = false
+        private var didSelectInitialText = false
         private weak var field: NSTextField?
         private var mouseMonitor: Any?
 
@@ -1608,6 +1392,30 @@ struct RenameTextField: NSViewRepresentable {
                 self.mouseMonitor = nil
             }
             field = nil
+        }
+
+        @MainActor
+        func focusIfNeeded(selectAll: Bool) {
+            guard let field,
+                  !handledEndEditing,
+                  let window = field.window else {
+                return
+            }
+            if window.firstResponder !== field,
+               field.currentEditor() == nil {
+                window.makeFirstResponder(field)
+            }
+            guard selectAll, !didSelectInitialText else { return }
+            field.currentEditor()?.selectAll(nil)
+            didSelectInitialText = true
+        }
+
+        @MainActor
+        func applyTextAppearance(to field: NSTextField, textColor: NSColor) {
+            field.textColor = textColor
+            guard let editor = field.currentEditor() as? NSTextView else { return }
+            editor.textColor = textColor
+            editor.insertionPointColor = textColor
         }
 
         func controlTextDidChange(_ notification: Notification) {
