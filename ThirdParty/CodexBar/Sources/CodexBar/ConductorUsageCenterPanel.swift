@@ -749,14 +749,7 @@ private struct ConductorUsageCenterStatusPill: View {
                 .foregroundStyle(style.secondaryText)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 8)
-        .frame(height: 24)
-        .background(style.controlStrongFill.opacity(0.62))
-        .clipShape(Capsule())
-        .overlay {
-            Capsule()
-                .stroke(status.color(style: style).opacity(0.28), lineWidth: 0.8)
-        }
+        .frame(height: 22)
     }
 }
 
@@ -775,10 +768,7 @@ private struct ConductorUsageMiniBadge: View {
                 .lineLimit(1)
         }
         .foregroundStyle(style.secondaryText)
-        .padding(.horizontal, 6)
-        .frame(height: 20)
-        .background(style.controlFill.opacity(0.72))
-        .clipShape(Capsule())
+        .frame(height: 19)
     }
 }
 

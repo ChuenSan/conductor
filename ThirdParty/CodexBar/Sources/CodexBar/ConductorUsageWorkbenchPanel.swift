@@ -1445,10 +1445,7 @@ private struct ConductorUsageWorkbenchTinyPill: View {
                 .minimumScaleFactor(0.72)
         }
         .foregroundStyle(style.secondaryText)
-        .padding(.horizontal, 7)
-        .frame(height: 22)
-        .background(style.controlStrongFill.opacity(0.54))
-        .clipShape(Capsule())
+        .frame(height: 20)
     }
 }
 
@@ -1467,10 +1464,7 @@ private struct ConductorUsageWorkbenchDotLabel: View {
                 .foregroundStyle(style.tertiaryText)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 7)
-        .frame(height: 21)
-        .background(style.controlStrongFill.opacity(0.44))
-        .clipShape(Capsule())
+        .frame(height: 19)
     }
 
     private var color: Color {
@@ -1504,10 +1498,7 @@ private struct ConductorUsageWorkbenchStatusCapsule: View {
                 .foregroundStyle(style.secondaryText)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 9)
-        .frame(height: 26)
-        .background(style.controlStrongFill.opacity(0.62))
-        .clipShape(Capsule())
+        .frame(height: 22)
     }
 
     private var color: Color {
