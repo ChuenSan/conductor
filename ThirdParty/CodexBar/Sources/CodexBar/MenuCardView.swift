@@ -297,20 +297,25 @@ private struct ConductorUsageMenuCardView: View {
                     }
                 }
             } else if let dashboard = model.inlineUsageDashboard {
-                InlineUsageDashboardContent(model: dashboard)
-                    .padding(10)
-                    .background(detailSurface)
+                GroupBox {
+                    InlineUsageDashboardContent(model: dashboard)
+                        .padding(.vertical, 2)
+                }
+                .groupBoxStyle(.automatic)
             } else if !model.usageNotes.isEmpty {
-                UsageNotesContent(notes: model.usageNotes)
-                    .padding(10)
-                    .background(detailSurface)
+                GroupBox {
+                    UsageNotesContent(notes: model.usageNotes)
+                        .padding(.vertical, 2)
+                }
+                .groupBoxStyle(.automatic)
             } else if let placeholder = model.placeholder {
-                Text(codexBarLocalizedDisplayText(placeholder))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(style.secondaryText)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(detailSurface)
+                GroupBox {
+                    Text(codexBarLocalizedDisplayText(placeholder))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(style.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .groupBoxStyle(.automatic)
             }
 
             if !detailBlocks.isEmpty {
@@ -333,14 +338,11 @@ private struct ConductorUsageMenuCardView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 9) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.48))
-                Image(systemName: "chart.bar.xaxis")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(style.secondaryText)
-            }
-            .frame(width: 26, height: 26)
+            Image(systemName: "chart.bar.xaxis")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(style.secondaryText)
+                .frame(width: 26, height: 26)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -352,10 +354,7 @@ private struct ConductorUsageMenuCardView: View {
                         Text(codexBarLocalizedDisplayText(plan))
                             .font(.system(size: 9.5, weight: .semibold))
                             .foregroundStyle(style.secondaryText)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.20 : 0.30))
-                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                            .lineLimit(1)
                     }
                 }
 
@@ -391,14 +390,6 @@ private struct ConductorUsageMenuCardView: View {
         }
     }
 
-    private var detailSurface: some View {
-        RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.22 : 0.30))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(style.stroke.opacity(0.14), lineWidth: 0.7)
-            }
-    }
 }
 
 private struct ConductorUsageMetricTile: View {
@@ -409,67 +400,61 @@ private struct ConductorUsageMetricTile: View {
     let isHighlighted: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(codexBarLocalizedDisplayText(title))
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(style.primaryText)
-                    .lineLimit(1)
-                Spacer()
-                if let resetText = metric.resetText {
-                    Text(codexBarLocalizedDisplayText(resetText))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(style.tertiaryText)
-                        .lineLimit(1)
-                }
-            }
-
-            if let statusText = metric.statusText {
-                Text(codexBarLocalizedDisplayText(statusText))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(style.secondaryText)
-                    .lineLimit(1)
-            } else {
-                ConductorUsageMiniProgress(
-                    percent: metric.percent,
-                    pacePercent: metric.pacePercent,
-                    warningMarkerPercents: metric.warningMarkerPercents,
-                    tint: isHighlighted ? style.emphasis : progressColor,
-                    style: style)
+        GroupBox {
+            VStack(alignment: .leading, spacing: 7) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(metric.percentLabel)
-                        .font(.system(size: 10.5, weight: .semibold))
+                    Text(codexBarLocalizedDisplayText(title))
+                        .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(style.primaryText)
+                        .lineLimit(1)
                     Spacer()
-                    if let detailRight = metric.detailRightText {
-                        Text(codexBarLocalizedDisplayText(detailRight))
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(style.tertiaryText)
-                            .lineLimit(1)
-                    } else if let detail = metric.detailText {
-                        Text(codexBarLocalizedDisplayText(detail))
-                            .font(.system(size: 10.5, weight: .medium))
+                    if let resetText = metric.resetText {
+                        Text(codexBarLocalizedDisplayText(resetText))
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(style.tertiaryText)
                             .lineLimit(1)
                     }
                 }
-                if let detailLeft = metric.detailLeftText {
-                    Text(codexBarLocalizedDisplayText(detailLeft))
-                        .font(.system(size: 10.5, weight: .medium))
+
+                if let statusText = metric.statusText {
+                    Text(codexBarLocalizedDisplayText(statusText))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(style.secondaryText)
                         .lineLimit(1)
+                } else {
+                    ConductorUsageMiniProgress(
+                        percent: metric.percent,
+                        pacePercent: metric.pacePercent,
+                        warningMarkerPercents: metric.warningMarkerPercents,
+                        tint: isHighlighted ? style.emphasis : progressColor,
+                        style: style)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(metric.percentLabel)
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(style.primaryText)
+                        Spacer()
+                        if let detailRight = metric.detailRightText {
+                            Text(codexBarLocalizedDisplayText(detailRight))
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundStyle(style.tertiaryText)
+                                .lineLimit(1)
+                        } else if let detail = metric.detailText {
+                            Text(codexBarLocalizedDisplayText(detail))
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundStyle(style.tertiaryText)
+                                .lineLimit(1)
+                        }
+                    }
+                    if let detailLeft = metric.detailLeftText {
+                        Text(codexBarLocalizedDisplayText(detailLeft))
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(style.secondaryText)
+                            .lineLimit(1)
+                    }
                 }
             }
         }
-        .padding(9)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.18 : 0.26))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(style.stroke.opacity(0.14), lineWidth: 0.7)
-        }
+        .groupBoxStyle(.automatic)
     }
 }
 
@@ -488,44 +473,39 @@ private struct ConductorUsageDetailTile: View {
     let style: ConductorUsagePanelStyle
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 5) {
-                Image(systemName: block.icon)
-                    .font(.system(size: 9.5, weight: .semibold))
-                    .foregroundStyle(style.emphasis)
-                    .frame(width: 12)
-                Text(codexBarLocalizedDisplayText(block.title))
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(style.secondaryText)
-                    .lineLimit(1)
-            }
-            Text(codexBarLocalizedDisplayText(block.value))
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(style.primaryText)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            if let percent = block.percent {
-                ConductorUsageMiniProgress(percent: percent, tint: progressColor, style: style)
-                    .frame(height: 4)
-            }
-            if let detail = block.detail, !detail.isEmpty {
-                Text(codexBarLocalizedDisplayText(detail))
-                    .font(.system(size: 9.5, weight: .medium))
-                    .foregroundStyle(style.tertiaryText)
+        GroupBox {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 5) {
+                    Image(systemName: block.icon)
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(style.emphasis)
+                        .frame(width: 12)
+                        .accessibilityHidden(true)
+                    Text(codexBarLocalizedDisplayText(block.title))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(style.secondaryText)
+                        .lineLimit(1)
+                }
+                Text(codexBarLocalizedDisplayText(block.value))
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(style.primaryText)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                if let percent = block.percent {
+                    ConductorUsageMiniProgress(percent: percent, tint: progressColor, style: style)
+                        .frame(height: 4)
+                }
+                if let detail = block.detail, !detail.isEmpty {
+                    Text(codexBarLocalizedDisplayText(detail))
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(style.tertiaryText)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
-        .padding(8)
+        .groupBoxStyle(.automatic)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.15 : 0.24))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(style.stroke.opacity(0.12), lineWidth: 0.7)
-        }
     }
 }
 
