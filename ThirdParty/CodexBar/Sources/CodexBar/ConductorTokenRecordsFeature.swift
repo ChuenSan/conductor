@@ -221,8 +221,6 @@ struct ConductorTokenRecordsWindowView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(style.secondaryText)
                 .frame(width: 26, height: 26)
-                .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.46))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -261,10 +259,7 @@ struct ConductorTokenRecordsWindowView: View {
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(style.secondaryText)
             .lineLimit(1)
-            .padding(.horizontal, 7)
             .frame(height: 18)
-            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.50))
-            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
     }
 
     @ViewBuilder
@@ -315,74 +310,70 @@ struct ConductorTokenRecordsWindowView: View {
         provider: UsageProvider,
         progressColor: Color) -> some View
     {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(localized(UsageMenuCardView.popupMetricTitle(provider: provider, metric: metric)))
-                    .font(.system(size: 12.2, weight: .semibold))
-                    .foregroundStyle(style.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.84)
-                Spacer(minLength: 0)
-                if metric.statusText == nil {
-                    Text(metric.percentLabel)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(style.secondaryText)
-                        .lineLimit(1)
-                }
-            }
-
-            if let statusText = metric.statusText {
-                Text(localized(statusText))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(style.secondaryText)
-                    .lineLimit(2)
-            } else {
-                overviewProgressBar(
-                    percent: metric.percent,
-                    tint: progressColor,
-                    pacePercent: metric.pacePercent,
-                    paceOnTop: metric.paceOnTop,
-                    warningMarkerPercents: metric.warningMarkerPercents)
-
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    if let detailLeft = metric.detailLeftText {
-                        Text(localized(detailLeft))
-                            .font(.system(size: 10.5, weight: .semibold))
+                    Text(localized(UsageMenuCardView.popupMetricTitle(provider: provider, metric: metric)))
+                        .font(.system(size: 12.2, weight: .semibold))
+                        .foregroundStyle(style.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.84)
+                    Spacer(minLength: 0)
+                    if metric.statusText == nil {
+                        Text(metric.percentLabel)
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(style.secondaryText)
                             .lineLimit(1)
                     }
-                    Spacer(minLength: 0)
-                    if let resetText = metric.resetText {
-                        Text(localized(resetText))
+                }
+
+                if let statusText = metric.statusText {
+                    Text(localized(statusText))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(style.secondaryText)
+                        .lineLimit(2)
+                } else {
+                    overviewProgressBar(
+                        percent: metric.percent,
+                        tint: progressColor,
+                        pacePercent: metric.pacePercent,
+                        paceOnTop: metric.paceOnTop,
+                        warningMarkerPercents: metric.warningMarkerPercents)
+
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        if let detailLeft = metric.detailLeftText {
+                            Text(localized(detailLeft))
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .foregroundStyle(style.secondaryText)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        if let resetText = metric.resetText {
+                            Text(localized(resetText))
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundStyle(style.tertiaryText)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    if let detailText = metric.detailText {
+                        Text(localized(detailText))
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(style.tertiaryText)
+                            .lineLimit(1)
+                    }
+
+                    if let detailRight = metric.detailRightText {
+                        Text(localized(detailRight))
                             .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(style.tertiaryText)
                             .lineLimit(1)
                     }
                 }
-
-                if let detailText = metric.detailText {
-                    Text(localized(detailText))
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(style.tertiaryText)
-                        .lineLimit(1)
-                }
-
-                if let detailRight = metric.detailRightText {
-                    Text(localized(detailRight))
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(style.tertiaryText)
-                        .lineLimit(1)
-                }
             }
         }
-        .padding(10)
+        .groupBoxStyle(.automatic)
         .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
-        .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.50))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(style.stroke.opacity(0.26), lineWidth: 0.7)
-        }
     }
 
     private func overviewProgressBar(
@@ -1216,8 +1207,6 @@ private struct ConductorUsageSummaryChip: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 22)
-        .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.50))
-        .clipShape(Capsule())
     }
 }
 

@@ -712,7 +712,19 @@ private struct MetricRow: View {
     let progressColor: Color
     @Environment(\.menuItemHighlighted) private var isHighlighted
 
+    @ViewBuilder
     var body: some View {
+        if self.metric.cardStyle {
+            GroupBox {
+                content
+            }
+            .groupBoxStyle(.automatic)
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(codexBarLocalizedDisplayText(self.title))
                 .font(.body)
@@ -771,9 +783,6 @@ private struct MetricRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(self.metric.cardStyle ? 10 : 0)
-        .background(self.metric.cardStyle ? Color.secondary.opacity(self.isHighlighted ? 0.2 : 0.08) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: self.metric.cardStyle ? 10 : 0))
     }
 }
 
