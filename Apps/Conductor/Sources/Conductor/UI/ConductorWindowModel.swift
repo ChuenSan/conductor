@@ -5268,7 +5268,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             workspace.panes.values.flatMap { pane -> [PersistedTerminalContentSnapshot] in
                 pane.tabs.compactMap { tab in
                     let liveText = surfaceCoordinator.existingSurface(for: tab.id)?.visibleText() ?? ""
-                    let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(liveText)
+                    let sanitized = terminalContentSnapshotText(terminalID: tab.id, liveText: liveText)
                     let restorePreview = RestoredTerminalContent.make(
                         terminalID: tab.id,
                         capturedAt: capturedAt,
@@ -5292,6 +5292,26 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             }
         }
         return PersistedTerminalContentSnapshotFile(capturedAt: capturedAt, snapshots: snapshots)
+    }
+
+    private func terminalContentSnapshotText(terminalID: TerminalID, liveText: String) -> String {
+        let sanitizedLiveText = TerminalContentSnapshotSanitizer.sanitizedText(liveText)
+        if !sanitizedLiveText.isEmpty {
+            return sanitizedLiveText
+        }
+        guard let restored = restoredTerminalContentByID[terminalID] else { return "" }
+        return TerminalContentSnapshotSanitizer.sanitizedText(
+            Self.persistedTextFallback(from: restored)
+        )
+    }
+
+    private static func persistedTextFallback(from restored: RestoredTerminalContent) -> String {
+        restored.text.components(separatedBy: .newlines)
+            .filter { line in
+                !line.trimmingCharacters(in: .whitespaces)
+                    .hasPrefix(RestoredTerminalContent.restoreHintPrefix)
+            }
+            .joined(separator: "\n")
     }
 
     private func persist() {
