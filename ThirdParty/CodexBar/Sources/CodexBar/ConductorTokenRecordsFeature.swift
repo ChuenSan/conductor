@@ -2039,41 +2039,31 @@ private struct ConductorTokenTimeline: View {
     @State private var revealed = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(conductorTokenRecordsText("明细", "Details"))
-                    .font(.system(size: 12.5, weight: .bold))
-                    .foregroundStyle(style.primaryText)
-                Spacer()
-                Text("\(entries.count)")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundStyle(style.tertiaryText)
-                    .padding(.horizontal, 7)
-                    .frame(height: 18)
-                    .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.42 : 0.58))
-                    .clipShape(Capsule())
-            }
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(conductorTokenRecordsText("明细", "Details"))
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundStyle(style.primaryText)
+                    Spacer()
+                    Text("\(entries.count)")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(style.tertiaryText)
+                        .frame(height: 18)
+                }
 
-            VStack(spacing: 7) {
-                ForEach(Array(entries.prefix(18).enumerated()), id: \.element.date) { index, entry in
-                    ConductorTokenTimelineRow(
-                        entry: entry,
-                        index: index,
-                        revealed: revealed,
-                        style: style)
+                VStack(spacing: 7) {
+                    ForEach(Array(entries.prefix(18).enumerated()), id: \.element.date) { index, entry in
+                        ConductorTokenTimelineRow(
+                            entry: entry,
+                            index: index,
+                            revealed: revealed,
+                            style: style)
+                    }
                 }
             }
         }
-        .padding(10)
-        .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.38 : 0.54))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(style.stroke.opacity(0.32), lineWidth: 0.7)
-                }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .groupBoxStyle(.automatic)
         .onAppear {
             withAnimation(.spring(response: 0.62, dampingFraction: 0.84)) {
                 revealed = true
@@ -2126,10 +2116,6 @@ private struct ConductorTokenTimelineRow: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 7)
-        .background {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.30 : 0.44))
-        }
         .offset(x: revealed ? 0 : 8)
         .opacity(revealed ? 1 : 0)
         .animation(.spring(response: 0.46, dampingFraction: 0.84).delay(Double(index) * 0.018), value: revealed)
@@ -2146,8 +2132,6 @@ private struct ConductorTokenTimelineRow: View {
         }
         .padding(.horizontal, 6)
         .frame(height: 22)
-        .background(style.controlFill.opacity(style.usesDarkChrome ? 0.44 : 0.62))
-        .clipShape(Capsule())
     }
 
     private func cacheTokens(_ entry: CostUsageDailyReport.Entry) -> Int? {
