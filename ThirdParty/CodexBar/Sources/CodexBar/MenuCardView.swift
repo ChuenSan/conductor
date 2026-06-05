@@ -677,13 +677,14 @@ private struct CopyIconButton: View {
                 }
             }
         } label: {
-            Image(systemName: self.didCopy ? "checkmark" : "doc.on.doc")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
-                .frame(width: 18, height: 18)
+            Label(
+                codexBarLocalizedDisplayText(self.didCopy ? "Copied" : "Copy error"),
+                systemImage: self.didCopy ? "checkmark" : "doc.on.doc")
         }
+        .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
         .controlSize(.small)
+        .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
         .help(codexBarLocalizedDisplayText(self.didCopy ? "Copied" : "Copy error"))
         .accessibilityLabel(codexBarLocalizedDisplayText(self.didCopy ? "Copied" : "Copy error"))
     }

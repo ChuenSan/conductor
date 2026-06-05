@@ -203,13 +203,12 @@ struct StoragePathCopyButton: View {
                 }
             }
         } label: {
-            Image(systemName: self.didCopy ? "checkmark" : "doc.on.doc")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 18, height: 18)
-                .contentShape(Rectangle())
+            Label(
+                self.didCopy ? "Copied" : "Copy path",
+                systemImage: self.didCopy ? "checkmark" : "doc.on.doc")
         }
-        .buttonStyle(.borderless)
+        .labelStyle(.iconOnly)
+        .buttonStyle(.bordered)
         .controlSize(.small)
         .help(self.didCopy ? "Copied" : "Copy path")
         .accessibilityLabel(self.didCopy ? "Copied" : "Copy path")
