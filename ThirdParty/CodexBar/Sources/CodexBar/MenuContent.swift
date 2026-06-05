@@ -70,7 +70,7 @@ struct MenuContent: View {
                         .accessibilityLabel(title)
                 }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
         case let .submenu(title, systemImageName, submenuItems):
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {

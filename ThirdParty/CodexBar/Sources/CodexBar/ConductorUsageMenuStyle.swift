@@ -24,17 +24,17 @@ enum ConductorUsageMenuStyle {
 
     static func plateFill(highlighted: Bool, style: ConductorUsagePanelStyle) -> Color {
         if highlighted {
-            return style.emphasis.opacity(style.usesDarkChrome ? 0.22 : 0.14)
+            return style.emphasis.opacity(style.usesDarkChrome ? 0.30 : 0.18)
         }
-        return style.controlFill.opacity(style.usesDarkChrome ? 0.18 : 0.22)
+        return style.controlFill.opacity(style.usesDarkChrome ? 0.22 : 0.28)
     }
 
     static func selectedControlFill(style: ConductorUsagePanelStyle) -> Color {
-        style.emphasis.opacity(style.usesDarkChrome ? 0.46 : 0.34)
+        style.emphasis.opacity(style.usesDarkChrome ? 0.56 : 0.42)
     }
 
     static func hoverControlFill(style: ConductorUsagePanelStyle) -> Color {
-        style.controlStrongFill.opacity(style.usesDarkChrome ? 0.36 : 0.44)
+        style.controlStrongFill.opacity(style.usesDarkChrome ? 0.46 : 0.56)
     }
 }
 
@@ -116,8 +116,8 @@ struct ConductorUsageMenuActionRow: View {
 
     private func iconFill(style: ConductorUsagePanelStyle) -> Color {
         if isHighlighted {
-            return style.emphasis.opacity(style.usesDarkChrome ? 0.22 : 0.16)
+            return style.emphasis.opacity(style.usesDarkChrome ? 0.30 : 0.22)
         }
-        return style.controlStrongFill.opacity(style.usesDarkChrome ? 0.22 : 0.32)
+        return style.controlStrongFill.opacity(style.usesDarkChrome ? 0.28 : 0.42)
     }
 }

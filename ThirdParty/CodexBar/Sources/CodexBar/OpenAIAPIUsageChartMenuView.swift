@@ -281,15 +281,7 @@ private struct StatPill: View {
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 7)
-        .background(fill, in: RoundedRectangle(cornerRadius: 6))
-    }
-
-    private var fill: Color {
-        if let style = ConductorUsageMenuStyle.current {
-            style.controlFill.opacity(style.usesDarkChrome ? 0.22 : 0.30)
-        } else {
-            Color.primary.opacity(0.06)
-        }
+        .background(Color(nsColor: .separatorColor).opacity(0.35), in: RoundedRectangle(cornerRadius: 6))
     }
 }
 

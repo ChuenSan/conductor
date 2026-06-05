@@ -112,18 +112,18 @@ extension AppearanceFontFamily {
 
 enum ConductorTokens {
     enum Chrome {
-        static let separatorOpacity: Double = 0.040
-        static let separatorOpacityDark: Double = 0.070
-        static let structuralSeparatorOpacity: Double = 0.075
-        static let structuralSeparatorOpacityDark: Double = 0.110
+        static let separatorOpacity: Double = 0.055
+        static let separatorOpacityDark: Double = 0.095
+        static let structuralSeparatorOpacity: Double = 0.10
+        static let structuralSeparatorOpacityDark: Double = 0.14
         static let hoverOpacity: Double = 0.030
         static let hoverOpacityDark: Double = 0.040
         static let selectionOpacity: Double = 0.070
         static let selectionOpacityDark: Double = 0.105
-        static let controlFillOpacity: Double = 0.020
-        static let controlFillOpacityDark: Double = 0.028
-        static let controlStrongFillOpacity: Double = 0.032
-        static let controlStrongFillOpacityDark: Double = 0.042
+        static let controlFillOpacity: Double = 0.026
+        static let controlFillOpacityDark: Double = 0.034
+        static let controlStrongFillOpacity: Double = 0.042
+        static let controlStrongFillOpacityDark: Double = 0.052
         static let dropTargetFillOpacity: Double = 0.075
         static let dropTargetFillOpacityDark: Double = 0.095
         static let dropTargetStrokeOpacity: Double = 0.46
@@ -231,23 +231,27 @@ enum ConductorTokens {
 
     enum Settings {
         static func panelWash(dark: Bool) -> Color {
-            Color.primary.opacity(dark ? 0.012 : 0.006)
+            Color.primary.opacity(dark ? 0.018 : 0.010)
+        }
+
+        static func sidebarWash(dark: Bool) -> Color {
+            Color.primary.opacity(dark ? 0.026 : 0.014)
         }
 
         static func panelChromeWash(dark: Bool) -> Color {
-            Color.primary.opacity(dark ? 0.014 : 0.008)
+            Color.primary.opacity(dark ? 0.020 : 0.012)
         }
 
         static func panelStroke(dark: Bool) -> Color {
-            ConductorTokens.Chrome.structuralSeparator(dark: dark).opacity(dark ? 0.34 : 0.26)
+            ConductorTokens.Chrome.structuralSeparator(dark: dark).opacity(dark ? 0.62 : 0.52)
         }
 
         static func panelShadow(dark: Bool) -> Color {
-            Color(nsColor: .shadowColor).opacity(dark ? 0.14 : 0.07)
+            Color(nsColor: .shadowColor).opacity(dark ? 0.20 : 0.11)
         }
 
         static func subtleSeparator(dark: Bool) -> Color {
-            ConductorTokens.Chrome.separator(dark: dark).opacity(0.42)
+            ConductorTokens.Chrome.separator(dark: dark).opacity(0.58)
         }
     }
 }

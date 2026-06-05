@@ -354,7 +354,7 @@ private struct ConductorUsageMenuCardView: View {
                             .foregroundStyle(style.secondaryText)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.20 : 0.30))
+                            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.28 : 0.42))
                             .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
                 }
@@ -396,7 +396,7 @@ private struct ConductorUsageMenuCardView: View {
             .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.22 : 0.30))
             .overlay {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(style.stroke.opacity(0.14), lineWidth: 0.7)
+                    .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
             }
     }
 }
@@ -464,11 +464,11 @@ private struct ConductorUsageMetricTile: View {
         .padding(9)
         .background {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.18 : 0.26))
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.24 : 0.34))
         }
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(style.stroke.opacity(0.14), lineWidth: 0.7)
+                .stroke(style.stroke.opacity(0.26), lineWidth: 0.7)
         }
     }
 }
@@ -520,11 +520,11 @@ private struct ConductorUsageDetailTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.15 : 0.24))
+                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.20 : 0.34))
         }
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(style.stroke.opacity(0.12), lineWidth: 0.7)
+                .stroke(style.stroke.opacity(0.22), lineWidth: 0.7)
         }
     }
 }
@@ -656,6 +656,21 @@ private struct UsageMenuCardHeaderView: View {
     }
 }
 
+private struct CopyIconButtonStyle: ButtonStyle {
+    let isHighlighted: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(4)
+            .background {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(MenuHighlightStyle.secondary(self.isHighlighted).opacity(configuration.isPressed ? 0.18 : 0))
+            }
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .animation(ConductorUsageMotion.press, value: configuration.isPressed)
+    }
+}
+
 private struct CopyIconButton: View {
     let copyText: String
     let isHighlighted: Bool
@@ -682,9 +697,7 @@ private struct CopyIconButton: View {
                 .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                 .frame(width: 18, height: 18)
         }
-        .buttonStyle(.borderless)
-        .controlSize(.small)
-        .help(codexBarLocalizedDisplayText(self.didCopy ? "Copied" : "Copy error"))
+        .buttonStyle(CopyIconButtonStyle(isHighlighted: self.isHighlighted))
         .accessibilityLabel(codexBarLocalizedDisplayText(self.didCopy ? "Copied" : "Copy error"))
     }
 
@@ -814,17 +827,6 @@ private struct UsageNotesContent: View {
     }
 }
 
-private struct UsageMenuSectionBreak: View {
-    var body: some View {
-        if ConductorUsageMenuStyle.current != nil {
-            Color.clear
-                .frame(height: 4)
-        } else {
-            Divider()
-        }
-    }
-}
-
 struct UsageMenuCardHeaderSectionView: View {
     let model: UsageMenuCardView.Model
     let showDivider: Bool
@@ -835,7 +837,7 @@ struct UsageMenuCardHeaderSectionView: View {
             UsageMenuCardHeaderView(model: self.model)
 
             if self.showDivider {
-                UsageMenuSectionBreak()
+                Divider()
             }
         }
         .padding(.horizontal, 16)
@@ -878,7 +880,7 @@ struct UsageMenuCardUsageSectionView: View {
                 }
             }
             if self.showBottomDivider {
-                UsageMenuSectionBreak()
+                Divider()
             }
         }
         .padding(.horizontal, 16)
@@ -905,7 +907,7 @@ struct UsageMenuCardCreditsSectionView: View {
                     hintCopyText: self.model.creditsHintCopyText,
                     progressColor: self.model.progressColor)
                 if self.showBottomDivider {
-                    UsageMenuSectionBreak()
+                    Divider()
                 }
             }
             .padding(.horizontal, 16)

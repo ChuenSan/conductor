@@ -153,11 +153,14 @@ struct ConductorUsageCenterPanel: View {
             Button {
                 refreshAll()
             } label: {
-                Label(t("刷新全部用量", "Refresh all usage"), systemImage: refreshSystemImage)
+                Image(systemName: refreshSystemImage)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(style.secondaryText)
+                    .frame(width: 28, height: 28)
+                    .background(style.controlStrongFill.opacity(0.78))
+                    .clipShape(Circle())
             }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderless)
-            .controlSize(.small)
+            .buttonStyle(.plain)
             .disabled(isRefreshingAll || context.store.isRefreshing)
             .help(t("刷新全部用量", "Refresh all usage"))
             .accessibilityLabel(t("刷新全部用量", "Refresh all usage"))
@@ -515,16 +518,16 @@ private struct ConductorUsageCenterRouteTile: View {
             }
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
-            .background(style.controlStrongFill.opacity(isHovered ? 0.46 : 0.28))
+            .background(style.controlStrongFill.opacity(isHovered ? 0.70 : 0.46))
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(style.stroke.opacity(isHovered ? 0.34 : 0.18), lineWidth: 0.7)
+                    .stroke(style.stroke.opacity(isHovered ? 0.58 : 0.34), lineWidth: 0.7)
             }
+            .scaleEffect(isHovered ? 1.01 : 1)
             .animation(ConductorUsageMotion.hover, value: isHovered)
         }
-        .buttonStyle(.borderless)
-        .controlSize(.small)
+        .buttonStyle(.plain)
         .accessibilityLabel(title)
     }
 }
@@ -602,8 +605,8 @@ private struct ConductorUsageProviderPill: View {
             .frame(height: 38)
             .background(
                 selected
-                    ? style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.48)
-                    : style.controlFill.opacity(isHovered ? 0.48 : 0.30))
+                    ? style.controlStrongFill.opacity(style.usesDarkChrome ? 0.42 : 0.62)
+                    : style.controlFill.opacity(isHovered ? 0.70 : 0.46))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(alignment: .leading) {
                 if selected {
@@ -622,8 +625,7 @@ private struct ConductorUsageProviderPill: View {
                         lineWidth: 0.7)
             }
         }
-        .buttonStyle(.borderless)
-        .controlSize(.small)
+        .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .accessibilityLabel("\(state.name), \(state.status.label(languageIdentifier: languageIdentifier))")
     }
@@ -826,14 +828,33 @@ private struct ConductorUsageFocusButton: View {
     let style: ConductorUsagePanelStyle
     let action: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(style.emphasis)
+                    .accessibilityHidden(true)
+
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(style.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .background(style.controlFill.opacity(isHovered ? 0.78 : 0.42))
+            .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(style.stroke.opacity(isHovered ? 0.48 : 0.22), lineWidth: 0.7)
+            }
         }
-        .labelStyle(.titleAndIcon)
-        .buttonStyle(.borderless)
-        .controlSize(.small)
-        .tint(style.emphasis)
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
         .help("\(title): \(subtitle)")
         .accessibilityLabel("\(title), \(subtitle)")
     }

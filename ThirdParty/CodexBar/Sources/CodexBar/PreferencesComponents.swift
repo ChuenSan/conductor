@@ -71,31 +71,21 @@ struct AboutLinkRow: View {
     let url: String
     @State private var hovering = false
 
-    private var destination: URL? {
-        URL(string: self.url)
-    }
-
     var body: some View {
-        if let destination {
-            Link(destination: destination) {
-                label
+        Button {
+            if let url = URL(string: self.url) { NSWorkspace.shared.open(url) }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: self.icon)
+                Text(self.title)
+                    .underline(self.hovering, color: .accentColor)
             }
-            .foregroundStyle(.tint)
-            .contentShape(Rectangle())
-            .onHover { self.hovering = $0 }
-        } else {
-            label
-                .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .foregroundColor(.accentColor)
         }
-    }
-
-    private var label: some View {
-        HStack(spacing: 8) {
-            Image(systemName: self.icon)
-            Text(self.title)
-                .underline(self.hovering, color: .accentColor)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 4)
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .onHover { self.hovering = $0 }
     }
 }

@@ -109,17 +109,31 @@ private struct ConductorUsageSettingsLoadedContent: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: 8) {
-            Picker("", selection: $selection) {
-                ForEach(availableTabs) { tab in
-                    Text(tab.title(languageIdentifier: languageIdentifier))
-                        .tag(tab)
+        HStack(spacing: 6) {
+            ForEach(availableTabs) { tab in
+                Button {
+                    selection = tab
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: tab.systemImage)
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .accessibilityHidden(true)
+                        Text(tab.title(languageIdentifier: languageIdentifier))
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(selection == tab ? style.primaryText : style.secondaryText)
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(selection == tab ? style.controlStrongFill.opacity(0.48) : style.controlFill.opacity(0.22))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(selection == tab ? style.emphasis.opacity(0.12) : Color.clear, lineWidth: 0.6)
+                    }
                 }
+                .buttonStyle(.plain)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.small)
-            .frame(maxWidth: 420, alignment: .leading)
 
             Spacer(minLength: 0)
         }
@@ -255,23 +269,27 @@ private struct ConductorUsageSettingsSummaryStrip: View {
                 Label(
                     conductorTokenRecordsText("工作台", "Workbench", languageIdentifier: languageIdentifier),
                     systemImage: "rectangle.stack")
+                    .labelStyle(.titleAndIcon)
             }
-            .labelStyle(.titleAndIcon)
-            .buttonStyle(.borderless)
-            .controlSize(.small)
+            .buttonStyle(.plain)
             .font(.system(size: 10.2, weight: .semibold))
             .foregroundStyle(style.secondaryText)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(style.controlFill.opacity(0.42))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             Button {
                 refreshAll()
             } label: {
-                Label(
-                    conductorTokenRecordsText("刷新用量", "Refresh usage", languageIdentifier: languageIdentifier),
-                    systemImage: refreshInFlight || summary.isRefreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                Image(systemName: refreshInFlight || summary.isRefreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                    .font(.system(size: 10.2, weight: .semibold))
+                    .foregroundStyle(style.secondaryText)
+                    .frame(width: 24, height: 24)
+                    .background(style.controlFill.opacity(0.42))
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderless)
-            .controlSize(.small)
+            .buttonStyle(.plain)
             .disabled(refreshInFlight || summary.isRefreshing)
             .help(conductorTokenRecordsText("刷新用量", "Refresh usage", languageIdentifier: languageIdentifier))
             .accessibilityLabel(conductorTokenRecordsText("刷新用量", "Refresh usage", languageIdentifier: languageIdentifier))
@@ -427,4 +445,20 @@ private enum ConductorUsageSettingsTab: String, CaseIterable, Identifiable {
         }
     }
 
+    var systemImage: String {
+        switch self {
+        case .providers:
+            "square.grid.2x2"
+        case .workbench:
+            "rectangle.stack"
+        case .general:
+            "gearshape"
+        case .display:
+            "eye"
+        case .advanced:
+            "slider.horizontal.3"
+        case .debug:
+            "ladybug"
+        }
+    }
 }

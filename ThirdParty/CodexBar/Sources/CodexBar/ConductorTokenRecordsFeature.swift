@@ -43,11 +43,11 @@ public struct ConductorUsagePanelStyle: @unchecked Sendable {
 
     public static let fallback = ConductorUsagePanelStyle(
         panelBase: Color(nsColor: .windowBackgroundColor),
-        panelWash: Color.primary.opacity(0.010),
-        controlFill: Color.primary.opacity(0.020),
-        controlStrongFill: Color.primary.opacity(0.032),
-        stroke: Color.primary.opacity(0.075),
-        separator: Color.primary.opacity(0.040),
+        panelWash: Color(nsColor: .controlBackgroundColor).opacity(0.42),
+        controlFill: Color(nsColor: .controlBackgroundColor).opacity(0.62),
+        controlStrongFill: Color(nsColor: .controlBackgroundColor).opacity(0.86),
+        stroke: Color(nsColor: .separatorColor).opacity(0.8),
+        separator: Color(nsColor: .separatorColor).opacity(0.72),
         emphasis: .accentColor,
         primaryText: .primary,
         secondaryText: .secondary,
@@ -882,10 +882,22 @@ struct ConductorTokenRecordsWindowView: View {
                 }
             }
         } label: {
-            Label(providerName(provider), systemImage: "line.3.horizontal.decrease.circle")
+            HStack(spacing: 6) {
+                Text(providerName(provider))
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(style.secondaryText)
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background(style.controlFill)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
+        .buttonStyle(.plain)
         .menuStyle(.button)
-        .controlSize(.small)
         .help(conductorTokenRecordsText("切换来源", "Switch Source"))
     }
 
@@ -896,11 +908,14 @@ struct ConductorTokenRecordsWindowView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Label(help, systemImage: systemName)
+            Image(systemName: systemName)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(disabled ? style.tertiaryText : style.secondaryText)
+                .frame(width: 24, height: 24)
+                .background(style.controlFill)
+                .clipShape(Circle())
         }
-        .labelStyle(.iconOnly)
-        .buttonStyle(.borderless)
-        .controlSize(.small)
+        .buttonStyle(.plain)
         .disabled(disabled)
         .help(help)
         .accessibilityLabel(help)
@@ -1035,9 +1050,14 @@ struct ConductorTokenRecordsWindowView: View {
     private func filledPanelButton(title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(style.secondaryText)
+                .padding(.horizontal, 12)
+                .frame(height: 26)
+                .background(style.controlStrongFill)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.borderless)
-        .controlSize(.small)
+        .buttonStyle(.plain)
     }
 
     private var panelDivider: some View {
@@ -1164,15 +1184,32 @@ private struct ConductorUsageActionTile: View {
     let systemName: String
     let style: ConductorUsagePanelStyle
     let action: () -> Void
+    @State private var hovering = false
+    @State private var pressed = false
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            ConductorUsageMotion.perform(ConductorUsageMotion.press) {
+                pressed = true
+            }
+            action()
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(120))
+                ConductorUsageMotion.perform {
+                    pressed = false
+                }
+            }
+        } label: {
             HStack(spacing: 10) {
-                Image(systemName: systemName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(style.emphasis)
-                    .frame(width: 22)
-                    .accessibilityHidden(true)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(style.emphasis.opacity(hovering ? 0.22 : 0.14))
+                    Image(systemName: systemName)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(style.emphasis)
+                        .accessibilityHidden(true)
+                }
+                .frame(width: 34, height: 34)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
@@ -1186,12 +1223,31 @@ private struct ConductorUsageActionTile: View {
                 }
                 .layoutPriority(1)
             }
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(style.controlFill.opacity(hovering ? 0.66 : 0.48))
+                    .overlay(alignment: .bottomTrailing) {
+                        ConductorSignalCells(style: style, active: hovering)
+                            .opacity(hovering ? 0.46 : 0.18)
+                            .frame(width: 72, height: 24)
+                            .padding(8)
+                    }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(style.stroke.opacity(hovering ? 0.58 : 0.32), lineWidth: 0.7)
+            }
+            .scaleEffect(pressed ? 0.985 : 1)
         }
-        .buttonStyle(.bordered)
-        .controlSize(.regular)
-        .tint(style.emphasis)
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            ConductorUsageMotion.perform(ConductorUsageMotion.hover) {
+                hovering = isHovering
+            }
+        }
         .accessibilityLabel(title)
         .accessibilityHint(subtitle)
     }
@@ -1230,6 +1286,8 @@ private struct ConductorExpandableInsightPanel<Summary: View, Content: View>: Vi
     private let summary: () -> Summary
     private let content: () -> Content
 
+    @State private var hovering = false
+
     init(
         title: String,
         subtitle: String,
@@ -1248,35 +1306,18 @@ private struct ConductorExpandableInsightPanel<Summary: View, Content: View>: Vi
         self.content = content
     }
 
-    private var expansion: Binding<Bool> {
-        Binding {
-            isExpanded
-        } set: { newValue in
-            guard newValue != isExpanded else { return }
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                isExpanded = newValue
-            }
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            DisclosureGroup(isExpanded: expansion) {
-                Rectangle()
-                    .fill(style.separator.opacity(0.50))
-                    .frame(height: 1)
-                    .padding(.vertical, 10)
-
-                content()
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .top)),
-                        removal: .opacity))
+            Button {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                    isExpanded.toggle()
+                }
             } label: {
                 VStack(alignment: .leading, spacing: 9) {
                     HStack(spacing: 10) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .fill(style.emphasis.opacity(isExpanded ? 0.18 : 0.12))
+                                .fill(style.emphasis.opacity(hovering || isExpanded ? 0.20 : 0.13))
                             Image(systemName: systemName)
                                 .font(.system(size: 12.5, weight: .bold))
                                 .foregroundStyle(style.emphasis)
@@ -1296,6 +1337,15 @@ private struct ConductorExpandableInsightPanel<Summary: View, Content: View>: Vi
                                 .truncationMode(.tail)
                         }
                         .layoutPriority(1)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(style.secondaryText)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                            .frame(width: 22, height: 22)
+                            .background(style.controlStrongFill.opacity(0.30))
+                            .clipShape(Circle())
+                            .accessibilityHidden(true)
                     }
 
                     HStack(spacing: 6) {
@@ -1305,18 +1355,35 @@ private struct ConductorExpandableInsightPanel<Summary: View, Content: View>: Vi
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(12)
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
-            .tint(style.tertiaryText)
+            .buttonStyle(.plain)
+            .onHover { isHovering in
+                withAnimation(.easeOut(duration: 0.16)) {
+                    hovering = isHovering
+                }
+            }
             .accessibilityLabel(title)
             .accessibilityValue(isExpanded
                 ? conductorTokenRecordsText("已展开", "Expanded")
                 : conductorTokenRecordsText("已收起", "Collapsed"))
+
+            if isExpanded {
+                Rectangle()
+                    .fill(style.separator.opacity(0.58))
+                    .frame(height: 1)
+                    .padding(.horizontal, 12)
+
+                content()
+                    .padding(12)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity))
+            }
         }
-        .padding(.bottom, isExpanded ? 12 : 0)
-        .padding(.trailing, 12)
         .background {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(style.controlFill.opacity(isExpanded ? 0.46 : 0.34))
+                .fill(style.controlFill.opacity(isExpanded ? 0.52 : 0.38))
                 .overlay(alignment: .topTrailing) {
                     ConductorUsageCircuitOverlay(style: style)
                         .opacity(isExpanded ? 0.16 : 0.10)
@@ -1327,7 +1394,7 @@ private struct ConductorExpandableInsightPanel<Summary: View, Content: View>: Vi
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(style.stroke.opacity(isExpanded ? 0.42 : 0.24), lineWidth: 0.7)
+                .stroke(style.stroke.opacity(hovering || isExpanded ? 0.50 : 0.32), lineWidth: 0.7)
         }
     }
 }
@@ -2220,6 +2287,39 @@ private struct ConductorTokenTimelineRow: View {
         ].compactMap(\.self)
         guard !values.isEmpty else { return nil }
         return values.reduce(0, +)
+    }
+}
+
+private struct ConductorPulseRing: View {
+    let style: ConductorUsagePanelStyle
+    let active: Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .trim(from: 0, to: active ? 0.92 : 0.16)
+            .stroke(style.emphasis.opacity(0.42), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+            .rotationEffect(.degrees(active ? 360 : 0))
+    }
+}
+
+private struct ConductorSignalCells: View {
+    let style: ConductorUsagePanelStyle
+    let active: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 3) {
+            ForEach(0..<9, id: \.self) { index in
+                Capsule()
+                    .fill(cellFill(index))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: CGFloat([8, 13, 18, 10, 22, 15, 9, 19, 12][index]))
+            }
+        }
+    }
+
+    private func cellFill(_ index: Int) -> Color {
+        let phase = active ? index : 8 - index
+        return style.emphasis.opacity(0.18 + Double(phase % 5) * 0.11)
     }
 }
 
