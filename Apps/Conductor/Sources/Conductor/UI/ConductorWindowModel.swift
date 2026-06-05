@@ -383,8 +383,10 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private let persistenceQueue = DispatchQueue(label: "app.conductor.persistence", qos: .utility)
     private let surfaceCoordinator = TerminalSurfaceCoordinator()
     private var pendingPersistence: DispatchWorkItem?
+    private var pendingTerminalContentPersistence: DispatchWorkItem?
     private var pendingMetadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
     private var pendingMetadataPublish: DispatchWorkItem?
+    private var terminalContentSnapshotObserver: NSObjectProtocol?
     private var activeTerminalContextMenuController: TerminalContextMenuController?
     private var workspaceContentStatesByWorkspaceID: [WorkspaceID: WorkspaceContentRuntimeState] = [:]
     private var workspaceFileBufferSnapshotsByTabID: [String: WorkspaceFileBufferSnapshot] = [:]
@@ -448,15 +450,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             fileTabs: selectedRuntimeContent.fileTabs,
             useTerminalFallback: restoredState != nil
         )
-        let validTerminalIDs = Self.terminalIDs(in: self.workspaces)
-        if let terminalSnapshots = terminalContentPersistence.load(validTerminalIDs: validTerminalIDs) {
-            self.restoredTerminalContentByID = Self.restoredTerminalContent(
-                from: terminalSnapshots,
-                workspaces: self.workspaces
-            )
-        } else {
-            self.restoredTerminalContentByID = [:]
-        }
+        reloadRestoredTerminalContentFromPersistence()
+        installTerminalContentSnapshotObserver()
         syncPanelCoordinatorFromPublished()
         syncFileWorkspaceCoordinatorFromPublished()
         ConductorAppearanceRuntime.apply(self.appearance)
@@ -2296,8 +2291,24 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 self?.installTerminalSurfaceHandlers(surface)
             }
         )
+        injectRestoredTerminalContentIfNeeded(for: tab.id, into: surface)
         applyOcclusion()
         return surface
+    }
+
+    private func injectRestoredTerminalContentIfNeeded(for terminalID: TerminalID, into surface: TerminalSurface) {
+        guard let restored = restoredTerminalContentByID[terminalID] else { return }
+        let text = restored.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        surface.processOutput(Self.terminalOutputStreamText(from: text))
+    }
+
+    private static func terminalOutputStreamText(from text: String) -> String {
+        let normalizedNewlines = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let output = normalizedNewlines.hasSuffix("\n") ? normalizedNewlines : "\(normalizedNewlines)\n"
+        return output.replacingOccurrences(of: "\n", with: "\r\n")
     }
 
     private func installTerminalSurfaceHandlers(_ surface: TerminalSurface) {
@@ -3039,7 +3050,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private func insertTextIntoTerminal(_ text: String, terminalID: TerminalID) -> Bool {
         guard let target = terminalContextMenuTarget(for: terminalID) else { return false }
         focusTerminal(target.tab.id)
-        recordTerminalInput(target.tab.id)
         surface(for: target.tab).sendText(text)
         refreshSurfaceAfterNavigation(target.tab.id)
         return true
@@ -4530,14 +4540,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         reason: TerminalSurfaceUserActivityReason = .input
     ) {
         guard terminalLocation(for: terminalID) != nil else { return }
-        if reason == .input {
-            recordTerminalInput(terminalID)
-        }
         attendTerminal(terminalID)
-    }
-
-    private func recordTerminalInput(_ terminalID: TerminalID) {
-        restoredTerminalContentByID.removeValue(forKey: terminalID)
     }
 
     private func attendSelectedTerminal(in paneID: PaneID) {
@@ -4817,6 +4820,33 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         pendingMetadataByTerminalID.removeAll(keepingCapacity: false)
     }
 
+    func reloadRestoredTerminalContentFromPersistence() {
+        let validTerminalIDs = Self.terminalIDs(in: workspaces)
+        if let terminalSnapshots = terminalContentPersistence.load(validTerminalIDs: validTerminalIDs) {
+            restoredTerminalContentByID = Self.restoredTerminalContent(
+                from: terminalSnapshots,
+                workspaces: workspaces
+            )
+        } else {
+            restoredTerminalContentByID = [:]
+        }
+    }
+
+    private func installTerminalContentSnapshotObserver() {
+        terminalContentSnapshotObserver = NotificationCenter.default.addObserver(
+            forName: .terminalSurfaceDidUpdateScrollbar,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let surface = notification.object as? TerminalSurface else { return }
+            let terminalID = surface.id
+            Task { @MainActor [weak self] in
+                guard let self, self.containsTerminal(terminalID) else { return }
+                self.scheduleTerminalContentPersistence()
+            }
+        }
+    }
+
     func restoredTerminalContent(for terminalID: TerminalID) -> RestoredTerminalContent? {
         restoredTerminalContentByID[terminalID]
     }
@@ -4828,6 +4858,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     func flushPersistence() {
         pendingPersistence?.cancel()
         pendingPersistence = nil
+        pendingTerminalContentPersistence?.cancel()
+        pendingTerminalContentPersistence = nil
         syncSelectedWorkspace()
         saveSelectedWorkspaceContentState()
         let terminalContentSnapshotFile = terminalContentSnapshotFile()
@@ -5267,7 +5299,8 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         let snapshots = workspaces.flatMap { workspace -> [PersistedTerminalContentSnapshot] in
             workspace.panes.values.flatMap { pane -> [PersistedTerminalContentSnapshot] in
                 pane.tabs.compactMap { tab in
-                    let liveText = surfaceCoordinator.existingSurface(for: tab.id)?.visibleText() ?? ""
+                    let surface = surfaceCoordinator.existingSurface(for: tab.id)
+                    let liveText = surface?.fullScrollbackText() ?? surface?.visibleText() ?? ""
                     let sanitized = terminalContentSnapshotText(terminalID: tab.id, liveText: liveText)
                     let restorePreview = RestoredTerminalContent.make(
                         terminalID: tab.id,
@@ -5296,6 +5329,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     private func terminalContentSnapshotText(terminalID: TerminalID, liveText: String) -> String {
         let sanitizedLiveText = TerminalContentSnapshotSanitizer.sanitizedText(liveText)
+        if let restored = restoredTerminalContentByID[terminalID] {
+            let restoredText = TerminalContentSnapshotSanitizer.sanitizedText(
+                Self.persistedTextFallback(from: restored)
+            )
+            if !restoredText.isEmpty && !Self.liveTextHasMeaningfulTerminalContent(sanitizedLiveText) {
+                return restoredText
+            }
+        }
         if !sanitizedLiveText.isEmpty {
             return sanitizedLiveText
         }
@@ -5312,6 +5353,35 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                     .hasPrefix(RestoredTerminalContent.restoreHintPrefix)
             }
             .joined(separator: "\n")
+    }
+
+    private static func liveTextHasMeaningfulTerminalContent(_ text: String) -> Bool {
+        text.components(separatedBy: .newlines)
+            .map { meaningfulTerminalLine($0) }
+            .contains { !$0.isEmpty }
+    }
+
+    private static func meaningfulTerminalLine(_ line: String) -> String {
+        var trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return "" }
+        if trimmed.hasPrefix("Last login:") {
+            return ""
+        }
+        if trimmed == "~" {
+            return ""
+        }
+        trimmed = trimmed.replacingOccurrences(
+            of: #"\s+\d{2}:\d{2}$"#,
+            with: "",
+            options: .regularExpression
+        )
+        let promptPrefixes = ["❯", "$", "%", ">"]
+        for prefix in promptPrefixes where trimmed.hasPrefix(prefix) {
+            return trimmed
+                .dropFirst(prefix.count)
+                .trimmingCharacters(in: .whitespaces)
+        }
+        return trimmed
     }
 
     private func persist() {
@@ -5344,6 +5414,25 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             )
             self.persistenceQueue.async(execute: item)
             self.persistenceQueue.async(execute: terminalContentItem)
+        }
+    }
+
+    private func scheduleTerminalContentPersistence() {
+        pendingTerminalContentPersistence?.cancel()
+        var item: DispatchWorkItem?
+        item = DispatchWorkItem { [weak self] in
+            guard let self, item?.isCancelled == false else { return }
+            let snapshotFile = self.terminalContentSnapshotFile()
+            let saveItem = Self.makeTerminalContentPersistenceSaveWorkItem(
+                terminalContentPersistence: self.terminalContentPersistence,
+                snapshotFile: snapshotFile,
+                cancellationItem: item ?? DispatchWorkItem {}
+            )
+            self.persistenceQueue.async(execute: saveItem)
+        }
+        pendingTerminalContentPersistence = item
+        if let item {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.25, execute: item)
         }
     }
 
@@ -6253,7 +6342,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         focusTerminal(target.tab.id)
         let surface = surface(for: target.tab)
         refreshSurfaceAfterNavigation(target.tab.id)
-        recordTerminalInput(target.tab.id)
         return surface.sendSyntheticKey(
             characters: syntheticKey.characters,
             charactersIgnoringModifiers: syntheticKey.ignoring,

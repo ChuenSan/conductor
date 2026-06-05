@@ -61,6 +61,7 @@ final class TerminalSurface {
     private var appliedRendererPreferences: TerminalRendererPreferences?
     private var surfaceConfig: ghostty_config_t?
     private var pendingText: [String] = []
+    private var pendingOutput: [String] = []
     private let workingDirectory: String?
     private let launchEnvironment: [String: String]
     private var lifecycle: TerminalSurfaceLifecycle = .initialized
@@ -209,6 +210,8 @@ final class TerminalSurface {
         setFocused(false, force: true)
         ghostty_surface_refresh(surface)
         lifecycle = .attached
+        pendingOutput.forEach { processOutput($0) }
+        pendingOutput.removeAll(keepingCapacity: false)
         pendingText.forEach { sendText($0) }
         pendingText.removeAll(keepingCapacity: false)
         ConductorLog.terminal.info("Ghostty surface created for \(self.id.description)")
@@ -395,8 +398,7 @@ final class TerminalSurface {
     /// Reads only the visible viewport (not the full scrollback buffer). This is
     /// cheap even when the session has tens of thousands of lines of history,
     /// which matters because agent-state polling calls it twice a second per
-    /// terminal. `GHOSTTY_POINT_SCREEN` would instead pin to the extremes of the
-    /// entire history and stall the main thread on large buffers.
+    /// terminal.
     func visibleText() -> String? {
         guard let surface else { return nil }
         let size = ghostty_surface_size(surface)
@@ -417,6 +419,35 @@ final class TerminalSurface {
             ),
             rectangle: false
         )
+        return readText(selection: selection)
+    }
+
+    /// Reads the complete text range currently available in Ghostty's screen
+    /// buffer, including scrollback. This is intentionally reserved for
+    /// low-frequency snapshot persistence; using it in polling paths can stall
+    /// the main thread on very large histories.
+    func fullScrollbackText() -> String? {
+        guard surface != nil else { return nil }
+        let selection = ghostty_selection_s(
+            top_left: ghostty_point_s(
+                tag: GHOSTTY_POINT_SCREEN,
+                coord: GHOSTTY_POINT_COORD_TOP_LEFT,
+                x: 0,
+                y: 0
+            ),
+            bottom_right: ghostty_point_s(
+                tag: GHOSTTY_POINT_SCREEN,
+                coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT,
+                x: 0,
+                y: 0
+            ),
+            rectangle: false
+        )
+        return readText(selection: selection)
+    }
+
+    private func readText(selection: ghostty_selection_s) -> String? {
+        guard let surface else { return nil }
         var text = ghostty_text_s()
         guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
         defer { ghostty_surface_free_text(surface, &text) }
@@ -463,6 +494,19 @@ final class TerminalSurface {
         guard let retained = retainedCString(for: text) else { return }
         recordInputEvent(kind: "text", bytes: text.utf8.count)
         ghostty_surface_text(surface, UnsafePointer(retained.pointer), UInt(text.utf8.count))
+    }
+
+    func processOutput(_ text: String) {
+        guard !text.isEmpty else { return }
+        guard let surface else {
+            pendingOutput.append(text)
+            if pendingOutput.reduce(0, { $0 + $1.utf8.count }) > 2 * 1024 * 1024 {
+                pendingOutput.removeAll(keepingCapacity: false)
+            }
+            return
+        }
+        guard let retained = retainedCString(for: text) else { return }
+        ghostty_surface_process_output(surface, UnsafePointer(retained.pointer), UInt(text.utf8.count))
     }
 
     @discardableResult
@@ -548,6 +592,7 @@ final class TerminalSurface {
         preciseScrollFlushTask = nil
         pendingPreciseScroll = nil
         pendingText.removeAll(keepingCapacity: false)
+        pendingOutput.removeAll(keepingCapacity: false)
         onFocusRequest = nil
         onUserActivity = nil
         onContextMenuRequest = nil

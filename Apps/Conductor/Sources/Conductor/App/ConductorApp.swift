@@ -445,6 +445,7 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         if !flag {
             ConductorDiagnostics.record("app-reopen-no-visible-windows")
             ConductorLog.app.info("Reopening Conductor main window after no visible windows")
+            model.reloadRestoredTerminalContentFromPersistence()
             didStart = false
             startApplication()
             return true

@@ -79,6 +79,7 @@ public struct RestoredTerminalContent: Codable, Equatable, Sendable {
     ) -> RestoredTerminalContent? {
         var text = TerminalContentSnapshotSanitizer.sanitizedText(rawText, maxUTF8Bytes: maxUTF8Bytes)
         text = textWithoutExistingRestoreHints(text)
+        text = textWithoutLegacyShellRestoreInjection(text)
         let resumeHint = resumeCommand(tabAgentSnapshot: tabAgentSnapshot, persistedAgentSnapshot: persistedAgentSnapshot)
         if let resumeHint {
             text = text.isEmpty ? "\(restoreHintPrefix) \(resumeHint)" : "\(text)\n\(restoreHintPrefix) \(resumeHint)"
@@ -140,6 +141,27 @@ public struct RestoredTerminalContent: Codable, Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private static func textWithoutLegacyShellRestoreInjection(_ text: String) -> String {
+        text.components(separatedBy: .newlines)
+            .filter { !isLegacyShellRestoreInjectionLine($0) }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isLegacyShellRestoreInjectionLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.contains("__CONDUCTOR_RESTORE_") {
+            return true
+        }
+        if trimmed.contains("stty -echo") && trimmed.count <= 80 {
+            return true
+        }
+        if trimmed.contains("stty echo") && trimmed.count <= 80 {
+            return true
+        }
+        return false
+    }
+
     private static func isRestoreHintContinuation(_ line: String) -> Bool {
         guard line.count >= 6, line.count <= 160 else { return false }
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")
@@ -160,7 +182,7 @@ public struct RestoredTerminalContent: Codable, Equatable, Sendable {
 }
 
 public enum TerminalContentSnapshotSanitizer {
-    public static let defaultMaxUTF8Bytes = 32 * 1024
+    public static let defaultMaxUTF8Bytes = 2 * 1024 * 1024
 
     public static func sanitizedText(
         _ rawText: String,

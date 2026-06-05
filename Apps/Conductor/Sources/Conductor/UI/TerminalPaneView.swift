@@ -215,16 +215,6 @@ struct TerminalPaneView: View {
             GeometryReader { proxy in
                 ZStack {
                     VStack(spacing: 0) {
-                        if let restored = model.restoredTerminalContent(for: selected.id) {
-                            RestoredTerminalContentBlock(
-                                content: restored,
-                                theme: snapshot.theme
-                            ) {
-                                model.dismissRestoredTerminalContent(for: selected.id)
-                            }
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                        }
-
                         TerminalSurfaceRepresentable(
                             surface: model.surface(for: selected),
                             theme: snapshot.theme,
@@ -328,52 +318,6 @@ private struct TerminalPaneFlashOverlay: View {
             .stroke(color.opacity(visible ? 0.86 : 0), lineWidth: 2)
             .shadow(color: color.opacity(visible ? 0.46 : 0), radius: visible ? 8 : 0)
             .padding(1)
-    }
-}
-
-private struct RestoredTerminalContentBlock: View {
-    let content: RestoredTerminalContent
-    let theme: TerminalTheme
-    let dismiss: () -> Void
-    @Environment(\.conductorFontScale) private var fontScale
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                Text(L("上次终端内容", "Previous Terminal Content"))
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                Spacer(minLength: 8)
-                Button(action: dismiss) {
-                    Image(systemName: "xmark")
-                        .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                }
-                .buttonStyle(.plain)
-                .macNativeTooltip(L("隐藏恢复内容", "Hide restored content"))
-                .accessibilityLabel(L("隐藏恢复内容", "Hide restored content"))
-            }
-            .foregroundStyle(theme.shellChromeText.opacity(0.86))
-
-            ScrollView {
-                Text(content.text)
-                    .font(.system(size: fontScale.size(11), design: .monospaced))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.88))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
-            }
-            .frame(maxHeight: 160)
-            .background(theme.terminalChrome.opacity(0.20))
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        }
-        .padding(8)
-        .background(theme.terminalChrome.opacity(0.16))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(0.20))
-                .frame(height: 1)
-        }
     }
 }
 
