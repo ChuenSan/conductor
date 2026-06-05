@@ -103,6 +103,7 @@ public enum ConductorControlMethod {
     public static let terminalSendText = "terminal.sendText"
     public static let terminalSendKey = "terminal.sendKey"
     public static let terminalVisibleText = "terminal.visibleText"
+    public static let terminalRestoredContent = "terminal.restoredContent"
     public static let terminalCwd = "terminal.cwd"
     public static let terminalTitle = "terminal.title"
     public static let terminalRename = "terminal.rename"

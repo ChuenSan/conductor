@@ -86,6 +86,7 @@ import Testing
         ConductorControlMethod.terminalSendText,
         ConductorControlMethod.terminalSendKey,
         ConductorControlMethod.terminalVisibleText,
+        ConductorControlMethod.terminalRestoredContent,
         ConductorControlMethod.terminalCwd,
         ConductorControlMethod.terminalTitle,
         ConductorControlMethod.terminalRename,

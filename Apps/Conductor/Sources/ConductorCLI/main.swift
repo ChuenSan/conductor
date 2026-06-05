@@ -177,7 +177,7 @@ struct ConductorCLI {
 
     private func terminalRequest(_ args: [String]) throws -> ConductorControlRequest {
         guard let subcommand = args.first else {
-            throw CLIError.usage("Usage: conductor terminal send|send-key|sample-scroll|visible-text|cwd|title|rename|agent|resume-agent|resume-agents|channel")
+            throw CLIError.usage("Usage: conductor terminal send|send-key|sample-scroll|visible-text|restored-content|cwd|title|rename|agent|resume-agent|resume-agents|channel")
         }
         switch subcommand {
         case "send":
@@ -218,6 +218,13 @@ struct ConductorCLI {
                 params["terminalID"] = .string(terminalID)
             }
             return request(.terminalVisibleText, params: params)
+        case "restored-content":
+            var params: [String: ConductorControlJSON] = [:]
+            if let terminalID = optionValue("--terminal", in: args) ?? optionValue("--target", in: args),
+               terminalID != "focused" {
+                params["terminalID"] = .string(terminalID)
+            }
+            return request(.terminalRestoredContent, params: params)
         case "cwd":
             var params: [String: ConductorControlJSON] = [:]
             if let terminalID = optionValue("--terminal", in: args) ?? optionValue("--target", in: args),
@@ -277,7 +284,7 @@ struct ConductorCLI {
             }
             return request(.terminalResumeAgents, params: params)
         default:
-            throw CLIError.usage("Usage: conductor terminal send|send-key|sample-scroll|visible-text|cwd|title|rename|agent|resume-agent|resume-agents")
+            throw CLIError.usage("Usage: conductor terminal send|send-key|sample-scroll|visible-text|restored-content|cwd|title|rename|agent|resume-agent|resume-agents")
         }
     }
 
@@ -782,6 +789,7 @@ struct ConductorCLI {
       conductor terminal send-key <key> [--target focused|terminal-id]
       conductor terminal sample-scroll [--target focused|terminal-id]
       conductor terminal visible-text [--target focused|terminal-id]
+      conductor terminal restored-content [--target focused|terminal-id]
       conductor terminal cwd [--target focused|terminal-id]
       conductor terminal title [--target focused|terminal-id]
       conductor terminal rename <title> [--target focused|terminal-id]
@@ -859,6 +867,7 @@ extension String {
     fileprivate static let terminalSendText = ConductorControlMethod.terminalSendText
     fileprivate static let terminalSendKey = ConductorControlMethod.terminalSendKey
     fileprivate static let terminalVisibleText = ConductorControlMethod.terminalVisibleText
+    fileprivate static let terminalRestoredContent = ConductorControlMethod.terminalRestoredContent
     fileprivate static let terminalCwd = ConductorControlMethod.terminalCwd
     fileprivate static let terminalTitle = ConductorControlMethod.terminalTitle
     fileprivate static let terminalRename = ConductorControlMethod.terminalRename

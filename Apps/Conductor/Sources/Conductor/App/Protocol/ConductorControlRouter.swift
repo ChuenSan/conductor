@@ -72,6 +72,8 @@ final class ConductorControlRouter {
                 result = try sendTerminalKey(request: request, model: model)
             case ConductorControlMethod.terminalVisibleText:
                 result = try visibleTerminalText(request: request, model: model)
+            case ConductorControlMethod.terminalRestoredContent:
+                result = try restoredTerminalContent(request: request, model: model)
             case ConductorControlMethod.terminalCwd:
                 result = try terminalCwd(request: request, model: model)
             case ConductorControlMethod.terminalTitle:
@@ -1457,6 +1459,29 @@ final class ConductorControlRouter {
         return .object([
             "terminalID": (terminalID ?? model.focusedTerminalID).map { .string($0.description) } ?? .null,
             "text": .string(text)
+        ])
+    }
+
+    private func restoredTerminalContent(
+        request: ConductorControlRequest,
+        model: ConductorWindowModel
+    ) throws -> ConductorControlJSON {
+        let terminalID = try optionalTerminalIDParam(request.params)
+        guard let info = model.controlTerminalInfo(terminalID: terminalID) else {
+            throw ConductorControlError.targetNotFound(
+                "Terminal not found.",
+                details: terminalID.map { ["terminalID": .string($0.description)] } ?? [:]
+            )
+        }
+        let restored = model.restoredTerminalContent(for: info.tab.id)
+        return .object([
+            "terminalID": .string(info.tab.id.description),
+            "workspaceID": .string(info.workspaceID.description),
+            "paneID": .string(info.paneID.description),
+            "available": .bool(restored != nil),
+            "capturedAt": restored.map { .string(Self.iso8601Formatter.string(from: $0.capturedAt)) } ?? .null,
+            "text": restored.map { .string($0.text) } ?? .null,
+            "resumeHint": restored?.resumeHint.map { .string($0) } ?? .null
         ])
     }
 
