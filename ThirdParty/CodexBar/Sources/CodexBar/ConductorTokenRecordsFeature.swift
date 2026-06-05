@@ -2417,48 +2417,38 @@ private struct ConductorInlineUsageDashboardCard: View {
     @State private var sweep = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 7) {
-                ForEach(Array(model.kpis.prefix(4).enumerated()), id: \.offset) { _, kpi in
-                    ConductorDashboardKPI(kpi: kpi, style: style)
-                }
-            }
-
-            ConductorUsageBarscape(
-                model: model,
-                style: style,
-                revealed: revealed,
-                sweep: sweep)
-                .frame(height: 112)
-                .accessibilityLabel(model.accessibilityLabel)
-
-            if !model.detailLines.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(Array(model.detailLines.prefix(3).enumerated()), id: \.offset) { _, line in
-                        Text(codexBarLocalizedDisplayText(line))
-                            .font(.system(size: 10.2, weight: .semibold))
-                            .foregroundStyle(style.secondaryText)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .padding(.horizontal, 7)
-                            .frame(height: 20)
-                            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.46 : 0.62))
-                            .clipShape(Capsule())
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 7) {
+                    ForEach(Array(model.kpis.prefix(4).enumerated()), id: \.offset) { _, kpi in
+                        ConductorDashboardKPI(kpi: kpi, style: style)
                     }
-                    Spacer(minLength: 0)
+                }
+
+                ConductorUsageBarscape(
+                    model: model,
+                    style: style,
+                    revealed: revealed,
+                    sweep: sweep)
+                    .frame(height: 112)
+                    .accessibilityLabel(model.accessibilityLabel)
+
+                if !model.detailLines.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(Array(model.detailLines.prefix(3).enumerated()), id: \.offset) { _, line in
+                            Text(codexBarLocalizedDisplayText(line))
+                                .font(.system(size: 10.2, weight: .semibold))
+                                .foregroundStyle(style.secondaryText)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(height: 20)
+                        }
+                        Spacer(minLength: 0)
+                    }
                 }
             }
         }
-        .padding(10)
-        .background {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.42 : 0.60))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(style.stroke.opacity(0.34), lineWidth: 0.7)
-                }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .groupBoxStyle(.automatic)
         .onAppear {
             withAnimation(.spring(response: 0.72, dampingFraction: 0.86).delay(0.08)) {
                 revealed = true
@@ -2479,33 +2469,22 @@ private struct ConductorDashboardKPI: View {
     let style: ConductorUsagePanelStyle
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(codexBarLocalizedDisplayText(kpi.title))
-                .font(.system(size: 10.2, weight: .bold))
-                .foregroundStyle(style.tertiaryText)
-                .lineLimit(1)
+        GroupBox {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(codexBarLocalizedDisplayText(kpi.title))
+                    .font(.system(size: 10.2, weight: .bold))
+                    .foregroundStyle(style.tertiaryText)
+                    .lineLimit(1)
 
-            Text(kpi.value)
-                .font(.system(size: kpi.emphasis ? 16 : 13, weight: .bold, design: .rounded))
-                .foregroundStyle(kpi.emphasis ? style.primaryText : style.secondaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+                Text(kpi.value)
+                    .font(.system(size: kpi.emphasis ? 16 : 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(kpi.emphasis ? style.primaryText : style.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 7)
+        .groupBoxStyle(.automatic)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(kpi.emphasis
-                    ? style.controlStrongFill.opacity(style.usesDarkChrome ? 0.62 : 0.78)
-                    : style.controlStrongFill.opacity(style.usesDarkChrome ? 0.32 : 0.48))
-                .overlay(alignment: .leading) {
-                    Capsule()
-                        .fill(kpi.emphasis ? style.emphasis : style.separator.opacity(0.54))
-                        .frame(width: 3)
-                        .padding(.vertical, 7)
-                }
-        }
     }
 }
 
