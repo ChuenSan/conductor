@@ -5,7 +5,6 @@ import SwiftUI
 @MainActor
 struct AboutPane: View {
     let updater: UpdaterProviding
-    @State private var iconHover = false
     @AppStorage("autoUpdateEnabled") private var autoUpdateEnabled: Bool = true
     @AppStorage(UpdateChannel.userDefaultsKey)
     private var updateChannelRaw: String = UpdateChannel.defaultChannel.rawValue
@@ -40,13 +39,6 @@ struct AboutPane: View {
                         .resizable()
                         .frame(width: 92, height: 92)
                         .cornerRadius(16)
-                        .scaleEffect(self.iconHover ? 1.05 : 1.0)
-                        .shadow(color: self.iconHover ? .accentColor.opacity(0.25) : .clear, radius: 6)
-                }
-                .onHover { hovering in
-                    ConductorUsageMotion.perform(ConductorUsageMotion.hover) {
-                        self.iconHover = hovering
-                    }
                 }
             }
 

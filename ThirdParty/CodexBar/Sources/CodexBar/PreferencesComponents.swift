@@ -69,7 +69,6 @@ struct AboutLinkRow: View {
     let icon: String
     let title: String
     let url: String
-    @State private var hovering = false
 
     private var destination: URL? {
         URL(string: self.url)
@@ -82,7 +81,6 @@ struct AboutLinkRow: View {
             }
             .foregroundStyle(.tint)
             .contentShape(Rectangle())
-            .onHover { self.hovering = $0 }
         } else {
             label
                 .foregroundStyle(.secondary)
@@ -93,7 +91,6 @@ struct AboutLinkRow: View {
         HStack(spacing: 8) {
             Image(systemName: self.icon)
             Text(self.title)
-                .underline(self.hovering, color: .accentColor)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 4)
