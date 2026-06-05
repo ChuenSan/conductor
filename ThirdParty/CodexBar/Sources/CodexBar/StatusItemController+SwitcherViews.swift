@@ -146,7 +146,7 @@ final class ProviderSwitcherView: NSView {
                     action: #selector(self.handleSelection(_:)))
                 button = inline
             } else {
-                button = PaddedToggleButton(
+                button = NSButton(
                     title: segment.title,
                     target: self,
                     action: #selector(self.handleSelection(_:)))

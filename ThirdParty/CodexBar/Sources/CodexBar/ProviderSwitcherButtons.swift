@@ -1,40 +1,9 @@
 import AppKit
 
-final class PaddedToggleButton: NSButton {
-    private var quotaBarReservedHeight: CGFloat = 0
-
-    var contentPadding = NSEdgeInsets(top: 4, left: 7, bottom: 4, right: 7) {
-        didSet {
-            if oldValue.top != self.contentPadding.top ||
-                oldValue.left != self.contentPadding.left ||
-                oldValue.bottom != self.contentPadding.bottom ||
-                oldValue.right != self.contentPadding.right
-            {
-                self.invalidateIntrinsicContentSize()
-            }
-        }
-    }
-
-    override var intrinsicContentSize: NSSize {
-        let size = super.intrinsicContentSize
-        return NSSize(
-            width: size.width + self.contentPadding.left + self.contentPadding.right,
-            height: size.height + self.contentPadding.top + self.contentPadding.bottom + self.quotaBarReservedHeight)
-    }
-
-    func setQuotaBarReservedHeight(_ height: CGFloat) {
-        guard self.quotaBarReservedHeight != height else { return }
-        self.quotaBarReservedHeight = height
-        self.invalidateIntrinsicContentSize()
-    }
-}
-
 @MainActor
 protocol ProviderSwitcherToggleButton: AnyObject {
     func setQuotaBarReservedHeight(_ height: CGFloat)
 }
-
-extension PaddedToggleButton: ProviderSwitcherToggleButton {}
 
 final class InlineIconToggleButton: NSButton {
     private let iconView = NSImageView()
