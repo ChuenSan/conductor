@@ -154,7 +154,7 @@ public struct RestoredTerminalContent: Codable, Equatable, Sendable {
             .dropFirst(restoreHintPrefix.count)
             .trimmingCharacters(in: .whitespaces)
             .lowercased()
-        return command == "codex resume" || command == "claude --resume" || command == "claude -r"
+        return command == "codex resume" || command == "claude --resume"
     }
 }
 

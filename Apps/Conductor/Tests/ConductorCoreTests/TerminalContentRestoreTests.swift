@@ -163,6 +163,18 @@ import Testing
     }
 }
 
+@Test func restoredTerminalContentKeepsTokenLikeOutputAfterClaudeShortResumeHint() {
+    let restored = RestoredTerminalContent.make(
+        terminalID: TerminalID(),
+        capturedAt: Date(timeIntervalSince1970: 2),
+        rawText: "previous\nConductor restore hint: claude -r\nbuild-123\nfinal",
+        tabAgentSnapshot: nil,
+        persistedAgentSnapshot: nil
+    )
+
+    #expect(restored?.text == "previous\nbuild-123\nfinal")
+}
+
 @Test func terminalContentSnapshotSanitizesAndCapsText() {
     let raw = "line 1\u{0007}\nline 2\n\n"
     let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(raw, maxUTF8Bytes: 64)
