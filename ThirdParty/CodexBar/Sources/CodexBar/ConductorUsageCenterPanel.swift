@@ -10,7 +10,6 @@ struct ConductorUsageCenterPanel: View {
 
     @State private var expandedProvider: UsageProvider?
     @State private var isRefreshingAll = false
-    @State private var hoveredRoute: ConductorUsageCenterRoute?
 
     private let tokenRecordProviders: [UsageProvider] = [.codex, .claude, .vertexai, .bedrock]
 
@@ -57,27 +56,21 @@ struct ConductorUsageCenterPanel: View {
                     subtitle: accountSubtitle,
                     systemImage: "person.crop.circle.badge.checkmark",
                     style: style,
-                    isHovered: hoveredRoute == .account,
                     action: { runCodexAccountAction() })
-                    .onHover { hoveredRoute = $0 ? .account : nil }
 
                 ConductorUsageCenterRouteTile(
                     title: t("Token 记录", "Token Records"),
                     subtitle: tokenRecordsSubtitle,
                     systemImage: "chart.bar.doc.horizontal",
                     style: style,
-                    isHovered: hoveredRoute == .records,
                     action: { openTokenRecords() })
-                    .onHover { hoveredRoute = $0 ? .records : nil }
 
                 ConductorUsageCenterRouteTile(
                     title: t("本地数据", "Local Data"),
                     subtitle: storageSubtitle,
                     systemImage: "internaldrive",
                     style: style,
-                    isHovered: hoveredRoute == .storage,
                     action: { focusStorage() })
-                    .onHover { hoveredRoute = $0 ? .storage : nil }
             }
 
             ConductorUsageProviderRail(
@@ -401,12 +394,6 @@ struct ConductorUsageCenterPanel: View {
     }
 }
 
-private enum ConductorUsageCenterRoute: Hashable {
-    case account
-    case records
-    case storage
-}
-
 private struct ConductorUsageProviderCenterState: Identifiable {
     let provider: UsageProvider
     let name: String
@@ -478,7 +465,6 @@ private struct ConductorUsageCenterRouteTile: View {
     let subtitle: String
     let systemImage: String
     let style: ConductorUsagePanelStyle
-    let isHovered: Bool
     let action: () -> Void
 
     var body: some View {
@@ -488,8 +474,6 @@ private struct ConductorUsageCenterRouteTile: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(style.emphasis)
                     .frame(width: 28, height: 28)
-                    .background(style.controlFill.opacity(0.86))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -510,20 +494,13 @@ private struct ConductorUsageCenterRouteTile: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(style.tertiaryText.opacity(isHovered ? 0.95 : 0.62))
+                    .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
-            .background(style.controlStrongFill.opacity(isHovered ? 0.46 : 0.28))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(style.stroke.opacity(isHovered ? 0.34 : 0.18), lineWidth: 0.7)
-            }
-            .animation(ConductorUsageMotion.hover, value: isHovered)
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.bordered)
         .controlSize(.small)
         .accessibilityLabel(title)
     }
@@ -575,9 +552,17 @@ private struct ConductorUsageProviderPill: View {
     let languageIdentifier: String?
     let action: () -> Void
 
-    @State private var isHovered = false
-
     var body: some View {
+        if selected {
+            pillButton
+                .buttonStyle(.borderedProminent)
+        } else {
+            pillButton
+                .buttonStyle(.bordered)
+        }
+    }
+
+    private var pillButton: some View {
         Button(action: action) {
             HStack(spacing: 7) {
                 ConductorUsageProviderGlyph(provider: state.provider, style: style, size: 24)
@@ -600,31 +585,9 @@ private struct ConductorUsageProviderPill: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 38)
-            .background(
-                selected
-                    ? style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.48)
-                    : style.controlFill.opacity(isHovered ? 0.48 : 0.30))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(alignment: .leading) {
-                if selected {
-                    Capsule()
-                        .fill(style.emphasis.opacity(style.usesDarkChrome ? 0.56 : 0.42))
-                        .frame(width: 3, height: 18)
-                        .padding(.leading, 3)
-                }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(
-                        selected
-                            ? style.emphasis.opacity(style.usesDarkChrome ? 0.34 : 0.24)
-                            : style.stroke.opacity(0.24),
-                        lineWidth: 0.7)
-            }
         }
-        .buttonStyle(.borderless)
         .controlSize(.small)
-        .onHover { isHovered = $0 }
+        .tint(style.emphasis)
         .accessibilityLabel("\(state.name), \(state.status.label(languageIdentifier: languageIdentifier))")
     }
 }
