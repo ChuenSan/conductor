@@ -812,12 +812,6 @@ private struct ConductorUsageProviderGlyph: View {
         .foregroundStyle(style.secondaryText)
         .frame(width: size * 0.58, height: size * 0.58)
         .frame(width: size, height: size)
-        .background(style.controlFill.opacity(0.88))
-        .clipShape(RoundedRectangle(cornerRadius: min(8, size * 0.28), style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: min(8, size * 0.28), style: .continuous)
-                .stroke(style.stroke.opacity(0.28), lineWidth: 0.7)
-        }
         .accessibilityHidden(true)
     }
 }
