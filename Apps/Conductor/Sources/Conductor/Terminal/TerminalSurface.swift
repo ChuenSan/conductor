@@ -16,6 +16,7 @@ struct TerminalScrollbarState: Equatable, Sendable {
 enum TerminalSurfaceUserActivityReason: Equatable, Sendable {
     case focus
     case input
+    case scroll
 }
 
 extension Notification.Name {
@@ -334,8 +335,8 @@ final class TerminalSurface {
         onUserActivity?(id, .focus)
     }
 
-    func recordUserActivity() {
-        onUserActivity?(id, .input)
+    func recordUserActivity(reason: TerminalSurfaceUserActivityReason = .input) {
+        onUserActivity?(id, reason)
     }
 
     func enqueueScrollbarUpdate(_ scrollbar: TerminalScrollbarState) {

@@ -167,7 +167,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
     override func scrollWheel(with event: NSEvent) {
         let startedAt = DispatchTime.now().uptimeNanoseconds
         guard let surface else { return }
-        surface.recordUserActivity()
+        surface.recordUserActivity(reason: .scroll)
         surface.scroll(
             deltaX: event.scrollingDeltaX,
             deltaY: event.scrollingDeltaY,
