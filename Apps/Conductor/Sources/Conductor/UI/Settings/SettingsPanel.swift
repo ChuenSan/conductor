@@ -19,11 +19,15 @@ struct AppearanceSettingsPanel: View {
     @Environment(\.conductorTheme) var theme
     @Environment(\.conductorFontScale) var fontScale
 
-    private var panelCornerRadius: CGFloat { 12 }
-    private var panelBase: Color { theme.floatingPanelBase }
-    private var panelWash: Color { theme.floatingPanelWash.opacity(theme.usesDarkChrome ? 0.14 : 0.18) }
-    private var sidebarBase: Color { theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.20 : 0.28) }
-    private var separatorColor: Color { theme.floatingSeparator.opacity(theme.usesDarkChrome ? 0.66 : 0.48) }
+    private var selectedSectionBinding: Binding<SettingsSectionID?> {
+        Binding(
+            get: { selectedSection },
+            set: { section in
+                guard let section else { return }
+                selectSection(section)
+            }
+        )
+    }
 
     var body: some View {
         let snapshot = SettingsSnapshot(
@@ -42,34 +46,28 @@ struct AppearanceSettingsPanel: View {
             VStack(spacing: 0) {
                 settingsHeader(snapshot: snapshot)
 
-                Rectangle()
-                    .fill(separatorColor)
-                    .frame(height: 1)
-
                 HStack(spacing: 0) {
                     sidebar(snapshot: snapshot)
-
-                    Rectangle()
-                        .fill(separatorColor)
-                        .frame(width: 1)
 
                     contentPane(snapshot: snapshot)
                 }
             }
             .background {
-                RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
-                    .fill(panelBase)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
-                            .fill(panelWash)
-                    }
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.panel, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.panel, style: .continuous)
+                    .fill(ConductorTokens.Settings.panelWash(dark: theme.usesDarkChrome))
             }
-            .clipShape(RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
-                    .stroke(separatorColor, lineWidth: 1)
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.panel, style: .continuous)
+                    .stroke(ConductorTokens.Settings.panelStroke(dark: theme.usesDarkChrome), lineWidth: 1)
             }
-            .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.36 : 0.18), radius: 28, y: 18)
+            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.panel, style: .continuous))
+            .shadow(
+                color: ConductorTokens.Settings.panelShadow(dark: theme.usesDarkChrome),
+                radius: 28,
+                y: 12
+            )
             .frame(width: 860, height: 520)
             .onExitCommand {
                 model.hideSettingsPanel()
@@ -84,101 +82,95 @@ struct AppearanceSettingsPanel: View {
     }
 
     private func settingsHeader(snapshot: SettingsSnapshot) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L("设置", "Settings"))
-                    .font(.conductorSystem(size: 13.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
-                Text(snapshot.selectedSection.subtitle)
-                    .font(.conductorSystem(size: 10.5, weight: .regular, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .lineLimit(1)
-            }
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("设置", "Settings"))
+                        .font(.conductorSystem(size: 13.5, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.primaryText)
+                        .lineLimit(1)
+                    Text(snapshot.selectedSection.subtitle)
+                        .font(.conductorSystem(size: 10.5, weight: .regular, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
 
-            Button {
-                model.hideSettingsPanel()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.secondaryText)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+                Button {
+                    model.hideSettingsPanel()
+                } label: {
+                    Label(L("关闭设置", "Close Settings"), systemImage: "xmark")
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .keyboardShortcut(.cancelAction)
+                .accessibilityLabel(L("关闭设置", "Close Settings"))
+                .help(L("关闭设置", "Close Settings"))
             }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
-            .accessibilityLabel(L("关闭设置", "Close Settings"))
-            .macNativeTooltip(L("关闭设置", "Close Settings"))
+            .padding(.leading, 18)
+            .padding(.trailing, 10)
+            .frame(height: 47)
         }
-        .padding(.leading, 18)
-        .padding(.trailing, 10)
-        .frame(height: 48)
-        .background(panelBase.opacity(theme.usesDarkChrome ? 0.94 : 0.88))
     }
 
     private func sidebar(snapshot: SettingsSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sidebarGroup(
-                title: L("常用", "General"),
-                sections: [.overview, .interface, .terminal]
-            )
+        List(selection: selectedSectionBinding) {
+            Section(L("常用", "General")) {
+                sidebarRows([.overview, .interface, .terminal])
+            }
 
-            sidebarGroup(
-                title: L("工作流", "Workflow"),
-                sections: [.shell, .usage, .automation, .updates, .commands]
-            )
+            Section(L("工作流", "Workflow")) {
+                sidebarRows([.shell, .usage, .automation, .updates, .commands])
+            }
 
-            sidebarGroup(
-                title: L("外观", "Look"),
-                sections: [.themes]
-            )
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 12)
-        .frame(width: 174)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(sidebarBase)
-    }
-
-    private func sidebarGroup(title: String, sections: [SettingsSectionID]) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 1)
-
-            VStack(spacing: 1) {
-                ForEach(sections) { section in
-                    SettingsSidebarItem(
-                        section: section,
-                        selected: selectedSection == section
-                    ) {
-                        selectSection(section)
-                    }
-                }
+            Section(L("外观", "Look")) {
+                sidebarRows([.themes])
             }
         }
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(ConductorTokens.Settings.sidebarWash(dark: theme.usesDarkChrome))
+        .frame(width: 174)
     }
 
+    @ViewBuilder
+    private func sidebarRows(_ sections: [SettingsSectionID]) -> some View {
+        ForEach(sections) { section in
+            Label(section.title, systemImage: section.systemImage)
+                .font(.conductorSystem(size: 12, weight: section == selectedSection ? .semibold : .medium, scale: fontScale))
+                .foregroundStyle(section == selectedSection ? ConductorDesign.primaryText : ConductorDesign.secondaryText)
+                .tag(section)
+                .help(section.subtitle)
+                .accessibilityLabel(section.title)
+                .accessibilityHint(section.subtitle)
+        }
+    }
+
+    @ViewBuilder
     private func contentPane(snapshot: SettingsSnapshot) -> some View {
         ZStack {
-            panelBase
-                .overlay(panelWash.opacity(0.45))
+            Color.clear
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+            if selectedSection == .overview || selectedSection == .interface || selectedSection == .themes {
+                VStack(alignment: .leading, spacing: 12) {
                     detailContent(snapshot: snapshot)
                 }
-                .frame(maxWidth: selectedSection == .usage || selectedSection == .updates ? 620 : 600, alignment: .topLeading)
+                .frame(maxWidth: 600, maxHeight: .infinity, alignment: .topLeading)
                 .padding(.horizontal, 26)
                 .padding(.vertical, 18)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        detailContent(snapshot: snapshot)
+                    }
+                    .frame(maxWidth: selectedSection == .usage || selectedSection == .updates ? 620 : 600, alignment: .topLeading)
+                    .padding(.horizontal, 26)
+                    .padding(.vertical, 18)
+                }
+                .scrollIndicators(.visible)
             }
-            .scrollIndicators(.visible)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

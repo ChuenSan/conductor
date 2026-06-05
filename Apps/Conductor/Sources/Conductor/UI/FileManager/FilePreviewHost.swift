@@ -73,27 +73,27 @@ func filePreviewBody(
         )
     case .nativePreview(let url, let descriptor):
         VStack(spacing: 0) {
-            HStack(spacing: 7) {
-                filePreviewInfoPill(
-                    descriptor.title,
-                    theme: theme,
-                    fontFamily: fontFamily,
-                    fontScale: fontScale
-                )
-                Text(descriptor.reason)
-                    .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.48))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 28)
-            .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.72 : 0.64))
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.35))
-                    .frame(height: 1)
+            filePreviewInfoBar(height: 28, theme: theme) {
+                HStack(spacing: 7) {
+                    Label {
+                        filePreviewInfoLabel(
+                            descriptor.title,
+                            theme: theme,
+                            fontFamily: fontFamily,
+                            fontScale: fontScale
+                        )
+                    } icon: {
+                        Image(systemName: "eye")
+                            .font(.conductorSystem(size: 9.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                    }
+                    .labelStyle(.titleAndIcon)
+                    Text(descriptor.reason)
+                        .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.48))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 0)
+                }
             }
 
             ConductorNativePreviewSurface(url: url, backgroundColor: NSColor(theme.terminalBackground))
@@ -151,7 +151,30 @@ func filePreviewBody(
 }
 
 @MainActor
-private func filePreviewInfoPill(
+private func filePreviewInfoBar<Content: View>(
+    height: CGFloat,
+    theme: TerminalTheme,
+    horizontalPadding: CGFloat = 12,
+    @ViewBuilder content: () -> Content
+) -> some View {
+    VStack(spacing: 0) {
+        content()
+            .padding(.horizontal, horizontalPadding)
+            .frame(height: height)
+        filePreviewSeparator(theme: theme)
+    }
+    .background(ConductorTokens.Settings.panelChromeWash(dark: theme.usesDarkChrome))
+}
+
+@MainActor
+private func filePreviewSeparator(theme: TerminalTheme) -> some View {
+    Rectangle()
+        .fill(ConductorTokens.Settings.subtleSeparator(dark: theme.usesDarkChrome))
+        .frame(height: 1)
+}
+
+@MainActor
+private func filePreviewInfoLabel(
     _ title: String,
     theme: TerminalTheme,
     fontFamily: AppearanceFontFamily,
@@ -161,10 +184,7 @@ private func filePreviewInfoPill(
         .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
         .foregroundStyle(theme.shellChromeText.opacity(0.52))
         .lineLimit(1)
-        .padding(.horizontal, 7)
         .frame(height: 19)
-        .background(theme.floatingControlFill.opacity(0.56))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 }
 
 @MainActor
@@ -175,16 +195,18 @@ private func filePreviewMessage(
     fontFamily: AppearanceFontFamily,
     fontScale: AppearanceFontScale
 ) -> some View {
-    VStack(spacing: 8) {
-        Image(systemName: systemImage)
-            .font(.conductorSystem(size: 22, weight: .medium, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.30))
-        Text(text)
-            .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.52))
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 20)
+    ContentUnavailableView {
+        Label(text, systemImage: systemImage)
     }
+    .overlay(alignment: .topTrailing) {
+        if systemImage == "hourglass" {
+            ProgressView()
+                .controlSize(.small)
+                .padding(14)
+        }
+    }
+    .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
+    .foregroundStyle(theme.shellChromeText.opacity(0.58))
     .frame(maxWidth: .infinity, maxHeight: .infinity)
 }
 
@@ -242,28 +264,34 @@ struct FileManagerSourcePreview: View {
     }
 
     private var sourceInfoBar: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(document.formatLabel ?? fileManagerL("文本预览", "Text Preview"))
-                    .font(.conductorSystem(size: 12, weight: .bold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.82))
-                Text(sourceSubtitle)
-                    .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.45))
-                    .lineLimit(1)
+        filePreviewInfoBar(height: 44, theme: theme, horizontalPadding: 14) {
+            HStack(spacing: 10) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(document.formatLabel ?? fileManagerL("文本预览", "Text Preview"))
+                            .font(.conductorSystem(size: 12, weight: .bold, family: fontFamily, scale: fontScale))
+                            .foregroundStyle(theme.shellChromeText.opacity(0.82))
+                        Text(sourceSubtitle)
+                            .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
+                            .foregroundStyle(theme.shellChromeText.opacity(0.45))
+                            .lineLimit(1)
+                    }
+                } icon: {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.58))
+                }
+                .labelStyle(.titleAndIcon)
+                Spacer(minLength: 0)
+                filePreviewInfoLabel(
+                    fileManagerL("\(document.lineCount) 行", "\(document.lineCount) lines"),
+                    theme: theme,
+                    fontFamily: fontFamily,
+                    fontScale: fontScale
+                )
+                if document.isLineLimited { infoLabel(fileManagerL("前 \(document.displayedLineCount) 行", "First \(document.displayedLineCount) lines")) }
+                if truncated { infoLabel(fileManagerL("前 256 KB", "First 256 KB")) }
             }
-            Spacer(minLength: 0)
-            infoPill(fileManagerL("\(document.lineCount) 行", "\(document.lineCount) lines"))
-            if document.isLineLimited { infoPill(fileManagerL("前 \(document.displayedLineCount) 行", "First \(document.displayedLineCount) lines")) }
-            if truncated { infoPill(fileManagerL("前 256 KB", "First 256 KB")) }
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 44)
-        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.46 : 0.26))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.30 : 0.18))
-                .frame(height: 1)
         }
     }
 
@@ -274,15 +302,8 @@ struct FileManagerSourcePreview: View {
         return fileManagerL("轻量文本阅读器", "Lightweight text reader")
     }
 
-    private func infoPill(_ title: String) -> some View {
-        Text(title)
-            .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.52))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .frame(height: 19)
-            .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.46 : 0.34))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    private func infoLabel(_ title: String) -> some View {
+        filePreviewInfoLabel(title, theme: theme, fontFamily: fontFamily, fontScale: fontScale)
     }
 
     private static let swiftUIRenderedLineLimit = 180
@@ -307,12 +328,7 @@ struct FileManagerTablePreview: View {
                     backgroundColor: NSColor(theme.terminalBackground),
                     textColor: NSColor(theme.shellChromeText.opacity(0.74)),
                     headerTextColor: NSColor(theme.shellChromeText.opacity(0.82)),
-                    lineNumberTextColor: NSColor(theme.shellChromeText.opacity(0.34)),
-                    lineNumberBackgroundColor: NSColor(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.30 : 0.18)),
-                    headerBackgroundColor: NSColor(theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.24 : 0.18)),
-                    evenCellBackgroundColor: NSColor(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.08 : 0.12)),
-                    oddCellBackgroundColor: NSColor.clear,
-                    gridColor: NSColor(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
+                    lineNumberTextColor: NSColor(theme.shellChromeText.opacity(0.34))
                 )
                 .background(theme.terminalBackground)
             } else {
@@ -325,7 +341,6 @@ struct FileManagerTablePreview: View {
                                     .foregroundStyle(theme.shellChromeText.opacity(0.34))
                                     .frame(width: 38, height: 26, alignment: .trailing)
                                     .padding(.trailing, 8)
-                                    .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.30 : 0.18))
 
                                 ForEach(0..<document.columnCount, id: \.self) { columnIndex in
                                     Text(cell(row: row.values, columnIndex: columnIndex))
@@ -335,12 +350,6 @@ struct FileManagerTablePreview: View {
                                         .truncationMode(.tail)
                                         .padding(.horizontal, 8)
                                         .frame(width: Self.cellWidth, height: Self.rowHeight, alignment: .leading)
-                                        .background(cellBackground(rowIndex: row.index, columnIndex: columnIndex))
-                                        .overlay(alignment: .trailing) {
-                                            Rectangle()
-                                                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
-                                                .frame(width: 1)
-                                        }
                                         .contextMenu {
                                             Button(fileManagerL("复制单元格", "Copy Cell")) {
                                                 copyText(cell(row: row.values, columnIndex: columnIndex))
@@ -352,9 +361,7 @@ struct FileManagerTablePreview: View {
                                 }
                             }
                             .overlay(alignment: .bottom) {
-                                Rectangle()
-                                    .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.14))
-                                    .frame(height: 1)
+                                filePreviewSeparator(theme: theme)
                             }
                         }
                     }
@@ -372,23 +379,17 @@ struct FileManagerTablePreview: View {
     }
 
     private var tableInfoBar: some View {
-        HStack(spacing: 7) {
-            infoPill(document.delimiterName)
-            infoPill(fileManagerL("\(document.sourceLineCount) 行", "\(document.sourceLineCount) lines"))
-            infoPill(fileManagerL("\(document.columnCount) 列", "\(document.columnCount) columns"))
-            infoPill(fileManagerL("预览前 \(document.rows.count) 行", "Previewing \(document.rows.count) rows"))
-            if truncated {
-                infoPill(fileManagerL("仅读取前 256 KB", "First 256 KB only"))
+        filePreviewInfoBar(height: 28, theme: theme) {
+            HStack(spacing: 7) {
+                infoLabel(document.delimiterName)
+                infoLabel(fileManagerL("\(document.sourceLineCount) 行", "\(document.sourceLineCount) lines"))
+                infoLabel(fileManagerL("\(document.columnCount) 列", "\(document.columnCount) columns"))
+                infoLabel(fileManagerL("预览前 \(document.rows.count) 行", "Previewing \(document.rows.count) rows"))
+                if truncated {
+                    infoLabel(fileManagerL("仅读取前 256 KB", "First 256 KB only"))
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 28)
-        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.72 : 0.64))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.35))
-                .frame(height: 1)
         }
     }
 
@@ -399,30 +400,13 @@ struct FileManagerTablePreview: View {
         return String(value.prefix(160)) + " ..."
     }
 
-    private func cellBackground(rowIndex: Int, columnIndex: Int) -> Color {
-        if rowIndex == 0 {
-            return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.24 : 0.18)
-        }
-        if columnIndex % 2 == 0 {
-            return theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.08 : 0.12)
-        }
-        return Color.clear
-    }
-
     private func copyText(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }
 
-    private func infoPill(_ title: String) -> some View {
-        Text(title)
-            .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.52))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .frame(height: 19)
-            .background(theme.floatingControlFill.opacity(0.56))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    private func infoLabel(_ title: String) -> some View {
+        filePreviewInfoLabel(title, theme: theme, fontFamily: fontFamily, fontScale: fontScale)
     }
 
     private static let swiftUICellLimit = 600
@@ -449,12 +433,7 @@ struct FileManagerKeyValuePreview: View {
                     backgroundColor: NSColor(theme.terminalBackground),
                     valueTextColor: NSColor(theme.shellChromeText.opacity(0.72)),
                     keyTextColor: NSColor(theme.shellChromeText.opacity(0.82)),
-                    lineNumberTextColor: NSColor(theme.shellChromeText.opacity(0.34)),
-                    lineNumberBackgroundColor: NSColor(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.30 : 0.18)),
-                    keyBackgroundColor: NSColor(theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.18 : 0.12)),
-                    evenValueBackgroundColor: NSColor(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.06 : 0.09)),
-                    oddValueBackgroundColor: NSColor.clear,
-                    gridColor: NSColor(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
+                    lineNumberTextColor: NSColor(theme.shellChromeText.opacity(0.34))
                 )
                 .background(theme.terminalBackground)
             } else {
@@ -467,7 +446,6 @@ struct FileManagerKeyValuePreview: View {
                                     .foregroundStyle(theme.shellChromeText.opacity(0.34))
                                     .frame(width: 38, height: 27, alignment: .trailing)
                                     .padding(.trailing, 8)
-                                    .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.30 : 0.18))
 
                                 Text(row.key)
                                     .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
@@ -476,7 +454,6 @@ struct FileManagerKeyValuePreview: View {
                                     .truncationMode(.middle)
                                     .padding(.horizontal, 8)
                                     .frame(width: 210, height: 27, alignment: .leading)
-                                    .background(theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.18 : 0.12))
 
                                 Text(row.value)
                                     .font(.system(size: 11.5, weight: .regular, design: .monospaced))
@@ -498,9 +475,7 @@ struct FileManagerKeyValuePreview: View {
                                 }
                             }
                             .overlay(alignment: .bottom) {
-                                Rectangle()
-                                    .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.14))
-                                    .frame(height: 1)
+                                filePreviewSeparator(theme: theme)
                             }
                         }
                     }
@@ -518,34 +493,21 @@ struct FileManagerKeyValuePreview: View {
     }
 
     private var infoBar: some View {
-        HStack(spacing: 7) {
-            infoPill(document.formatLabel)
-            infoPill(fileManagerL("\(document.rows.count) 个键值", "\(document.rows.count) pairs"))
-            infoPill(fileManagerL("\(document.sourceLineCount) 行", "\(document.sourceLineCount) lines"))
-            if truncated {
-                infoPill(fileManagerL("仅读取前 256 KB", "First 256 KB only"))
+        filePreviewInfoBar(height: 28, theme: theme) {
+            HStack(spacing: 7) {
+                infoLabel(document.formatLabel)
+                infoLabel(fileManagerL("\(document.rows.count) 个键值", "\(document.rows.count) pairs"))
+                infoLabel(fileManagerL("\(document.sourceLineCount) 行", "\(document.sourceLineCount) lines"))
+                if truncated {
+                    infoLabel(fileManagerL("仅读取前 256 KB", "First 256 KB only"))
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 28)
-        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.72 : 0.64))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.35))
-                .frame(height: 1)
         }
     }
 
-    private func infoPill(_ title: String) -> some View {
-        Text(title)
-            .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.52))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .frame(height: 19)
-            .background(theme.floatingControlFill.opacity(0.56))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    private func infoLabel(_ title: String) -> some View {
+        filePreviewInfoLabel(title, theme: theme, fontFamily: fontFamily, fontScale: fontScale)
     }
 
     private func copyText(_ text: String) {
@@ -575,11 +537,7 @@ struct FileManagerStructuredPreview: View {
                     backgroundColor: NSColor(theme.terminalBackground),
                     pathTextColor: NSColor(theme.shellChromeText.opacity(0.72)),
                     kindTextColor: NSColor(theme.shellChromeText.opacity(0.52)),
-                    valueTextColor: NSColor(theme.shellChromeText.opacity(0.78)),
-                    pathBackgroundColor: NSColor(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.26 : 0.16)),
-                    evenValueBackgroundColor: NSColor(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.06 : 0.09)),
-                    oddValueBackgroundColor: NSColor.clear,
-                    gridColor: NSColor(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16))
+                    valueTextColor: NSColor(theme.shellChromeText.opacity(0.78))
                 )
                 .background(theme.terminalBackground)
             } else {
@@ -595,7 +553,6 @@ struct FileManagerStructuredPreview: View {
                                     .padding(.leading, 10 + CGFloat(min(row.depth, 8)) * 16)
                                     .padding(.trailing, 8)
                                     .frame(width: 300, height: 28, alignment: .leading)
-                                    .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.26 : 0.16))
 
                                 Text(row.kind)
                                     .font(.conductorSystem(size: 10.5, weight: .bold, family: fontFamily, scale: fontScale))
@@ -626,9 +583,7 @@ struct FileManagerStructuredPreview: View {
                                 }
                             }
                             .overlay(alignment: .bottom) {
-                                Rectangle()
-                                    .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.14))
-                                    .frame(height: 1)
+                                filePreviewSeparator(theme: theme)
                             }
                         }
                     }
@@ -646,34 +601,21 @@ struct FileManagerStructuredPreview: View {
     }
 
     private var infoBar: some View {
-        HStack(spacing: 7) {
-            infoPill(document.formatLabel)
-            infoPill(fileManagerL("\(document.rows.count) 个节点", "\(document.rows.count) nodes"))
-            infoPill(fileManagerL("\(document.sourceLineCount) 行", "\(document.sourceLineCount) lines"))
-            if truncated {
-                infoPill(fileManagerL("仅读取前 256 KB", "First 256 KB only"))
+        filePreviewInfoBar(height: 28, theme: theme) {
+            HStack(spacing: 7) {
+                infoLabel(document.formatLabel)
+                infoLabel(fileManagerL("\(document.rows.count) 个节点", "\(document.rows.count) nodes"))
+                infoLabel(fileManagerL("\(document.sourceLineCount) 行", "\(document.sourceLineCount) lines"))
+                if truncated {
+                    infoLabel(fileManagerL("仅读取前 256 KB", "First 256 KB only"))
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 28)
-        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.72 : 0.64))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.48 : 0.35))
-                .frame(height: 1)
         }
     }
 
-    private func infoPill(_ title: String) -> some View {
-        Text(title)
-            .font(.conductorSystem(size: 10, weight: .semibold, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.52))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .frame(height: 19)
-            .background(theme.floatingControlFill.opacity(0.56))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    private func infoLabel(_ title: String) -> some View {
+        filePreviewInfoLabel(title, theme: theme, fontFamily: fontFamily, fontScale: fontScale)
     }
 
     private func copyText(_ text: String) {
@@ -707,10 +649,7 @@ struct SourcePreviewLine: View {
         .padding(.leading, 4)
         .padding(.trailing, 10)
         .frame(minWidth: 420, maxWidth: .infinity, minHeight: 22, alignment: .leading)
-        .background {
-            Rectangle()
-                .fill(isHighlighted ? theme.floatingSelectedFill.opacity(0.30) : Color.clear)
-        }
+        .background(isHighlighted ? theme.floatingSelectedFill : Color.clear)
     }
 
 }

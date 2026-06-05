@@ -33,7 +33,7 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
         case .commands:
             ConductorLocalization.text(zh: "快捷键", en: "Shortcuts")
         case .themes:
-            ConductorLocalization.text(zh: "主题", en: "Themes")
+            ConductorLocalization.text(zh: "模式", en: "Mode")
         }
     }
 
@@ -56,7 +56,7 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
         case .commands:
             ConductorLocalization.text(zh: "快捷键与命令入口", en: "Shortcuts and commands")
         case .themes:
-            ConductorLocalization.text(zh: "整套窗口、终端和强调色", en: "Window, terminal, and accent colors")
+            ConductorLocalization.text(zh: "只保留浅色和暗色", en: "Light and dark only")
         }
     }
 
@@ -79,7 +79,7 @@ enum SettingsSectionID: String, CaseIterable, Identifiable, Sendable {
         case .commands:
             "command"
         case .themes:
-            "swatchpalette"
+            "circle.lefthalf.filled"
         }
     }
 }

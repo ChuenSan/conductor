@@ -248,7 +248,6 @@ final class ConductorWindow: NSWindow {
             let className = NSStringFromClass(type(of: candidate))
             if candidate.accessibilityIdentifier() == "ConductorWorkspaceTabInteractiveRegion" ||
                 className.contains("NativeWorkspaceTopTabView") ||
-                className.contains("NativeTerminalTab") ||
                 className.contains("WorkspaceTab") ||
                 className.contains("TerminalTab") ||
                 className.contains("Button") ||
@@ -275,15 +274,6 @@ final class ConductorWindow: NSWindow {
         return nil
     }
 
-    func hideSystemTrafficLights() {
-        [
-            NSWindow.ButtonType.closeButton,
-            .miniaturizeButton,
-            .zoomButton
-        ].forEach { buttonType in
-            standardWindowButton(buttonType)?.isHidden = true
-        }
-    }
 }
 
 final class ConductorHostingView<Content: View>: NSHostingView<Content> {
@@ -347,7 +337,6 @@ final class ConductorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemVal
         window.backgroundColor = .clear
         window.collectionBehavior = [.fullScreenPrimary, .managed]
         applyAppearance(for: model.theme, to: window)
-        window.hideSystemTrafficLights()
         window.routeAppShortcut = { [weak self] event in
             self?.routeAppShortcut(event) ?? false
         }

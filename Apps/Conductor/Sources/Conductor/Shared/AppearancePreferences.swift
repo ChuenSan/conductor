@@ -108,80 +108,6 @@ enum AppearanceDensity: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-enum ChromeClarity: String, CaseIterable, Codable, Identifiable {
-    case soft
-    case balanced
-    case crisp
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .soft:
-            ConductorLocalization.text(zh: "柔和", en: "Soft")
-        case .balanced:
-            ConductorLocalization.text(zh: "标准", en: "Balanced")
-        case .crisp:
-            ConductorLocalization.text(zh: "清晰", en: "Crisp")
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .soft:
-            ConductorLocalization.text(zh: "弱边界", en: "Softer edges")
-        case .balanced:
-            ConductorLocalization.text(zh: "默认层级", en: "Default hierarchy")
-        case .crisp:
-            ConductorLocalization.text(zh: "更明确", en: "Clearer layers")
-        }
-    }
-
-    var glassTintMultiplier: Double {
-        switch self {
-        case .soft:
-            1.16
-        case .balanced:
-            1.0
-        case .crisp:
-            0.72
-        }
-    }
-
-    var strokeMultiplier: Double {
-        switch self {
-        case .soft:
-            0.66
-        case .balanced:
-            1.0
-        case .crisp:
-            1.0
-        }
-    }
-
-    var accentFillMultiplier: Double {
-        switch self {
-        case .soft:
-            0.78
-        case .balanced:
-            1.0
-        case .crisp:
-            1.08
-        }
-    }
-
-    var highlightMultiplier: Double {
-        switch self {
-        case .soft:
-            0.72
-        case .balanced:
-            1.0
-        case .crisp:
-            1.12
-        }
-    }
-}
-
 enum AppearanceFontScale: String, CaseIterable, Codable, Identifiable {
     case small
     case standard
@@ -352,7 +278,6 @@ struct AppearancePreferences: Codable, Equatable {
     static let maxTerminalFontSize: CGFloat = 22
 
     var density: AppearanceDensity
-    var chromeClarity: ChromeClarity
     var fontScale: AppearanceFontScale
     var language: AppearanceLanguage
     var fontFamily: AppearanceFontFamily
@@ -364,7 +289,6 @@ struct AppearancePreferences: Codable, Equatable {
 
     init(
         density: AppearanceDensity = .standard,
-        chromeClarity: ChromeClarity = .balanced,
         fontScale: AppearanceFontScale = .standard,
         language: AppearanceLanguage = .english,
         fontFamily: AppearanceFontFamily = .system,
@@ -375,7 +299,6 @@ struct AppearancePreferences: Codable, Equatable {
         keyboardShortcuts: KeyboardShortcutPreferences = KeyboardShortcutPreferences()
     ) {
         self.density = density
-        self.chromeClarity = chromeClarity
         self.fontScale = fontScale
         self.language = language
         self.fontFamily = fontFamily
@@ -389,7 +312,6 @@ struct AppearancePreferences: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.density = try container.decodeIfPresent(AppearanceDensity.self, forKey: .density) ?? .standard
-        self.chromeClarity = try container.decodeIfPresent(ChromeClarity.self, forKey: .chromeClarity) ?? .balanced
         self.fontScale = try container.decodeIfPresent(AppearanceFontScale.self, forKey: .fontScale) ?? .standard
         self.language = try container.decodeIfPresent(AppearanceLanguage.self, forKey: .language) ?? .english
         self.fontFamily = try container.decodeIfPresent(AppearanceFontFamily.self, forKey: .fontFamily) ?? .system
@@ -407,7 +329,6 @@ struct AppearancePreferences: Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case density
-        case chromeClarity
         case fontScale
         case language
         case fontFamily

@@ -243,14 +243,12 @@ struct ConductorFileWorkspaceView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(theme.shellChromeText.opacity(0.28))
-            Text(L("没有打开的文件", "No File Open"))
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(theme.shellChromeText.opacity(0.58))
+        ContentUnavailableView {
+            Label(L("没有打开的文件", "No File Open"), systemImage: "doc.text.magnifyingglass")
+        } description: {
+            Text(L("从文件面板打开一个文件", "Open a file from the file panel"))
         }
+        .foregroundStyle(theme.shellChromeText.opacity(0.62))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -531,109 +529,116 @@ private struct ConductorWorkspaceFileEditorView: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(document.title)
-                    .font(.conductorSystem(size: 13.4, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.90))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(document.subtitle.isEmpty ? tab.fileURL.path : document.subtitle)
-                    .font(.conductorSystem(size: 10, weight: .medium, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.48))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(document.title)
+                        .font(.conductorSystem(size: 13.4, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.90))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(document.subtitle.isEmpty ? tab.fileURL.path : document.subtitle)
+                        .font(.conductorSystem(size: 10, weight: .medium, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.48))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-            if let statusMessage {
-                Text(statusMessage)
-                    .font(.conductorSystem(size: 11, weight: .medium, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.50))
-                    .lineLimit(1)
-            }
+                if let statusMessage {
+                    Text(statusMessage)
+                        .font(.conductorSystem(size: 11, weight: .medium, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.50))
+                        .lineLimit(1)
+                }
 
-            statusPill(systemImage: isImageFile ? "photo" : "doc.text.magnifyingglass", title: fileKindTitle)
-            if externalChangeDetected {
-                statusPill(systemImage: "arrow.triangle.2.circlepath", title: L("外部已修改", "Changed externally"))
-            }
+                statusLabel(systemImage: isImageFile ? "photo" : "doc.text.magnifyingglass", title: fileKindTitle)
+                if externalChangeDetected {
+                    statusLabel(systemImage: "arrow.triangle.2.circlepath", title: L("外部已修改", "Changed externally"))
+                }
 
-            if supportsFileSearch && (searchVisible || !searchQuery.isEmpty) {
-                fileSearchField
-            }
+                if supportsFileSearch && (searchVisible || !searchQuery.isEmpty) {
+                    fileSearchField
+                }
 
-            editorButton("arrow.clockwise", help: L("重新载入", "Reload")) {
-                reload()
-            }
-
-            if canEditText {
-                if isMarkdown && !usesDocumentPreviewReader {
-                    Picker("", selection: $markdownMode) {
-                        ForEach(WorkspaceMarkdownMode.allCases) { mode in
-                            Label(mode.title, systemImage: mode.systemImage)
-                                .tag(mode)
+                if canEditText {
+                    if isMarkdown && !usesDocumentPreviewReader {
+                        Picker("", selection: $markdownMode) {
+                            ForEach(WorkspaceMarkdownMode.allCases) { mode in
+                                Label(mode.title, systemImage: mode.systemImage)
+                                    .tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 190)
+                        .onChange(of: markdownMode) { _, newValue in
+                            if newValue == .source || newValue == .split {
+                                editorFocusToken &+= 1
+                            }
+                            scheduleMarkdownPreviewRefresh(force: true)
                         }
                     }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 190)
-                    .onChange(of: markdownMode) { _, newValue in
-                        if newValue == .source || newValue == .split {
-                            editorFocusToken &+= 1
+                }
+
+                ControlGroup {
+                    editorButton("arrow.clockwise", help: L("重新载入", "Reload")) {
+                        reload()
+                    }
+
+                    if canEditText, canEditSourceText {
+                        editorButton("square.and.arrow.down", help: L("保存", "Save")) {
+                            save()
                         }
-                        scheduleMarkdownPreviewRefresh(force: true)
+                    }
+
+                    editorButton("arrow.up.right.square", help: L("系统应用打开", "Open in System App")) {
+                        model.performCommand(.openSelectedFileExternally)
+                    }
+
+                    editorButton("folder", help: L("在 Finder 中显示", "Reveal in Finder")) {
+                        model.performCommand(.revealSelectedFileInFinder)
                     }
                 }
-                if canEditSourceText {
-                    editorButton("square.and.arrow.down", help: L("保存", "Save")) {
-                        save()
-                    }
-                }
+                .controlSize(.small)
             }
-
-            editorButton("arrow.up.right.square", help: L("系统应用打开", "Open in System App")) {
-                model.performCommand(.openSelectedFileExternally)
-            }
-
-            editorButton("folder", help: L("在 Finder 中显示", "Reveal in Finder")) {
-                model.performCommand(.revealSelectedFileInFinder)
-            }
+            .padding(.horizontal, 16)
+            .frame(height: 51)
         }
-        .padding(.horizontal, 16)
-        .frame(height: 52)
-        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.36 : 0.16))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.14))
-                .frame(height: 1)
-        }
+        .background(.regularMaterial)
     }
 
     private var externalChangeBar: some View {
         VStack(spacing: 0) {
             HStack(spacing: 9) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.conductorSystem(size: 12, weight: .bold, family: fontFamily, scale: fontScale))
-                Text(L("磁盘上的文件已变化，保存已暂停。选择重新载入、保留当前内容，或先查看差异。", "The file changed on disk; saving is paused. Reload, keep current content, or inspect the diff first."))
-                    .font(.conductorSystem(size: 11.4, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .lineLimit(2)
+                Label {
+                    Text(L("磁盘上的文件已变化，保存已暂停。选择重新载入、保留当前内容，或先查看差异。", "The file changed on disk; saving is paused. Reload, keep current content, or inspect the diff first."))
+                        .font(.conductorSystem(size: 11.4, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .lineLimit(2)
+                } icon: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.conductorSystem(size: 12, weight: .bold, family: fontFamily, scale: fontScale))
+                }
                 Spacer(minLength: 8)
-                Button(externalDiffVisible ? L("隐藏差异", "Hide Diff") : L("查看差异", "View Diff")) {
-                    toggleExternalDiff()
+
+                ControlGroup {
+                    Button(externalDiffVisible ? L("隐藏差异", "Hide Diff") : L("查看差异", "View Diff")) {
+                        toggleExternalDiff()
+                    }
+                    Button(L("重新载入", "Reload")) {
+                        reload()
+                    }
+                    Button(L("保留当前", "Keep Current")) {
+                        keepCurrentVersionAfterExternalChange()
+                    }
                 }
-                Button(L("重新载入", "Reload")) {
-                    reload()
-                }
-                Button(L("保留当前", "Keep Current")) {
-                    keepCurrentVersionAfterExternalChange()
-                }
+                .controlSize(.small)
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(theme.shellChromeText.opacity(0.84))
+            .foregroundStyle(.primary)
             .padding(.horizontal, 14)
             .frame(minHeight: 36)
-            .background(theme.floatingControlStrongFill.opacity(theme.usesDarkChrome ? 0.34 : 0.40))
+            .background(ConductorTokens.Settings.panelChromeWash(dark: theme.usesDarkChrome))
 
             if externalDiffVisible {
                 ScrollView {
@@ -648,7 +653,7 @@ private struct ConductorWorkspaceFileEditorView: View {
                 .background(theme.terminalBackground.opacity(0.98))
                 .overlay(alignment: .bottom) {
                     Rectangle()
-                        .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.26 : 0.16))
+                        .fill(ConductorTokens.Settings.subtleSeparator(dark: theme.usesDarkChrome))
                         .frame(height: 1)
                 }
             }
@@ -762,9 +767,8 @@ private struct ConductorWorkspaceFileEditorView: View {
                 .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
                 .foregroundStyle(theme.shellChromeText.opacity(0.46))
             TextField(L("搜索文件内容", "Search file contents"), text: $searchQuery)
-                .textFieldStyle(.plain)
+                .textFieldStyle(.roundedBorder)
                 .font(.conductorSystem(size: 12, weight: .medium, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.84))
                 .focused($fileSearchFocused)
                 .frame(width: 190)
                 .onSubmit {
@@ -775,23 +779,20 @@ private struct ConductorWorkspaceFileEditorView: View {
                 .foregroundStyle(theme.shellChromeText.opacity(0.46))
                 .monospacedDigit()
                 .frame(minWidth: 34, alignment: .trailing)
-            if !searchQuery.isEmpty {
-                editorButton("xmark.circle.fill", help: L("清除搜索", "Clear Search")) {
-                    searchQuery = ""
-                    fileSearchFocused = true
+            ControlGroup {
+                if !searchQuery.isEmpty {
+                    editorButton("xmark.circle.fill", help: L("清除搜索", "Clear Search")) {
+                        searchQuery = ""
+                        fileSearchFocused = true
+                    }
                 }
-                .frame(width: 24, height: 24)
+                editorButton("xmark", help: L("关闭搜索", "Close Search")) {
+                    closeSearch()
+                }
             }
-            editorButton("xmark", help: L("关闭搜索", "Close Search")) {
-                closeSearch()
-            }
-            .frame(width: 24, height: 24)
+            .controlSize(.small)
         }
-        .padding(.leading, 10)
-        .padding(.trailing, 5)
         .frame(height: 30)
-        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.38 : 0.22))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var searchStatus: String {
@@ -801,31 +802,20 @@ private struct ConductorWorkspaceFileEditorView: View {
         return "\(selectedSearchIndex + 1)/\(searchMatches.count)"
     }
 
-    private func editorButton(_ systemImage: String, active: Bool = false, help: String, action: @escaping () -> Void) -> some View {
+    private func editorButton(_ systemImage: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(active ? theme.floatingEmphasis : theme.shellChromeText.opacity(0.62))
-                .frame(width: 30, height: 30)
-                .background(active ? theme.floatingSelectedFill.opacity(0.72) : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            Label(help, systemImage: systemImage)
         }
-        .buttonStyle(.plain)
-        .macNativeTooltip(help)
+        .labelStyle(.iconOnly)
+        .controlSize(.small)
+        .help(help)
     }
 
-    private func statusPill(systemImage: String, title: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 10.5, weight: .bold, family: fontFamily, scale: fontScale))
-            Text(title)
-                .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-        }
+    private func statusLabel(systemImage: String, title: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
         .foregroundStyle(theme.shellChromeText.opacity(0.64))
-        .padding(.horizontal, 8)
         .frame(height: 22)
-        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.38 : 0.22))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 
     private var fileKindTitle: String {

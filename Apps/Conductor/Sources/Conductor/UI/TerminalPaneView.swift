@@ -154,57 +154,45 @@ struct TerminalPaneView: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: 4) {
-            StableTerminalTabStrip(
-                pane: pane,
-                snapshot: snapshot,
-                model: model,
-                highlightedDropTabID: $highlightedDropTabID
-            )
-            .frame(minWidth: 64, maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(1)
-
-            PaneBarButton(
-                systemImage: "xmark",
-                title: L("关闭", "Close"),
-                showsTitle: false,
-                disabled: !snapshot.canClosePane,
-                help: "\(L("关闭这个分屏", "Close this pane")) \(model.shortcutTitle(for: .closeFocusedPane, fallback: "Cmd-Shift-W"))"
-            ) {
-                ConductorMotion.perform(ConductorMotion.layout) {
-                    model.closePane(pane.id)
-                }
-            }
-        }
-        .padding(.leading, 12)
-        .padding(.trailing, 8)
-        .frame(height: snapshot.appearance.density.paneTabRailHeight)
-        .background {
-            ZStack(alignment: .bottom) {
-                terminalBackground
-                snapshot.theme.terminalChrome.opacity(isFocused ? 0.075 : 0.050)
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(isFocused ? 0.006 : 0.003),
-                        Color.clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
+        VStack(spacing: 0) {
+            HStack(spacing: 4) {
+                StableTerminalTabStrip(
+                    pane: pane,
+                    snapshot: snapshot,
+                    model: model,
+                    highlightedDropTabID: $highlightedDropTabID
                 )
+                .frame(minWidth: 64, maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+
+                Button {
+                    ConductorMotion.perform(ConductorMotion.layout) {
+                        model.closePane(pane.id)
+                    }
+                } label: {
+                    Label(L("关闭", "Close"), systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                        .frame(width: 19, height: 18)
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.mini)
+                .foregroundStyle(.secondary)
+                .disabled(!snapshot.canClosePane)
+                .opacity(snapshot.canClosePane ? 1 : 0.35)
+                .accessibilityLabel(L("关闭", "Close"))
+                .help("\(L("关闭这个分屏", "Close this pane")) \(model.shortcutTitle(for: .closeFocusedPane, fallback: "Cmd-Shift-W"))")
+            }
+            .padding(.leading, 12)
+            .padding(.trailing, 8)
+            .frame(height: max(0, snapshot.appearance.density.paneTabRailHeight - 1))
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(ConductorTokens.Chrome.separator(dark: snapshot.theme.usesDarkChrome))
+                    .frame(height: 1)
+                    .opacity(isFocused ? 1 : 0.55)
             }
         }
-        .overlay(alignment: .bottom) {
-            LinearGradient(
-                colors: [
-                    Color.clear,
-                    snapshot.theme.terminalOuterStroke.opacity(isFocused ? 0.22 : 0.14),
-                    Color.clear
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-                .frame(height: 1)
-        }
+        .background(.regularMaterial)
         .animation(splitResizeActive ? nil : ConductorMotion.micro, value: isFocused)
     }
 
@@ -281,19 +269,19 @@ private struct TerminalDetachDropOverlay: View {
         GeometryReader { proxy in
             if target == .center {
                 Rectangle()
-                    .fill(theme.accent.opacity(0.10))
+                    .fill(ConductorTokens.Chrome.dropTargetFill(dark: theme.usesDarkChrome))
                     .overlay {
                         Rectangle()
-                            .stroke(theme.accent.opacity(0.62), lineWidth: 1)
+                            .stroke(ConductorTokens.Chrome.dropTargetStroke(dark: theme.usesDarkChrome), lineWidth: 1)
                     }
             } else {
                 ZStack(alignment: target.alignment) {
                     Color.clear
                     Rectangle()
-                        .fill(theme.accent.opacity(0.12))
+                        .fill(ConductorTokens.Chrome.dropTargetFill(dark: theme.usesDarkChrome))
                         .overlay {
                             Rectangle()
-                                .stroke(theme.accent.opacity(0.72), lineWidth: 1)
+                                .stroke(ConductorTokens.Chrome.dropTargetStroke(dark: theme.usesDarkChrome), lineWidth: 1)
                         }
                         .frame(
                             width: target.isHorizontalSplit ? max(0, proxy.size.width / 2) : nil,
@@ -308,567 +296,281 @@ private struct TerminalDetachDropOverlay: View {
 private struct TerminalPaneFlashOverlay: View {
     let color: Color
     let visible: Bool
+    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .stroke(color.opacity(visible ? 0.86 : 0), lineWidth: 2)
-            .shadow(color: color.opacity(visible ? 0.46 : 0), radius: visible ? 8 : 0)
+        RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalPane, style: .continuous)
+            .stroke(color.opacity(visible ? (theme.usesDarkChrome ? ConductorTokens.Chrome.focusRingOpacityDark : ConductorTokens.Chrome.focusRingOpacity) : 0), lineWidth: 2)
             .padding(1)
     }
 }
 
 private let terminalTabDragType = UTType(exportedAs: "app.conductor.terminal-tab")
 private let terminalTabDropTypes: [UTType] = [terminalTabDragType, .plainText]
-private let terminalTabPasteboardType = NSPasteboard.PasteboardType(terminalTabDragType.identifier)
 private let terminalTabDragPrefix = "terminal:"
 
-private struct StableTerminalTabStrip: NSViewRepresentable {
+private struct StableTerminalTabStrip: View {
     let pane: PaneState
     let snapshot: TerminalPaneChromeSnapshot
     let model: ConductorWindowModel
     @Binding var highlightedDropTabID: TerminalID?
 
-    func makeNSView(context: Context) -> NativeTerminalTabStripView {
-        let view = NativeTerminalTabStripView()
-        view.onHighlightedDropTabChange = { terminalID in
-            highlightedDropTabID = terminalID
-        }
-        return view
-    }
+    @State private var scrollTargetID: TerminalID?
 
-    func updateNSView(_ view: NativeTerminalTabStripView, context: Context) {
-        view.onHighlightedDropTabChange = { terminalID in
-            highlightedDropTabID = terminalID
-        }
-        view.update(
-            displays: snapshot.tabs,
-            selectedTabID: pane.selectedTabID,
-            paneFocused: snapshot.paneFocused,
-            highlightedDropTabID: highlightedDropTabID,
-            paneID: pane.id,
-            model: model,
-            theme: snapshot.theme,
-            density: snapshot.appearance.density,
-            fontScale: snapshot.appearance.fontScale
-        )
-    }
-}
-
-private final class NativeTerminalTabStripView: NSView {
-    var onHighlightedDropTabChange: ((TerminalID?) -> Void)?
-
-    private let scrollView = NSScrollView()
-    private let contentView = FlippedDocumentView()
-    private var itemViews: [TerminalID: NativeTerminalTabItemView] = [:]
-    private var orderedIDs: [TerminalID] = []
-    private var selectedTabID: TerminalID?
-    private var paneID: PaneID?
-    private weak var model: ConductorWindowModel?
-    private var theme: TerminalTheme = .codexDark
-    private var density: AppearanceDensity = .standard
-    private var fontScale: AppearanceFontScale = .standard
-    private var highlightedDropTabID: TerminalID?
-    private let tabSpacing: CGFloat = 3
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        setup()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setup()
-    }
-
-    private func setup() {
-        wantsLayer = true
-        layer?.masksToBounds = true
-        scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = false
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-        scrollView.borderType = .noBorder
-        scrollView.scrollerStyle = .overlay
-        scrollView.documentView = contentView
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(scrollView)
-        NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
-        ])
-        registerForDraggedTypes([terminalTabPasteboardType])
-    }
-
-    func update(
-        displays: [TerminalTabDisplayModel],
-        selectedTabID: TerminalID,
-        paneFocused: Bool,
-        highlightedDropTabID: TerminalID?,
-        paneID: PaneID,
-        model: ConductorWindowModel,
-        theme: TerminalTheme,
-        density: AppearanceDensity,
-        fontScale: AppearanceFontScale
-    ) {
-        self.selectedTabID = selectedTabID
-        self.paneID = paneID
-        self.model = model
-        self.theme = theme
-        self.density = density
-        self.fontScale = fontScale
-        self.highlightedDropTabID = highlightedDropTabID
-
-        let nextIDs = displays.map(\.id)
-        for staleID in Set(itemViews.keys).subtracting(nextIDs) {
-            itemViews.removeValue(forKey: staleID)?.removeFromSuperview()
-        }
-
-        for display in displays {
-            let item = itemViews[display.id] ?? makeItemView()
-            itemViews[display.id] = item
-            if item.superview == nil {
-                contentView.addSubview(item)
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 3) {
+                ForEach(snapshot.tabs) { display in
+                    TerminalTabChip(
+                        display: display,
+                        selected: display.id == pane.selectedTabID,
+                        paneFocused: snapshot.paneFocused,
+                        highlighted: highlightedDropTabID == display.id,
+                        paneID: pane.id,
+                        model: model,
+                        theme: snapshot.theme,
+                        density: snapshot.appearance.density,
+                        fontScale: snapshot.appearance.fontScale
+                    )
+                    .id(display.id)
+                    .onDrag {
+                        terminalTabItemProvider(for: display.id, model: model, paneID: pane.id)
+                    } preview: {
+                        TerminalTabChipPreview(
+                            display: display,
+                            theme: snapshot.theme,
+                            fontScale: snapshot.appearance.fontScale
+                        )
+                    }
+                    .onDrop(
+                        of: terminalTabDropTypes,
+                        delegate: TerminalTabReorderDropDelegate(
+                            paneID: pane.id,
+                            targetTabID: display.id,
+                            model: model,
+                            highlightedDropTabID: $highlightedDropTabID
+                        )
+                    )
+                }
             }
-            item.update(
-                display: display,
-                selected: display.id == selectedTabID,
-                paneFocused: paneFocused,
-                highlighted: highlightedDropTabID == display.id,
-                paneID: paneID,
-                model: model,
-                theme: theme,
-                density: density,
-                fontScale: fontScale
+            .scrollTargetLayout()
+            .onDrop(
+                of: terminalTabDropTypes,
+                delegate: TerminalTabReorderDropDelegate(
+                    paneID: pane.id,
+                    targetTabID: nil,
+                    model: model,
+                    highlightedDropTabID: $highlightedDropTabID
+                )
             )
         }
-
-        if orderedIDs != nextIDs {
-            orderedIDs = nextIDs
-            needsLayout = true
+        .scrollPosition(id: $scrollTargetID, anchor: .center)
+        .onAppear {
+            scrollTargetID = pane.selectedTabID
         }
-        layoutItemViews()
-        scrollSelectedTabIntoView()
-    }
-
-    override func layout() {
-        super.layout()
-        layoutItemViews()
-    }
-
-    private func makeItemView() -> NativeTerminalTabItemView {
-        let item = NativeTerminalTabItemView()
-        item.onDragEnded = { [weak self] in
-            self?.model?.endTerminalTabDrag()
+        .onChange(of: pane.selectedTabID) { _, newValue in
+            scrollTargetID = newValue
         }
-        return item
+    }
+}
+
+private struct TerminalTabChip: View {
+    let display: TerminalTabDisplayModel
+    let selected: Bool
+    let paneFocused: Bool
+    let highlighted: Bool
+    let paneID: PaneID
+    let model: ConductorWindowModel
+    let theme: TerminalTheme
+    let density: AppearanceDensity
+    let fontScale: AppearanceFontScale
+
+    private var detailLabel: String? {
+        terminalTabDetailLabel(for: display)
     }
 
-    private func layoutItemViews() {
-        let width = density.paneTabWidth
-        let height = max(0, bounds.height)
-        var x: CGFloat = 0
-
-        for id in orderedIDs {
-            guard let item = itemViews[id] else { continue }
-            item.frame = NSRect(x: x, y: 0, width: width, height: height)
-            x += width + tabSpacing
-        }
-
-        let contentWidth = max(bounds.width, max(0, x - tabSpacing))
-        contentView.frame = NSRect(x: 0, y: 0, width: contentWidth, height: height)
-    }
-
-    private func scrollSelectedTabIntoView() {
-        guard let selectedTabID,
-              let item = itemViews[selectedTabID],
-              item.superview === contentView else { return }
-        contentView.scrollToVisible(item.frame.insetBy(dx: -18, dy: 0))
-    }
-
-    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        draggingUpdated(sender)
-    }
-
-    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard let model,
-              model.hasActiveTerminalTabDrag(),
-              draggedTerminalID(from: sender.draggingPasteboard) != nil else {
-            setHighlightedDropTab(nil)
-            return []
-        }
-        setHighlightedDropTab(targetTabID(for: sender))
-        return .move
-    }
-
-    override func draggingExited(_ sender: NSDraggingInfo?) {
-        setHighlightedDropTab(nil)
-    }
-
-    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        draggedTerminalID(from: sender.draggingPasteboard) != nil
-    }
-
-    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        defer { setHighlightedDropTab(nil) }
-        guard let draggedTabID = draggedTerminalID(from: sender.draggingPasteboard),
-              let paneID,
-              let model else { return false }
-        if let targetTabID = targetTabID(for: sender), targetTabID != draggedTabID {
-            model.moveTab(draggedTabID, before: targetTabID, in: paneID)
+    private var titleText: String {
+        if selected, let detailLabel {
+            "\(display.tab.title) · \(detailLabel)"
         } else {
-            model.moveTabToEnd(draggedTabID, in: paneID)
+            display.tab.title
         }
-        model.endTerminalTabDrag()
-        return true
     }
 
-    private func targetTabID(for sender: NSDraggingInfo) -> TerminalID? {
-        let point = convert(sender.draggingLocation, from: nil)
-        let contentPoint = contentView.convert(point, from: self)
-        for id in orderedIDs {
-            guard let item = itemViews[id] else { continue }
-            if item.frame.contains(contentPoint) {
-                return id
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                model.selectTab(display.id, in: paneID)
+            } label: {
+                Label {
+                    HStack(spacing: 4) {
+                        Text(titleText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        statusIcon
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } icon: {
+                    Image(systemName: "terminal")
+                }
+            }
+            .labelStyle(.titleAndIcon)
+            .buttonStyle(.borderless)
+            .foregroundStyle(selected ? theme.shellChromeText.opacity(0.92) : theme.shellChromeTextMuted.opacity(0.72))
+            .font(.conductorSystem(size: 10.8, weight: selected ? .semibold : .medium, scale: fontScale))
+            .accessibilityLabel(accessibilityTitle)
+
+            if selected {
+                Button {
+                    model.closeTab(display.id, in: paneID)
+                } label: {
+                    Label(L("关闭终端", "Close Terminal"), systemImage: "xmark")
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .controlSize(.mini)
+                .accessibilityLabel(L("关闭终端", "Close Terminal"))
+                .help(L("关闭终端", "Close Terminal"))
             }
         }
-        return nil
-    }
-
-    private func setHighlightedDropTab(_ terminalID: TerminalID?) {
-        guard highlightedDropTabID != terminalID else { return }
-        highlightedDropTabID = terminalID
-        onHighlightedDropTabChange?(terminalID)
-        for (id, item) in itemViews {
-            item.setHighlighted(id == terminalID)
-        }
-    }
-}
-
-private final class FlippedDocumentView: NSView {
-    override var isFlipped: Bool { true }
-}
-
-private final class NativeTerminalTabItemView: NSView, NSDraggingSource, NSTextFieldDelegate {
-    var onDragEnded: (() -> Void)?
-
-    private var display: TerminalTabDisplayModel?
-    private var selected = false
-    private var paneFocused = false
-    private var highlighted = false
-    private var paneID: PaneID?
-    private weak var model: ConductorWindowModel?
-    private var theme: TerminalTheme = .codexDark
-    private var density: AppearanceDensity = .standard
-    private var fontScale: AppearanceFontScale = .standard
-    private var hovering = false
-    private var mouseDownPoint: NSPoint?
-    private var mouseDownWasOnClose = false
-    private var dragStarted = false
-    private var renameField: NSTextField?
-    private var tracking: NSTrackingArea?
-
-    override var isFlipped: Bool { true }
-    override var acceptsFirstResponder: Bool { true }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        registerForDraggedTypes([terminalTabPasteboardType])
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        wantsLayer = true
-        registerForDraggedTypes([terminalTabPasteboardType])
-    }
-
-    func update(
-        display: TerminalTabDisplayModel,
-        selected: Bool,
-        paneFocused: Bool,
-        highlighted: Bool,
-        paneID: PaneID,
-        model: ConductorWindowModel,
-        theme: TerminalTheme,
-        density: AppearanceDensity,
-        fontScale: AppearanceFontScale
-    ) {
-        self.display = display
-        self.selected = selected
-        self.paneFocused = paneFocused
-        self.highlighted = highlighted
-        self.paneID = paneID
-        self.model = model
-        self.theme = theme
-        self.density = density
-        self.fontScale = fontScale
-        toolTip = helpText(for: display)
-        needsDisplay = true
-    }
-
-    func setHighlighted(_ highlighted: Bool) {
-        guard self.highlighted != highlighted else { return }
-        self.highlighted = highlighted
-        needsDisplay = true
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking {
-            removeTrackingArea(tracking)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        tracking = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        hovering = true
-        needsDisplay = true
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        if !hovering {
-            hovering = true
-            needsDisplay = true
-        }
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        hovering = false
-        needsDisplay = true
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        guard display != nil else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        window?.makeFirstResponder(self)
-        mouseDownPoint = point
-        mouseDownWasOnClose = closeRect.contains(point)
-        dragStarted = false
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard !dragStarted,
-              let display,
-              let paneID,
-              let start = mouseDownPoint else { return }
-        guard !mouseDownWasOnClose else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        guard hypot(point.x - start.x, point.y - start.y) > 4 else { return }
-
-        dragStarted = true
-        model?.selectTab(display.id, in: paneID)
-        model?.beginTerminalTabDrag(display.id)
-
-        let pasteboardItem = NSPasteboardItem()
-        let payload = "\(terminalTabDragPrefix)\(display.id.description)"
-        pasteboardItem.setString(payload, forType: terminalTabPasteboardType)
-        pasteboardItem.setString(payload, forType: .string)
-
-        let draggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
-        draggingItem.setDraggingFrame(bounds, contents: dragPreviewImage())
-        beginDraggingSession(with: [draggingItem], event: event, source: self)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        defer {
-            mouseDownPoint = nil
-            mouseDownWasOnClose = false
-            dragStarted = false
-        }
-        guard let display, let paneID, !dragStarted else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        if mouseDownWasOnClose && closeRect.contains(point) {
-            model?.closeTab(display.id, in: paneID)
-            return
-        }
-        guard bounds.contains(point) else { return }
-        model?.selectTab(display.id, in: paneID)
-        mouseDownPoint = nil
-    }
-
-    override func rightMouseDown(with event: NSEvent) {
-        guard let display else { return }
-        _ = model?.showTerminalContextMenu(terminalID: display.id, event: event, in: self)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard let display else { return }
-
-        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 1), xRadius: ConductorTokens.Radius.terminalTab, yRadius: ConductorTokens.Radius.terminalTab)
-        fillColor.setFill()
-        shape.fill()
-        strokeColor.setStroke()
-        shape.lineWidth = highlighted ? 1.25 : 1
-        shape.stroke()
-
-        drawIcon(in: iconRect)
-        if renameField == nil {
-            drawTitle(for: display)
-            drawStatus(for: display)
-            if hovering || selected {
-                drawCloseGlyph()
+        .padding(.leading, 8)
+        .padding(.trailing, selected ? 4 : 8)
+        .frame(width: density.paneTabWidth, height: max(18, density.paneTabHeight), alignment: .leading)
+        .background(tabBackground, in: RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
+        .overlay {
+            if highlighted {
+                RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
+                    .stroke(ConductorTokens.Chrome.focusRing(dark: theme.usesDarkChrome), lineWidth: 1.2)
             }
         }
+        .contentShape(Rectangle())
+        .contextMenu {
+            terminalContextMenu
+        }
+        .help(helpText)
     }
 
-    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        .move
-    }
-
-    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-        mouseDownPoint = nil
-        dragStarted = false
-        onDragEnded?()
-    }
-
-    private var fillColor: NSColor {
+    private var tabBackground: Color {
         if selected {
-            return NSColor(theme.shellSelectedFill.opacity(0.68))
+            return theme.floatingSelectedFill.opacity(paneFocused ? 1.0 : 0.72)
         }
-        if hovering {
-            return NSColor(theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.22 : 0.12))
-        }
-        return .clear
-    }
-
-    private var strokeColor: NSColor {
         if highlighted {
-            return NSColor(theme.floatingSelectedStroke.opacity(0.95))
+            return ConductorTokens.Chrome.dropTargetFill(dark: theme.usesDarkChrome)
         }
-        if selected {
-            return NSColor(theme.floatingSelectedStroke.opacity(paneFocused ? (theme.usesDarkChrome ? 0.34 : 0.30) : (theme.usesDarkChrome ? 0.22 : 0.20)))
-        }
-        return NSColor(theme.shellStroke.opacity(hovering ? 0.08 : 0.0))
+        return Color.clear
     }
 
-    private var iconRect: NSRect {
-        NSRect(x: 8, y: (bounds.height - 13) / 2, width: 13, height: 13)
-    }
-
-    private var closeRect: NSRect {
-        NSRect(x: bounds.maxX - 22, y: (bounds.height - 16) / 2, width: 16, height: 16)
-    }
-
-    private var textRect: NSRect {
-        let rightInset: CGFloat = (hovering || selected) ? 30 : 12
-        return NSRect(x: 26, y: 0, width: max(0, bounds.width - 26 - rightInset), height: bounds.height)
-    }
-
-    private func drawIcon(in rect: NSRect) {
-        let image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
-        image?.isTemplate = true
-        let tint = selected ? NSColor(theme.shellChromeText.opacity(0.90)) : NSColor(theme.shellChromeTextMuted.opacity(0.62))
-        tint.set()
-        image?.draw(in: rect)
-    }
-
-    private func drawTitle(for display: TerminalTabDisplayModel) {
-        let title = display.tab.title
-        let titleColor = selected ? NSColor(theme.shellChromeText.opacity(0.92)) : NSColor(theme.shellChromeTextMuted.opacity(0.68))
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byTruncatingTail
-        let titleFont = NSFont.systemFont(ofSize: fontScale.size(10.8), weight: selected ? .semibold : .medium)
-        let attributedTitle = NSAttributedString(
-            string: title,
-            attributes: [
-                .font: titleFont,
-                .foregroundColor: titleColor,
-                .paragraphStyle: paragraph
-            ]
-        )
-
-        let rect = textRect
-        if selected, let detail = detailLabel(for: display) {
-            let detailText = " · \(detail)"
-            let detailAttributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: fontScale.size(9.5), weight: .medium),
-                .foregroundColor: NSColor(theme.shellChromeTextMuted.opacity(0.72)),
-                .paragraphStyle: paragraph
-            ]
-            let combined = NSMutableAttributedString(attributedString: attributedTitle)
-            combined.append(NSAttributedString(string: detailText, attributes: detailAttributes))
-            combined.draw(in: rect.insetBy(dx: 0, dy: max(0, (rect.height - 15) / 2)))
-        } else {
-            attributedTitle.draw(in: rect.insetBy(dx: 0, dy: max(0, (rect.height - 15) / 2)))
-        }
-    }
-
-    private func drawStatus(for display: TerminalTabDisplayModel) {
-        let closeReserve: CGFloat = (hovering || selected) ? 27 : 9
-        let rect = NSRect(x: bounds.maxX - closeReserve - 10, y: bounds.midY - 3, width: 6, height: 6)
+    @ViewBuilder
+    private var statusIcon: some View {
         if display.metadata?.progressKind != nil {
-            NSColor(theme.floatingEmphasis.opacity(0.72)).setStroke()
-            let path = NSBezierPath(ovalIn: rect.insetBy(dx: -0.5, dy: -0.5))
-            path.lineWidth = 1.25
-            path.stroke()
+            Label(L("终端任务进行中", "Terminal task in progress"), systemImage: "arrow.triangle.2.circlepath")
+                .labelStyle(.iconOnly)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(theme.floatingEmphasis.opacity(0.72))
+                .accessibilityHidden(true)
         } else if display.metadata?.readonly == true {
-            let image = NSImage(systemSymbolName: "lock", accessibilityDescription: nil)
-            image?.isTemplate = true
-            NSColor.secondaryLabelColor.set()
-            image?.draw(in: NSRect(x: rect.minX - 1, y: rect.minY - 2, width: 9, height: 9))
+            Label(L("只读终端", "Read-only terminal"), systemImage: "lock")
+                .labelStyle(.iconOnly)
+                .font(.system(size: 8.5, weight: .medium))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
     }
 
-    private func drawCloseGlyph() {
-        let closeHovering: Bool
-        if let window {
-            closeHovering = closeRect.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
-        } else {
-            closeHovering = false
+    @ViewBuilder
+    private var terminalContextMenu: some View {
+        Button(L("重命名当前终端...", "Rename Current Terminal...")) {
+            perform(.renameTerminal)
         }
-        if closeHovering {
-            NSColor(theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.44 : 0.26)).setFill()
-            NSBezierPath(ovalIn: closeRect).fill()
-        }
-        let image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
-        image?.isTemplate = true
-        NSColor(theme.shellChromeText.opacity(0.80)).set()
-        image?.draw(in: closeRect.insetBy(dx: 4, dy: 4))
-    }
-
-    func controlTextDidEndEditing(_ notification: Notification) {
-        let movement = (notification.userInfo?["NSTextMovement"] as? NSNumber)?.intValue
-        let cancelled = movement == NSCancelTextMovement
-        if let display, !cancelled {
-            let title = renameField?.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !title.isEmpty {
-                model?.renameTerminal(display.id, title: title)
+        if display.tab.userTitle != nil {
+            Button(L("恢复终端标题", "Restore Terminal Title")) {
+                perform(.restoreTerminalTitle)
             }
         }
-        renameField?.removeFromSuperview()
-        renameField = nil
-        needsDisplay = true
+        Button(L("复制当前终端", "Duplicate Current Terminal")) {
+            perform(.duplicateTerminal)
+        }
+        Button(L("上下文搜索", "Context Search")) {
+            perform(.showSearch)
+        }
+        Button(L("浏览当前目录", "Browse Current Directory")) {
+            perform(.showFileManager)
+        }
+        .disabled(detailLabel == nil)
+        Button(L("打开当前目录", "Open Current Directory")) {
+            perform(.openDirectory)
+        }
+        .disabled(detailLabel == nil)
+        Button(L("复制当前目录路径", "Copy Current Directory Path")) {
+            perform(.copyDirectory)
+        }
+        .disabled(detailLabel == nil)
+
+        Divider()
+
+        Button(L("新开终端", "New Terminal")) {
+            perform(.newTerminal)
+        }
+        Button(L("从当前目录新开终端", "New Terminal at Current Directory")) {
+            perform(.newTerminalAtDirectory)
+        }
+        .disabled(detailLabel == nil)
+        Button(L("向右分屏", "Split Right")) {
+            perform(.splitRight)
+        }
+        .disabled(!display.workspaceCanSplit)
+        Button(L("向下分屏", "Split Down")) {
+            perform(.splitDown)
+        }
+        .disabled(!display.workspaceCanSplit)
+        Button(L("关闭当前分屏", "Close Current Pane")) {
+            perform(.closePane)
+        }
+        .disabled(display.workspacePaneCount <= 1)
+
+        Divider()
+
+        Button(L("关闭当前终端", "Close Current Terminal")) {
+            perform(.closeTerminal)
+        }
+        Button(L("关闭其他终端", "Close Other Terminals")) {
+            perform(.closeOtherTerminals)
+        }
+        .disabled(!display.canCloseOtherTabs)
+        Button(L("关闭右侧终端", "Close Terminals to the Right")) {
+            perform(.closeTerminalsToRight)
+        }
+        .disabled(!display.canCloseTabsToRight)
+
+        Divider()
+
+        Button(L("重命名当前工作区...", "Rename Current Workspace...")) {
+            perform(.renameWorkspace)
+        }
+        Button(L("复制当前工作区", "Duplicate Current Workspace")) {
+            perform(.duplicateWorkspace)
+        }
+        Button(L("关闭当前工作区", "Close Current Workspace")) {
+            perform(.closeWorkspace)
+        }
+        .disabled(display.workspacePaneCount <= 0)
     }
 
-    private func detailLabel(for display: TerminalTabDisplayModel) -> String? {
-        guard let workingDirectory = display.metadata?.workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !workingDirectory.isEmpty else {
-            return nil
-        }
-        let normalized = (workingDirectory as NSString).expandingTildeInPath
-        let lastComponent = (normalized as NSString).lastPathComponent
-        guard !lastComponent.isEmpty,
-              lastComponent != "/",
-              lastComponent != display.tab.title else {
-            return nil
-        }
-        return lastComponent
-    }
-
-    private func helpText(for display: TerminalTabDisplayModel) -> String {
+    private var accessibilityTitle: String {
         var parts = [display.tab.title]
-        if let detail = detailLabel(for: display) {
-            parts.append(detail)
+        if let detailLabel {
+            parts.append(detailLabel)
+        }
+        if display.metadata?.readonly == true {
+            parts.append(L("只读", "Read Only"))
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    private var helpText: String {
+        var parts = [display.tab.title]
+        if let detailLabel {
+            parts.append(detailLabel)
         }
         if display.metadata?.readonly == true {
             parts.append(L("只读", "Read Only"))
@@ -876,13 +578,95 @@ private final class NativeTerminalTabItemView: NSView, NSDraggingSource, NSTextF
         return parts.joined(separator: " · ")
     }
 
-    private func dragPreviewImage() -> NSImage {
-        let image = NSImage(size: bounds.size)
-        image.lockFocus()
-        draw(bounds)
-        image.unlockFocus()
-        return image
+    private func perform(_ action: TerminalContextMenuAction) {
+        _ = model.performTerminalContextMenuAction(action, terminalID: display.id)
     }
+}
+
+private struct TerminalTabChipPreview: View {
+    let display: TerminalTabDisplayModel
+    let theme: TerminalTheme
+    let fontScale: AppearanceFontScale
+
+    var body: some View {
+        Label(display.tab.title, systemImage: "terminal")
+            .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
+            .foregroundStyle(theme.shellChromeText)
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
+    }
+}
+
+private struct TerminalTabReorderDropDelegate: DropDelegate {
+    let paneID: PaneID
+    let targetTabID: TerminalID?
+    let model: ConductorWindowModel
+    @Binding var highlightedDropTabID: TerminalID?
+
+    func validateDrop(info: DropInfo) -> Bool {
+        model.hasActiveTerminalTabDrag() && terminalTabDropProvider(in: info) != nil
+    }
+
+    func dropEntered(info: DropInfo) {
+        highlightedDropTabID = targetTabID
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard validateDrop(info: info) else { return nil }
+        highlightedDropTabID = targetTabID
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        highlightedDropTabID = nil
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        highlightedDropTabID = nil
+        guard validateDrop(info: info),
+              let payloadProvider = terminalTabDropProvider(in: info) else { return false }
+        payloadProvider.loadTerminalID { draggedTabID in
+            guard let draggedTabID else { return }
+            Task { @MainActor in
+                if let targetTabID, targetTabID != draggedTabID {
+                    model.moveTab(draggedTabID, before: targetTabID, in: paneID)
+                } else {
+                    model.moveTabToEnd(draggedTabID, in: paneID)
+                }
+                model.endTerminalTabDrag()
+            }
+        }
+        return true
+    }
+}
+
+@MainActor
+private func terminalTabItemProvider(for terminalID: TerminalID, model: ConductorWindowModel, paneID: PaneID) -> NSItemProvider {
+    model.selectTab(terminalID, in: paneID)
+    model.beginTerminalTabDrag(terminalID)
+    let payload = "\(terminalTabDragPrefix)\(terminalID.description)"
+    let provider = NSItemProvider(object: payload as NSString)
+    provider.registerDataRepresentation(forTypeIdentifier: terminalTabDragType.identifier, visibility: .all) { completion in
+        completion(payload.data(using: .utf8), nil)
+        return nil
+    }
+    return provider
+}
+
+private func terminalTabDetailLabel(for display: TerminalTabDisplayModel) -> String? {
+    guard let workingDirectory = display.metadata?.workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !workingDirectory.isEmpty else {
+        return nil
+    }
+    let normalized = (workingDirectory as NSString).expandingTildeInPath
+    let lastComponent = (normalized as NSString).lastPathComponent
+    guard !lastComponent.isEmpty,
+          lastComponent != "/",
+          lastComponent != display.tab.title else {
+        return nil
+    }
+    return lastComponent
 }
 
 private struct TerminalTabDropPayloadProvider {
@@ -904,18 +688,6 @@ private func terminalID(fromDroppedText text: String) -> TerminalID? {
         : trimmed
     guard let uuid = UUID(uuidString: rawID) else { return nil }
     return TerminalID(uuid)
-}
-
-private func draggedTerminalID(from pasteboard: NSPasteboard) -> TerminalID? {
-    if let text = pasteboard.string(forType: terminalTabPasteboardType),
-       let terminalID = terminalID(fromDroppedText: text) {
-        return terminalID
-    }
-    if let text = pasteboard.string(forType: .string),
-       let terminalID = terminalID(fromDroppedText: text) {
-        return terminalID
-    }
-    return nil
 }
 
 private func stringFromDropItem(_ item: NSSecureCoding?) -> String? {
@@ -993,57 +765,5 @@ private struct TerminalPaneSplitDropDelegate: DropDelegate {
             forPane: paneID,
             target: TerminalTabDropTarget.splitTarget(for: info.location, in: paneSize)
         )
-    }
-}
-
-private struct PaneBarButton: View {
-    let systemImage: String
-    let title: String
-    var showsTitle = true
-    var disabled = false
-    let help: String
-    let action: () -> Void
-    @State private var hovering = false
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        Button {
-            action()
-        } label: {
-            ViewThatFits(in: .horizontal) {
-                if showsTitle {
-                    HStack(spacing: 4) {
-                        Image(systemName: systemImage)
-                            .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
-                            .accessibilityHidden(true)
-                        Text(title)
-                            .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
-                            .lineLimit(1)
-                    }
-                }
-                Image(systemName: systemImage)
-                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                    .accessibilityHidden(true)
-            }
-            .foregroundStyle(hovering ? theme.shellChromeText.opacity(0.92) : theme.shellChromeTextMuted)
-            .padding(.horizontal, showsTitle ? 5 : 4)
-            .frame(height: 18)
-            .frame(minWidth: showsTitle ? nil : 19)
-            .background(hovering ? theme.shellHoverFill.opacity(0.44) : (theme.usesDarkChrome ? Color.white.opacity(showsTitle ? 0.018 : 0.0) : theme.shellControlFill.opacity(0.34)))
-            .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous)
-                    .stroke(hovering ? theme.shellStroke.opacity(0.30) : theme.shellStroke.opacity(0.12), lineWidth: 0.6)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.terminalTab, style: .continuous))
-        }
-        .buttonStyle(ConductorPressButtonStyle())
-        .accessibilityLabel(showsTitle ? title : help)
-        .disabled(disabled)
-        .opacity(disabled ? 0.35 : 1)
-        .animation(ConductorMotion.micro, value: disabled)
-        .conductorHover($hovering, animation: nil)
-        .macNativeTooltip(help, enabled: !showsTitle)
     }
 }

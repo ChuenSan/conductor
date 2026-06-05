@@ -59,38 +59,39 @@ struct GhosttyPresetOverrideMenu: View {
     let options: [GhosttyPresetOption]
     let setValue: (String) -> Void
     let reset: () -> Void
-    @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
-    private var selectedTitle: String {
-        guard !value.isEmpty else { return L("默认", "Default") }
-        return options.first { $0.value == value }?.title ?? value
+    private var menuOptions: [GhosttyPresetOption] {
+        let defaultOption = GhosttyPresetOption(title: L("默认", "Default"), value: "")
+        guard !value.isEmpty, !options.contains(where: { $0.value == value }) else {
+            return [defaultOption] + options
+        }
+        return [defaultOption, GhosttyPresetOption(title: value, value: value)] + options
+    }
+
+    private var selection: Binding<String> {
+        Binding {
+            value
+        } set: { newValue in
+            if newValue.isEmpty {
+                reset()
+            } else {
+                setValue(newValue)
+            }
+        }
     }
 
     var body: some View {
-        Menu {
-            Button(L("默认", "Default")) {
-                reset()
+        Picker(L("预设", "Preset"), selection: selection) {
+            ForEach(menuOptions, id: \.self) { option in
+                Text(option.title).tag(option.value)
             }
-            Divider()
-            ForEach(options, id: \.self) { option in
-                Button(option.title) {
-                    setValue(option.value)
-                }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Text(selectedTitle)
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis)
-                    .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .bold))
-                    .accessibilityHidden(true)
-            }
-            .frame(width: 236, alignment: .trailing)
         }
-        .menuStyle(.button)
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .frame(width: 236, alignment: .trailing)
+        .tint(theme.floatingEmphasis)
     }
 }
 
@@ -110,7 +111,7 @@ struct ShellCommandSettingControl: View {
             .font(.system(size: 11, weight: .medium, design: .monospaced))
             .frame(width: 186)
 
-            GhosttyResetButton(
+            ghosttyResetButton(
                 disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 action: reset
             )
@@ -156,7 +157,7 @@ struct WorkingDirectorySettingControl: View {
                 .lineLimit(1)
                 .frame(width: 110, alignment: .leading)
 
-            GhosttyResetButton(
+            ghosttyResetButton(
                 disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 action: reset
             )
@@ -192,50 +193,47 @@ struct ScrollbackPresetPicker: View {
         presets.first { $0.value == value } ?? Preset(title: value, value: value)
     }
 
-    var body: some View {
-        Menu {
-            ForEach(presets, id: \.self) { preset in
-                Button(preset.title) {
-                    if preset.value.isEmpty {
-                        reset()
-                    } else {
-                        setValue(preset.value)
-                    }
-                }
+    private var presetOptions: [Preset] {
+        presets.contains(selectedPreset) ? presets : [selectedPreset] + presets
+    }
+
+    private var selection: Binding<String> {
+        Binding {
+            selectedPreset.value
+        } set: { newValue in
+            if newValue.isEmpty {
+                reset()
+            } else {
+                setValue(newValue)
             }
-        } label: {
-            HStack(spacing: 8) {
-                Text(selectedPreset.title)
-                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis)
-                    .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .bold))
-                    .accessibilityHidden(true)
-            }
-            .frame(width: 236, alignment: .trailing)
         }
-        .menuStyle(.button)
+    }
+
+    var body: some View {
+        Picker(L("滚动缓冲区", "Scrollback"), selection: selection) {
+            ForEach(presetOptions, id: \.self) { preset in
+                Text(preset.title).tag(preset.value)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .frame(width: 236, alignment: .trailing)
+        .tint(theme.floatingEmphasis)
     }
 }
 
-struct GhosttyResetButton: View {
-    let disabled: Bool
-    let action: () -> Void
-
-    var body: some View {
-        ConductorIconButton(
-            state: ConductorControlState(
-                id: "settings-reset",
-                systemImage: "arrow.uturn.backward",
-                isEnabled: !disabled,
-                tooltip: L("恢复默认值", "Reset to Default"),
-                accessibilityLabel: L("恢复默认值", "Reset to Default")
-            ),
-            variant: .settingsIcon,
-            action: action
-        )
+@MainActor
+private func ghosttyResetButton(disabled: Bool, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+        Label(L("恢复默认值", "Reset to Default"), systemImage: "arrow.uturn.backward")
     }
+    .labelStyle(.iconOnly)
+    .buttonStyle(.borderless)
+    .controlSize(.small)
+    .disabled(disabled)
+    .help(L("恢复默认值", "Reset to Default"))
+    .accessibilityLabel(L("恢复默认值", "Reset to Default"))
 }
 
 struct GhosttyInlineTextOverrideControl: View {
@@ -246,16 +244,13 @@ struct GhosttyInlineTextOverrideControl: View {
     let setValue: (String) -> Void
     let reset: () -> Void
     @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: systemImage)
                 .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.floatingEmphasis)
-                .frame(width: 22, height: 22)
-                .background(theme.floatingControlStrongFill)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
                 .accessibilityHidden(true)
 
             TextField(placeholder, text: Binding(
@@ -266,7 +261,7 @@ struct GhosttyInlineTextOverrideControl: View {
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .frame(width: 176)
 
-            GhosttyResetButton(
+            ghosttyResetButton(
                 disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 action: reset
             )
@@ -310,7 +305,7 @@ struct GhosttySliderOverrideControl: View {
                 .monospacedDigit()
                 .frame(width: 42, alignment: .trailing)
 
-            GhosttyResetButton(
+            ghosttyResetButton(
                 disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 action: reset
             )
@@ -332,20 +327,12 @@ struct GhosttyColorOverrideControl: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(currentColor)
-                .frame(width: 22, height: 22)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .stroke(theme.floatingStroke.opacity(0.42), lineWidth: 0.6)
-                }
-
             ColorPicker("", selection: Binding(
                 get: { currentColor },
                 set: { setValue($0.ghosttyHexString ?? "#FFFFFF") }
             ))
             .labelsHidden()
-            .frame(width: 34)
+            .frame(width: 44)
 
             Text(value.isEmpty ? L("默认", "Default") : value)
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
@@ -353,7 +340,7 @@ struct GhosttyColorOverrideControl: View {
                 .lineLimit(1)
                 .frame(width: 112, alignment: .leading)
 
-            GhosttyResetButton(
+            ghosttyResetButton(
                 disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 action: reset
             )
@@ -400,7 +387,7 @@ struct GhosttyFileOverrideControl: View {
                 .lineLimit(1)
                 .frame(width: 110, alignment: .leading)
 
-            GhosttyResetButton(
+            ghosttyResetButton(
                 disabled: value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 action: reset
             )
@@ -412,63 +399,49 @@ struct GhosttyFileOverrideControl: View {
 struct TerminalRendererSummary: View {
     let appearance: AppearancePreferences
     @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        HStack(spacing: 8) {
-            summaryTile(
-                title: L("字体", "Font"),
-                value: appearance.terminalRenderer.effectiveFontFamilyName,
-                systemImage: "textformat"
-            )
-            summaryTile(
-                title: L("字号", "Size"),
-                value: terminalFontSizeText(appearance.terminalFontSize),
-                systemImage: "textformat.size"
-            )
-            summaryTile(
-                title: L("透明度", "Opacity"),
-                value: percentText(appearance.terminalRenderer.backgroundOpacity),
-                systemImage: "circle.lefthalf.filled"
-            )
-            summaryTile(
-                title: L("代理", "Proxy"),
-                value: appearance.terminalRenderer.proxy.enabled ? L("开启", "On") : L("关闭", "Off"),
-                systemImage: "network"
-            )
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 6) {
+            GridRow {
+                summaryField(
+                    title: L("字体", "Font"),
+                    value: appearance.terminalRenderer.effectiveFontFamilyName,
+                    systemImage: "textformat"
+                )
+                summaryField(
+                    title: L("字号", "Size"),
+                    value: terminalFontSizeText(appearance.terminalFontSize),
+                    systemImage: "textformat.size"
+                )
+            }
+            GridRow {
+                summaryField(
+                    title: L("透明度", "Opacity"),
+                    value: percentText(appearance.terminalRenderer.backgroundOpacity),
+                    systemImage: "circle.lefthalf.filled"
+                )
+                summaryField(
+                    title: L("代理", "Proxy"),
+                    value: appearance.terminalRenderer.proxy.enabled ? L("开启", "On") : L("关闭", "Off"),
+                    systemImage: "network"
+                )
+            }
         }
     }
 
-    private func summaryTile(title: String, value: String, systemImage: String) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                .foregroundStyle(theme.floatingEmphasis)
-                .frame(width: 22, height: 22)
-                .background(theme.floatingControlStrongFill)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                Text(value)
-                    .font(.conductorSystem(size: 10.6, weight: .bold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-            Spacer(minLength: 0)
+    private func summaryField(title: String, value: String, systemImage: String) -> some View {
+        LabeledContent {
+            Text(value)
+                .font(.conductorSystem(size: 10.6, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.conductorSystem(size: 9.8, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
         }
-        .padding(.horizontal, 9)
-        .frame(height: 44)
-        .background(theme.floatingControlFill.opacity(0.54))
-        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.34), lineWidth: 0.6)
-        }
+        .frame(width: 164, alignment: .leading)
     }
 
     private func terminalFontSizeText(_ value: CGFloat) -> String {
@@ -569,7 +542,7 @@ struct TerminalFontPickerMenu: View {
                 }
             }
         } label: {
-            HStack(spacing: 8) {
+            Label {
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(selectedChoice.displayName)
                         .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
@@ -579,10 +552,12 @@ struct TerminalFontPickerMenu: View {
                         .foregroundStyle(selectedChoice.isInstalled ? theme.floatingEmphasis : ConductorDesign.tertiaryText)
                         .lineLimit(1)
                 }
-                Image(systemName: "chevron.up.chevron.down")
+            } icon: {
+                Image(systemName: menuStatusIcon(for: selectedChoice))
                     .font(.system(size: 9, weight: .bold))
                     .accessibilityHidden(true)
             }
+            .labelStyle(.titleAndIcon)
             .foregroundStyle(theme.floatingEmphasis)
             .frame(width: 212, alignment: .trailing)
         }
@@ -616,1014 +591,145 @@ struct TerminalFontPickerMenu: View {
     }
 }
 
-struct SettingsStatusPill: View {
-    let title: String
-    let systemImage: String
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
-                .accessibilityHidden(true)
-            Text(title)
-                .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
-        }
-        .foregroundStyle(theme.floatingEmphasis)
-        .padding(.horizontal, 10)
-        .frame(height: 26)
-        .background(theme.floatingControlStrongFill.opacity(theme.usesDarkChrome ? 0.82 : 0.70))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.34), lineWidth: 0.6)
-        }
-    }
-}
-
-struct SettingsPreferenceGroup<Content: View>: View {
-    let title: String
-    let content: Content
-    @Environment(\.conductorFontScale) private var fontScale
-
-    init(
-        title: String,
-        subtitle: String = "",
-        systemImage: String = "",
-        @ViewBuilder content: () -> Content
-    ) {
-        _ = subtitle
-        _ = systemImage
-        self.title = title
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.secondaryText)
-                .lineLimit(1)
-
-            content
-        }
-        .padding(.top, 2)
-    }
-}
-
-struct SettingsFormSurface<Content: View>: View {
-    let content: Content
-    @Environment(\.conductorTheme) private var theme
-
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            content
-        }
-        .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.16 : 0.24))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.18), lineWidth: 0.6)
-        }
-    }
-}
-
-struct SettingsControlRow<Trailing: View>: View {
-    let title: String
-    let subtitle: String
-    let trailing: Trailing
-    @Environment(\.conductorFontScale) private var fontScale
-
-    init(
-        title: String,
-        subtitle: String,
-        systemImage: String = "",
-        @ViewBuilder trailing: () -> Trailing
-    ) {
-        _ = systemImage
-        self.title = title
-        self.subtitle = subtitle
-        self.trailing = trailing()
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.conductorSystem(size: 12, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.conductorSystem(size: 10, weight: .regular, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 12)
-
-            trailing
-        }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 44)
-        .contentShape(Rectangle())
-    }
-}
-
-struct SettingsToggleRow: View {
-    let title: String
-    let subtitle: String
-    var systemImage: String = ""
-    let isOn: Binding<Bool>
-
-    var body: some View {
-        SettingsControlRow(
-            title: title,
-            subtitle: subtitle
-        ) {
-            Toggle("", isOn: isOn)
-                .toggleStyle(.switch)
-                .labelsHidden()
-        }
-    }
-}
-
-struct SettingsTextFieldRow: View {
-    let title: String
-    let subtitle: String
-    var systemImage: String = ""
-    let text: Binding<String>
-
-    var body: some View {
-        SettingsControlRow(
-            title: title,
-            subtitle: subtitle
-        ) {
-            TextField("", text: text)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .frame(width: 278)
-        }
-    }
-}
-
-struct SettingsSliderRow: View {
-    let title: String
-    let subtitle: String
-    var systemImage: String = ""
-    let value: CGFloat
-    let range: ClosedRange<CGFloat>
-    let step: CGFloat
-    let valueText: String
-    let action: (CGFloat) -> Void
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        SettingsControlRow(
-            title: title,
-            subtitle: subtitle
-        ) {
-            HStack(spacing: 10) {
-                Slider(
-                    value: Binding(
-                        get: { Double(value) },
-                        set: { action(CGFloat($0)) }
-                    ),
-                    in: Double(range.lowerBound)...Double(range.upperBound),
-                    step: Double(step)
-                )
-                .frame(width: 192)
-
-                Text(valueText)
-                    .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis)
-                    .monospacedDigit()
-                    .frame(width: 46, alignment: .trailing)
-            }
-        }
-    }
-}
-
-struct SettingsControlDivider: View {
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        Rectangle()
-            .fill(theme.floatingSeparator.opacity(theme.usesDarkChrome ? 0.52 : 0.38))
-            .frame(height: 1)
-            .padding(.leading, 12)
-    }
-}
-
-struct SettingsSegmentedPicker<Option: Hashable>: View {
-    let options: [Option]
-    let selection: Option
-    let title: (Option) -> String
-    let action: (Option) -> Void
-    @Environment(\.conductorTheme) private var theme
-
-    private var selectionBinding: Binding<Option> {
-        Binding(
-            get: { selection },
-            set: { option in
-                guard option != selection else { return }
-                action(option)
-            }
-        )
-    }
-
-    var body: some View {
-        Picker("", selection: selectionBinding) {
-            ForEach(options, id: \.self) { option in
-                Text(title(option)).tag(option)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .frame(width: 284)
-        .tint(theme.floatingEmphasis)
-    }
-}
-
-extension AppearanceFontFamily {
-    var systemImage: String {
-        switch self {
-        case .system:
-            "textformat"
-        case .rounded:
-            "textformat.alt"
-        case .serif:
-            "textformat.abc"
-        case .monospaced:
-            "number"
-        }
-    }
-}
-
-struct SettingsSidebarItem: View {
-    let section: SettingsSectionID
-    let selected: Bool
-    let action: () -> Void
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .center, spacing: 8) {
-                Image(systemName: section.systemImage)
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(selected ? ConductorDesign.primaryText : ConductorDesign.secondaryText.opacity(0.86))
-                    .frame(width: 16, height: 17)
-                    .accessibilityHidden(true)
-
-                Text(section.title)
-                    .font(.conductorSystem(size: 11.5, weight: selected ? .semibold : .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 7)
-            .frame(height: 30, alignment: .center)
-            .background(rowBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        }
-        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
-    }
-
-    private var rowBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-        return ZStack {
-            if selected {
-                shape
-                    .fill(theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.68 : 0.78))
-            }
-        }
-    }
-}
-
 enum CommandShortcutGuideStyle {
-    case card
+    case grouped
     case plain
 }
 
 struct CommandShortcutGuide: View {
     let rows: [CommandShortcutGuideRowModel]
     var height: CGFloat = 178
-    var style: CommandShortcutGuideStyle = .card
+    var style: CommandShortcutGuideStyle = .grouped
     var editable = false
     var recordingCommand: ConductorShellCommand?
     var onRecord: (ConductorShellCommand) -> Void = { _ in }
     var onReset: (ConductorShellCommand) -> Void = { _ in }
     @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
 
     @ViewBuilder
     var body: some View {
-        let guide = NativeCommandShortcutGuide(
-            rows: rows,
-            style: style,
-            editable: editable,
-            recordingCommand: recordingCommand,
-            theme: theme,
-            fontScale: fontScale,
-            onRecord: onRecord,
-            onReset: onReset
-        )
-        .scrollIndicators(.visible)
+        let guide = List {
+            ForEach(sections) { section in
+                Section {
+                    ForEach(section.rows) { row in
+                        CommandShortcutGuideRow(
+                            row: row,
+                            editable: editable,
+                            isRecording: recordingCommand == row.item.command,
+                            onRecord: onRecord,
+                            onReset: onReset
+                        )
+                    }
+                } header: {
+                    Text(section.title.uppercased())
+                        .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                }
+            }
+        }
+        .listStyle(.inset)
+        .scrollContentBackground(.hidden)
         .frame(height: height)
 
         switch style {
-        case .card:
-            guide
-                .background(theme.floatingControlFill)
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(theme.floatingStroke.opacity(0.32), lineWidth: 0.7)
-                }
+        case .grouped:
+            GroupBox {
+                guide
+            }
         case .plain:
             guide
-                .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.10 : 0.16))
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.55 : 0.42))
-                        .frame(height: 1)
-                }
-                .overlay(alignment: .bottom) {
-                    Rectangle()
-                        .fill(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.55 : 0.42))
-                        .frame(height: 1)
-                }
         }
+    }
+
+    private var sections: [CommandShortcutGuideSection] {
+        var result: [CommandShortcutGuideSection] = []
+        for row in rows {
+            if result.last?.title == row.item.section {
+                result[result.count - 1].rows.append(row)
+            } else {
+                result.append(CommandShortcutGuideSection(title: row.item.section, rows: [row]))
+            }
+        }
+        return result
     }
 }
 
-private struct NativeCommandShortcutGuide: NSViewRepresentable {
-    let rows: [CommandShortcutGuideRowModel]
-    let style: CommandShortcutGuideStyle
+private struct CommandShortcutGuideSection: Identifiable {
+    var id: String { title }
+    let title: String
+    var rows: [CommandShortcutGuideRowModel]
+}
+
+private struct CommandShortcutGuideRow: View {
+    let row: CommandShortcutGuideRowModel
     let editable: Bool
-    let recordingCommand: ConductorShellCommand?
-    let theme: TerminalTheme
-    let fontScale: AppearanceFontScale
+    let isRecording: Bool
     let onRecord: (ConductorShellCommand) -> Void
     let onReset: (ConductorShellCommand) -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
 
-    func makeNSView(context: Context) -> NativeCommandShortcutGuideView {
-        NativeCommandShortcutGuideView()
-    }
+    var body: some View {
+        LabeledContent {
+            HStack(spacing: 8) {
+                Text(row.item.shortcut)
+                    .font(.conductorSystem(size: 9.6, weight: isRecording ? .bold : .semibold, design: .monospaced, scale: fontScale))
+                    .foregroundStyle(isRecording ? theme.floatingEmphasis : ConductorDesign.secondaryText)
+                    .lineLimit(1)
+                    .frame(minWidth: 54, alignment: .trailing)
 
-    func updateNSView(_ view: NativeCommandShortcutGuideView, context: Context) {
-        view.update(
-            rows: rows,
-            style: style,
-            editable: editable,
-            recordingCommand: recordingCommand,
-            theme: theme,
-            fontScale: fontScale,
-            onRecord: onRecord,
-            onReset: onReset
-        )
-    }
-}
+                if editable {
+                    ControlGroup {
+                        Button {
+                            onRecord(row.item.command)
+                        } label: {
+                            Label(isRecording ? L("按键", "Press") : L("更改", "Change"), systemImage: isRecording ? "record.circle.fill" : "keyboard")
+                        }
+                        .help(L("录制新的快捷键", "Record a new shortcut"))
 
-private final class NativeCommandShortcutGuideView: NSView, NSTableViewDataSource, NSTableViewDelegate {
-    private let scrollView = NSScrollView()
-    private let tableView = NSTableView()
-    private let columnIdentifier = NSUserInterfaceItemIdentifier("command-shortcut-row")
-    private var rows: [CommandShortcutGuideRowModel] = []
-    private var style: CommandShortcutGuideStyle = .plain
-    private var editable = false
-    private var recordingCommand: ConductorShellCommand?
-    private var theme: TerminalTheme = .codexDark
-    private var fontScale: AppearanceFontScale = .standard
-    private var onRecord: ((ConductorShellCommand) -> Void)?
-    private var onReset: ((ConductorShellCommand) -> Void)?
-
-    override var isFlipped: Bool { true }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        setup()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setup()
-    }
-
-    private func setup() {
-        scrollView.drawsBackground = false
-        scrollView.borderType = .noBorder
-        scrollView.hasHorizontalScroller = false
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.scrollerStyle = .overlay
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-
-        tableView.headerView = nil
-        tableView.backgroundColor = .clear
-        tableView.selectionHighlightStyle = .none
-        tableView.focusRingType = .none
-        tableView.allowsColumnSelection = false
-        tableView.allowsMultipleSelection = false
-        tableView.allowsEmptySelection = true
-        tableView.intercellSpacing = NSSize(width: 0, height: 0)
-        tableView.dataSource = self
-        tableView.delegate = self
-        let column = NSTableColumn(identifier: columnIdentifier)
-        column.resizingMask = .autoresizingMask
-        tableView.addTableColumn(column)
-        scrollView.documentView = tableView
-
-        addSubview(scrollView)
-        NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
-        ])
-    }
-
-    func update(
-        rows: [CommandShortcutGuideRowModel],
-        style: CommandShortcutGuideStyle,
-        editable: Bool,
-        recordingCommand: ConductorShellCommand?,
-        theme: TerminalTheme,
-        fontScale: AppearanceFontScale,
-        onRecord: @escaping (ConductorShellCommand) -> Void,
-        onReset: @escaping (ConductorShellCommand) -> Void
-    ) {
-        self.rows = rows
-        self.style = style
-        self.editable = editable
-        self.recordingCommand = recordingCommand
-        self.theme = theme
-        self.fontScale = fontScale
-        self.onRecord = onRecord
-        self.onReset = onReset
-        tableView.reloadData()
-    }
-
-    override func layout() {
-        super.layout()
-        tableView.tableColumns.first?.width = scrollView.contentView.bounds.width
-    }
-
-    func numberOfRows(in tableView: NSTableView) -> Int {
-        rows.count
-    }
-
-    func tableView(_ tableView: NSTableView, heightOfRow rowIndex: Int) -> CGFloat {
-        guard rows.indices.contains(rowIndex) else { return 30 }
-        return rows[rowIndex].showsSectionTitle ? 47 : 30
-    }
-
-    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-        NativeCommandShortcutTableRowView()
-    }
-
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row rowIndex: Int) -> NSView? {
-        guard rows.indices.contains(rowIndex) else { return nil }
-        let row = rows[rowIndex]
-        let view = tableView.makeView(withIdentifier: columnIdentifier, owner: self) as? NativeCommandShortcutGuideRowView ?? NativeCommandShortcutGuideRowView()
-        view.identifier = columnIdentifier
-        view.update(
-            row: row,
-            style: style,
-            editable: editable,
-            isRecording: recordingCommand == row.item.command,
-            theme: theme,
-            fontScale: fontScale,
-            onRecord: { [weak self] in self?.onRecord?(row.item.command) },
-            onReset: { [weak self] in self?.onReset?(row.item.command) }
-        )
-        return view
-    }
-}
-
-private final class NativeCommandShortcutTableRowView: NSTableRowView {
-    override func drawSelection(in dirtyRect: NSRect) {}
-    override func drawBackground(in dirtyRect: NSRect) {}
-}
-
-private final class NativeCommandShortcutGuideRowView: NSTableCellView {
-    private var row: CommandShortcutGuideRowModel?
-    private var style: CommandShortcutGuideStyle = .plain
-    private var editable = false
-    private var isRecording = false
-    private var theme: TerminalTheme = .codexDark
-    private var fontScale: AppearanceFontScale = .standard
-    private var onRecord: (() -> Void)?
-    private var onReset: (() -> Void)?
-    private let recordButton = NSButton()
-    private let resetButton = NSButton()
-
-    override var isFlipped: Bool { true }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        setup()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setup()
-    }
-
-    private func setup() {
-        wantsLayer = true
-        setupButton(recordButton, action: #selector(recordShortcut))
-        setupButton(resetButton, action: #selector(resetShortcut))
-        addSubview(recordButton)
-        addSubview(resetButton)
-    }
-
-    private func setupButton(_ button: NSButton, action: Selector) {
-        button.bezelStyle = .texturedRounded
-        button.isBordered = true
-        button.controlSize = .small
-        button.font = .systemFont(ofSize: 9.2, weight: .semibold)
-        button.target = self
-        button.action = action
-        button.imagePosition = .imageLeading
-    }
-
-    func update(
-        row: CommandShortcutGuideRowModel,
-        style: CommandShortcutGuideStyle,
-        editable: Bool,
-        isRecording: Bool,
-        theme: TerminalTheme,
-        fontScale: AppearanceFontScale,
-        onRecord: @escaping () -> Void,
-        onReset: @escaping () -> Void
-    ) {
-        self.row = row
-        self.style = style
-        self.editable = editable
-        self.isRecording = isRecording
-        self.theme = theme
-        self.fontScale = fontScale
-        self.onRecord = onRecord
-        self.onReset = onReset
-
-        recordButton.title = isRecording ? L("按键", "Press") : L("更改", "Change")
-        recordButton.image = NSImage(systemSymbolName: isRecording ? "record.circle.fill" : "keyboard", accessibilityDescription: nil)
-        recordButton.isHidden = !editable
-        resetButton.title = L("默认", "Default")
-        resetButton.image = NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: nil)
-        resetButton.isHidden = !editable
-        toolTip = "\(row.item.title)\n\(row.item.shortcutStatus) · \(row.item.shortcut)"
-        recordButton.toolTip = L("录制新的快捷键", "Record a new shortcut")
-        resetButton.toolTip = L("恢复默认快捷键", "Restore default shortcut")
-        needsLayout = true
-        needsDisplay = true
-    }
-
-    override func layout() {
-        super.layout()
-        let contentY = contentOriginY
-        let buttonWidth: CGFloat = 58
-        let buttonHeight: CGFloat = 21
-        let gap: CGFloat = 6
-        resetButton.frame = NSRect(x: bounds.maxX - buttonWidth - 8, y: contentY + 4.5, width: buttonWidth, height: buttonHeight)
-        recordButton.frame = NSRect(x: resetButton.frame.minX - buttonWidth - gap, y: contentY + 4.5, width: buttonWidth, height: buttonHeight)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard let row else { return }
-        drawSectionHeader(row)
-        drawRowContent(row)
-        if style == .plain {
-            NSColor(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.16)).setFill()
-            NSRect(x: 30, y: bounds.maxY - 1, width: max(0, bounds.width - 30), height: 1).fill()
+                        Button {
+                            onReset(row.item.command)
+                        } label: {
+                            Label(L("默认", "Default"), systemImage: "arrow.counterclockwise")
+                        }
+                        .help(L("恢复默认快捷键", "Restore default shortcut"))
+                    }
+                    .controlSize(.small)
+                }
+            }
+        } label: {
+            Label {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(row.item.title)
+                        .font(.conductorSystem(size: 11.2, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.primaryText)
+                        .lineLimit(1)
+                    if editable {
+                        Text(row.item.shortcutStatus)
+                            .font(.conductorSystem(size: 9, weight: .medium, scale: fontScale))
+                            .foregroundStyle(statusColor)
+                            .lineLimit(1)
+                    }
+                }
+            } icon: {
+                Image(systemName: row.item.systemImage)
+                    .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.secondaryText)
+                    .frame(width: 18)
+            }
         }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(row.item.title), \(row.item.shortcutStatus), \(row.item.shortcut)")
     }
 
-    private var contentOriginY: CGFloat {
-        row?.showsSectionTitle == true ? 17 : 0
-    }
-
-    private func drawSectionHeader(_ row: CommandShortcutGuideRowModel) {
-        guard row.showsSectionTitle else { return }
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: fontScale.size(9.2), weight: .semibold),
-            .foregroundColor: NSColor(ConductorDesign.tertiaryText)
-        ]
-        let title = row.item.section.uppercased()
-        title.draw(at: NSPoint(x: 4, y: row.isFirst ? 1 : 7), withAttributes: attrs)
-        NSColor(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.38 : 0.30)).setFill()
-        NSRect(x: 92, y: row.isFirst ? 8 : 14, width: max(0, bounds.width - 100), height: 1).fill()
-    }
-
-    private func drawRowContent(_ row: CommandShortcutGuideRowModel) {
-        let y = contentOriginY
-        let contentHeight: CGFloat = 30
-        let iconRect = NSRect(x: 6, y: y + 6, width: 18, height: 18)
-        let icon = NSImage(systemSymbolName: row.item.systemImage, accessibilityDescription: nil)
-        icon?.isTemplate = true
-        NSColor(ConductorDesign.secondaryText).set()
-        icon?.draw(in: iconRect.insetBy(dx: 3.5, dy: 3.5))
-
-        let titleAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: fontScale.size(11), weight: .semibold),
-            .foregroundColor: NSColor(ConductorDesign.primaryText)
-        ]
-        let trailingWidth: CGFloat = editable ? 250 : 76
-        let titleRect = NSRect(x: 32, y: y + 7, width: max(0, bounds.width - trailingWidth - 40), height: 16)
-        (row.item.title as NSString).draw(in: titleRect, withAttributes: titleAttrs)
-
-        if editable {
-            drawShortcutStatus(row, y: y, after: titleRect)
-        }
-
-        let shortcutAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: fontScale.size(9.5), weight: .semibold),
-            .foregroundColor: NSColor(isRecording ? theme.floatingEmphasis : ConductorDesign.secondaryText)
-        ]
-        let shortcut = row.item.shortcut as NSString
-        let shortcutSize = shortcut.size(withAttributes: shortcutAttrs)
-        let shortcutWidth = min(max(shortcutSize.width + 12, 44), 92)
-        let shortcutX = editable ? recordButton.frame.minX - shortcutWidth - 8 : bounds.maxX - shortcutWidth - 8
-        let shortcutRect = NSRect(x: shortcutX, y: y + 7, width: shortcutWidth, height: style == .plain ? 16 : 17)
-        NSColor(shortcutBackground).setFill()
-        NSBezierPath(roundedRect: shortcutRect, xRadius: style == .plain ? 4 : 8, yRadius: style == .plain ? 4 : 8).fill()
-        shortcut.draw(
-            at: NSPoint(x: shortcutRect.midX - shortcutSize.width / 2, y: shortcutRect.midY - shortcutSize.height / 2),
-            withAttributes: shortcutAttrs
-        )
-
-        _ = contentHeight
-    }
-
-    private func drawShortcutStatus(_ row: CommandShortcutGuideRowModel, y: CGFloat, after titleRect: NSRect) {
-        let status = row.item.shortcutStatus as NSString
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: fontScale.size(8.2), weight: .semibold),
-            .foregroundColor: NSColor(statusColor(for: row.item.shortcutStatus))
-        ]
-        let size = status.size(withAttributes: attrs)
-        let shortcutAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: fontScale.size(9.5), weight: .semibold)
-        ]
-        let shortcutWidth = min(max((row.item.shortcut as NSString).size(withAttributes: shortcutAttrs).width + 12, 44), 92)
-        let shortcutX = editable ? recordButton.frame.minX - shortcutWidth - 8 : bounds.maxX - shortcutWidth - 8
-        let pillWidth = min(size.width + 10, 58)
-        let x = min(titleRect.maxX + 6, shortcutX - pillWidth - 8)
-        guard x > titleRect.minX + 36 else { return }
-        let rect = NSRect(x: x, y: y + 7, width: pillWidth, height: 16)
-        NSColor(statusBackground(for: row.item.shortcutStatus)).setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
-        status.draw(
-            at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
-            withAttributes: attrs
-        )
-    }
-
-    private func statusColor(for status: String) -> Color {
-        if status == L("自定义", "Custom") {
+    private var statusColor: Color {
+        if row.item.shortcutStatus == L("自定义", "Custom") {
             return theme.floatingEmphasis
         }
-        if status == L("未设置", "Unassigned") {
+        if row.item.shortcutStatus == L("未设置", "Unassigned") {
             return ConductorDesign.tertiaryText
         }
         return ConductorDesign.secondaryText
-    }
-
-    private func statusBackground(for status: String) -> Color {
-        if status == L("自定义", "Custom") {
-            return theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.18 : 0.12)
-        }
-        return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.35 : 0.42)
-    }
-
-    private var shortcutBackground: Color {
-        switch style {
-        case .card:
-            return theme.floatingSelectedFill
-        case .plain:
-            return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.46 : 0.54)
-        }
-    }
-
-    @objc private func recordShortcut() {
-        onRecord?()
-    }
-
-    @objc private func resetShortcut() {
-        onReset?()
-    }
-}
-
-struct SelectedThemeShowcase: View {
-    let theme: TerminalTheme
-    @Environment(\.conductorFontScale) private var fontScale
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            ThemePreviewArtwork(theme: theme, height: 54, showsSidebar: false)
-                .frame(width: 128, height: 54)
-                .clipped()
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L("当前主题", "Current Theme"))
-                    .font(.conductorSystem(size: 9.6, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-                    .textCase(.uppercase)
-
-                Text(theme.title)
-                    .font(.conductorSystem(size: 13.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
-            }
-            .layoutPriority(1)
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 4) {
-                ThemeSwatch(color: theme.accent, width: 18)
-                ThemeSwatch(color: theme.terminalChrome, width: 18)
-                ThemeSwatch(color: theme.terminalBackground, width: 18)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.18 : 0.24))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(theme.floatingStroke.opacity(theme.usesDarkChrome ? 0.24 : 0.18))
-                .frame(height: 1)
-        }
-    }
-}
-
-struct ThemeOptionRow: View {
-    let theme: TerminalTheme
-    let selected: Bool
-    let action: () -> Void
-    @State private var hovering = false
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var activeTheme
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(selected ? activeTheme.floatingEmphasis : ConductorDesign.tertiaryText.opacity(0.62))
-                    .frame(width: 16)
-                    .accessibilityHidden(true)
-
-                Text(theme.title)
-                    .font(.conductorSystem(size: 12.0, weight: .medium, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-                    .lineLimit(1)
-
-                Spacer(minLength: 8)
-
-                HStack(spacing: 4) {
-                    ThemeSwatch(color: theme.accent, width: 16)
-                    ThemeSwatch(color: theme.terminalChrome, width: 16)
-                    ThemeSwatch(color: theme.terminalBackground, width: 16)
-                }
-            }
-            .padding(.horizontal, 10)
-            .frame(minHeight: 32)
-            .background(rowFill)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .conductorHover($hovering, animation: nil)
-    }
-
-    private var rowFill: Color {
-        if selected {
-            return activeTheme.floatingSelectedFill
-        }
-        if hovering {
-            return activeTheme.floatingHoverFill.opacity(0.44)
-        }
-        return Color.clear
-    }
-}
-
-struct ThemePreviewArtwork: View {
-    let theme: TerminalTheme
-    var height: CGFloat
-    var showsSidebar: Bool = true
-
-    private var large: Bool {
-        height > 100
-    }
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            LinearGradient(
-                colors: theme.windowBackdropStops,
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            ThemePreviewMotif(theme: theme)
-                .opacity(large ? 1 : 0.72)
-
-            if theme.chromeMaterial.glassIntensity > 0 {
-                RoundedRectangle(cornerRadius: large ? 16 : 10, style: .continuous)
-                    .stroke(Color.white.opacity(theme.chromeMaterial.highlightOpacity), lineWidth: 0.7)
-                    .padding(large ? 8 : 5)
-                    .blendMode(.screen)
-                RoundedRectangle(cornerRadius: large ? 14 : 9, style: .continuous)
-                    .fill(Color.white.opacity(theme.chromeMaterial.highlightOpacity * 0.22))
-                    .padding(large ? 11 : 7)
-                    .blendMode(.screen)
-            }
-
-            HStack(spacing: large ? 8 : 5) {
-                if showsSidebar {
-                    VStack(alignment: .leading, spacing: large ? 7 : 5) {
-                        HStack(spacing: 3) {
-                            Circle()
-                                .fill(Color.white.opacity(0.82))
-                                .frame(width: large ? 5 : 4, height: large ? 5 : 4)
-                            Circle()
-                                .fill(theme.accent.opacity(0.76))
-                                .frame(width: large ? 5 : 4, height: large ? 5 : 4)
-                            Spacer(minLength: 0)
-                        }
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(theme.shellSelectedFill)
-                            .frame(height: large ? 12 : 8)
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(theme.shellHoverFill)
-                            .frame(width: large ? 42 : 26, height: large ? 10 : 8)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(large ? 9 : 6)
-                    .frame(width: large ? 72 : 45)
-                    .background(theme.shellPanelBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: large ? 10 : 7, style: .continuous))
-                }
-
-                VStack(spacing: 0) {
-                    HStack(spacing: large ? 6 : 4) {
-                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(theme.accent.opacity(0.80))
-                            .frame(width: large ? 32 : 18, height: large ? 5 : 4)
-                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(Color.white.opacity(theme.usesDarkChrome ? 0.22 : 0.58))
-                            .frame(width: large ? 48 : 28, height: large ? 5 : 4)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, large ? 10 : 7)
-                    .frame(height: large ? 25 : 16)
-                    .background(theme.terminalChrome.opacity(0.92))
-
-                    VStack(alignment: .leading, spacing: large ? 5 : 3) {
-                        PreviewTerminalLine(prompt: "$", text: "swift build", accent: theme.accent, fontSize: large ? 10 : 8.5)
-                        PreviewTerminalLine(prompt: ">", text: "Conductor", accent: theme.accent, fontSize: large ? 10 : 8.5)
-                        Rectangle()
-                            .fill(theme.accent.opacity(0.86))
-                            .frame(width: large ? 42 : 22, height: large ? 3 : 2)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(large ? 11 : 7)
-                    .background(theme.terminalBackground)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: large ? 10 : 7, style: .continuous))
-            }
-            .padding(large ? 10 : 6)
-        }
-        .frame(height: height)
-        .clipShape(RoundedRectangle(cornerRadius: large ? 13 : 9, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: large ? 13 : 9, style: .continuous)
-                .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.12 + theme.chromeMaterial.highlightOpacity * 0.45 : 0.24), lineWidth: 0.6)
-        }
-        .shadow(color: Color.black.opacity(theme.chromeMaterial.shadowOpacity), radius: large ? 12 : 7, y: large ? 4 : 2)
-    }
-}
-
-struct ThemePreviewMotif: View {
-    let theme: TerminalTheme
-
-    var body: some View {
-        GeometryReader { proxy in
-            switch theme.designLanguage {
-            case .neon:
-                Path { path in
-                    let step: CGFloat = 18
-                    var x: CGFloat = 0
-                    while x <= proxy.size.width {
-                        path.move(to: CGPoint(x: x, y: 0))
-                        path.addLine(to: CGPoint(x: x, y: proxy.size.height))
-                        x += step
-                    }
-                    var y: CGFloat = 0
-                    while y <= proxy.size.height {
-                        path.move(to: CGPoint(x: 0, y: y))
-                        path.addLine(to: CGPoint(x: proxy.size.width, y: y))
-                        y += step
-                    }
-                }
-                .stroke(theme.accent.opacity(0.20), lineWidth: 0.7)
-            case .paper, .editorial:
-                VStack(spacing: 13) {
-                    ForEach(0..<12, id: \.self) { _ in
-                        Rectangle()
-                            .fill(theme.shellStroke.opacity(0.36))
-                            .frame(height: 1)
-                    }
-                }
-                .padding(.top, 14)
-                .padding(.horizontal, 14)
-            case .glass, .fluid, .frost:
-                ZStack {
-                    Circle()
-                        .fill(theme.accent.opacity(0.08))
-                        .frame(width: proxy.size.width * 0.42)
-                        .blur(radius: 12)
-                        .offset(x: proxy.size.width * 0.28, y: -proxy.size.height * 0.18)
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color.white.opacity(theme.usesDarkChrome ? 0.10 : 0.20), lineWidth: 0.6)
-                        .frame(width: proxy.size.width * 0.42, height: proxy.size.height * 0.44)
-                        .offset(x: proxy.size.width * 0.22, y: proxy.size.height * 0.18)
-                }
-            case .botanical:
-                HStack(alignment: .bottom, spacing: 11) {
-                    ForEach(0..<9, id: \.self) { index in
-                        Capsule()
-                            .fill(theme.accent.opacity(index.isMultiple(of: 2) ? 0.20 : 0.10))
-                            .frame(width: 5, height: CGFloat(24 + index * 7))
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(18)
-            case .sunlit, .warm:
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.24),
-                        theme.accent.opacity(0.16),
-                        Color.clear
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            case .studio, .minimal, .system:
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(theme.usesDarkChrome ? 0.025 : 0.18),
-                                Color.clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
-
-struct PreviewTerminalLine: View {
-    let prompt: String
-    let text: String
-    let accent: Color
-    var fontSize: CGFloat = 8.5
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(prompt)
-                .foregroundStyle(accent)
-            Text(text)
-                .foregroundStyle(Color.white.opacity(0.78))
-                .lineLimit(1)
-        }
-        .font(.system(size: fontSize, weight: .medium, design: .monospaced))
-    }
-}
-
-struct ThemeSwatch: View {
-    let color: Color
-    var width: CGFloat = 16
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-            .fill(color)
-            .frame(width: width, height: 5)
-            .overlay {
-                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                    .stroke(Color.white.opacity(0.36), lineWidth: 0.5)
-            }
     }
 }

@@ -312,6 +312,28 @@ final class FileManagerPanelStore: ObservableObject {
         }
     }
 
+    func selectFromList(_ paths: Set<String>) {
+        guard paths != selectedPaths else { return }
+        guard !paths.isEmpty else {
+            clearSelectionForCurrentDisplay()
+            operationMessage = nil
+            return
+        }
+
+        let activeItem: FileManagerItem?
+        if let selectedItem, paths.contains(selectedItem.url.path) {
+            activeItem = selectedItem
+        } else {
+            activeItem = displayedRows.first { paths.contains($0.item.url.path) }?.item
+        }
+        guard let activeItem else {
+            clearSelectionForCurrentDisplay()
+            operationMessage = nil
+            return
+        }
+        selectItemForAction(activeItem, selectedPaths: paths, anchorPath: activeItem.url.path)
+    }
+
     func selectAdjacentRow(by offset: Int) {
         let rows = displayedRows
         guard !rows.isEmpty else { return }

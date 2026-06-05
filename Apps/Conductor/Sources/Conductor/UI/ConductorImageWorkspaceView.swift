@@ -66,64 +66,79 @@ struct ConductorImageWorkspaceView: View {
     }
 
     private var imageToolbar: some View {
-        HStack(spacing: 8) {
-            if let image = imageLoader.image {
-                statusPill(systemImage: "photo", title: dimensions(for: image))
-            }
-
-            Picker("", selection: $zoomMode) {
-                ForEach(ConductorImageZoomMode.allCases) { mode in
-                    Image(systemName: mode.systemImage)
-                        .tag(mode)
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                if let image = imageLoader.image {
+                    statusLabel(systemImage: "photo", title: dimensions(for: image))
                 }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 104)
-            .macNativeTooltip(L("图片缩放模式 Cmd-0/Cmd-1/Cmd-+", "Image Zoom Mode Cmd-0/Cmd-1/Cmd-+"))
 
-            Slider(value: $zoomScale, in: 0.1...4, step: 0.05)
-                .frame(width: 112)
-                .disabled(zoomMode != .custom)
-                .macNativeTooltip(L("缩放比例", "Zoom Scale"))
+                Picker("", selection: $zoomMode) {
+                    ForEach(ConductorImageZoomMode.allCases) { mode in
+                        Image(systemName: mode.systemImage)
+                            .tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 104)
+                .help(L("图片缩放模式 Cmd-0/Cmd-1/Cmd-+", "Image Zoom Mode Cmd-0/Cmd-1/Cmd-+"))
 
-            Text("\(Int(effectiveZoomPercent))%")
-                .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.52))
-                .monospacedDigit()
-                .frame(width: 44, alignment: .trailing)
+                Slider(value: $zoomScale, in: 0.1...4, step: 0.05)
+                    .frame(width: 112)
+                    .disabled(zoomMode != .custom)
+                    .help(L("缩放比例", "Zoom Scale"))
 
-            if let statusMessage {
-                Text(statusMessage)
+                Text("\(Int(effectiveZoomPercent))%")
                     .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.48))
-                    .lineLimit(1)
-            }
+                    .foregroundStyle(theme.shellChromeText.opacity(0.52))
+                    .monospacedDigit()
+                    .frame(width: 44, alignment: .trailing)
 
-            Spacer(minLength: 0)
+                if let statusMessage {
+                    Text(statusMessage)
+                        .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.48))
+                        .lineLimit(1)
+                }
 
-            iconButton("doc.on.doc", help: L("复制路径 Cmd-Opt-C", "Copy Path Cmd-Opt-C")) {
-                copy(url.path)
-            }
-            .keyboardShortcut("c", modifiers: [.command, .option])
+                Spacer(minLength: 0)
 
-            iconButton("arrow.up.right.square", help: L("系统应用打开 Cmd-O", "Open in System App Cmd-O")) {
-                NSWorkspace.shared.open(url)
-            }
-            .keyboardShortcut("o", modifiers: .command)
+                Button {
+                    copy(url.path)
+                } label: {
+                    Label(L("复制路径 Cmd-Opt-C", "Copy Path Cmd-Opt-C"), systemImage: "doc.on.doc")
+                }
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .help(L("复制路径 Cmd-Opt-C", "Copy Path Cmd-Opt-C"))
+                .accessibilityLabel(L("复制路径 Cmd-Opt-C", "Copy Path Cmd-Opt-C"))
+                .keyboardShortcut("c", modifiers: [.command, .option])
 
-            iconButton("folder", help: L("在 Finder 中显示 Cmd-Opt-R", "Reveal in Finder Cmd-Opt-R")) {
-                NSWorkspace.shared.activateFileViewerSelecting([url])
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Label(L("系统应用打开 Cmd-O", "Open in System App Cmd-O"), systemImage: "arrow.up.right.square")
+                }
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .help(L("系统应用打开 Cmd-O", "Open in System App Cmd-O"))
+                .accessibilityLabel(L("系统应用打开 Cmd-O", "Open in System App Cmd-O"))
+                .keyboardShortcut("o", modifiers: .command)
+
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                } label: {
+                    Label(L("在 Finder 中显示 Cmd-Opt-R", "Reveal in Finder Cmd-Opt-R"), systemImage: "folder")
+                }
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .help(L("在 Finder 中显示 Cmd-Opt-R", "Reveal in Finder Cmd-Opt-R"))
+                .accessibilityLabel(L("在 Finder 中显示 Cmd-Opt-R", "Reveal in Finder Cmd-Opt-R"))
+                .keyboardShortcut("r", modifiers: [.command, .option])
             }
-            .keyboardShortcut("r", modifiers: [.command, .option])
+            .padding(.horizontal, 12)
+            .frame(height: 33)
         }
-        .padding(.horizontal, 12)
-        .frame(height: 34)
-        .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.48 : 0.20))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.30 : 0.16))
-                .frame(height: 1)
-        }
+        .background(.regularMaterial)
     }
 
     @ViewBuilder
@@ -141,19 +156,25 @@ struct ConductorImageWorkspaceView: View {
                 .background(theme.terminalBackground)
             }
         } else {
-            VStack(spacing: 10) {
-                Image(systemName: imageLoader.isLoading ? "hourglass" : "photo")
-                    .font(.conductorSystem(size: 28, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.28))
-                Text(imageLoader.isLoading ? L("正在读取图片", "Loading Image") : L("图片无法读取", "Image Could Not Load"))
-                    .font(.conductorSystem(size: 13, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.62))
+            ContentUnavailableView {
+                Label(
+                    imageLoader.isLoading ? L("正在读取图片", "Loading Image") : L("图片无法读取", "Image Could Not Load"),
+                    systemImage: imageLoader.isLoading ? "hourglass" : "photo"
+                )
+            } description: {
                 Text(url.lastPathComponent)
-                    .font(.conductorSystem(size: 12, weight: .medium, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.46))
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
+            .overlay(alignment: .topTrailing) {
+                if imageLoader.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(14)
+                }
+            }
+            .font(.conductorSystem(size: 12, weight: .medium, family: fontFamily, scale: fontScale))
+            .foregroundStyle(theme.shellChromeText.opacity(0.62))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(24)
         }
@@ -264,29 +285,11 @@ struct ConductorImageWorkspaceView: View {
         statusMessage = L("缩小到 \(Int(zoomScale * 100))%", "Zoom \(Int(zoomScale * 100))%")
     }
 
-    private func statusPill(systemImage: String, title: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 10.5, weight: .bold, family: fontFamily, scale: fontScale))
-            Text(title)
-                .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-        }
+    private func statusLabel(systemImage: String, title: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
         .foregroundStyle(theme.shellChromeText.opacity(0.64))
-        .padding(.horizontal, 8)
         .frame(height: 22)
-        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.34 : 0.18))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 
-    private func iconButton(_ systemImage: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.conductorSystem(size: 11.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.66))
-                .frame(width: 28, height: 24)
-                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .macNativeTooltip(help)
-    }
 }

@@ -38,42 +38,37 @@ struct FileManagerPanel: View {
         VStack(spacing: 0) {
             header
                 .zIndex(1)
-            divider
+            panelDivider
                 .zIndex(1)
             if searchVisible || !store.searchQuery.isEmpty {
                 fileTreeSearchBar(snapshot: snapshot)
                     .zIndex(1)
                     .transition(ConductorMotion.rowTransition(itemCount: 1))
-                divider
+                panelDivider
                     .zIndex(1)
             }
             content(snapshot: snapshot)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .zIndex(0)
-            divider
+            panelDivider
             statusBar(snapshot: snapshot)
             if let message = store.operationMessage {
-                divider
+                panelDivider
                 operationMessageBar(message)
                     .transition(ConductorMotion.rowTransition(itemCount: 1))
             }
             if store.pendingDeleteCount > 0 {
-                divider
+                panelDivider
                 deleteConfirmationBar(count: store.pendingDeleteCount)
                     .transition(ConductorMotion.rowTransition(itemCount: 1))
             }
         }
-        .background(panelBackground)
+        .background(.regularMaterial)
         .background {
             ConductorKeyboardShortcutBridge(autofocus: false) { event in
                 handleKeyboardShortcut(event)
             }
             .frame(width: 0, height: 0)
-        }
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.42 : 0.26))
-                .frame(width: 1)
         }
         .task(id: request.id) {
             await store.load(request)
@@ -146,18 +141,6 @@ struct FileManagerPanel: View {
         }
     }
 
-    private var panelBackground: Color {
-        theme.usesDarkChrome
-            ? theme.terminalRaisedBackground.opacity(0.96)
-            : theme.terminalBackground.opacity(0.985)
-    }
-
-    private var headerBackground: Color {
-        theme.usesDarkChrome
-            ? theme.terminalChrome.opacity(0.44)
-            : theme.terminalChrome.opacity(0.16)
-    }
-
     private var currentFolderTitle: String {
         let url = store.currentURL ?? request.rootURL
         let name = url.lastPathComponent
@@ -183,9 +166,15 @@ struct FileManagerPanel: View {
 
                 Spacer(minLength: 10)
 
-                panelIconButton("xmark", id: "file-manager.panel.close", help: L("关闭文件面板", "Close Files")) {
+                Button {
                     model.closeFileManagerPanel()
+                } label: {
+                    Label(L("关闭文件面板", "Close Files"), systemImage: "xmark")
                 }
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .help(L("关闭文件面板", "Close Files"))
+                .accessibilityLabel(L("关闭文件面板", "Close Files"))
             }
             .padding(.horizontal, 14)
             .padding(.top, 9)
@@ -199,7 +188,7 @@ struct FileManagerPanel: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
         }
-        .background(headerBackground)
+        .background(ConductorTokens.Settings.panelChromeWash(dark: theme.usesDarkChrome))
     }
 
     private var headerToolbar: some View {
@@ -211,49 +200,81 @@ struct FileManagerPanel: View {
             }
 
             toolbarGroup {
-                panelIconButton("arrow.up", id: "file-manager.panel.parent-directory", help: L("上级目录", "Parent Directory"), disabled: store.currentURL == nil) {
+                Button {
                     Task { await store.goUp() }
+                } label: {
+                    Label(L("上级目录", "Parent Directory"), systemImage: "arrow.up")
                 }
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .disabled(store.currentURL == nil)
+                .help(L("上级目录", "Parent Directory"))
+                .accessibilityLabel(L("上级目录", "Parent Directory"))
 
-                panelIconButton("arrow.clockwise", id: "file-manager.panel.refresh", help: L("刷新文件", "Refresh Files")) {
+                Button {
                     Task { await store.refresh() }
+                } label: {
+                    Label(L("刷新文件", "Refresh Files"), systemImage: "arrow.clockwise")
                 }
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .help(L("刷新文件", "Refresh Files"))
+                .accessibilityLabel(L("刷新文件", "Refresh Files"))
 
-                panelIconButton(store.includeHiddenFiles ? "eye" : "eye.slash", id: "file-manager.panel.toggle-hidden", help: L("显示/隐藏隐藏文件", "Show/Hide Hidden Files")) {
+                Button {
                     Task { await store.setIncludeHiddenFiles(!store.includeHiddenFiles) }
+                } label: {
+                    Label(L("显示/隐藏隐藏文件", "Show/Hide Hidden Files"), systemImage: store.includeHiddenFiles ? "eye" : "eye.slash")
                 }
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .help(L("显示/隐藏隐藏文件", "Show/Hide Hidden Files"))
+                .accessibilityLabel(L("显示/隐藏隐藏文件", "Show/Hide Hidden Files"))
             }
 
             Spacer(minLength: 0)
 
             toolbarGroup {
-                panelIconButton("doc.badge.plus", id: "file-manager.panel.new-file", help: L("新建文件", "New File")) {
+                Button {
                     Task { await store.createFile() }
+                } label: {
+                    Label(L("新建文件", "New File"), systemImage: "doc.badge.plus")
                 }
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .help(L("新建文件", "New File"))
+                .accessibilityLabel(L("新建文件", "New File"))
 
-                panelIconButton("folder.badge.plus", id: "file-manager.panel.new-folder", help: L("新建文件夹", "New Folder")) {
+                Button {
                     Task { await store.createFolder() }
+                } label: {
+                    Label(L("新建文件夹", "New Folder"), systemImage: "folder.badge.plus")
                 }
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .help(L("新建文件夹", "New Folder"))
+                .accessibilityLabel(L("新建文件夹", "New Folder"))
 
-                panelIconButton("folder", id: "file-manager.panel.reveal-current-directory", help: L("在 Finder 中显示当前目录", "Reveal Current Directory in Finder")) {
+                Button {
                     reveal(store.currentURL ?? request.rootURL)
+                } label: {
+                    Label(L("在 Finder 中显示当前目录", "Reveal Current Directory in Finder"), systemImage: "folder")
                 }
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .help(L("在 Finder 中显示当前目录", "Reveal Current Directory in Finder"))
+                .accessibilityLabel(L("在 Finder 中显示当前目录", "Reveal Current Directory in Finder"))
             }
         }
         .frame(height: 32)
     }
 
     private func toolbarGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: 1) {
+        ControlGroup {
             content()
         }
-        .padding(2)
-        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.14 : 0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.10 : 0.08), lineWidth: 0.6)
-        }
+        .controlGroupStyle(.automatic)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var quickAccessMenuButton: some View {
@@ -277,16 +298,12 @@ struct FileManagerPanel: View {
                 }
             }
         } label: {
-            Image(systemName: "clock")
-                .renderingMode(.template)
-                .symbolRenderingMode(.monochrome)
-                .font(toolbarIconFont)
-                .foregroundStyle(toolbarIconColor)
-                .frame(width: 28, height: 28)
+            Label(L("最近和收藏", "Recent and Favorites"), systemImage: "clock")
         }
+        .labelStyle(.iconOnly)
         .menuStyle(.button)
-        .buttonStyle(.plain)
-        .macNativeTooltip(L("最近和收藏", "Recent and Favorites"))
+        .controlSize(.small)
+        .help(L("最近和收藏", "Recent and Favorites"))
         .accessibilityLabel(Text(L("最近和收藏", "Recent and Favorites")))
     }
 
@@ -302,16 +319,12 @@ struct FileManagerPanel: View {
                 }
             }
         } label: {
-            Image(systemName: "arrow.up.arrow.down")
-                .renderingMode(.template)
-                .symbolRenderingMode(.monochrome)
-                .font(toolbarIconFont)
-                .foregroundStyle(toolbarIconColor)
-                .frame(width: 28, height: 28)
+            Label(L("排序方式", "Sort"), systemImage: "arrow.up.arrow.down")
         }
+        .labelStyle(.iconOnly)
         .menuStyle(.button)
-        .buttonStyle(.plain)
-        .macNativeTooltip(L("排序方式", "Sort"))
+        .controlSize(.small)
+        .help(L("排序方式", "Sort"))
         .accessibilityLabel(Text(L("排序方式", "Sort")))
     }
 
@@ -327,45 +340,31 @@ struct FileManagerPanel: View {
                 }
             }
         } label: {
-            Image(systemName: store.kindFilter.systemImage)
-                .renderingMode(.template)
-                .symbolRenderingMode(.monochrome)
-                .font(toolbarIconFont)
-                .foregroundStyle(toolbarIconColor)
-                .frame(width: 28, height: 28)
+            Label(L("类型过滤", "Kind Filter"), systemImage: store.kindFilter.systemImage)
         }
+        .labelStyle(.iconOnly)
         .menuStyle(.button)
-        .buttonStyle(.plain)
-        .macNativeTooltip(L("类型过滤", "Kind Filter"))
+        .controlSize(.small)
+        .help(L("类型过滤", "Kind Filter"))
         .accessibilityLabel(Text(L("类型过滤", "Kind Filter")))
     }
 
-    private var toolbarSeparator: some View {
-        Rectangle()
-            .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.20 : 0.26))
-            .frame(width: 1, height: 18)
-            .padding(.horizontal, 3)
-    }
-
-    private var toolbarIconFont: Font {
-        .conductorSystem(size: toolbarIconSymbolSize, weight: .semibold, family: fontFamily, scale: fontScale)
-    }
-
-    private var toolbarIconColor: Color {
-        theme.shellChromeText.opacity(toolbarIconOpacity)
-    }
-
     private var favoriteButton: some View {
-        Button {
+        let isFavorite = store.isFavoriteDirectory(store.currentURL ?? request.rootURL)
+        return Button {
             store.toggleFavoriteDirectory(store.currentURL ?? request.rootURL)
         } label: {
-            Image(systemName: store.isFavoriteDirectory(store.currentURL ?? request.rootURL) ? "star.fill" : "folder")
-                .font(.conductorSystem(size: 13, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(store.isFavoriteDirectory(store.currentURL ?? request.rootURL) ? theme.floatingEmphasis.opacity(0.95) : theme.floatingEmphasis.opacity(0.78))
-                .frame(width: 24, height: 28)
+            Label(
+                L("收藏当前目录", "Favorite Current Directory"),
+                systemImage: isFavorite ? "star.fill" : "folder"
+            )
+            .font(.conductorSystem(size: 13, weight: .semibold, family: fontFamily, scale: fontScale))
+            .foregroundStyle(isFavorite ? theme.floatingEmphasis.opacity(0.95) : theme.floatingEmphasis.opacity(0.78))
+            .labelStyle(.iconOnly)
+            .frame(width: 24, height: 28)
         }
-        .buttonStyle(.plain)
-        .macNativeTooltip(L("收藏当前目录", "Favorite Current Directory"))
+        .buttonStyle(.borderless)
+        .help(L("收藏当前目录", "Favorite Current Directory"))
         .accessibilityLabel(Text(L("收藏当前目录", "Favorite Current Directory")))
     }
 
@@ -389,7 +388,7 @@ struct FileManagerPanel: View {
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.borderless)
                         if url.path != breadcrumbURLs.last?.path {
                             Image(systemName: "chevron.right")
                                 .font(.conductorSystem(size: 7.5, weight: .bold, family: fontFamily, scale: fontScale))
@@ -402,9 +401,6 @@ struct FileManagerPanel: View {
             }
         }
         .frame(height: 24)
-        .padding(.horizontal, 8)
-        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.20 : 0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 
     private var breadcrumbURLs: [URL] {
@@ -440,9 +436,8 @@ struct FileManagerPanel: View {
                 .frame(width: 18)
 
             TextField(L("搜索文件", "Search files"), text: $store.searchQuery)
-                .textFieldStyle(.plain)
+                .textFieldStyle(.roundedBorder)
                 .font(.conductorSystem(size: 12, weight: .medium, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.84))
                 .focused($searchFocused)
                 .onSubmit {
                     store.recordSearchQuery()
@@ -453,13 +448,13 @@ struct FileManagerPanel: View {
                     store.searchQuery = ""
                     searchFocused = true
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.conductorSystem(size: 11.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                        .foregroundStyle(theme.shellChromeText.opacity(0.42))
-                        .frame(width: 22, height: 22)
+                    Label(L("清除搜索", "Clear Search"), systemImage: "xmark.circle.fill")
                 }
-                .buttonStyle(.plain)
-                .macNativeTooltip(L("清除搜索", "Clear Search"))
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .help(L("清除搜索", "Clear Search"))
+                .accessibilityLabel(L("清除搜索", "Clear Search"))
             }
 
             Text(L("\(snapshot.totalRowCount)/\(snapshot.totalKnownItemCount)", "\(snapshot.totalRowCount)/\(snapshot.totalKnownItemCount)"))
@@ -467,13 +462,19 @@ struct FileManagerPanel: View {
                 .foregroundStyle(theme.shellChromeText.opacity(0.42))
                 .lineLimit(1)
 
-            panelIconButton("xmark", id: "file-manager.search.close", help: L("关闭搜索", "Close Search")) {
+            Button {
                 closeSearch()
+            } label: {
+                Label(L("关闭搜索", "Close Search"), systemImage: "xmark")
             }
+            .labelStyle(.iconOnly)
+            .controlSize(.small)
+            .help(L("关闭搜索", "Close Search"))
+            .accessibilityLabel(L("关闭搜索", "Close Search"))
         }
         .padding(.horizontal, 12)
         .frame(height: 36)
-        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.18 : 0.10))
+        .background(ConductorTokens.Settings.panelChromeWash(dark: theme.usesDarkChrome))
     }
 
     private func browser(snapshot: FileManagerDisplaySnapshot) -> some View {
@@ -505,7 +506,7 @@ struct FileManagerPanel: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 30)
-        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.12 : 0.08))
+        .background(ConductorTokens.Settings.panelChromeWash(dark: theme.usesDarkChrome))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(statusBarAccessibilityLabel(snapshot: snapshot, selectedItems: selectedItems))
         .accessibilityAddTraits(.isStaticText)
@@ -543,86 +544,90 @@ struct FileManagerPanel: View {
     }
 
     private func operationMessageBar(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
-            Text(message)
-                .font(.conductorSystem(size: 11.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                .lineLimit(2)
+        HStack(spacing: 10) {
+            Label {
+                Text(message)
+                    .font(.conductorSystem(size: 11.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .lineLimit(2)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle")
+            }
+
             Spacer(minLength: 8)
-            if store.canUndoTrash {
-                ConductorCommandButton(
-                    state: ConductorControlState(
-                        id: "file-manager-undo-trash",
-                        title: L("撤销", "Undo"),
-                        systemImage: "arrow.uturn.backward",
-                        tooltip: L("撤销", "Undo"),
-                        accessibilityLabel: L("撤销", "Undo")
-                    )
-                ) {
-                    Task {
-                        let restoredPaths = await store.undoLastTrash()
-                        for path in restoredPaths {
-                            model.updateWorkspaceFileTabs(
-                                moving: path,
-                                to: URL(fileURLWithPath: path),
-                                isDirectory: true
-                            )
+
+            ControlGroup {
+                if store.canUndoTrash {
+                    Button {
+                        Task {
+                            let restoredPaths = await store.undoLastTrash()
+                            for path in restoredPaths {
+                                model.updateWorkspaceFileTabs(
+                                    moving: path,
+                                    to: URL(fileURLWithPath: path),
+                                    isDirectory: true
+                                )
+                            }
                         }
+                    } label: {
+                        Label(L("撤销", "Undo"), systemImage: "arrow.uturn.backward")
                     }
+                    .help(L("撤销", "Undo"))
+                    .accessibilityLabel(L("撤销", "Undo"))
                 }
+
+                Button {
+                    store.clearOperationMessage()
+                } label: {
+                    Label(L("关闭提示", "Dismiss Message"), systemImage: "xmark")
+                }
+                .help(L("关闭提示", "Dismiss Message"))
+                .accessibilityLabel(L("关闭提示", "Dismiss Message"))
             }
-            panelIconButton("xmark", id: "file-manager.message.dismiss", help: L("关闭提示", "Dismiss Message")) {
-                store.clearOperationMessage()
-            }
+            .controlSize(.small)
         }
         .foregroundStyle(theme.shellChromeText.opacity(0.84))
         .padding(.horizontal, 14)
         .frame(minHeight: 38)
-        .background(theme.floatingControlStrongFill.opacity(theme.usesDarkChrome ? 0.36 : 0.42))
+        .background(.regularMaterial)
     }
 
     private func deleteConfirmationBar(count: Int) -> some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 7) {
-                Image(systemName: "trash")
-                    .font(.conductorSystem(size: 12, weight: .bold, family: fontFamily, scale: fontScale))
-                Text(L("已标记 \(count) 项删除", "\(count) item(s) marked for delete"))
-                    .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(Color.white.opacity(0.94))
-
-            Spacer(minLength: 8)
-
-            Button {
-                store.cancelPendingDeletes()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.conductorSystem(size: 12, weight: .bold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(Color.white.opacity(0.96))
-                    .frame(width: 24, height: 22)
-            }
-            .buttonStyle(.plain)
-            .macNativeTooltip(L("取消删除", "Cancel Delete"))
-
-            Button {
-                Task {
-                    let deletedPaths = await store.confirmPendingDeletes()
-                    model.closeWorkspaceFileTabs(matchingDeletedPaths: deletedPaths)
+        GroupBox {
+            HStack(spacing: 10) {
+                Label {
+                    Text(L("已标记 \(count) 项删除", "\(count) item(s) marked for delete"))
+                        .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
+                } icon: {
+                    Image(systemName: "trash")
                 }
-            } label: {
-                Image(systemName: "checkmark")
-                    .font(.conductorSystem(size: 12, weight: .bold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(Color.white.opacity(0.96))
-                    .frame(width: 24, height: 22)
+                .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                Button(role: .cancel) {
+                    store.cancelPendingDeletes()
+                } label: {
+                    Label(L("取消", "Cancel"), systemImage: "xmark")
+                }
+                .controlSize(.small)
+                .help(L("取消删除", "Cancel Delete"))
+
+                Button(role: .destructive) {
+                    Task {
+                        let deletedPaths = await store.confirmPendingDeletes()
+                        model.closeWorkspaceFileTabs(matchingDeletedPaths: deletedPaths)
+                    }
+                } label: {
+                    Label(L("确认", "Confirm"), systemImage: "checkmark")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .help(L("确认移到废纸篓", "Confirm Move to Trash"))
             }
-            .buttonStyle(.plain)
-            .macNativeTooltip(L("确认移到废纸篓", "Confirm Move to Trash"))
         }
         .padding(.horizontal, 14)
-        .frame(height: 38)
-        .background(Color.red.opacity(theme.usesDarkChrome ? 0.66 : 0.74))
+        .padding(.vertical, 6)
+        .tint(.red)
     }
 
     private func open(_ item: FileManagerItem) {
@@ -675,36 +680,11 @@ struct FileManagerPanel: View {
         }
     }
 
-    private var divider: some View {
+    private var panelDivider: some View {
         Rectangle()
-            .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.26 : 0.18))
+            .fill(ConductorTokens.Settings.subtleSeparator(dark: theme.usesDarkChrome))
             .frame(height: 1)
     }
-
-    private func panelIconButton(_ systemImage: String, id: String, help: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {
-        ConductorIconButton(
-            state: ConductorControlState(
-                id: id,
-                systemImage: systemImage,
-                isEnabled: !disabled,
-                tooltip: help,
-                accessibilityLabel: help
-            ),
-            variant: .fileManagerPanel(
-                iconColor: theme.shellChromeText,
-                opacity: toolbarIconOpacity,
-                disabledOpacity: toolbarDisabledIconOpacity,
-                fontScale: fontScale,
-                fontFamily: fontFamily
-            ),
-            action: action
-        )
-        .frame(width: 28, height: 28)
-    }
-
-    private var toolbarIconSymbolSize: CGFloat { 12.5 }
-    private var toolbarIconOpacity: CGFloat { 0.86 }
-    private var toolbarDisabledIconOpacity: CGFloat { theme.usesDarkChrome ? 0.34 : 0.38 }
 
     private func copyPath(_ url: URL) {
         copyText(url.standardizedFileURL.path)
@@ -924,114 +904,94 @@ private struct FileManagerInfoSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 14) {
-                Image(systemName: item.isDirectory ? "folder.fill" : iconName)
-                    .font(.conductorSystem(size: 32, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(item.isDirectory ? theme.floatingEmphasis.opacity(0.95) : theme.shellChromeText.opacity(0.68))
-                    .frame(width: 42, height: 42)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.name)
-                        .font(.conductorSystem(size: 17, weight: .bold, family: fontFamily, scale: fontScale))
-                        .foregroundStyle(theme.shellChromeText.opacity(0.90))
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-                    Text(item.url.deletingLastPathComponent().path)
-                        .font(.conductorSystem(size: 11, weight: .medium, family: fontFamily, scale: fontScale))
-                        .foregroundStyle(theme.shellChromeText.opacity(0.48))
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.name)
+                            .font(.conductorSystem(size: 17, weight: .bold, family: fontFamily, scale: fontScale))
+                            .foregroundStyle(theme.shellChromeText.opacity(0.90))
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                        Text(item.url.deletingLastPathComponent().path)
+                            .font(.conductorSystem(size: 11, weight: .medium, family: fontFamily, scale: fontScale))
+                            .foregroundStyle(theme.shellChromeText.opacity(0.48))
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                    }
+                } icon: {
+                    Image(systemName: item.isDirectory ? "folder.fill" : iconName)
+                        .font(.conductorSystem(size: 32, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(item.isDirectory ? theme.floatingEmphasis.opacity(0.95) : theme.shellChromeText.opacity(0.68))
+                        .frame(width: 42, height: 42)
+                        .accessibilityHidden(true)
                 }
+                .labelStyle(.titleAndIcon)
                 Spacer(minLength: 0)
             }
 
-            VStack(spacing: 0) {
-                infoRow(L("类型", "Kind"), item.typeLabel)
-                infoRow(L("大小", "Size"), sizeLabel)
-                infoRow(L("修改时间", "Modified"), dateLabel(item.modificationDate))
-                infoRow(L("创建时间", "Created"), dateLabel(item.creationDate))
-                infoRow(L("权限", "Permissions"), permissionLabel)
-                infoRow(L("完整路径", "Full Path"), item.url.path, selectable: true)
-                infoRow(L("所在目录", "Parent"), item.url.deletingLastPathComponent().path, selectable: true)
+            Form {
+                Section {
+                    infoField(L("类型", "Kind"), item.typeLabel)
+                    infoField(L("大小", "Size"), sizeLabel)
+                    infoField(L("修改时间", "Modified"), dateLabel(item.modificationDate))
+                    infoField(L("创建时间", "Created"), dateLabel(item.creationDate))
+                    infoField(L("权限", "Permissions"), permissionLabel)
+                    infoField(L("完整路径", "Full Path"), item.url.path, selectable: true)
+                    infoField(L("所在目录", "Parent"), item.url.deletingLastPathComponent().path, selectable: true)
+                }
             }
-            .background(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.12 : 0.18))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.14 : 0.10), lineWidth: 0.6)
-            }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .frame(minHeight: 248)
 
             HStack(spacing: 8) {
-                ConductorCommandButton(
-                    state: ConductorControlState(
-                        id: "file-info-copy-path",
-                        title: L("复制路径", "Copy Path"),
-                        systemImage: "doc.on.doc",
-                        tooltip: L("复制路径", "Copy Path"),
-                        accessibilityLabel: L("复制路径", "Copy Path")
-                    )
-                ) {
-                    copyInfoText(item.url.path)
+                ControlGroup {
+                    Button {
+                        copyInfoText(item.url.path)
+                    } label: {
+                        Label(L("复制路径", "Copy Path"), systemImage: "doc.on.doc")
+                    }
+                    .help(L("复制路径", "Copy Path"))
+
+                    Button {
+                        copyInfoText("'" + item.url.path.replacingOccurrences(of: "'", with: "'\\''") + "'")
+                    } label: {
+                        Label(L("复制 Shell 路径", "Copy Shell Path"), systemImage: "quote.bubble")
+                    }
+                    .help(L("复制 Shell 路径", "Copy Shell Path"))
                 }
-                ConductorCommandButton(
-                    state: ConductorControlState(
-                        id: "file-info-copy-shell-path",
-                        title: L("复制 Shell 路径", "Copy Shell Path"),
-                        systemImage: "quote.bubble",
-                        tooltip: L("复制 Shell 路径", "Copy Shell Path"),
-                        accessibilityLabel: L("复制 Shell 路径", "Copy Shell Path")
-                    )
-                ) {
-                    copyInfoText("'" + item.url.path.replacingOccurrences(of: "'", with: "'\\''") + "'")
-                }
+                .controlSize(.small)
+
                 Spacer()
-                ConductorCommandButton(
-                    state: ConductorControlState(
-                        id: "file-info-done",
-                        title: L("完成", "Done"),
-                        systemImage: "checkmark",
-                        tooltip: L("完成", "Done"),
-                        accessibilityLabel: L("完成", "Done")
-                    )
-                ) {
+                Button {
                     dismiss()
+                } label: {
+                    Label(L("完成", "Done"), systemImage: "checkmark")
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .help(L("完成", "Done"))
                 .keyboardShortcut(.defaultAction)
             }
         }
         .padding(22)
         .frame(width: 440)
-        .background(theme.terminalBackground)
+        .background(.regularMaterial)
     }
 
-    private func infoRow(_ title: String, _ value: String, selectable: Bool = false) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 14) {
-            Text(title)
-                .font(.conductorSystem(size: 11.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeText.opacity(0.48))
-                .frame(width: 72, alignment: .trailing)
+    private func infoField(_ title: String, _ value: String, selectable: Bool = false) -> some View {
+        LabeledContent {
             if selectable {
                 Text(value)
-                    .font(.conductorSystem(size: 11.5, weight: .medium, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.78))
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .textSelection(.enabled)
             } else {
                 Text(value)
-                    .font(.conductorSystem(size: 11.5, weight: .medium, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(theme.shellChromeText.opacity(0.78))
                     .lineLimit(1)
             }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 32)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.18 : 0.13))
-                .frame(height: 1)
+        } label: {
+            Text(title)
         }
     }
 

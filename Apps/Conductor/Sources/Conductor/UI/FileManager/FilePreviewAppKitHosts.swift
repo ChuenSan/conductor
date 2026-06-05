@@ -156,11 +156,6 @@ struct FileManagerTablePreviewHost: NSViewRepresentable {
     let textColor: NSColor
     let headerTextColor: NSColor
     let lineNumberTextColor: NSColor
-    let lineNumberBackgroundColor: NSColor
-    let headerBackgroundColor: NSColor
-    let evenCellBackgroundColor: NSColor
-    let oddCellBackgroundColor: NSColor
-    let gridColor: NSColor
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -179,12 +174,12 @@ struct FileManagerTablePreviewHost: NSViewRepresentable {
         tableView.headerView = nil
         tableView.rowHeight = Self.rowHeight
         tableView.intercellSpacing = .zero
-        tableView.usesAlternatingRowBackgroundColors = false
+        tableView.usesAlternatingRowBackgroundColors = true
         tableView.selectionHighlightStyle = .none
         tableView.allowsColumnReordering = false
         tableView.allowsColumnResizing = true
         tableView.allowsMultipleSelection = false
-        tableView.gridStyleMask = [.solidHorizontalGridLineMask, .solidVerticalGridLineMask]
+        tableView.gridStyleMask = []
         tableView.dataSource = context.coordinator
         tableView.delegate = context.coordinator
 
@@ -211,12 +206,7 @@ struct FileManagerTablePreviewHost: NSViewRepresentable {
             backgroundColor: backgroundColor,
             textColor: textColor,
             headerTextColor: headerTextColor,
-            lineNumberTextColor: lineNumberTextColor,
-            lineNumberBackgroundColor: lineNumberBackgroundColor,
-            headerBackgroundColor: headerBackgroundColor,
-            evenCellBackgroundColor: evenCellBackgroundColor,
-            oddCellBackgroundColor: oddCellBackgroundColor,
-            gridColor: gridColor
+            lineNumberTextColor: lineNumberTextColor
         )
     }
 
@@ -229,11 +219,6 @@ struct FileManagerTablePreviewHost: NSViewRepresentable {
             let textColor: NSColor
             let headerTextColor: NSColor
             let lineNumberTextColor: NSColor
-            let lineNumberBackgroundColor: NSColor
-            let headerBackgroundColor: NSColor
-            let evenCellBackgroundColor: NSColor
-            let oddCellBackgroundColor: NSColor
-            let gridColor: NSColor
         }
 
         weak var tableView: NSTableView?
@@ -257,7 +242,6 @@ struct FileManagerTablePreviewHost: NSViewRepresentable {
             appliedConfiguration = configuration
             scrollView.backgroundColor = configuration.backgroundColor
             tableView.backgroundColor = configuration.backgroundColor
-            tableView.gridColor = configuration.gridColor
 
             if columnsChanged {
                 rebuildColumns(in: tableView, columnCount: document.columnCount)
@@ -295,8 +279,7 @@ struct FileManagerTablePreviewHost: NSViewRepresentable {
                 text: text,
                 alignment: isLineNumber ? .right : .left,
                 font: isLineNumber ? configuration.lineNumberFont : (row == 0 ? configuration.headerFont : configuration.font),
-                textColor: isLineNumber ? configuration.lineNumberTextColor : (row == 0 ? configuration.headerTextColor : configuration.textColor),
-                backgroundColor: backgroundColor(row: row, columnIndex: columnIndex, isLineNumber: isLineNumber, configuration: configuration)
+                textColor: isLineNumber ? configuration.lineNumberTextColor : (row == 0 ? configuration.headerTextColor : configuration.textColor)
             )
             return cell
         }
@@ -348,22 +331,6 @@ struct FileManagerTablePreviewHost: NSViewRepresentable {
             }
         }
 
-        private func backgroundColor(
-            row: Int,
-            columnIndex: Int?,
-            isLineNumber: Bool,
-            configuration: Configuration
-        ) -> NSColor {
-            if isLineNumber {
-                return configuration.lineNumberBackgroundColor
-            }
-            if row == 0 {
-                return configuration.headerBackgroundColor
-            }
-            guard let columnIndex else { return configuration.oddCellBackgroundColor }
-            return columnIndex.isMultiple(of: 2) ? configuration.evenCellBackgroundColor : configuration.oddCellBackgroundColor
-        }
-
         private func columnIndex(for identifier: NSUserInterfaceItemIdentifier) -> Int? {
             guard identifier.rawValue.hasPrefix(Self.columnPrefix) else { return nil }
             return Int(identifier.rawValue.dropFirst(Self.columnPrefix.count))
@@ -397,7 +364,6 @@ final class FileManagerTableCellView: NSTableCellView {
     init(identifier: NSUserInterfaceItemIdentifier) {
         super.init(frame: .zero)
         self.identifier = identifier
-        wantsLayer = true
         label.translatesAutoresizingMaskIntoConstraints = false
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
@@ -423,7 +389,6 @@ final class FileManagerTableCellView: NSTableCellView {
         alignment: NSTextAlignment,
         font: NSFont,
         textColor: NSColor,
-        backgroundColor: NSColor,
         leadingInset: CGFloat = 8,
         trailingInset: CGFloat = 8
     ) {
@@ -433,7 +398,6 @@ final class FileManagerTableCellView: NSTableCellView {
         label.textColor = textColor
         leadingConstraint?.constant = leadingInset
         trailingConstraint?.constant = -trailingInset
-        layer?.backgroundColor = backgroundColor.cgColor
     }
 }
 
@@ -446,11 +410,6 @@ struct FileManagerKeyValuePreviewHost: NSViewRepresentable {
     let valueTextColor: NSColor
     let keyTextColor: NSColor
     let lineNumberTextColor: NSColor
-    let lineNumberBackgroundColor: NSColor
-    let keyBackgroundColor: NSColor
-    let evenValueBackgroundColor: NSColor
-    let oddValueBackgroundColor: NSColor
-    let gridColor: NSColor
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -469,12 +428,12 @@ struct FileManagerKeyValuePreviewHost: NSViewRepresentable {
         tableView.headerView = nil
         tableView.rowHeight = Self.rowHeight
         tableView.intercellSpacing = .zero
-        tableView.usesAlternatingRowBackgroundColors = false
+        tableView.usesAlternatingRowBackgroundColors = true
         tableView.selectionHighlightStyle = .none
         tableView.allowsColumnReordering = false
         tableView.allowsColumnResizing = true
         tableView.allowsMultipleSelection = false
-        tableView.gridStyleMask = [.solidHorizontalGridLineMask, .solidVerticalGridLineMask]
+        tableView.gridStyleMask = []
         tableView.dataSource = context.coordinator
         tableView.delegate = context.coordinator
 
@@ -501,12 +460,7 @@ struct FileManagerKeyValuePreviewHost: NSViewRepresentable {
             backgroundColor: backgroundColor,
             valueTextColor: valueTextColor,
             keyTextColor: keyTextColor,
-            lineNumberTextColor: lineNumberTextColor,
-            lineNumberBackgroundColor: lineNumberBackgroundColor,
-            keyBackgroundColor: keyBackgroundColor,
-            evenValueBackgroundColor: evenValueBackgroundColor,
-            oddValueBackgroundColor: oddValueBackgroundColor,
-            gridColor: gridColor
+            lineNumberTextColor: lineNumberTextColor
         )
     }
 
@@ -519,11 +473,6 @@ struct FileManagerKeyValuePreviewHost: NSViewRepresentable {
             let valueTextColor: NSColor
             let keyTextColor: NSColor
             let lineNumberTextColor: NSColor
-            let lineNumberBackgroundColor: NSColor
-            let keyBackgroundColor: NSColor
-            let evenValueBackgroundColor: NSColor
-            let oddValueBackgroundColor: NSColor
-            let gridColor: NSColor
         }
 
         weak var tableView: NSTableView?
@@ -546,7 +495,6 @@ struct FileManagerKeyValuePreviewHost: NSViewRepresentable {
             appliedConfiguration = configuration
             scrollView.backgroundColor = configuration.backgroundColor
             tableView.backgroundColor = configuration.backgroundColor
-            tableView.gridColor = configuration.gridColor
 
             if !didBuildColumns {
                 rebuildColumns(in: tableView)
@@ -574,34 +522,29 @@ struct FileManagerKeyValuePreviewHost: NSViewRepresentable {
             let text: String
             let font: NSFont
             let textColor: NSColor
-            let backgroundColor: NSColor
             let alignment: NSTextAlignment
             switch identifier.rawValue {
             case Self.lineNumberIdentifier:
                 text = "\(previewRow.index)"
                 font = configuration.lineNumberFont
                 textColor = configuration.lineNumberTextColor
-                backgroundColor = configuration.lineNumberBackgroundColor
                 alignment = .right
             case Self.keyIdentifier:
                 text = previewRow.key
                 font = configuration.keyFont
                 textColor = configuration.keyTextColor
-                backgroundColor = configuration.keyBackgroundColor
                 alignment = .left
             default:
                 text = Self.previewText(previewRow.value)
                 font = configuration.valueFont
                 textColor = configuration.valueTextColor
-                backgroundColor = row.isMultiple(of: 2) ? configuration.evenValueBackgroundColor : configuration.oddValueBackgroundColor
                 alignment = .left
             }
             cell.configure(
                 text: text,
                 alignment: alignment,
                 font: font,
-                textColor: textColor,
-                backgroundColor: backgroundColor
+                textColor: textColor
             )
             return cell
         }
@@ -693,10 +636,6 @@ struct FileManagerStructuredPreviewHost: NSViewRepresentable {
     let pathTextColor: NSColor
     let kindTextColor: NSColor
     let valueTextColor: NSColor
-    let pathBackgroundColor: NSColor
-    let evenValueBackgroundColor: NSColor
-    let oddValueBackgroundColor: NSColor
-    let gridColor: NSColor
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -715,12 +654,12 @@ struct FileManagerStructuredPreviewHost: NSViewRepresentable {
         tableView.headerView = nil
         tableView.rowHeight = Self.rowHeight
         tableView.intercellSpacing = .zero
-        tableView.usesAlternatingRowBackgroundColors = false
+        tableView.usesAlternatingRowBackgroundColors = true
         tableView.selectionHighlightStyle = .none
         tableView.allowsColumnReordering = false
         tableView.allowsColumnResizing = true
         tableView.allowsMultipleSelection = false
-        tableView.gridStyleMask = [.solidHorizontalGridLineMask, .solidVerticalGridLineMask]
+        tableView.gridStyleMask = []
         tableView.dataSource = context.coordinator
         tableView.delegate = context.coordinator
 
@@ -747,11 +686,7 @@ struct FileManagerStructuredPreviewHost: NSViewRepresentable {
             backgroundColor: backgroundColor,
             pathTextColor: pathTextColor,
             kindTextColor: kindTextColor,
-            valueTextColor: valueTextColor,
-            pathBackgroundColor: pathBackgroundColor,
-            evenValueBackgroundColor: evenValueBackgroundColor,
-            oddValueBackgroundColor: oddValueBackgroundColor,
-            gridColor: gridColor
+            valueTextColor: valueTextColor
         )
     }
 
@@ -764,10 +699,6 @@ struct FileManagerStructuredPreviewHost: NSViewRepresentable {
             let pathTextColor: NSColor
             let kindTextColor: NSColor
             let valueTextColor: NSColor
-            let pathBackgroundColor: NSColor
-            let evenValueBackgroundColor: NSColor
-            let oddValueBackgroundColor: NSColor
-            let gridColor: NSColor
         }
 
         weak var tableView: NSTableView?
@@ -790,7 +721,6 @@ struct FileManagerStructuredPreviewHost: NSViewRepresentable {
             appliedConfiguration = configuration
             scrollView.backgroundColor = configuration.backgroundColor
             tableView.backgroundColor = configuration.backgroundColor
-            tableView.gridColor = configuration.gridColor
 
             if !didBuildColumns {
                 rebuildColumns(in: tableView)
@@ -818,26 +748,22 @@ struct FileManagerStructuredPreviewHost: NSViewRepresentable {
             let text: String
             let font: NSFont
             let textColor: NSColor
-            let backgroundColor: NSColor
             let leadingInset: CGFloat
             switch identifier.rawValue {
             case Self.pathIdentifier:
                 text = previewRow.path
                 font = configuration.pathFont
                 textColor = configuration.pathTextColor
-                backgroundColor = configuration.pathBackgroundColor
                 leadingInset = 10 + CGFloat(min(previewRow.depth, 8)) * 16
             case Self.kindIdentifier:
                 text = previewRow.kind
                 font = configuration.kindFont
                 textColor = configuration.kindTextColor
-                backgroundColor = row.isMultiple(of: 2) ? configuration.evenValueBackgroundColor : configuration.oddValueBackgroundColor
                 leadingInset = 8
             default:
                 text = Self.previewText(previewRow.value.isEmpty ? " " : previewRow.value)
                 font = configuration.valueFont
                 textColor = configuration.valueTextColor
-                backgroundColor = row.isMultiple(of: 2) ? configuration.evenValueBackgroundColor : configuration.oddValueBackgroundColor
                 leadingInset = 8
             }
             cell.configure(
@@ -845,7 +771,6 @@ struct FileManagerStructuredPreviewHost: NSViewRepresentable {
                 alignment: .left,
                 font: font,
                 textColor: textColor,
-                backgroundColor: backgroundColor,
                 leadingInset: leadingInset
             )
             return cell

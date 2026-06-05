@@ -18,7 +18,7 @@ struct SettingsUpdateSection: View {
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 14) {
-            UpdateStatusCard(
+            UpdateStatusGroup(
                 preferences: preferences,
                 state: state,
                 checkForUpdates: checkForUpdates,
@@ -27,23 +27,27 @@ struct SettingsUpdateSection: View {
                 installUpdate: installUpdate
             )
 
-            SettingsPreferenceGroup(title: L("偏好", "Preferences")) {
-                SettingsFormSurface {
-                    SettingsToggleRow(
-                        title: L("自动检查更新", "Automatically Check for Updates"),
-                        subtitle: L("启动后在后台检查；没有更新时不打扰", "Checks quietly after launch and stays silent when current"),
+            Form {
+                Section(L("偏好", "Preferences")) {
+                    Toggle(
+                        L("自动检查更新", "Automatically Check for Updates"),
                         isOn: Binding(
                             get: { preferences.automaticChecksEnabled },
                             set: { value in setAutomaticChecksEnabled(value) }
                         )
                     )
+
+                    Text(L("启动后在后台检查；没有更新时不打扰", "Checks quietly after launch and stays silent when current"))
+                        .foregroundStyle(.secondary)
                 }
             }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
         }
     }
 }
 
-private struct UpdateStatusCard: View {
+private struct UpdateStatusGroup: View {
     let preferences: ConductorUpdatePreferences
     let state: ConductorUpdateState
     let checkForUpdates: @MainActor () -> Void
@@ -54,78 +58,69 @@ private struct UpdateStatusCard: View {
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
-                Image(systemName: state.phase.systemImage)
-                    .font(.conductorSystem(size: 16, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(theme.floatingEmphasis)
-                    .frame(width: 38, height: 38)
-                    .background(theme.floatingControlStrongFill)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(state.phase.statusTitle)
-                        .font(.conductorSystem(size: 15, weight: .bold, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.primaryText)
-                        .lineLimit(1)
-
-                    Text(statusDetail)
-                        .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-
-                if state.phase.isBusy {
-                    ProgressView()
-                        .controlSize(.small)
+        GroupBox {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: state.phase.systemImage)
+                        .font(.conductorSystem(size: 18, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(theme.floatingEmphasis)
                         .frame(width: 24, height: 24)
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(state.phase.statusTitle)
+                            .font(.conductorSystem(size: 15, weight: .bold, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.primaryText)
+                            .lineLimit(1)
+
+                        Text(statusDetail)
+                            .font(.conductorSystem(size: 10.5, weight: .medium, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.tertiaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    if state.phase.isBusy {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 24, height: 24)
+                    }
                 }
-            }
 
-            HStack(spacing: 10) {
-                Text(L("当前版本", "Current Version"))
-                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.tertiaryText)
-
-                Text(state.currentVersion.displayText)
-                    .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
-                    .foregroundStyle(ConductorDesign.primaryText)
-
-                if let lastCheckedAt = state.lastCheckedAt {
-                    Text("·")
-                        .foregroundStyle(ConductorDesign.tertiaryText.opacity(0.7))
-                    Text(lastCheckedAt, style: .relative)
-                        .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                HStack(spacing: 10) {
+                    Text(L("当前版本", "Current Version"))
+                        .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                         .foregroundStyle(ConductorDesign.tertiaryText)
+
+                    Text(state.currentVersion.displayText)
+                        .font(.conductorSystem(size: 10.5, weight: .bold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.primaryText)
+
+                    if let lastCheckedAt = state.lastCheckedAt {
+                        Text("·")
+                            .foregroundStyle(ConductorDesign.tertiaryText.opacity(0.7))
+                        Text(lastCheckedAt, style: .relative)
+                            .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.tertiaryText)
+                    }
+
+                    Spacer(minLength: 0)
                 }
 
-                Spacer(minLength: 0)
-            }
+                if state.phase == .downloading, let progress = state.downloadProgress {
+                    UpdateDownloadProgressView(progress: progress)
+                }
 
-            if state.phase == .downloading, let progress = state.downloadProgress {
-                UpdateDownloadProgressView(progress: progress)
+                UpdateActionRow(
+                    state: state,
+                    hasManifestURL: preferences.manifestURL != nil,
+                    checkForUpdates: checkForUpdates,
+                    downloadUpdate: downloadUpdate,
+                    cancelUpdate: cancelUpdate,
+                    installUpdate: installUpdate
+                )
             }
-
-            UpdateActionRow(
-                state: state,
-                hasManifestURL: preferences.manifestURL != nil,
-                checkForUpdates: checkForUpdates,
-                downloadUpdate: downloadUpdate,
-                cancelUpdate: cancelUpdate,
-                installUpdate: installUpdate
-            )
-        }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.18 : 0.24))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(theme.floatingStroke.opacity(0.32), lineWidth: 0.8)
         }
     }
 
@@ -163,8 +158,8 @@ private struct UpdateActionRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            UpdateActionButton(
-                title: primaryTitle,
+            updateButton(
+                primaryTitle,
                 systemImage: primarySystemImage,
                 tooltip: primaryTooltip,
                 prominent: state.phase == .available || state.phase == .downloaded,
@@ -172,8 +167,8 @@ private struct UpdateActionRow: View {
                 action: primaryAction
             )
             if state.phase == .downloading {
-                UpdateActionButton(
-                    title: L("取消下载", "Cancel"),
+                updateButton(
+                    L("取消下载", "Cancel"),
                     systemImage: "xmark.circle",
                     tooltip: L("停止当前下载，保留稍后重试", "Stop this download and keep it ready to retry"),
                     prominent: false,
@@ -184,6 +179,39 @@ private struct UpdateActionRow: View {
             }
         }
         .frame(height: 36)
+    }
+
+    @ViewBuilder
+    private func updateButton(
+        _ title: String,
+        systemImage: String,
+        tooltip: String,
+        prominent: Bool,
+        disabled: Bool,
+        action: @escaping @MainActor () -> Void
+    ) -> some View {
+        let button = Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .labelStyle(.titleAndIcon)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .frame(maxWidth: .infinity)
+        }
+        if prominent {
+            button
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(disabled)
+                .help(disabled ? "" : tooltip)
+                .accessibilityLabel(title)
+        } else {
+            button
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(disabled)
+                .help(disabled ? "" : tooltip)
+                .accessibilityLabel(title)
+        }
     }
 
     private var primaryTitle: String {
@@ -273,26 +301,10 @@ private struct UpdateDownloadProgressView: View {
                 Spacer(minLength: 0)
             }
 
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(theme.floatingControlStrongFill.opacity(theme.usesDarkChrome ? 0.45 : 0.62))
-
-                    Capsule()
-                        .fill(theme.accent.opacity(theme.usesDarkChrome ? 0.78 : 0.7))
-                        .frame(width: max(8, proxy.size.width * progress.fraction))
-                }
-            }
-            .frame(height: 6)
-            .clipShape(Capsule())
+            ProgressView(value: progress.fraction)
+                .progressViewStyle(.linear)
             .accessibilityLabel(L("下载进度", "Download Progress"))
             .accessibilityValue(percentText)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .background {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(theme.floatingControlFill.opacity(theme.usesDarkChrome ? 0.16 : 0.22))
         }
     }
 
@@ -312,50 +324,4 @@ private struct UpdateDownloadProgressView: View {
         formatter.allowedUnits = [.useKB, .useMB, .useGB]
         return formatter
     }()
-}
-
-private struct UpdateActionButton: View {
-    let title: String
-    let systemImage: String
-    let tooltip: String
-    var prominent = false
-    let disabled: Bool
-    let action: @MainActor () -> Void
-    @State private var hovering = false
-    @Environment(\.conductorFontScale) private var fontScale
-    @Environment(\.conductorTheme) private var theme
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.conductorSystem(size: 10.6, weight: .bold, scale: fontScale))
-                .foregroundStyle(disabled ? ConductorDesign.tertiaryText : theme.floatingEmphasis)
-                .labelStyle(.titleAndIcon)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-                .frame(maxWidth: .infinity)
-                .frame(height: 32)
-                .background(buttonFill)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .stroke(theme.floatingStroke.opacity(disabled ? 0.18 : 0.42), lineWidth: 0.8)
-                }
-        }
-        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
-        .disabled(disabled)
-        .macNativeTooltip(tooltip, enabled: !disabled)
-        .conductorHover($hovering)
-        .animation(ConductorMotion.hover, value: hovering)
-    }
-
-    private var buttonFill: Color {
-        guard !disabled else {
-            return theme.floatingControlFill.opacity(0.18)
-        }
-        if prominent {
-            return hovering ? theme.accent.opacity(0.88) : theme.accent.opacity(0.76)
-        }
-        return hovering ? theme.floatingHoverFill.opacity(0.32) : theme.floatingControlStrongFill.opacity(0.92)
-    }
 }

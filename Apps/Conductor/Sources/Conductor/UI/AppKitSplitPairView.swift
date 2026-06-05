@@ -51,10 +51,7 @@ struct AppKitSplitPairView: NSViewRepresentable {
         splitView.applyDividerAppearance(
             ConductorSplitDividerAppearance(
                 themeID: theme.id,
-                thickness: dividerThickness,
-                fillColor: NSColor(theme.terminalBackground),
-                lineColor: NSColor(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.52 : 0.42)),
-                activeLineColor: NSColor(theme.shellChromeTextMuted.opacity(theme.usesDarkChrome ? 0.82 : 0.68))
+                thickness: dividerThickness
             )
         )
 
