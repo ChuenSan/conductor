@@ -33,7 +33,7 @@ Conductor is for local development sessions where terminal panes, browser refere
 
 ## What Users Get
 
-- **Less context loss:** workspaces, terminal layout, browser tabs, file tabs, appearance, and sidecar terminal snapshots are persisted locally.
+- **Less context loss:** workspaces, terminal layout, browser tabs, file tabs, and appearance are persisted locally.
 - **A scriptable workbench:** the local control API can create workspaces, split panes, send terminal input, open web tabs, run commands, and create in-app attention events.
 - **Attention that points somewhere:** notifications are stored in-app with workspace and surface context, so a missed macOS banner is not the only evidence.
 - **Project state at a glance:** workspace rows and inspectors expose path, open files, web tabs, unread work, and local services without making users read every terminal.
