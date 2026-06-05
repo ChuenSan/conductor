@@ -131,11 +131,11 @@ public enum TerminalContentSnapshotSanitizer {
         let lineNormalized = rawText
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
-        let printable = lineNormalized.unicodeScalars.map { scalar -> Character in
+        let printable = lineNormalized.unicodeScalars.compactMap { scalar -> Character? in
             if scalar == "\n" || scalar == "\t" || !CharacterSet.controlCharacters.contains(scalar) {
                 return Character(scalar)
             }
-            return "\n"
+            return nil
         }
         let normalized = String(printable)
             .components(separatedBy: .newlines)

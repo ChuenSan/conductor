@@ -103,6 +103,12 @@ import Testing
     #expect(capped.utf8.count <= 32)
 }
 
+@Test func terminalContentSnapshotDropsNonNewlineControlsAndPreservesTabs() {
+    let raw = "first\u{0007}\nsecond\tcolumn\u{0008}\n"
+    let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(raw, maxUTF8Bytes: 64)
+    #expect(sanitized == "first\nsecond\tcolumn")
+}
+
 @Test func terminalContentSnapshotNormalizesCRLFAndCRBoundaries() {
     let raw = "line 1\r\nline 2\rline 3"
     let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(raw, maxUTF8Bytes: 64)
