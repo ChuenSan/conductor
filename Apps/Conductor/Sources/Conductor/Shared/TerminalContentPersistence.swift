@@ -44,6 +44,7 @@ final class TerminalContentPersistence {
     }
 
     func reset() {
+        guard isEnabled else { return }
         try? fileManager.removeItem(at: fileURL)
     }
 
