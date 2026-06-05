@@ -1454,22 +1454,15 @@ private struct ConductorStorageFootprintPanel: View {
 
     var body: some View {
         if usesChrome {
-            content
-                .padding(12)
-                .background {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.38 : 0.56))
+            GroupBox {
+                content
+            }
+            .groupBoxStyle(.automatic)
+            .onAppear {
+                withAnimation(.spring(response: 0.58, dampingFraction: 0.86)) {
+                    revealed = true
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(style.stroke.opacity(0.34), lineWidth: 0.7)
-                }
-                .onAppear {
-                    withAnimation(.spring(response: 0.58, dampingFraction: 0.86)) {
-                        revealed = true
-                    }
-                }
+            }
         } else {
             content
                 .onAppear {
@@ -1531,8 +1524,6 @@ private struct ConductorStorageFootprintPanel: View {
                 .font(.system(size: 11.5, weight: .bold))
                 .foregroundStyle(style.emphasis)
                 .frame(width: 26, height: 26)
-                .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.46 : 0.66))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(conductorTokenRecordsText("本地存储", "Storage"))
@@ -1583,8 +1574,6 @@ private struct ConductorStorageFootprintPanel: View {
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(style.emphasis)
                 .frame(width: 20, height: 20)
-                .background(style.controlStrongFill.opacity(0.54))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline) {
@@ -1605,8 +1594,6 @@ private struct ConductorStorageFootprintPanel: View {
             }
         }
         .padding(8)
-        .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.30 : 0.42))
-        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 
     private func storageFill(index: Int) -> Color {
