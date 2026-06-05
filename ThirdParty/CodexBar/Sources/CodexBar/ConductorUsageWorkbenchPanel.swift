@@ -1237,14 +1237,15 @@ private struct ConductorUsageWorkbenchServiceChip: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 40)
-            .background(isSelected ? style.controlStrongFill.opacity(0.72) : style.controlFill.opacity(0.38))
+            .background(isSelected ? style.controlStrongFill.opacity(0.50) : style.controlFill.opacity(0.28))
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(isSelected ? style.emphasis.opacity(0.28) : style.stroke.opacity(0.16), lineWidth: 0.8)
+                    .stroke(isSelected ? style.emphasis.opacity(0.20) : style.stroke.opacity(0.10), lineWidth: 0.8)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
+        .controlSize(.small)
         .help(state.name)
         .accessibilityLabel(state.name)
     }
