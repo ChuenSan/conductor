@@ -1206,6 +1206,16 @@ private struct ConductorUsageWorkbenchServiceChip: View {
     let action: () -> Void
 
     var body: some View {
+        if isSelected {
+            chipButton
+                .buttonStyle(.borderedProminent)
+        } else {
+            chipButton
+                .buttonStyle(.bordered)
+        }
+    }
+
+    private var chipButton: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 ZStack(alignment: .bottomTrailing) {
@@ -1213,8 +1223,6 @@ private struct ConductorUsageWorkbenchServiceChip: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(isSelected ? style.primaryText : style.secondaryText)
                         .frame(width: 24, height: 24)
-                        .background(iconBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                         .accessibilityHidden(true)
 
                     Circle()
@@ -1237,21 +1245,11 @@ private struct ConductorUsageWorkbenchServiceChip: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 40)
-            .background(isSelected ? style.controlStrongFill.opacity(0.50) : style.controlFill.opacity(0.28))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(isSelected ? style.emphasis.opacity(0.20) : style.stroke.opacity(0.10), lineWidth: 0.8)
-            }
         }
-        .buttonStyle(.borderless)
         .controlSize(.small)
+        .tint(style.emphasis)
         .help(state.name)
         .accessibilityLabel(state.name)
-    }
-
-    private var iconBackground: Color {
-        isSelected ? style.emphasis.opacity(style.usesDarkChrome ? 0.18 : 0.12) : style.controlStrongFill.opacity(0.52)
     }
 
     private var detailText: String {
