@@ -75,13 +75,15 @@ private struct ConductorUsageSettingsLoadedContent: View {
                 .fill(style.separator.opacity(0.72))
                 .frame(height: 1)
 
-            GroupBox {
-                content
-                    .id(languageSyncKey)
-                    .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
-            }
-            .groupBoxStyle(.automatic)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            content
+                .id(languageSyncKey)
+                .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
+                .background(style.panelBase.opacity(style.usesDarkChrome ? 0.18 : 0.38))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(style.stroke.opacity(0.16), lineWidth: 0.6)
+                }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .environment(\.colorScheme, style.colorScheme)
@@ -222,6 +224,8 @@ private struct ConductorUsageSettingsSummaryStrip: View {
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(summary.issueCount > 0 ? Color.orange : style.emphasis)
                 .frame(width: 24, height: 24)
+                .background(style.controlFill.opacity(0.48))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -274,6 +278,12 @@ private struct ConductorUsageSettingsSummaryStrip: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 42)
+        .background(style.panelBase.opacity(style.usesDarkChrome ? 0.18 : 0.34))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(style.stroke.opacity(0.22), lineWidth: 0.8)
+        }
     }
 
     private func metricPill(title: String, value: String) -> some View {
@@ -287,6 +297,8 @@ private struct ConductorUsageSettingsSummaryStrip: View {
         .font(.system(size: 10, weight: .semibold))
         .padding(.horizontal, 7)
         .frame(height: 22)
+        .background(style.controlFill.opacity(0.34))
+        .clipShape(Capsule())
     }
 
     private func refreshAll() {

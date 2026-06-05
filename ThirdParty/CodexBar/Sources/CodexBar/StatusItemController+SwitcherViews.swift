@@ -128,33 +128,37 @@ final class ProviderSwitcherView: NSView {
         func makeButton(index: Int, segment: Segment) -> NSButton {
             let button: NSButton
             if self.stackedIcons {
-                let stacked = NSButton(
+                let stacked = StackedToggleButton(
                     title: segment.title,
                     image: segment.image,
                     target: self,
                     action: #selector(self.handleSelection(_:)))
-                stacked.imagePosition = .imageAbove
-                stacked.imageScaling = .scaleNone
-                self.configureStackedButtonCell(stacked, title: segment.title)
+                stacked.setAllowsTwoLineTitle(self.rowCount >= 3)
+                if self.rowCount >= 4 {
+                    stacked.setTitleFontSize(NSFont.smallSystemFontSize - 3)
+                }
                 button = stacked
             } else if self.showsIcons {
-                let inline = NSButton(
+                let inline = InlineIconToggleButton(
                     title: segment.title,
                     image: segment.image,
                     target: self,
                     action: #selector(self.handleSelection(_:)))
-                inline.imagePosition = .imageLeading
-                inline.imageScaling = .scaleNone
-                inline.imageHugsTitle = true
                 button = inline
             } else {
-                button = NSButton(
+                button = PaddedToggleButton(
                     title: segment.title,
                     target: self,
                     action: #selector(self.handleSelection(_:)))
             }
             button.tag = index
-            if !self.showsIcons {
+            if self.showsIcons {
+                if self.stackedIcons {
+                    // StackedToggleButton manages its own image view.
+                } else {
+                    // InlineIconToggleButton manages its own image view.
+                }
+            } else {
                 button.image = nil
                 button.imagePosition = .noImage
             }
@@ -169,7 +173,7 @@ final class ProviderSwitcherView: NSView {
             button.bezelStyle = .regularSquare
             button.isBordered = false
             button.controlSize = .small
-            button.font = self.buttonFont()
+            button.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
             button.setButtonType(.toggle)
             button.contentTintColor = self.unselectedTextColor
             button.alignment = .center
@@ -612,6 +616,7 @@ final class ProviderSwitcherView: NSView {
                     self.addQuotaIndicator(to: button, selection: segment.selection, remainingPercent: remaining)
                 }
             } else if let indicator = self.quotaIndicators.removeValue(forKey: key) {
+                Self.applyQuotaBarContentInset(to: button, height: 0)
                 indicator.track.removeFromSuperview()
                 continue
             }
@@ -642,6 +647,8 @@ final class ProviderSwitcherView: NSView {
                 self.unselectedBackground
             }
             self.updateQuotaIndicatorVisibility(for: button)
+            (button as? StackedToggleButton)?.setContentTintColor(button.contentTintColor)
+            (button as? InlineIconToggleButton)?.setContentTintColor(button.contentTintColor)
         }
     }
 
@@ -768,8 +775,10 @@ final class ProviderSwitcherView: NSView {
         desiredWidths.reserveCapacity(self.buttons.count)
 
         for (index, button) in self.buttons.enumerated() {
-            if self.stackedIcons, self.segments.indices.contains(index) {
-                let font = self.buttonFont()
+            if self.stackedIcons,
+               self.segments.indices.contains(index)
+            {
+                let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
                 let titleWidth = ceil(
                     (self.segments[index].title as NSString).size(withAttributes: [.font: font])
                         .width)
@@ -909,29 +918,12 @@ final class ProviderSwitcherView: NSView {
     private static func switcherTitle(for provider: UsageProvider) -> String {
         ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName
     }
-
-    private func buttonFont() -> NSFont {
-        if self.stackedIcons {
-            let size = self.rowCount >= 4
-                ? NSFont.smallSystemFontSize - 3
-                : NSFont.smallSystemFontSize - 2
-            return NSFont.systemFont(ofSize: size)
-        }
-        return NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-    }
-
-    private func configureStackedButtonCell(_ button: NSButton, title: String) {
-        let allowWrap = self.rowCount >= 3
-            && title.rangeOfCharacter(from: .whitespacesAndNewlines) != nil
-        button.alignment = .center
-        button.cell?.wraps = allowWrap
-        button.cell?.lineBreakMode = allowWrap ? .byWordWrapping : .byTruncatingTail
-    }
 }
 
 extension ProviderSwitcherView {
     private func addQuotaIndicator(to view: NSView, selection: ProviderSwitcherSelection, remainingPercent: Double?) {
         guard let remainingPercent else { return }
+        Self.applyQuotaBarContentInset(to: view)
 
         let track = NSView()
         track.wantsLayer = true
@@ -977,6 +969,13 @@ extension ProviderSwitcherView {
             fillWidthConstraint: fillWidthConstraint,
             fillRatio: ratio)
         self.updateQuotaIndicatorVisibility(for: view)
+    }
+
+    fileprivate static func applyQuotaBarContentInset(
+        to view: NSView,
+        height: CGFloat = quotaIndicatorReservedHeight)
+    {
+        (view as? ProviderSwitcherToggleButton)?.setQuotaBarReservedHeight(height)
     }
 
     private func updateQuotaIndicatorVisibility(for view: NSView) {
@@ -1043,10 +1042,14 @@ final class TokenAccountSwitcherView: NSView {
     private let accounts: [ProviderTokenAccount]
     private let onSelect: (Int) -> Task<Void, Never>?
     private var selectedIndex: Int
-    private var controls: [NSSegmentedControl] = []
+    private var buttons: [NSButton] = []
     private let preferredSize: NSSize
     private let rowSpacing: CGFloat = 4
     private let rowHeight: CGFloat = 26
+    private let selectedBackground = NSColor.controlAccentColor.cgColor
+    private let unselectedBackground = NSColor.clear.cgColor
+    private let selectedTextColor = NSColor.white
+    private let unselectedTextColor = NSColor.secondaryLabelColor
 
     init(
         accounts: [ProviderTokenAccount],
@@ -1097,28 +1100,35 @@ final class TokenAccountSwitcherView: NSView {
 
         var globalIndex = 0
         for rowAccounts in rows {
-            let control = NSSegmentedControl(
-                labels: rowAccounts.map(\.displayName),
-                trackingMode: .selectOne,
-                target: self,
-                action: #selector(self.handleSelect))
-            control.segmentStyle = .rounded
-            control.segmentDistribution = .fillEqually
-            control.controlSize = .small
-            control.translatesAutoresizingMaskIntoConstraints = false
-            control.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            for segment in 0..<rowAccounts.count {
-                let account = rowAccounts[segment]
-                control.setTag(globalIndex, forSegment: segment)
-                control.setToolTip(account.displayName, forSegment: segment)
-                control.setWidth(0, forSegment: segment)
+            let row = NSStackView()
+            row.orientation = .horizontal
+            row.alignment = .centerY
+            row.distribution = .fillEqually
+            row.spacing = self.rowSpacing
+            row.translatesAutoresizingMaskIntoConstraints = false
+
+            for account in rowAccounts {
+                let button = PaddedToggleButton(
+                    title: account.displayName,
+                    target: self,
+                    action: #selector(self.handleSelect))
+                button.tag = globalIndex
+                button.toolTip = account.displayName
+                button.isBordered = false
+                button.setButtonType(.toggle)
+                button.controlSize = .small
+                button.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+                button.cell?.lineBreakMode = account.displayName.contains("@") ? .byTruncatingMiddle : .byTruncatingTail
+                button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+                button.wantsLayer = true
+                button.layer?.cornerRadius = 6
+                row.addArrangedSubview(button)
+                self.buttons.append(button)
                 globalIndex += 1
             }
 
-            stack.addArrangedSubview(control)
-            control.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-            control.heightAnchor.constraint(equalToConstant: self.rowHeight).isActive = true
-            self.controls.append(control)
+            stack.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
 
         self.addSubview(stack)
@@ -1133,16 +1143,37 @@ final class TokenAccountSwitcherView: NSView {
     }
 
     private func updateButtonStyles() {
-        for control in self.controls {
-            for segment in 0..<control.segmentCount {
-                control.setSelected(control.tag(forSegment: segment) == self.selectedIndex, forSegment: segment)
-            }
+        for (index, button) in self.buttons.enumerated() {
+            let selected = index == self.selectedIndex
+            button.state = selected ? .on : .off
+            button.layer?.backgroundColor = selected ? self.selectedPlateColor() : self.unselectedBackground
+            button.contentTintColor = selected ? self.selectedTitleColor() : self.unselectedTitleColor()
         }
     }
 
-    @objc private func handleSelect(_ sender: NSSegmentedControl) {
-        guard sender.selectedSegment >= 0 else { return }
-        _ = self.select(index: sender.tag(forSegment: sender.selectedSegment))
+    private func selectedPlateColor() -> CGColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(ConductorUsageMenuStyle.selectedControlFill(style: style)).cgColor
+        }
+        return self.selectedBackground
+    }
+
+    private func selectedTitleColor() -> NSColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(style.primaryText)
+        }
+        return self.selectedTextColor
+    }
+
+    private func unselectedTitleColor() -> NSColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(style.secondaryText)
+        }
+        return self.unselectedTextColor
+    }
+
+    @objc private func handleSelect(_ sender: NSButton) {
+        _ = self.select(index: sender.tag)
     }
 
     @discardableResult
@@ -1155,14 +1186,12 @@ final class TokenAccountSwitcherView: NSView {
 
     #if DEBUG
     func _test_select(index: Int) -> Task<Void, Never>? {
-        guard index >= 0, index < self.accounts.count else { return nil }
-        return self.select(index: index)
+        guard let button = self.buttons.first(where: { $0.tag == index }) else { return nil }
+        return self.select(index: button.tag)
     }
 
     func _test_buttonTitles() -> [String] {
-        self.controls.flatMap { control in
-            (0..<control.segmentCount).compactMap { control.label(forSegment: $0) }
-        }
+        self.buttons.map(\.title)
     }
     #endif
 }
@@ -1172,10 +1201,14 @@ final class CodexAccountSwitcherView: NSView {
     private let onSelect: (CodexVisibleAccount) -> Void
     private var selectedAccountID: String
     private var pressedAccountID: String?
-    private var controls: [NSSegmentedControl] = []
+    private var buttons: [NSButton] = []
     private let preferredSize: NSSize
     private let rowSpacing: CGFloat = 4
     private let rowHeight: CGFloat = 26
+    private let selectedBackground = NSColor.controlAccentColor.cgColor
+    private let unselectedBackground = NSColor.clear.cgColor
+    private let selectedTextColor = NSColor.white
+    private let unselectedTextColor = NSColor.secondaryLabelColor
     private let buttonFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
     private let buttonHorizontalPadding: CGFloat = 14
     private let buttonSideInset: CGFloat = 6
@@ -1227,28 +1260,36 @@ final class CodexAccountSwitcherView: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         for rowAccounts in rows {
+            let row = NSStackView()
+            row.orientation = .horizontal
+            row.alignment = .centerY
+            row.distribution = .fillEqually
+            row.spacing = self.rowSpacing
+            row.translatesAutoresizingMaskIntoConstraints = false
+
             let buttonWidth = self.buttonWidth(for: rowAccounts.count)
-            let control = NSSegmentedControl(
-                labels: rowAccounts.map { self.compactButtonTitle(for: $0, buttonWidth: buttonWidth) },
-                trackingMode: .selectOne,
-                target: self,
-                action: #selector(self.handleSelect))
-            control.segmentStyle = .rounded
-            control.segmentDistribution = .fillEqually
-            control.controlSize = .small
-            control.translatesAutoresizingMaskIntoConstraints = false
-            control.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            for segment in 0..<rowAccounts.count {
-                let account = rowAccounts[segment]
-                control.setTag(segment, forSegment: segment)
-                control.setToolTip(account.menuDisplayName, forSegment: segment)
-                control.setWidth(0, forSegment: segment)
+            for account in rowAccounts {
+                let title = self.compactButtonTitle(for: account, buttonWidth: buttonWidth)
+                let button = PaddedToggleButton(
+                    title: title,
+                    target: self,
+                    action: #selector(self.handleSelect))
+                button.identifier = NSUserInterfaceItemIdentifier(account.id)
+                button.toolTip = account.menuDisplayName
+                button.isBordered = false
+                button.setButtonType(.toggle)
+                button.controlSize = .small
+                button.font = self.buttonFont
+                button.cell?.lineBreakMode = .byTruncatingTail
+                button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+                button.wantsLayer = true
+                button.layer?.cornerRadius = 6
+                row.addArrangedSubview(button)
+                self.buttons.append(button)
             }
 
-            stack.addArrangedSubview(control)
-            control.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-            control.heightAnchor.constraint(equalToConstant: self.rowHeight).isActive = true
-            self.controls.append(control)
+            stack.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
 
         self.addSubview(stack)
@@ -1394,13 +1435,33 @@ final class CodexAccountSwitcherView: NSView {
     }
 
     private func updateButtonStyles() {
-        for (rowIndex, control) in self.controls.enumerated() {
-            let rowAccounts = self.accountsForControl(at: rowIndex)
-            for segment in 0..<control.segmentCount {
-                let account = rowAccounts[segment]
-                control.setSelected(account.id == self.selectedAccountID, forSegment: segment)
-            }
+        for button in self.buttons {
+            let selected = button.identifier?.rawValue == self.selectedAccountID
+            button.state = selected ? .on : .off
+            button.layer?.backgroundColor = selected ? self.selectedPlateColor() : self.unselectedBackground
+            button.contentTintColor = selected ? self.selectedTitleColor() : self.unselectedTitleColor()
         }
+    }
+
+    private func selectedPlateColor() -> CGColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(ConductorUsageMenuStyle.selectedControlFill(style: style)).cgColor
+        }
+        return self.selectedBackground
+    }
+
+    private func selectedTitleColor() -> NSColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(style.primaryText)
+        }
+        return self.selectedTextColor
+    }
+
+    private func unselectedTitleColor() -> NSColor {
+        if let style = ConductorUsageMenuStyle.current {
+            return ConductorUsageMenuStyle.nsColor(style.secondaryText)
+        }
+        return self.unselectedTextColor
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
@@ -1410,8 +1471,7 @@ final class CodexAccountSwitcherView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let descendant = super.hitTest(point)
         if descendant != nil, descendant !== self {
-            let pointInSelf = self.convert(point, from: self)
-            self.toolTip = self.account(at: pointInSelf)?.menuDisplayName
+            self.toolTip = (descendant as? NSButton)?.toolTip
             return self
         }
         self.toolTip = nil
@@ -1437,50 +1497,12 @@ final class CodexAccountSwitcherView: NSView {
     }
 
     private func accountID(at pointInSelf: NSPoint) -> String? {
-        self.account(at: pointInSelf)?.id
+        self.buttons.first(where: { self.convert($0.bounds, from: $0).contains(pointInSelf) })?.identifier?.rawValue
     }
 
-    private func account(at pointInSelf: NSPoint) -> CodexVisibleAccount? {
-        for (rowIndex, control) in self.controls.enumerated() {
-            let pointInControl = control.convert(pointInSelf, from: self)
-            guard control.bounds.contains(pointInControl) else { continue }
-            let rowAccounts = self.accountsForControl(at: rowIndex)
-            for segment in 0..<control.segmentCount {
-                if self.segmentFrame(in: control, segment: segment).contains(pointInControl) {
-                    return rowAccounts[segment]
-                }
-            }
-        }
-        return nil
-    }
-
-    private func segmentFrame(in control: NSSegmentedControl, segment: Int) -> NSRect {
-        guard control.segmentCount > 0 else { return .zero }
-        let width = control.bounds.width / CGFloat(control.segmentCount)
-        return NSRect(
-            x: CGFloat(segment) * width,
-            y: 0,
-            width: width,
-            height: control.bounds.height)
-    }
-
-    private func accountsForControl(at rowIndex: Int) -> [CodexVisibleAccount] {
-        let useTwoRows = self.controls.count > 1
-        guard useTwoRows else { return self.accounts }
-        let perRow = Int(ceil(Double(self.accounts.count) / 2.0))
-        if rowIndex == 0 {
-            return Array(self.accounts.prefix(perRow))
-        }
-        return Array(self.accounts.dropFirst(perRow))
-    }
-
-    @objc private func handleSelect(_ sender: NSSegmentedControl) {
-        guard let rowIndex = self.controls.firstIndex(of: sender),
-              sender.selectedSegment >= 0
-        else { return }
-        let rowAccounts = self.accountsForControl(at: rowIndex)
-        guard rowAccounts.indices.contains(sender.selectedSegment) else { return }
-        let account = rowAccounts[sender.selectedSegment]
+    @objc private func handleSelect(_ sender: NSButton) {
+        guard let accountID = sender.identifier?.rawValue,
+              let account = self.accounts.first(where: { $0.id == accountID }) else { return }
         self.applySelection(account)
     }
 
@@ -1492,15 +1514,11 @@ final class CodexAccountSwitcherView: NSView {
 
     #if DEBUG
     func _test_buttonTitles() -> [String] {
-        self.controls.flatMap { control in
-            (0..<control.segmentCount).compactMap { control.label(forSegment: $0) }
-        }
+        self.buttons.map(\.title)
     }
 
     func _test_buttonToolTips() -> [String?] {
-        self.controls.flatMap { control in
-            (0..<control.segmentCount).map { control.toolTip(forSegment: $0) }
-        }
+        self.buttons.map(\.toolTip)
     }
 
     func _test_selectAccount(id: String) {
@@ -1508,21 +1526,11 @@ final class CodexAccountSwitcherView: NSView {
         self.applySelection(account)
     }
 
-    private func _test_pointForAccount(id: String) -> NSPoint? {
+    func _test_simulateRuntimeClick(id: String) -> Bool {
+        guard let button = self.buttons.first(where: { $0.identifier?.rawValue == id }) else { return false }
         self.updateConstraintsForSubtreeIfNeeded()
         self.layoutSubtreeIfNeeded()
-        for (rowIndex, control) in self.controls.enumerated() {
-            let rowAccounts = self.accountsForControl(at: rowIndex)
-            guard let segment = rowAccounts.firstIndex(where: { $0.id == id }) else { continue }
-            let segmentFrame = self.segmentFrame(in: control, segment: segment)
-            let pointInControl = NSPoint(x: segmentFrame.midX, y: segmentFrame.midY)
-            return self.convert(pointInControl, from: control)
-        }
-        return nil
-    }
-
-    func _test_simulateRuntimeClick(id: String) -> Bool {
-        guard let point = self._test_pointForAccount(id: id) else { return false }
+        let point = self.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), from: button)
         guard let mouseDownEvent = NSEvent.mouseEvent(
             with: .leftMouseDown,
             location: point,
@@ -1552,12 +1560,18 @@ final class CodexAccountSwitcherView: NSView {
     }
 
     func _test_hitTestSwallowsChildButton(id: String) -> Bool {
-        guard let point = self._test_pointForAccount(id: id) else { return false }
+        guard let button = self.buttons.first(where: { $0.identifier?.rawValue == id }) else { return false }
+        self.updateConstraintsForSubtreeIfNeeded()
+        self.layoutSubtreeIfNeeded()
+        let point = self.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), from: button)
         return self.hitTest(point) === self
     }
 
     func _test_toolTipAfterHitTest(id: String) -> String? {
-        guard let point = self._test_pointForAccount(id: id) else { return nil }
+        guard let button = self.buttons.first(where: { $0.identifier?.rawValue == id }) else { return nil }
+        self.updateConstraintsForSubtreeIfNeeded()
+        self.layoutSubtreeIfNeeded()
+        let point = self.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), from: button)
         _ = self.hitTest(point)
         return self.toolTip
     }

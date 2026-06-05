@@ -221,6 +221,8 @@ struct ConductorTokenRecordsWindowView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(style.secondaryText)
                 .frame(width: 26, height: 26)
+                .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.46))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -259,7 +261,10 @@ struct ConductorTokenRecordsWindowView: View {
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(style.secondaryText)
             .lineLimit(1)
+            .padding(.horizontal, 7)
             .frame(height: 18)
+            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.50))
+            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
     }
 
     @ViewBuilder
@@ -310,70 +315,74 @@ struct ConductorTokenRecordsWindowView: View {
         provider: UsageProvider,
         progressColor: Color) -> some View
     {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(localized(UsageMenuCardView.popupMetricTitle(provider: provider, metric: metric)))
-                        .font(.system(size: 12.2, weight: .semibold))
-                        .foregroundStyle(style.primaryText)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(localized(UsageMenuCardView.popupMetricTitle(provider: provider, metric: metric)))
+                    .font(.system(size: 12.2, weight: .semibold))
+                    .foregroundStyle(style.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.84)
+                Spacer(minLength: 0)
+                if metric.statusText == nil {
+                    Text(metric.percentLabel)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(style.secondaryText)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.84)
-                    Spacer(minLength: 0)
-                    if metric.statusText == nil {
-                        Text(metric.percentLabel)
-                            .font(.system(size: 11, weight: .bold))
+                }
+            }
+
+            if let statusText = metric.statusText {
+                Text(localized(statusText))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(style.secondaryText)
+                    .lineLimit(2)
+            } else {
+                overviewProgressBar(
+                    percent: metric.percent,
+                    tint: progressColor,
+                    pacePercent: metric.pacePercent,
+                    paceOnTop: metric.paceOnTop,
+                    warningMarkerPercents: metric.warningMarkerPercents)
+
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if let detailLeft = metric.detailLeftText {
+                        Text(localized(detailLeft))
+                            .font(.system(size: 10.5, weight: .semibold))
                             .foregroundStyle(style.secondaryText)
                             .lineLimit(1)
                     }
+                    Spacer(minLength: 0)
+                    if let resetText = metric.resetText {
+                        Text(localized(resetText))
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(style.tertiaryText)
+                            .lineLimit(1)
+                    }
                 }
 
-                if let statusText = metric.statusText {
-                    Text(localized(statusText))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(style.secondaryText)
-                        .lineLimit(2)
-                } else {
-                    overviewProgressBar(
-                        percent: metric.percent,
-                        tint: progressColor,
-                        pacePercent: metric.pacePercent,
-                        paceOnTop: metric.paceOnTop,
-                        warningMarkerPercents: metric.warningMarkerPercents)
+                if let detailText = metric.detailText {
+                    Text(localized(detailText))
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(style.tertiaryText)
+                        .lineLimit(1)
+                }
 
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        if let detailLeft = metric.detailLeftText {
-                            Text(localized(detailLeft))
-                                .font(.system(size: 10.5, weight: .semibold))
-                                .foregroundStyle(style.secondaryText)
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                        if let resetText = metric.resetText {
-                            Text(localized(resetText))
-                                .font(.system(size: 10.5, weight: .medium))
-                                .foregroundStyle(style.tertiaryText)
-                                .lineLimit(1)
-                        }
-                    }
-
-                    if let detailText = metric.detailText {
-                        Text(localized(detailText))
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(style.tertiaryText)
-                            .lineLimit(1)
-                    }
-
-                    if let detailRight = metric.detailRightText {
-                        Text(localized(detailRight))
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(style.tertiaryText)
-                            .lineLimit(1)
-                    }
+                if let detailRight = metric.detailRightText {
+                    Text(localized(detailRight))
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(style.tertiaryText)
+                        .lineLimit(1)
                 }
             }
         }
-        .groupBoxStyle(.automatic)
+        .padding(10)
         .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
+        .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.50))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(style.stroke.opacity(0.26), lineWidth: 0.7)
+        }
     }
 
     private func overviewProgressBar(
@@ -1207,6 +1216,8 @@ private struct ConductorUsageSummaryChip: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 22)
+        .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.50))
+        .clipShape(Capsule())
     }
 }
 
@@ -1454,15 +1465,22 @@ private struct ConductorStorageFootprintPanel: View {
 
     var body: some View {
         if usesChrome {
-            GroupBox {
-                content
-            }
-            .groupBoxStyle(.automatic)
-            .onAppear {
-                withAnimation(.spring(response: 0.58, dampingFraction: 0.86)) {
-                    revealed = true
+            content
+                .padding(12)
+                .background {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.38 : 0.56))
                 }
-            }
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(style.stroke.opacity(0.34), lineWidth: 0.7)
+                }
+                .onAppear {
+                    withAnimation(.spring(response: 0.58, dampingFraction: 0.86)) {
+                        revealed = true
+                    }
+                }
         } else {
             content
                 .onAppear {
@@ -1524,6 +1542,8 @@ private struct ConductorStorageFootprintPanel: View {
                 .font(.system(size: 11.5, weight: .bold))
                 .foregroundStyle(style.emphasis)
                 .frame(width: 26, height: 26)
+                .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.46 : 0.66))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(conductorTokenRecordsText("本地存储", "Storage"))
@@ -1574,6 +1594,8 @@ private struct ConductorStorageFootprintPanel: View {
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(style.emphasis)
                 .frame(width: 20, height: 20)
+                .background(style.controlStrongFill.opacity(0.54))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline) {
@@ -1594,6 +1616,8 @@ private struct ConductorStorageFootprintPanel: View {
             }
         }
         .padding(8)
+        .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.30 : 0.42))
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 
     private func storageFill(index: Int) -> Color {
@@ -1615,35 +1639,46 @@ private struct ConductorSignalInfoCard: View {
     let style: ConductorUsagePanelStyle
 
     var body: some View {
-        GroupBox {
-            HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.48))
                 Image(systemName: systemName)
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(style.secondaryText)
-                    .frame(width: 30, height: 30)
                     .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 10.5, weight: .bold))
-                        .foregroundStyle(style.tertiaryText)
-                        .lineLimit(1)
-                    Text(primary)
-                        .font(.system(size: 12.2, weight: .bold, design: .rounded))
-                        .foregroundStyle(style.primaryText)
-                        .lineLimit(1)
-                    if let secondary, !secondary.isEmpty {
-                        Text(secondary)
-                            .font(.system(size: 10.2, weight: .medium))
-                            .foregroundStyle(style.secondaryText)
-                            .lineLimit(2)
-                    }
-                }
-
-                Spacer(minLength: 6)
             }
+            .frame(width: 30, height: 30)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundStyle(style.tertiaryText)
+                    .lineLimit(1)
+                Text(primary)
+                    .font(.system(size: 12.2, weight: .bold, design: .rounded))
+                    .foregroundStyle(style.primaryText)
+                    .lineLimit(1)
+                if let secondary, !secondary.isEmpty {
+                    Text(secondary)
+                        .font(.system(size: 10.2, weight: .medium))
+                        .foregroundStyle(style.secondaryText)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer(minLength: 6)
         }
-        .groupBoxStyle(.automatic)
+        .padding(10)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.28 : 0.40))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -1653,41 +1688,48 @@ private struct ConductorCostSignalCard: View {
     @State private var revealed = false
 
     var body: some View {
-        GroupBox {
-            HStack(alignment: .center, spacing: 12) {
-                ConductorMiniArc(
-                    percent: section.percentUsed ?? 0,
-                    style: style,
-                    revealed: revealed)
-                    .frame(width: 48, height: 48)
+        HStack(alignment: .center, spacing: 12) {
+            ConductorMiniArc(
+                percent: section.percentUsed ?? 0,
+                style: style,
+                revealed: revealed)
+                .frame(width: 48, height: 48)
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(codexBarLocalizedDisplayText(section.title))
-                        .font(.system(size: 10.5, weight: .bold))
-                        .foregroundStyle(style.tertiaryText)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(codexBarLocalizedDisplayText(section.title))
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundStyle(style.tertiaryText)
+                    .lineLimit(1)
+                Text(codexBarLocalizedDisplayText(section.spendLine))
+                    .font(.system(size: 12.4, weight: .bold, design: .rounded))
+                    .foregroundStyle(style.primaryText)
+                    .lineLimit(1)
+                if let percentLine = section.percentLine {
+                    Text(codexBarLocalizedDisplayText(percentLine))
+                        .font(.system(size: 10.2, weight: .medium))
+                        .foregroundStyle(style.secondaryText)
                         .lineLimit(1)
-                    Text(codexBarLocalizedDisplayText(section.spendLine))
-                        .font(.system(size: 12.4, weight: .bold, design: .rounded))
-                        .foregroundStyle(style.primaryText)
-                        .lineLimit(1)
-                    if let percentLine = section.percentLine {
-                        Text(codexBarLocalizedDisplayText(percentLine))
-                            .font(.system(size: 10.2, weight: .medium))
-                            .foregroundStyle(style.secondaryText)
-                            .lineLimit(1)
-                    }
                 }
-
-                Spacer(minLength: 6)
-
-                ConductorMicroRail(
-                    percent: section.percentUsed ?? 0,
-                    style: style,
-                    revealed: revealed)
-                    .frame(width: 110, height: 26)
             }
+
+            Spacer(minLength: 6)
+
+            ConductorMicroRail(
+                percent: section.percentUsed ?? 0,
+                style: style,
+                revealed: revealed)
+                .frame(width: 110, height: 26)
         }
-        .groupBoxStyle(.automatic)
+        .padding(10)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.28 : 0.40))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onAppear {
             withAnimation(.spring(response: 0.58, dampingFraction: 0.84).delay(0.05)) {
                 revealed = true
@@ -1701,41 +1743,50 @@ private struct ConductorTokenUsageSignalCard: View {
     let style: ConductorUsagePanelStyle
 
     var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .center, spacing: 8) {
-                    Image(systemName: "chart.xyaxis.line")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(style.secondaryText)
-                        .frame(width: 24, height: 24)
-                        .accessibilityHidden(true)
-                    Text(codexBarLocalizedDisplayText(L("cost_header_estimated")))
-                        .font(.system(size: 10.8, weight: .bold))
-                        .foregroundStyle(style.tertiaryText)
-                    Spacer()
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: "chart.xyaxis.line")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(style.secondaryText)
+                    .frame(width: 24, height: 24)
+                    .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.48))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .accessibilityHidden(true)
+                Text(codexBarLocalizedDisplayText(L("cost_header_estimated")))
+                    .font(.system(size: 10.8, weight: .bold))
+                    .foregroundStyle(style.tertiaryText)
+                Spacer()
+            }
 
-                HStack(spacing: 7) {
-                    ConductorTokenLinePill(text: section.sessionLine, style: style, prominent: true)
-                    ConductorTokenLinePill(text: section.monthLine, style: style, prominent: false)
-                }
+            HStack(spacing: 7) {
+                ConductorTokenLinePill(text: section.sessionLine, style: style, prominent: true)
+                ConductorTokenLinePill(text: section.monthLine, style: style, prominent: false)
+            }
 
-                if let hint = section.hintLine, !hint.isEmpty {
-                    Text(codexBarLocalizedDisplayText(hint))
-                        .font(.system(size: 10.2, weight: .medium))
-                        .foregroundStyle(style.secondaryText)
-                        .lineLimit(2)
-                }
+            if let hint = section.hintLine, !hint.isEmpty {
+                Text(codexBarLocalizedDisplayText(hint))
+                    .font(.system(size: 10.2, weight: .medium))
+                    .foregroundStyle(style.secondaryText)
+                    .lineLimit(2)
+            }
 
-                if let error = section.errorLine, !error.isEmpty {
-                    Text(codexBarLocalizedDisplayText(error))
-                        .font(.system(size: 10.2, weight: .semibold))
-                        .foregroundStyle(Color(nsColor: .systemRed))
-                        .lineLimit(2)
-                }
+            if let error = section.errorLine, !error.isEmpty {
+                Text(codexBarLocalizedDisplayText(error))
+                    .font(.system(size: 10.2, weight: .semibold))
+                    .foregroundStyle(Color(nsColor: .systemRed))
+                    .lineLimit(2)
             }
         }
-        .groupBoxStyle(.automatic)
+        .padding(10)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.28 : 0.40))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -1752,6 +1803,8 @@ private struct ConductorTokenLinePill: View {
             .minimumScaleFactor(0.72)
             .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+            .background(style.controlStrongFill.opacity(prominent ? 0.48 : 0.32))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
@@ -1812,40 +1865,52 @@ private struct ConductorSummaryNode: View {
     let style: ConductorUsagePanelStyle
 
     var body: some View {
-        GroupBox {
-            HStack(spacing: 9) {
-                ZStack {
-                    Circle()
-                        .stroke(style.separator.opacity(0.28), lineWidth: 5)
-                    Circle()
-                        .trim(from: 0, to: revealed ? ringAmount : 0)
-                        .stroke(style.emphasis.opacity(0.82), style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                    Circle()
-                        .fill(style.emphasis.opacity(0.16))
-                        .frame(width: 9, height: 9)
-                }
-                .frame(width: 34, height: 34)
+        HStack(spacing: 9) {
+            ZStack {
+                Circle()
+                    .stroke(style.separator.opacity(0.28), lineWidth: 5)
+                Circle()
+                    .trim(from: 0, to: revealed ? ringAmount : 0)
+                    .stroke(style.emphasis.opacity(0.82), style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Circle()
+                    .fill(style.emphasis.opacity(0.16))
+                    .frame(width: 9, height: 9)
+            }
+            .frame(width: 34, height: 34)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(style.tertiaryText)
-                        .lineLimit(1)
-                    Text(value)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(style.primaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                    Text(subtitle)
-                        .font(.system(size: 9.8, weight: .medium))
-                        .foregroundStyle(style.tertiaryText)
-                        .lineLimit(1)
-                }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(style.tertiaryText)
+                    .lineLimit(1)
+                Text(value)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(style.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Text(subtitle)
+                    .font(.system(size: 9.8, weight: .medium))
+                    .foregroundStyle(style.tertiaryText)
+                    .lineLimit(1)
             }
         }
-        .groupBoxStyle(.automatic)
+        .padding(10)
         .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.44 : 0.62))
+                .overlay(alignment: .bottomTrailing) {
+                    ConductorUsageCircuitOverlay(style: style)
+                        .opacity(0.14)
+                        .frame(width: 96, height: 52)
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(style.stroke.opacity(0.34), lineWidth: 0.7)
+        }
     }
 
     private var ringAmount: Double {
@@ -2026,31 +2091,41 @@ private struct ConductorTokenTimeline: View {
     @State private var revealed = false
 
     var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(conductorTokenRecordsText("明细", "Details"))
-                        .font(.system(size: 12.5, weight: .bold))
-                        .foregroundStyle(style.primaryText)
-                    Spacer()
-                    Text("\(entries.count)")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(style.tertiaryText)
-                        .frame(height: 18)
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(conductorTokenRecordsText("明细", "Details"))
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundStyle(style.primaryText)
+                Spacer()
+                Text("\(entries.count)")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundStyle(style.tertiaryText)
+                    .padding(.horizontal, 7)
+                    .frame(height: 18)
+                    .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.42 : 0.58))
+                    .clipShape(Capsule())
+            }
 
-                VStack(spacing: 7) {
-                    ForEach(Array(entries.prefix(18).enumerated()), id: \.element.date) { index, entry in
-                        ConductorTokenTimelineRow(
-                            entry: entry,
-                            index: index,
-                            revealed: revealed,
-                            style: style)
-                    }
+            VStack(spacing: 7) {
+                ForEach(Array(entries.prefix(18).enumerated()), id: \.element.date) { index, entry in
+                    ConductorTokenTimelineRow(
+                        entry: entry,
+                        index: index,
+                        revealed: revealed,
+                        style: style)
                 }
             }
         }
-        .groupBoxStyle(.automatic)
+        .padding(10)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.38 : 0.54))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(style.stroke.opacity(0.32), lineWidth: 0.7)
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onAppear {
             withAnimation(.spring(response: 0.62, dampingFraction: 0.84)) {
                 revealed = true
@@ -2103,6 +2178,10 @@ private struct ConductorTokenTimelineRow: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 7)
+        .background {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.30 : 0.44))
+        }
         .offset(x: revealed ? 0 : 8)
         .opacity(revealed ? 1 : 0)
         .animation(.spring(response: 0.46, dampingFraction: 0.84).delay(Double(index) * 0.018), value: revealed)
@@ -2119,6 +2198,8 @@ private struct ConductorTokenTimelineRow: View {
         }
         .padding(.horizontal, 6)
         .frame(height: 22)
+        .background(style.controlFill.opacity(style.usesDarkChrome ? 0.44 : 0.62))
+        .clipShape(Capsule())
     }
 
     private func cacheTokens(_ entry: CostUsageDailyReport.Entry) -> Int? {
@@ -2190,83 +2271,90 @@ private struct ConductorUsageMetricTile: View {
     @State private var revealed = false
 
     var body: some View {
-        GroupBox {
-            HStack(alignment: .top, spacing: 12) {
-                ConductorGaugeDial(
-                    percent: metric.statusText == nil ? metric.percent : 0,
-                    tint: progressColor,
-                    style: style,
-                    revealed: revealed)
-                    .frame(width: 74, height: 74)
+        HStack(alignment: .top, spacing: 12) {
+            ConductorGaugeDial(
+                percent: metric.statusText == nil ? metric.percent : 0,
+                tint: progressColor,
+                style: style,
+                revealed: revealed)
+                .frame(width: 74, height: 74)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline, spacing: 7) {
-                        Text(codexBarLocalizedDisplayText(
-                            UsageMenuCardView.popupMetricTitle(provider: provider, metric: metric)))
-                            .font(.system(size: 12.2, weight: .bold))
-                            .foregroundStyle(style.primaryText)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Text(codexBarLocalizedDisplayText(
+                        UsageMenuCardView.popupMetricTitle(provider: provider, metric: metric)))
+                        .font(.system(size: 12.2, weight: .bold))
+                        .foregroundStyle(style.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                    Spacer(minLength: 0)
+                    if metric.statusText == nil {
+                        Text(metric.percentLabel)
+                            .font(.system(size: 10.5, weight: .bold))
+                            .foregroundStyle(style.secondaryText)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.82)
-                        Spacer(minLength: 0)
-                        if metric.statusText == nil {
-                            Text(metric.percentLabel)
-                                .font(.system(size: 10.5, weight: .bold))
+                    }
+                }
+
+                if let statusText = metric.statusText {
+                    Text(codexBarLocalizedDisplayText(statusText))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(style.secondaryText)
+                        .lineLimit(2)
+                } else {
+                    ConductorSegmentedUsageTrack(
+                        percent: metric.percent,
+                        tint: progressColor,
+                        pacePercent: metric.pacePercent,
+                        warningMarkerPercents: metric.warningMarkerPercents,
+                        style: style,
+                        revealed: revealed)
+                        .frame(height: 18)
+
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        if let detailLeft = metric.detailLeftText {
+                            Text(codexBarLocalizedDisplayText(detailLeft))
+                                .font(.system(size: 10.5, weight: .semibold))
                                 .foregroundStyle(style.secondaryText)
                                 .lineLimit(1)
                         }
+                        Spacer(minLength: 0)
+                        if let resetText = metric.resetText {
+                            Text(codexBarLocalizedDisplayText(resetText))
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundStyle(style.tertiaryText)
+                                .lineLimit(1)
+                        }
                     }
 
-                    if let statusText = metric.statusText {
-                        Text(codexBarLocalizedDisplayText(statusText))
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(style.secondaryText)
-                            .lineLimit(2)
-                    } else {
-                        ConductorSegmentedUsageTrack(
-                            percent: metric.percent,
-                            tint: progressColor,
-                            pacePercent: metric.pacePercent,
-                            warningMarkerPercents: metric.warningMarkerPercents,
-                            style: style,
-                            revealed: revealed)
-                            .frame(height: 18)
+                    if let detailText = metric.detailText {
+                        Text(codexBarLocalizedDisplayText(detailText))
+                            .font(.system(size: 10.2, weight: .medium))
+                            .foregroundStyle(style.tertiaryText)
+                            .lineLimit(1)
+                    }
 
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            if let detailLeft = metric.detailLeftText {
-                                Text(codexBarLocalizedDisplayText(detailLeft))
-                                    .font(.system(size: 10.5, weight: .semibold))
-                                    .foregroundStyle(style.secondaryText)
-                                    .lineLimit(1)
-                            }
-                            Spacer(minLength: 0)
-                            if let resetText = metric.resetText {
-                                Text(codexBarLocalizedDisplayText(resetText))
-                                    .font(.system(size: 10.5, weight: .medium))
-                                    .foregroundStyle(style.tertiaryText)
-                                    .lineLimit(1)
-                            }
-                        }
-
-                        if let detailText = metric.detailText {
-                            Text(codexBarLocalizedDisplayText(detailText))
-                                .font(.system(size: 10.2, weight: .medium))
-                                .foregroundStyle(style.tertiaryText)
-                                .lineLimit(1)
-                        }
-
-                        if let detailRight = metric.detailRightText {
-                            Text(codexBarLocalizedDisplayText(detailRight))
-                                .font(.system(size: 10.2, weight: .medium))
-                                .foregroundStyle(style.tertiaryText)
-                                .lineLimit(1)
-                        }
+                    if let detailRight = metric.detailRightText {
+                        Text(codexBarLocalizedDisplayText(detailRight))
+                            .font(.system(size: 10.2, weight: .medium))
+                            .foregroundStyle(style.tertiaryText)
+                            .lineLimit(1)
                     }
                 }
-                .padding(.top, 2)
             }
+            .padding(.top, 2)
         }
-        .groupBoxStyle(.automatic)
+        .padding(10)
         .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.30 : 0.46))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(style.stroke.opacity(0.26), lineWidth: 0.7)
+        }
         .onAppear {
             withAnimation(.spring(response: 0.58, dampingFraction: 0.82).delay(0.05)) {
                 revealed = true
@@ -2388,38 +2476,48 @@ private struct ConductorInlineUsageDashboardCard: View {
     @State private var sweep = false
 
     var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 7) {
-                    ForEach(Array(model.kpis.prefix(4).enumerated()), id: \.offset) { _, kpi in
-                        ConductorDashboardKPI(kpi: kpi, style: style)
-                    }
+        VStack(alignment: .leading, spacing: 10) {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 7) {
+                ForEach(Array(model.kpis.prefix(4).enumerated()), id: \.offset) { _, kpi in
+                    ConductorDashboardKPI(kpi: kpi, style: style)
                 }
+            }
 
-                ConductorUsageBarscape(
-                    model: model,
-                    style: style,
-                    revealed: revealed,
-                    sweep: sweep)
-                    .frame(height: 112)
-                    .accessibilityLabel(model.accessibilityLabel)
+            ConductorUsageBarscape(
+                model: model,
+                style: style,
+                revealed: revealed,
+                sweep: sweep)
+                .frame(height: 112)
+                .accessibilityLabel(model.accessibilityLabel)
 
-                if !model.detailLines.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(Array(model.detailLines.prefix(3).enumerated()), id: \.offset) { _, line in
-                            Text(codexBarLocalizedDisplayText(line))
-                                .font(.system(size: 10.2, weight: .semibold))
-                                .foregroundStyle(style.secondaryText)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .frame(height: 20)
-                        }
-                        Spacer(minLength: 0)
+            if !model.detailLines.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(Array(model.detailLines.prefix(3).enumerated()), id: \.offset) { _, line in
+                        Text(codexBarLocalizedDisplayText(line))
+                            .font(.system(size: 10.2, weight: .semibold))
+                            .foregroundStyle(style.secondaryText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .padding(.horizontal, 7)
+                            .frame(height: 20)
+                            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.46 : 0.62))
+                            .clipShape(Capsule())
                     }
+                    Spacer(minLength: 0)
                 }
             }
         }
-        .groupBoxStyle(.automatic)
+        .padding(10)
+        .background {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.42 : 0.60))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(style.stroke.opacity(0.34), lineWidth: 0.7)
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .onAppear {
             withAnimation(.spring(response: 0.72, dampingFraction: 0.86).delay(0.08)) {
                 revealed = true
@@ -2440,22 +2538,33 @@ private struct ConductorDashboardKPI: View {
     let style: ConductorUsagePanelStyle
 
     var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(codexBarLocalizedDisplayText(kpi.title))
-                    .font(.system(size: 10.2, weight: .bold))
-                    .foregroundStyle(style.tertiaryText)
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(codexBarLocalizedDisplayText(kpi.title))
+                .font(.system(size: 10.2, weight: .bold))
+                .foregroundStyle(style.tertiaryText)
+                .lineLimit(1)
 
-                Text(kpi.value)
-                    .font(.system(size: kpi.emphasis ? 16 : 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(kpi.emphasis ? style.primaryText : style.secondaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-            }
+            Text(kpi.value)
+                .font(.system(size: kpi.emphasis ? 16 : 13, weight: .bold, design: .rounded))
+                .foregroundStyle(kpi.emphasis ? style.primaryText : style.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
         }
-        .groupBoxStyle(.automatic)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(kpi.emphasis
+                    ? style.controlStrongFill.opacity(style.usesDarkChrome ? 0.62 : 0.78)
+                    : style.controlStrongFill.opacity(style.usesDarkChrome ? 0.32 : 0.48))
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(kpi.emphasis ? style.emphasis : style.separator.opacity(0.54))
+                        .frame(width: 3)
+                        .padding(.vertical, 7)
+                }
+        }
     }
 }
 

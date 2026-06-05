@@ -112,6 +112,23 @@ struct ConductorUsageWorkbenchPanel: View {
             }
         }
         .padding(12)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(style.panelBase.opacity(style.usesDarkChrome ? 0.24 : 0.50))
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            style.panelWash.opacity(style.usesDarkChrome ? 0.10 : 0.20),
+                            style.controlFill.opacity(style.usesDarkChrome ? 0.08 : 0.14),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(style.stroke.opacity(0.24), lineWidth: 0.8)
+        }
         .onAppear {
             normalizeSelection()
             prime()
@@ -132,6 +149,8 @@ struct ConductorUsageWorkbenchPanel: View {
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(style.emphasis)
                 .frame(width: 26, height: 26)
+                .background(style.emphasis.opacity(style.usesDarkChrome ? 0.14 : 0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -1128,7 +1147,7 @@ private struct ConductorUsageWorkbenchCard<Summary: View, Detail: View>: View {
     }
 
     var body: some View {
-        GroupBox {
+        VStack(alignment: .leading, spacing: 10) {
             DisclosureGroup(isExpanded: expansion) {
                 Rectangle()
                     .fill(style.separator.opacity(0.44))
@@ -1142,6 +1161,8 @@ private struct ConductorUsageWorkbenchCard<Summary: View, Detail: View>: View {
                             .font(.system(size: 11.5, weight: .semibold))
                             .foregroundStyle(style.emphasis)
                             .frame(width: 22, height: 22)
+                            .background(style.emphasis.opacity(style.usesDarkChrome ? 0.14 : 0.10))
+                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 1) {
@@ -1164,8 +1185,16 @@ private struct ConductorUsageWorkbenchCard<Summary: View, Detail: View>: View {
             .tint(style.tertiaryText)
             .accessibilityLabel(section.title(languageIdentifier: languageIdentifier))
         }
-        .groupBoxStyle(.automatic)
+        .padding(11)
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.34 : 0.52))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(style.stroke.opacity(isExpanded ? 0.34 : 0.22), lineWidth: 0.8)
+        }
     }
 }
 
@@ -1177,16 +1206,6 @@ private struct ConductorUsageWorkbenchServiceChip: View {
     let action: () -> Void
 
     var body: some View {
-        if isSelected {
-            chipButton
-                .buttonStyle(.borderedProminent)
-        } else {
-            chipButton
-                .buttonStyle(.bordered)
-        }
-    }
-
-    private var chipButton: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 ZStack(alignment: .bottomTrailing) {
@@ -1194,6 +1213,8 @@ private struct ConductorUsageWorkbenchServiceChip: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(isSelected ? style.primaryText : style.secondaryText)
                         .frame(width: 24, height: 24)
+                        .background(iconBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                         .accessibilityHidden(true)
 
                     Circle()
@@ -1216,11 +1237,21 @@ private struct ConductorUsageWorkbenchServiceChip: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 40)
+            .background(isSelected ? style.controlStrongFill.opacity(0.50) : style.controlFill.opacity(0.28))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(isSelected ? style.emphasis.opacity(0.20) : style.stroke.opacity(0.10), lineWidth: 0.8)
+            }
         }
+        .buttonStyle(.borderless)
         .controlSize(.small)
-        .tint(style.emphasis)
         .help(state.name)
         .accessibilityLabel(state.name)
+    }
+
+    private var iconBackground: Color {
+        isSelected ? style.emphasis.opacity(style.usesDarkChrome ? 0.18 : 0.12) : style.controlStrongFill.opacity(0.52)
     }
 
     private var detailText: String {
@@ -1416,7 +1447,10 @@ private struct ConductorUsageWorkbenchTinyPill: View {
                 .minimumScaleFactor(0.72)
         }
         .foregroundStyle(style.secondaryText)
-        .frame(height: 20)
+        .padding(.horizontal, 7)
+        .frame(height: 22)
+        .background(style.controlStrongFill.opacity(0.54))
+        .clipShape(Capsule())
     }
 }
 
@@ -1435,7 +1469,10 @@ private struct ConductorUsageWorkbenchDotLabel: View {
                 .foregroundStyle(style.tertiaryText)
                 .lineLimit(1)
         }
-        .frame(height: 19)
+        .padding(.horizontal, 7)
+        .frame(height: 21)
+        .background(style.controlStrongFill.opacity(0.44))
+        .clipShape(Capsule())
     }
 
     private var color: Color {
@@ -1469,7 +1506,10 @@ private struct ConductorUsageWorkbenchStatusCapsule: View {
                 .foregroundStyle(style.secondaryText)
                 .lineLimit(1)
         }
-        .frame(height: 22)
+        .padding(.horizontal, 9)
+        .frame(height: 26)
+        .background(style.controlStrongFill.opacity(0.62))
+        .clipShape(Capsule())
     }
 
     private var color: Color {

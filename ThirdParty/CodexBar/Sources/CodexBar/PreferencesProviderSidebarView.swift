@@ -13,36 +13,82 @@ struct ProviderSidebarListView: View {
     var scrollsVertically = true
     @State private var draggingProvider: UsageProvider?
 
-    private var listSelection: Binding<UsageProvider?> {
-        Binding {
-            self.selection ?? self.providers.first
-        } set: { newSelection in
-            self.selection = newSelection
+    var body: some View {
+        let style = ConductorUsageMenuStyle.current ?? .fallback
+        Group {
+            if scrollsVertically {
+                ScrollView {
+                    providerRows(style: style, lazy: false)
+                }
+                .scrollIndicators(.visible)
+            } else {
+                providerRows(style: style, lazy: false)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: ProviderSettingsMetrics.sidebarCornerRadius, style: .continuous)
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.22 : 0.30)))
+        .overlay(
+            RoundedRectangle(cornerRadius: ProviderSettingsMetrics.sidebarCornerRadius, style: .continuous)
+                .stroke(style.stroke.opacity(0.18), lineWidth: 0.6))
+        .clipShape(RoundedRectangle(cornerRadius: ProviderSettingsMetrics.sidebarCornerRadius, style: .continuous))
+        .frame(minWidth: ProviderSettingsMetrics.sidebarWidth, maxWidth: ProviderSettingsMetrics.sidebarWidth)
+    }
+
+    @ViewBuilder
+    private func providerRows(style: ConductorUsagePanelStyle, lazy: Bool) -> some View {
+        if lazy {
+            LazyVStack(spacing: 0) {
+                providerRowList(style: style)
+            }
+            .padding(.vertical, 4)
+        } else {
+            VStack(spacing: 0) {
+                providerRowList(style: style)
+            }
+            .padding(.vertical, 4)
         }
     }
 
-    var body: some View {
-        List(selection: self.listSelection) {
-            ForEach(self.providers, id: \.self) { provider in
-                ProviderSidebarRowView(
-                    provider: provider,
-                    store: self.store,
-                    isEnabled: self.isEnabled(provider),
-                    subtitle: self.subtitle(provider),
-                    draggingProvider: self.$draggingProvider)
-                    .tag(provider)
-                    .onDrop(
-                        of: [UTType.plainText],
-                        delegate: ProviderSidebarDropDelegate(
-                            item: provider,
-                            providers: self.providers,
-                            dragging: self.$draggingProvider,
-                            moveProviders: self.moveProviders))
-            }
+    @ViewBuilder
+    private func providerRowList(style: ConductorUsagePanelStyle) -> some View {
+        ForEach(self.providers, id: \.self) { provider in
+            let isSelected = self.selection == provider
+            ProviderSidebarRowView(
+                provider: provider,
+                store: self.store,
+                isEnabled: self.isEnabled(provider),
+                subtitle: self.subtitle(provider),
+                isSelected: isSelected,
+                style: style,
+                draggingProvider: self.$draggingProvider)
+                .padding(.horizontal, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(
+                            isSelected
+                                ? style.emphasis.opacity(style.usesDarkChrome ? 0.12 : 0.07)
+                                : Color.clear)
+                        .padding(.horizontal, 4))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(
+                            isSelected
+                                ? style.emphasis.opacity(style.usesDarkChrome ? 0.18 : 0.12)
+                                : Color.clear,
+                            lineWidth: 0.6)
+                        .padding(.horizontal, 4)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { self.selection = provider }
+                .onDrop(
+                    of: [UTType.plainText],
+                    delegate: ProviderSidebarDropDelegate(
+                        item: provider,
+                        providers: self.providers,
+                        dragging: self.$draggingProvider,
+                        moveProviders: self.moveProviders))
         }
-        .listStyle(.sidebar)
-        .scrollDisabled(!self.scrollsVertically)
-        .frame(minWidth: ProviderSettingsMetrics.sidebarWidth, maxWidth: ProviderSettingsMetrics.sidebarWidth)
     }
 
 }
@@ -53,6 +99,8 @@ private struct ProviderSidebarRowView: View {
     @Bindable var store: UsageStore
     @Binding var isEnabled: Bool
     let subtitle: String
+    let isSelected: Bool
+    let style: ConductorUsagePanelStyle
     @Binding var draggingProvider: UsageProvider?
 
     var body: some View {
@@ -77,7 +125,7 @@ private struct ProviderSidebarRowView: View {
                 HStack(spacing: 6) {
                     Text(self.store.metadata(for: self.provider).displayName)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(self.isSelected ? self.style.primaryText : self.style.primaryText.opacity(0.90))
 
                     if showStatus {
                         ProviderStatusDot(indicator: self.store.statusIndicator(for: self.provider))
@@ -90,7 +138,7 @@ private struct ProviderSidebarRowView: View {
                 }
                 Text(statusText)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(self.style.secondaryText)
                     .lineLimit(2)
                     .frame(height: ProviderSettingsMetrics.sidebarSubtitleHeight, alignment: .topLeading)
             }
