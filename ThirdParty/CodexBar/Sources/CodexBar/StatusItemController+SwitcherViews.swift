@@ -139,11 +139,14 @@ final class ProviderSwitcherView: NSView {
                 }
                 button = stacked
             } else if self.showsIcons {
-                let inline = InlineIconToggleButton(
+                let inline = NSButton(
                     title: segment.title,
                     image: segment.image,
                     target: self,
                     action: #selector(self.handleSelection(_:)))
+                inline.imagePosition = .imageLeading
+                inline.imageScaling = .scaleNone
+                inline.imageHugsTitle = true
                 button = inline
             } else {
                 button = NSButton(
@@ -152,13 +155,7 @@ final class ProviderSwitcherView: NSView {
                     action: #selector(self.handleSelection(_:)))
             }
             button.tag = index
-            if self.showsIcons {
-                if self.stackedIcons {
-                    // StackedToggleButton manages its own image view.
-                } else {
-                    // InlineIconToggleButton manages its own image view.
-                }
-            } else {
+            if !self.showsIcons {
                 button.image = nil
                 button.imagePosition = .noImage
             }
@@ -648,7 +645,6 @@ final class ProviderSwitcherView: NSView {
             }
             self.updateQuotaIndicatorVisibility(for: button)
             (button as? StackedToggleButton)?.setContentTintColor(button.contentTintColor)
-            (button as? InlineIconToggleButton)?.setContentTintColor(button.contentTintColor)
         }
     }
 
@@ -975,7 +971,7 @@ extension ProviderSwitcherView {
         to view: NSView,
         height: CGFloat = quotaIndicatorReservedHeight)
     {
-        (view as? ProviderSwitcherToggleButton)?.setQuotaBarReservedHeight(height)
+        (view as? StackedToggleButton)?.setQuotaBarReservedHeight(height)
     }
 
     private func updateQuotaIndicatorVisibility(for view: NSView) {
