@@ -257,6 +257,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
     }
     @Published private(set) var metadataByTerminalID: [TerminalID: TerminalDisplayMetadata] = [:]
+    @Published private(set) var restoredTerminalContentByID: [TerminalID: RestoredTerminalContent] = [:]
     @Published private(set) var workspaceMetadataSnapshots: [WorkspaceID: WorkspaceMetadataSnapshot] = [:]
     @Published private(set) var applicationActive = NSApp.isActive
     @Published var sidebarVisible = true
@@ -375,6 +376,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     }
 
     private let persistence = WorkspacePersistence()
+    private let terminalContentPersistence = TerminalContentPersistence()
     private let attentionStore = ConductorAttentionStore(isEnabled: WorkspacePersistence.isEnabledByDefault)
     /// Serial queue for persistence encoding + atomic writes, keeping that work
     /// off the main thread. Serial so saves never race or interleave on disk.
@@ -446,6 +448,15 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             fileTabs: selectedRuntimeContent.fileTabs,
             useTerminalFallback: restoredState != nil
         )
+        let validTerminalIDs = Self.terminalIDs(in: self.workspaces)
+        if let terminalSnapshots = terminalContentPersistence.load(validTerminalIDs: validTerminalIDs) {
+            self.restoredTerminalContentByID = Self.restoredTerminalContent(
+                from: terminalSnapshots,
+                workspaces: self.workspaces
+            )
+        } else {
+            self.restoredTerminalContentByID = [:]
+        }
         syncPanelCoordinatorFromPublished()
         syncFileWorkspaceCoordinatorFromPublished()
         ConductorAppearanceRuntime.apply(self.appearance)
@@ -502,6 +513,42 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         }
 
         return result
+    }
+
+    private static func terminalIDs(in workspaces: [WorkspaceState]) -> Set<TerminalID> {
+        Set(workspaces.flatMap { workspace in
+            workspace.panes.values.flatMap { pane in pane.tabs.map(\.id) }
+        })
+    }
+
+    private static func restoredTerminalContent(
+        from snapshotFile: PersistedTerminalContentSnapshotFile,
+        workspaces: [WorkspaceState]
+    ) -> [TerminalID: RestoredTerminalContent] {
+        var tabByID: [TerminalID: TerminalTabState] = [:]
+        for workspace in workspaces {
+            for pane in workspace.panes.values {
+                for tab in pane.tabs {
+                    tabByID[tab.id] = tab
+                }
+            }
+        }
+
+        var restored: [TerminalID: RestoredTerminalContent] = [:]
+        for snapshot in snapshotFile.snapshots {
+            guard let tab = tabByID[snapshot.terminalID],
+                  let content = RestoredTerminalContent.make(
+                    terminalID: snapshot.terminalID,
+                    capturedAt: snapshot.capturedAt,
+                    rawText: snapshot.text,
+                    tabAgentSnapshot: tab.agentSnapshot,
+                    persistedAgentSnapshot: snapshot.agentSnapshot
+                  ) else {
+                continue
+            }
+            restored[snapshot.terminalID] = content
+        }
+        return restored
     }
 
     private static func restoredFileTabs(_ tabs: [PersistedFileTab]) -> [ConductorWorkspaceFileTab] {
@@ -4479,6 +4526,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
     func recordTerminalUserActivity(_ terminalID: TerminalID) {
         guard terminalLocation(for: terminalID) != nil else { return }
+        restoredTerminalContentByID.removeValue(forKey: terminalID)
         attendTerminal(terminalID)
     }
 
@@ -4759,6 +4807,14 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         pendingMetadataByTerminalID.removeAll(keepingCapacity: false)
     }
 
+    func restoredTerminalContent(for terminalID: TerminalID) -> RestoredTerminalContent? {
+        restoredTerminalContentByID[terminalID]
+    }
+
+    func dismissRestoredTerminalContent(for terminalID: TerminalID) {
+        restoredTerminalContentByID.removeValue(forKey: terminalID)
+    }
+
     func flushPersistence() {
         pendingPersistence?.cancel()
         pendingPersistence = nil
@@ -4776,6 +4832,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             selectedWorkspaceContentTabID: selectedContent?.selectedWorkspaceContentTabID,
             workspaceContentStates: workspaceContentStates
         )
+        terminalContentPersistence.save(terminalContentSnapshotFile())
     }
 
     func resetWorkspace() {
@@ -5194,11 +5251,45 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.10, execute: item)
     }
 
+    private func terminalContentSnapshotFile() -> PersistedTerminalContentSnapshotFile {
+        syncSelectedWorkspace()
+        let capturedAt = Date()
+        let snapshots = workspaces.flatMap { workspace -> [PersistedTerminalContentSnapshot] in
+            workspace.panes.values.flatMap { pane -> [PersistedTerminalContentSnapshot] in
+                pane.tabs.compactMap { tab in
+                    let liveText = surfaceCoordinator.existingSurface(for: tab.id)?.visibleText() ?? ""
+                    let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(liveText)
+                    let restorePreview = RestoredTerminalContent.make(
+                        terminalID: tab.id,
+                        capturedAt: capturedAt,
+                        rawText: sanitized,
+                        tabAgentSnapshot: tab.agentSnapshot,
+                        persistedAgentSnapshot: nil
+                    )
+                    guard !sanitized.isEmpty || restorePreview?.resumeHint != nil else {
+                        return nil
+                    }
+                    return PersistedTerminalContentSnapshot(
+                        terminalID: tab.id,
+                        workspaceID: workspace.id,
+                        paneID: pane.id,
+                        capturedAt: capturedAt,
+                        workingDirectory: tab.workingDirectory,
+                        text: sanitized,
+                        agentSnapshot: tab.agentSnapshot
+                    )
+                }
+            }
+        }
+        return PersistedTerminalContentSnapshotFile(capturedAt: capturedAt, snapshots: snapshots)
+    }
+
     private func persist() {
         pendingPersistence?.cancel()
         saveSelectedWorkspaceContentState()
         let workspaceContentStates = persistedWorkspaceContentStates()
         let selectedContent = workspaceContentStates.first { $0.workspaceID == selectedWorkspaceID }
+        let terminalContentSnapshotFile = terminalContentSnapshotFile()
         let item = Self.makePersistenceSaveWorkItem(
             persistence: persistence,
             workspaces: workspaces,
@@ -5210,12 +5301,17 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
             selectedWorkspaceContentTabID: selectedContent?.selectedWorkspaceContentTabID,
             workspaceContentStates: workspaceContentStates
         )
+        let terminalContentItem = Self.makeTerminalContentPersistenceSaveWorkItem(
+            terminalContentPersistence: terminalContentPersistence,
+            snapshotFile: terminalContentSnapshotFile
+        )
         pendingPersistence = item
         // Debounce on main (so rapid edits coalesce), then encode + write on a
         // background queue so large YAML/blob serialization never stalls the UI.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             guard let self, !item.isCancelled else { return }
             self.persistenceQueue.async(execute: item)
+            self.persistenceQueue.async(execute: terminalContentItem)
         }
     }
 
@@ -5250,6 +5346,15 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
                 selectedWorkspaceContentTabID: selectedWorkspaceContentTabID,
                 workspaceContentStates: workspaceContentStates
             )
+        }
+    }
+
+    private nonisolated static func makeTerminalContentPersistenceSaveWorkItem(
+        terminalContentPersistence: TerminalContentPersistence,
+        snapshotFile: PersistedTerminalContentSnapshotFile
+    ) -> DispatchWorkItem {
+        DispatchWorkItem {
+            terminalContentPersistence.save(snapshotFile)
         }
     }
 
