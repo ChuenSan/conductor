@@ -882,22 +882,10 @@ struct ConductorTokenRecordsWindowView: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                Text(providerName(provider))
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 8.5, weight: .bold))
-                    .accessibilityHidden(true)
-            }
-            .foregroundStyle(style.secondaryText)
-            .padding(.horizontal, 9)
-            .frame(height: 24)
-            .background(style.controlFill)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Label(providerName(provider), systemImage: "line.3.horizontal.decrease.circle")
         }
-        .buttonStyle(.plain)
         .menuStyle(.button)
+        .controlSize(.small)
         .help(conductorTokenRecordsText("切换来源", "Switch Source"))
     }
 
@@ -908,14 +896,11 @@ struct ConductorTokenRecordsWindowView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(disabled ? style.tertiaryText : style.secondaryText)
-                .frame(width: 24, height: 24)
-                .background(style.controlFill)
-                .clipShape(Circle())
+            Label(help, systemImage: systemName)
         }
-        .buttonStyle(.plain)
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+        .controlSize(.small)
         .disabled(disabled)
         .help(help)
         .accessibilityLabel(help)
@@ -1050,14 +1035,9 @@ struct ConductorTokenRecordsWindowView: View {
     private func filledPanelButton(title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(style.secondaryText)
-                .padding(.horizontal, 12)
-                .frame(height: 26)
-                .background(style.controlStrongFill)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
+        .controlSize(.small)
     }
 
     private var panelDivider: some View {

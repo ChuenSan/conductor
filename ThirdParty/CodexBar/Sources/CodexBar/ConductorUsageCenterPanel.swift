@@ -153,14 +153,11 @@ struct ConductorUsageCenterPanel: View {
             Button {
                 refreshAll()
             } label: {
-                Image(systemName: refreshSystemImage)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(style.secondaryText)
-                    .frame(width: 28, height: 28)
-                    .background(style.controlStrongFill.opacity(0.78))
-                    .clipShape(Circle())
+                Label(t("刷新全部用量", "Refresh all usage"), systemImage: refreshSystemImage)
             }
-            .buttonStyle(.plain)
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .controlSize(.small)
             .disabled(isRefreshingAll || context.store.isRefreshing)
             .help(t("刷新全部用量", "Refresh all usage"))
             .accessibilityLabel(t("刷新全部用量", "Refresh all usage"))

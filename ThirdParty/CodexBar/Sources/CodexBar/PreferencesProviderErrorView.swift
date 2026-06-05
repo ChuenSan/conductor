@@ -24,7 +24,8 @@ struct ProviderErrorView: View {
                 } label: {
                     Image(systemName: "doc.on.doc")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
+                .controlSize(.small)
                 .foregroundStyle(.secondary)
                 .help("Copy error")
             }

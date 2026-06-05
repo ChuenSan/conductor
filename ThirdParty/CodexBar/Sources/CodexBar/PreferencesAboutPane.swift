@@ -32,8 +32,10 @@ struct AboutPane: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            if let image = NSApplication.shared.applicationIconImage {
-                Button(action: self.openProjectHome) {
+            if let image = NSApplication.shared.applicationIconImage,
+               let projectHomeURL = URL(string: "https://github.com/steipete/CodexBar")
+            {
+                Link(destination: projectHomeURL) {
                     Image(nsImage: image)
                         .resizable()
                         .frame(width: 92, height: 92)
@@ -41,7 +43,6 @@ struct AboutPane: View {
                         .scaleEffect(self.iconHover ? 1.05 : 1.0)
                         .shadow(color: self.iconHover ? .accentColor.opacity(0.25) : .clear, radius: 6)
                 }
-                .buttonStyle(.plain)
                 .onHover { hovering in
                     ConductorUsageMotion.perform(ConductorUsageMotion.hover) {
                         self.iconHover = hovering
@@ -147,8 +148,4 @@ struct AboutPane: View {
             })
     }
 
-    private func openProjectHome() {
-        guard let url = URL(string: "https://github.com/steipete/CodexBar") else { return }
-        NSWorkspace.shared.open(url)
-    }
 }

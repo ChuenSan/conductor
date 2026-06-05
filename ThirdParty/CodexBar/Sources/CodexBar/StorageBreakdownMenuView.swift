@@ -209,7 +209,8 @@ struct StoragePathCopyButton: View {
                 .frame(width: 18, height: 18)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
+        .controlSize(.small)
         .help(self.didCopy ? "Copied" : "Copy path")
         .accessibilityLabel(self.didCopy ? "Copied" : "Copy path")
     }

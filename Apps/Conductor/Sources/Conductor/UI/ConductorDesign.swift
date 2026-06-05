@@ -231,27 +231,23 @@ enum ConductorTokens {
 
     enum Settings {
         static func panelWash(dark: Bool) -> Color {
-            Color.primary.opacity(dark ? 0.018 : 0.010)
-        }
-
-        static func sidebarWash(dark: Bool) -> Color {
-            Color.primary.opacity(dark ? 0.026 : 0.014)
+            Color.primary.opacity(dark ? 0.012 : 0.006)
         }
 
         static func panelChromeWash(dark: Bool) -> Color {
-            Color.primary.opacity(dark ? 0.020 : 0.012)
+            Color.primary.opacity(dark ? 0.014 : 0.008)
         }
 
         static func panelStroke(dark: Bool) -> Color {
-            ConductorTokens.Chrome.structuralSeparator(dark: dark).opacity(dark ? 0.62 : 0.52)
+            ConductorTokens.Chrome.structuralSeparator(dark: dark).opacity(dark ? 0.34 : 0.26)
         }
 
         static func panelShadow(dark: Bool) -> Color {
-            Color(nsColor: .shadowColor).opacity(dark ? 0.20 : 0.11)
+            Color(nsColor: .shadowColor).opacity(dark ? 0.14 : 0.07)
         }
 
         static func subtleSeparator(dark: Bool) -> Color {
-            ConductorTokens.Chrome.separator(dark: dark).opacity(0.58)
+            ConductorTokens.Chrome.separator(dark: dark).opacity(0.42)
         }
     }
 }

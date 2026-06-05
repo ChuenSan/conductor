@@ -656,21 +656,6 @@ private struct UsageMenuCardHeaderView: View {
     }
 }
 
-private struct CopyIconButtonStyle: ButtonStyle {
-    let isHighlighted: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(4)
-            .background {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(MenuHighlightStyle.secondary(self.isHighlighted).opacity(configuration.isPressed ? 0.18 : 0))
-            }
-            .scaleEffect(configuration.isPressed ? 0.94 : 1)
-            .animation(ConductorUsageMotion.press, value: configuration.isPressed)
-    }
-}
-
 private struct CopyIconButton: View {
     let copyText: String
     let isHighlighted: Bool
@@ -697,7 +682,9 @@ private struct CopyIconButton: View {
                 .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                 .frame(width: 18, height: 18)
         }
-        .buttonStyle(CopyIconButtonStyle(isHighlighted: self.isHighlighted))
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .help(codexBarLocalizedDisplayText(self.didCopy ? "Copied" : "Copy error"))
         .accessibilityLabel(codexBarLocalizedDisplayText(self.didCopy ? "Copied" : "Copy error"))
     }
 

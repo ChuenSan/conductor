@@ -175,14 +175,13 @@ struct ConductorUsageWorkbenchPanel: View {
             Button {
                 refreshAll()
             } label: {
-                Image(systemName: isRefreshingAll || context.store.isRefreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(style.secondaryText)
-                    .frame(width: 28, height: 28)
-                    .background(style.controlStrongFill.opacity(0.72))
-                    .clipShape(Circle())
+                Label(
+                    t("刷新全部用量", "Refresh all usage"),
+                    systemImage: isRefreshingAll || context.store.isRefreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
             }
-            .buttonStyle(.plain)
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .controlSize(.small)
             .disabled(isRefreshingAll || context.store.isRefreshing)
             .help(t("刷新服务状态、用量记录和本地数据", "Refresh service status, usage records, and local data"))
             .accessibilityLabel(t("刷新全部用量", "Refresh all usage"))
@@ -563,14 +562,11 @@ struct ConductorUsageWorkbenchPanel: View {
 
     private func quickIcon(_ systemImage: String, _ help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(style.secondaryText)
-                .frame(width: 28, height: 28)
-                .background(style.controlStrongFill.opacity(0.66))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Label(help, systemImage: systemImage)
         }
-        .buttonStyle(.plain)
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+        .controlSize(.small)
         .help(help)
         .accessibilityLabel(help)
     }
@@ -1141,50 +1137,53 @@ private struct ConductorUsageWorkbenchCard<Summary: View, Detail: View>: View {
     @ViewBuilder let summary: () -> Summary
     @ViewBuilder let detail: () -> Detail
 
+    private var expansion: Binding<Bool> {
+        Binding {
+            isExpanded
+        } set: { newValue in
+            guard newValue != isExpanded else { return }
+            toggle()
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Button(action: toggle) {
-                HStack(spacing: 8) {
-                    Image(systemName: section.systemImage)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(style.emphasis)
-                        .frame(width: 22, height: 22)
-                        .background(style.emphasis.opacity(style.usesDarkChrome ? 0.14 : 0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                        .accessibilityHidden(true)
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(section.title(languageIdentifier: languageIdentifier))
-                            .font(.system(size: 11.8, weight: .semibold))
-                            .foregroundStyle(style.primaryText)
-                            .lineLimit(1)
-                        Text(section.subtitle(languageIdentifier: languageIdentifier))
-                            .font(.system(size: 9.4, weight: .medium))
-                            .foregroundStyle(style.tertiaryText)
-                            .lineLimit(1)
-                    }
-
-                    Spacer(minLength: 6)
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9.5, weight: .bold))
-                        .foregroundStyle(style.tertiaryText)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .accessibilityHidden(true)
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(section.title(languageIdentifier: languageIdentifier))
-
-            summary()
-
-            if isExpanded {
+            DisclosureGroup(isExpanded: expansion) {
                 Rectangle()
                     .fill(style.separator.opacity(0.44))
                     .frame(height: 1)
                 detail()
                     .transition(.opacity.combined(with: .move(edge: .top)))
+            } label: {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: section.systemImage)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(style.emphasis)
+                            .frame(width: 22, height: 22)
+                            .background(style.emphasis.opacity(style.usesDarkChrome ? 0.14 : 0.10))
+                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .accessibilityHidden(true)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(section.title(languageIdentifier: languageIdentifier))
+                                .font(.system(size: 11.8, weight: .semibold))
+                                .foregroundStyle(style.primaryText)
+                                .lineLimit(1)
+                            Text(section.subtitle(languageIdentifier: languageIdentifier))
+                                .font(.system(size: 9.4, weight: .medium))
+                                .foregroundStyle(style.tertiaryText)
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 6)
+                    }
+
+                    summary()
+                }
             }
+            .tint(style.tertiaryText)
+            .accessibilityLabel(section.title(languageIdentifier: languageIdentifier))
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -1421,14 +1420,11 @@ private struct ConductorUsageWorkbenchPathRow: View {
 
     private func iconButton(_ systemName: String, _ help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(style.secondaryText)
-                .frame(width: 22, height: 22)
-                .background(style.controlStrongFill.opacity(0.56))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            Label(help, systemImage: systemName)
         }
-        .buttonStyle(.plain)
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+        .controlSize(.small)
         .help(help)
         .accessibilityLabel(help)
     }
@@ -1539,22 +1535,11 @@ private struct ConductorUsageWorkbenchActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 9.5, weight: .semibold))
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(.system(size: 9.8, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-            }
-            .foregroundStyle(style.secondaryText)
-            .padding(.horizontal, 8)
-            .frame(height: 26)
-            .background(style.controlStrongFill.opacity(0.60))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            Label(title, systemImage: systemImage)
         }
-        .buttonStyle(.plain)
+        .labelStyle(.titleAndIcon)
+        .buttonStyle(.borderless)
+        .controlSize(.small)
         .help(title)
         .accessibilityLabel(title)
     }

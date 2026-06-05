@@ -59,7 +59,8 @@ struct ZaiHourlyUsageChartMenuView: View {
                             .foregroundColor(.secondary)
                             .frame(width: 10)
                     })
-                    .buttonStyle(.plain)
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
 
                 Text("Hourly Tokens")
                     .font(.system(size: 11, weight: .semibold))

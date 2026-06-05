@@ -303,7 +303,7 @@ struct ProviderSettingsTokenAccountsRowView: View {
                                 }
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.borderless)
 
                             Button(codexBarLocalizedDisplayText("Remove")) {
                                 self.descriptor.removeAccount(account.id)

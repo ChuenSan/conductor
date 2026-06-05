@@ -131,7 +131,6 @@ struct AppearanceSettingsPanel: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(ConductorTokens.Settings.sidebarWash(dark: theme.usesDarkChrome))
         .frame(width: 174)
     }
 

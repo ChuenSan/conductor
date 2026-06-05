@@ -39,7 +39,7 @@ struct ShellRootView: View {
             maxHeight: .infinity,
             alignment: .topLeading
         )
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(.regularMaterial)
         .ignoresSafeArea(.container, edges: .top)
         .environment(\.colorScheme, model.theme.chromeColorScheme)
         .preferredColorScheme(model.theme.chromeColorScheme)
