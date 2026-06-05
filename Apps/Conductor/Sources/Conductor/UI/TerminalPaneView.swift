@@ -231,6 +231,8 @@ struct TerminalPaneView: View {
                             isFocused: terminalAcceptsInputFocus,
                             suspendsGeometrySync: filePanelLayoutActive
                         )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .layoutPriority(1)
                         .background(terminalBackground)
                         .transaction { transaction in
                             transaction.disablesAnimations = true
@@ -349,6 +351,7 @@ private struct RestoredTerminalContentBlock: View {
                 }
                 .buttonStyle(.plain)
                 .macNativeTooltip(L("隐藏恢复内容", "Hide restored content"))
+                .accessibilityLabel(L("隐藏恢复内容", "Hide restored content"))
             }
             .foregroundStyle(theme.shellChromeText.opacity(0.86))
 
