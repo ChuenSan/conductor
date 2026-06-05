@@ -111,11 +111,11 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     }
 
     var floatingPanelBase: Color {
-        Color(nsColor: .windowBackgroundColor).opacity(usesDarkChrome ? 0.94 : 0.96)
+        Color(nsColor: .windowBackgroundColor).opacity(usesDarkChrome ? 0.90 : 0.94)
     }
 
     var floatingPanelWash: Color {
-        Color.primary.opacity(usesDarkChrome ? 0.026 : 0.018)
+        Color.primary.opacity(usesDarkChrome ? 0.016 : 0.010)
     }
 
     var floatingControlFill: Color {
@@ -131,7 +131,7 @@ enum TerminalTheme: String, CaseIterable, Codable, Identifiable {
     }
 
     var floatingSeparator: Color {
-        floatingStroke.opacity(0.55)
+        floatingStroke.opacity(0.38)
     }
 
     var floatingEmphasis: Color {

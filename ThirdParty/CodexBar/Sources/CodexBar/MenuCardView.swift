@@ -354,7 +354,7 @@ private struct ConductorUsageMenuCardView: View {
                             .foregroundStyle(style.secondaryText)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.28 : 0.42))
+                            .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.20 : 0.30))
                             .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
                 }
@@ -396,7 +396,7 @@ private struct ConductorUsageMenuCardView: View {
             .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.22 : 0.30))
             .overlay {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
+                    .stroke(style.stroke.opacity(0.14), lineWidth: 0.7)
             }
     }
 }
@@ -464,11 +464,11 @@ private struct ConductorUsageMetricTile: View {
         .padding(9)
         .background {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.24 : 0.34))
+                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.18 : 0.26))
         }
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(style.stroke.opacity(0.26), lineWidth: 0.7)
+                .stroke(style.stroke.opacity(0.14), lineWidth: 0.7)
         }
     }
 }
@@ -520,11 +520,11 @@ private struct ConductorUsageDetailTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.20 : 0.34))
+                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.15 : 0.24))
         }
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(style.stroke.opacity(0.22), lineWidth: 0.7)
+                .stroke(style.stroke.opacity(0.12), lineWidth: 0.7)
         }
     }
 }
@@ -814,6 +814,17 @@ private struct UsageNotesContent: View {
     }
 }
 
+private struct UsageMenuSectionBreak: View {
+    var body: some View {
+        if ConductorUsageMenuStyle.current != nil {
+            Color.clear
+                .frame(height: 4)
+        } else {
+            Divider()
+        }
+    }
+}
+
 struct UsageMenuCardHeaderSectionView: View {
     let model: UsageMenuCardView.Model
     let showDivider: Bool
@@ -824,7 +835,7 @@ struct UsageMenuCardHeaderSectionView: View {
             UsageMenuCardHeaderView(model: self.model)
 
             if self.showDivider {
-                Divider()
+                UsageMenuSectionBreak()
             }
         }
         .padding(.horizontal, 16)
@@ -867,7 +878,7 @@ struct UsageMenuCardUsageSectionView: View {
                 }
             }
             if self.showBottomDivider {
-                Divider()
+                UsageMenuSectionBreak()
             }
         }
         .padding(.horizontal, 16)
@@ -894,7 +905,7 @@ struct UsageMenuCardCreditsSectionView: View {
                     hintCopyText: self.model.creditsHintCopyText,
                     progressColor: self.model.progressColor)
                 if self.showBottomDivider {
-                    Divider()
+                    UsageMenuSectionBreak()
                 }
             }
             .padding(.horizontal, 16)

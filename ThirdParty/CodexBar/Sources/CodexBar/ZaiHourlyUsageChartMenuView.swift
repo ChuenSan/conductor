@@ -179,19 +179,30 @@ struct ZaiHourlyUsageChartMenuView: View {
                         .foregroundColor(.primary)
                 }
             }
-            Divider()
-                .background(Color.primary.opacity(0.15))
+            if ConductorUsageMenuStyle.current == nil {
+                Divider()
+            } else {
+                Color.clear.frame(height: 2)
+            }
             Text(self.formatTokenCount(bar.totalTokens))
                 .font(.system(size: 10, weight: .bold))
                 .foregroundColor(.primary)
         }
         .padding(6)
         .frame(minWidth: 90, maxWidth: 140)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.95))
+        .background(tooltipBackground)
         .background(.ultraThinMaterial)
         .cornerRadius(6)
         .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
         .offset(y: -self.barHeight - 8)
+    }
+
+    private var tooltipBackground: Color {
+        if let style = ConductorUsageMenuStyle.current {
+            style.panelBase.opacity(style.usesDarkChrome ? 0.78 : 0.84)
+        } else {
+            Color(nsColor: .controlBackgroundColor).opacity(0.90)
+        }
     }
 
     private var legend: some View {

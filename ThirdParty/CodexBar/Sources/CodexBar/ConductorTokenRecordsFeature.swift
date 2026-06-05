@@ -43,11 +43,11 @@ public struct ConductorUsagePanelStyle: @unchecked Sendable {
 
     public static let fallback = ConductorUsagePanelStyle(
         panelBase: Color(nsColor: .windowBackgroundColor),
-        panelWash: Color(nsColor: .controlBackgroundColor).opacity(0.42),
-        controlFill: Color(nsColor: .controlBackgroundColor).opacity(0.62),
-        controlStrongFill: Color(nsColor: .controlBackgroundColor).opacity(0.86),
-        stroke: Color(nsColor: .separatorColor).opacity(0.8),
-        separator: Color(nsColor: .separatorColor).opacity(0.72),
+        panelWash: Color.primary.opacity(0.010),
+        controlFill: Color.primary.opacity(0.020),
+        controlStrongFill: Color.primary.opacity(0.032),
+        stroke: Color.primary.opacity(0.075),
+        separator: Color.primary.opacity(0.040),
         emphasis: .accentColor,
         primaryText: .primary,
         secondaryText: .secondary,

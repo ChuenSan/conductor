@@ -112,18 +112,18 @@ extension AppearanceFontFamily {
 
 enum ConductorTokens {
     enum Chrome {
-        static let separatorOpacity: Double = 0.055
-        static let separatorOpacityDark: Double = 0.095
-        static let structuralSeparatorOpacity: Double = 0.10
-        static let structuralSeparatorOpacityDark: Double = 0.14
+        static let separatorOpacity: Double = 0.040
+        static let separatorOpacityDark: Double = 0.070
+        static let structuralSeparatorOpacity: Double = 0.075
+        static let structuralSeparatorOpacityDark: Double = 0.110
         static let hoverOpacity: Double = 0.030
         static let hoverOpacityDark: Double = 0.040
         static let selectionOpacity: Double = 0.070
         static let selectionOpacityDark: Double = 0.105
-        static let controlFillOpacity: Double = 0.026
-        static let controlFillOpacityDark: Double = 0.034
-        static let controlStrongFillOpacity: Double = 0.042
-        static let controlStrongFillOpacityDark: Double = 0.052
+        static let controlFillOpacity: Double = 0.020
+        static let controlFillOpacityDark: Double = 0.028
+        static let controlStrongFillOpacity: Double = 0.032
+        static let controlStrongFillOpacityDark: Double = 0.042
         static let dropTargetFillOpacity: Double = 0.075
         static let dropTargetFillOpacityDark: Double = 0.095
         static let dropTargetStrokeOpacity: Double = 0.46
