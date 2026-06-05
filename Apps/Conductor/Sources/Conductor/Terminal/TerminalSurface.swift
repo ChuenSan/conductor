@@ -13,6 +13,11 @@ struct TerminalScrollbarState: Equatable, Sendable {
     }
 }
 
+enum TerminalSurfaceUserActivityReason: Equatable, Sendable {
+    case focus
+    case input
+}
+
 extension Notification.Name {
     static let terminalSurfaceDidUpdateScrollbar = Notification.Name("terminalSurfaceDidUpdateScrollbar")
     static let terminalSurfaceDidUpdateCellSize = Notification.Name("terminalSurfaceDidUpdateCellSize")
@@ -36,7 +41,7 @@ final class TerminalSurface {
     let id: TerminalID
     let hostView: TerminalHostView
     var onFocusRequest: (@MainActor (TerminalID) -> Void)?
-    var onUserActivity: (@MainActor (TerminalID) -> Void)?
+    var onUserActivity: (@MainActor (TerminalID, TerminalSurfaceUserActivityReason) -> Void)?
     var onContextMenuRequest: (@MainActor (TerminalID, NSEvent, NSView) -> Bool)?
     var onTerminalTabDropRequest: (@MainActor (TerminalID, TerminalID, TerminalTabDropTarget) -> Bool)?
     var onTerminalTabDropTargetChange: (@MainActor (TerminalID, TerminalTabDropTarget?) -> Void)?
@@ -326,11 +331,11 @@ final class TerminalSurface {
 
     func requestWorkspaceFocus() {
         onFocusRequest?(id)
-        onUserActivity?(id)
+        onUserActivity?(id, .focus)
     }
 
     func recordUserActivity() {
-        onUserActivity?(id)
+        onUserActivity?(id, .input)
     }
 
     func enqueueScrollbarUpdate(_ scrollbar: TerminalScrollbarState) {

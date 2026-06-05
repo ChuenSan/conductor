@@ -341,6 +341,7 @@ final class TerminalHostView: NSView, @preconcurrency NSTextInputClient {
             return
         }
 
+        surface?.recordUserActivity()
         surface?.sendText(text)
     }
 
