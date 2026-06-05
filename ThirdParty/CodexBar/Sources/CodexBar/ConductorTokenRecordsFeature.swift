@@ -1825,52 +1825,40 @@ private struct ConductorSummaryNode: View {
     let style: ConductorUsagePanelStyle
 
     var body: some View {
-        HStack(spacing: 9) {
-            ZStack {
-                Circle()
-                    .stroke(style.separator.opacity(0.28), lineWidth: 5)
-                Circle()
-                    .trim(from: 0, to: revealed ? ringAmount : 0)
-                    .stroke(style.emphasis.opacity(0.82), style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                Circle()
-                    .fill(style.emphasis.opacity(0.16))
-                    .frame(width: 9, height: 9)
-            }
-            .frame(width: 34, height: 34)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(style.tertiaryText)
-                    .lineLimit(1)
-                Text(value)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(style.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-                Text(subtitle)
-                    .font(.system(size: 9.8, weight: .medium))
-                    .foregroundStyle(style.tertiaryText)
-                    .lineLimit(1)
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.44 : 0.62))
-                .overlay(alignment: .bottomTrailing) {
-                    ConductorUsageCircuitOverlay(style: style)
-                        .opacity(0.14)
-                        .frame(width: 96, height: 52)
+        GroupBox {
+            HStack(spacing: 9) {
+                ZStack {
+                    Circle()
+                        .stroke(style.separator.opacity(0.28), lineWidth: 5)
+                    Circle()
+                        .trim(from: 0, to: revealed ? ringAmount : 0)
+                        .stroke(style.emphasis.opacity(0.82), style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Circle()
+                        .fill(style.emphasis.opacity(0.16))
+                        .frame(width: 9, height: 9)
                 }
+                .frame(width: 34, height: 34)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(style.tertiaryText)
+                        .lineLimit(1)
+                    Text(value)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(style.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                    Text(subtitle)
+                        .font(.system(size: 9.8, weight: .medium))
+                        .foregroundStyle(style.tertiaryText)
+                        .lineLimit(1)
+                }
+            }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(style.stroke.opacity(0.34), lineWidth: 0.7)
-        }
+        .groupBoxStyle(.automatic)
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
     }
 
     private var ringAmount: Double {
@@ -2231,90 +2219,83 @@ private struct ConductorUsageMetricTile: View {
     @State private var revealed = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ConductorGaugeDial(
-                percent: metric.statusText == nil ? metric.percent : 0,
-                tint: progressColor,
-                style: style,
-                revealed: revealed)
-                .frame(width: 74, height: 74)
+        GroupBox {
+            HStack(alignment: .top, spacing: 12) {
+                ConductorGaugeDial(
+                    percent: metric.statusText == nil ? metric.percent : 0,
+                    tint: progressColor,
+                    style: style,
+                    revealed: revealed)
+                    .frame(width: 74, height: 74)
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Text(codexBarLocalizedDisplayText(
-                        UsageMenuCardView.popupMetricTitle(provider: provider, metric: metric)))
-                        .font(.system(size: 12.2, weight: .bold))
-                        .foregroundStyle(style.primaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-                    Spacer(minLength: 0)
-                    if metric.statusText == nil {
-                        Text(metric.percentLabel)
-                            .font(.system(size: 10.5, weight: .bold))
-                            .foregroundStyle(style.secondaryText)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text(codexBarLocalizedDisplayText(
+                            UsageMenuCardView.popupMetricTitle(provider: provider, metric: metric)))
+                            .font(.system(size: 12.2, weight: .bold))
+                            .foregroundStyle(style.primaryText)
                             .lineLimit(1)
-                    }
-                }
-
-                if let statusText = metric.statusText {
-                    Text(codexBarLocalizedDisplayText(statusText))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(style.secondaryText)
-                        .lineLimit(2)
-                } else {
-                    ConductorSegmentedUsageTrack(
-                        percent: metric.percent,
-                        tint: progressColor,
-                        pacePercent: metric.pacePercent,
-                        warningMarkerPercents: metric.warningMarkerPercents,
-                        style: style,
-                        revealed: revealed)
-                        .frame(height: 18)
-
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        if let detailLeft = metric.detailLeftText {
-                            Text(codexBarLocalizedDisplayText(detailLeft))
-                                .font(.system(size: 10.5, weight: .semibold))
+                            .minimumScaleFactor(0.82)
+                        Spacer(minLength: 0)
+                        if metric.statusText == nil {
+                            Text(metric.percentLabel)
+                                .font(.system(size: 10.5, weight: .bold))
                                 .foregroundStyle(style.secondaryText)
                                 .lineLimit(1)
                         }
-                        Spacer(minLength: 0)
-                        if let resetText = metric.resetText {
-                            Text(codexBarLocalizedDisplayText(resetText))
-                                .font(.system(size: 10.5, weight: .medium))
+                    }
+
+                    if let statusText = metric.statusText {
+                        Text(codexBarLocalizedDisplayText(statusText))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(style.secondaryText)
+                            .lineLimit(2)
+                    } else {
+                        ConductorSegmentedUsageTrack(
+                            percent: metric.percent,
+                            tint: progressColor,
+                            pacePercent: metric.pacePercent,
+                            warningMarkerPercents: metric.warningMarkerPercents,
+                            style: style,
+                            revealed: revealed)
+                            .frame(height: 18)
+
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            if let detailLeft = metric.detailLeftText {
+                                Text(codexBarLocalizedDisplayText(detailLeft))
+                                    .font(.system(size: 10.5, weight: .semibold))
+                                    .foregroundStyle(style.secondaryText)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                            if let resetText = metric.resetText {
+                                Text(codexBarLocalizedDisplayText(resetText))
+                                    .font(.system(size: 10.5, weight: .medium))
+                                    .foregroundStyle(style.tertiaryText)
+                                    .lineLimit(1)
+                            }
+                        }
+
+                        if let detailText = metric.detailText {
+                            Text(codexBarLocalizedDisplayText(detailText))
+                                .font(.system(size: 10.2, weight: .medium))
+                                .foregroundStyle(style.tertiaryText)
+                                .lineLimit(1)
+                        }
+
+                        if let detailRight = metric.detailRightText {
+                            Text(codexBarLocalizedDisplayText(detailRight))
+                                .font(.system(size: 10.2, weight: .medium))
                                 .foregroundStyle(style.tertiaryText)
                                 .lineLimit(1)
                         }
                     }
-
-                    if let detailText = metric.detailText {
-                        Text(codexBarLocalizedDisplayText(detailText))
-                            .font(.system(size: 10.2, weight: .medium))
-                            .foregroundStyle(style.tertiaryText)
-                            .lineLimit(1)
-                    }
-
-                    if let detailRight = metric.detailRightText {
-                        Text(codexBarLocalizedDisplayText(detailRight))
-                            .font(.system(size: 10.2, weight: .medium))
-                            .foregroundStyle(style.tertiaryText)
-                            .lineLimit(1)
-                    }
                 }
+                .padding(.top, 2)
             }
-            .padding(.top, 2)
         }
-        .padding(10)
+        .groupBoxStyle(.automatic)
         .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.30 : 0.46))
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(style.stroke.opacity(0.26), lineWidth: 0.7)
-        }
         .onAppear {
             withAnimation(.spring(response: 0.58, dampingFraction: 0.82).delay(0.05)) {
                 revealed = true
