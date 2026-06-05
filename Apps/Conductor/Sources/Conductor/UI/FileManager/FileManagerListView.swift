@@ -32,7 +32,8 @@ struct FileManagerListView: View {
                         ) {
                             store.showPreviousVisibleWindow()
                         }
-                        .fileManagerListRow()
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 1, leading: 11, bottom: 1, trailing: 11))
                     }
 
                     ForEach(store.displaySnapshot.rows) { row in
@@ -87,7 +88,8 @@ struct FileManagerListView: View {
                         )
                         .transition(ConductorMotion.rowTransition(itemCount: store.displaySnapshot.rows.count))
                         .tag(row.item.url.path)
-                        .fileManagerListRow()
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 1, leading: 11, bottom: 1, trailing: 11))
                     }
 
                     if store.displaySnapshot.visibleRange.upperBound < store.displaySnapshot.totalRowCount {
@@ -97,7 +99,8 @@ struct FileManagerListView: View {
                         ) {
                             store.showNextVisibleWindow()
                         }
-                        .fileManagerListRow()
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 1, leading: 11, bottom: 1, trailing: 11))
                     }
                 }
                 .listStyle(.plain)
@@ -597,12 +600,4 @@ struct FileManagerRowView: View {
         theme.shellChromeText.opacity(isSelected ? 0.88 : 0.78)
     }
 
-}
-
-private extension View {
-    func fileManagerListRow() -> some View {
-        self
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 1, leading: 11, bottom: 1, trailing: 11))
-    }
 }

@@ -68,13 +68,24 @@ struct ProviderSettingsToggleRowView: View {
                 if !actions.isEmpty {
                     HStack(spacing: 10) {
                         ForEach(actions) { action in
-                            Button(codexBarLocalizedDisplayText(action.title)) {
-                                Task { @MainActor in
-                                    await action.perform()
+                            switch action.style {
+                            case .bordered:
+                                Button(codexBarLocalizedDisplayText(action.title)) {
+                                    Task { @MainActor in
+                                        await action.perform()
+                                    }
                                 }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            case .link:
+                                Button(codexBarLocalizedDisplayText(action.title)) {
+                                    Task { @MainActor in
+                                        await action.perform()
+                                    }
+                                }
+                                .buttonStyle(.link)
+                                .controlSize(.small)
                             }
-                            .applyProviderSettingsButtonStyle(action.style)
-                            .controlSize(.small)
                         }
                     }
                 }
@@ -187,13 +198,24 @@ struct ProviderSettingsFieldRowView: View {
             if !actions.isEmpty {
                 HStack(spacing: 10) {
                     ForEach(actions) { action in
-                        Button(codexBarLocalizedDisplayText(action.title)) {
-                            Task { @MainActor in
-                                await action.perform()
+                        switch action.style {
+                        case .bordered:
+                            Button(codexBarLocalizedDisplayText(action.title)) {
+                                Task { @MainActor in
+                                    await action.perform()
+                                }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        case .link:
+                            Button(codexBarLocalizedDisplayText(action.title)) {
+                                Task { @MainActor in
+                                    await action.perform()
+                                }
+                            }
+                            .buttonStyle(.link)
+                            .controlSize(.small)
                         }
-                        .applyProviderSettingsButtonStyle(action.style)
-                        .controlSize(.small)
                     }
                 }
             }
@@ -228,13 +250,24 @@ struct ProviderSettingsActionsRowView: View {
             if !actions.isEmpty {
                 HStack(spacing: 10) {
                     ForEach(actions) { action in
-                        Button(codexBarLocalizedDisplayText(action.title)) {
-                            Task { @MainActor in
-                                await action.perform()
+                        switch action.style {
+                        case .bordered:
+                            Button(codexBarLocalizedDisplayText(action.title)) {
+                                Task { @MainActor in
+                                    await action.perform()
+                                }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        case .link:
+                            Button(codexBarLocalizedDisplayText(action.title)) {
+                                Task { @MainActor in
+                                    await action.perform()
+                                }
+                            }
+                            .buttonStyle(.link)
+                            .controlSize(.small)
                         }
-                        .applyProviderSettingsButtonStyle(action.style)
-                        .controlSize(.small)
                     }
                 }
             }
@@ -373,18 +406,6 @@ struct ProviderSettingsTokenAccountsRowView: View {
         guard accountCount > 0 else { return false }
         let selectedIndex = min(self.descriptor.activeIndex(), max(0, accountCount - 1))
         return selectedIndex == index
-    }
-}
-
-extension View {
-    @ViewBuilder
-    fileprivate func applyProviderSettingsButtonStyle(_ style: ProviderSettingsActionDescriptor.Style) -> some View {
-        switch style {
-        case .bordered:
-            self.buttonStyle(.bordered)
-        case .link:
-            self.buttonStyle(.link)
-        }
     }
 }
 
