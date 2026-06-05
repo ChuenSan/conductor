@@ -128,15 +128,14 @@ final class ProviderSwitcherView: NSView {
         func makeButton(index: Int, segment: Segment) -> NSButton {
             let button: NSButton
             if self.stackedIcons {
-                let stacked = StackedToggleButton(
+                let stacked = NSButton(
                     title: segment.title,
                     image: segment.image,
                     target: self,
                     action: #selector(self.handleSelection(_:)))
-                stacked.setAllowsTwoLineTitle(self.rowCount >= 3)
-                if self.rowCount >= 4 {
-                    stacked.setTitleFontSize(NSFont.smallSystemFontSize - 3)
-                }
+                stacked.imagePosition = .imageAbove
+                stacked.imageScaling = .scaleNone
+                self.configureStackedButtonCell(stacked, title: segment.title)
                 button = stacked
             } else if self.showsIcons {
                 let inline = NSButton(
@@ -170,7 +169,7 @@ final class ProviderSwitcherView: NSView {
             button.bezelStyle = .regularSquare
             button.isBordered = false
             button.controlSize = .small
-            button.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+            button.font = self.buttonFont()
             button.setButtonType(.toggle)
             button.contentTintColor = self.unselectedTextColor
             button.alignment = .center
@@ -613,7 +612,6 @@ final class ProviderSwitcherView: NSView {
                     self.addQuotaIndicator(to: button, selection: segment.selection, remainingPercent: remaining)
                 }
             } else if let indicator = self.quotaIndicators.removeValue(forKey: key) {
-                Self.applyQuotaBarContentInset(to: button, height: 0)
                 indicator.track.removeFromSuperview()
                 continue
             }
@@ -644,7 +642,6 @@ final class ProviderSwitcherView: NSView {
                 self.unselectedBackground
             }
             self.updateQuotaIndicatorVisibility(for: button)
-            (button as? StackedToggleButton)?.setContentTintColor(button.contentTintColor)
         }
     }
 
@@ -771,10 +768,8 @@ final class ProviderSwitcherView: NSView {
         desiredWidths.reserveCapacity(self.buttons.count)
 
         for (index, button) in self.buttons.enumerated() {
-            if self.stackedIcons,
-               self.segments.indices.contains(index)
-            {
-                let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+            if self.stackedIcons, self.segments.indices.contains(index) {
+                let font = self.buttonFont()
                 let titleWidth = ceil(
                     (self.segments[index].title as NSString).size(withAttributes: [.font: font])
                         .width)
@@ -914,12 +909,29 @@ final class ProviderSwitcherView: NSView {
     private static func switcherTitle(for provider: UsageProvider) -> String {
         ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName
     }
+
+    private func buttonFont() -> NSFont {
+        if self.stackedIcons {
+            let size = self.rowCount >= 4
+                ? NSFont.smallSystemFontSize - 3
+                : NSFont.smallSystemFontSize - 2
+            return NSFont.systemFont(ofSize: size)
+        }
+        return NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+    }
+
+    private func configureStackedButtonCell(_ button: NSButton, title: String) {
+        let allowWrap = self.rowCount >= 3
+            && title.rangeOfCharacter(from: .whitespacesAndNewlines) != nil
+        button.alignment = .center
+        button.cell?.wraps = allowWrap
+        button.cell?.lineBreakMode = allowWrap ? .byWordWrapping : .byTruncatingTail
+    }
 }
 
 extension ProviderSwitcherView {
     private func addQuotaIndicator(to view: NSView, selection: ProviderSwitcherSelection, remainingPercent: Double?) {
         guard let remainingPercent else { return }
-        Self.applyQuotaBarContentInset(to: view)
 
         let track = NSView()
         track.wantsLayer = true
@@ -965,13 +977,6 @@ extension ProviderSwitcherView {
             fillWidthConstraint: fillWidthConstraint,
             fillRatio: ratio)
         self.updateQuotaIndicatorVisibility(for: view)
-    }
-
-    fileprivate static func applyQuotaBarContentInset(
-        to view: NSView,
-        height: CGFloat = quotaIndicatorReservedHeight)
-    {
-        (view as? StackedToggleButton)?.setQuotaBarReservedHeight(height)
     }
 
     private func updateQuotaIndicatorVisibility(for view: NSView) {
