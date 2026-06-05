@@ -1628,46 +1628,35 @@ private struct ConductorSignalInfoCard: View {
     let style: ConductorUsagePanelStyle
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.48))
+        GroupBox {
+            HStack(alignment: .center, spacing: 10) {
                 Image(systemName: systemName)
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(style.secondaryText)
+                    .frame(width: 30, height: 30)
                     .accessibilityHidden(true)
-            }
-            .frame(width: 30, height: 30)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(style.tertiaryText)
-                    .lineLimit(1)
-                Text(primary)
-                    .font(.system(size: 12.2, weight: .bold, design: .rounded))
-                    .foregroundStyle(style.primaryText)
-                    .lineLimit(1)
-                if let secondary, !secondary.isEmpty {
-                    Text(secondary)
-                        .font(.system(size: 10.2, weight: .medium))
-                        .foregroundStyle(style.secondaryText)
-                        .lineLimit(2)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(style.tertiaryText)
+                        .lineLimit(1)
+                    Text(primary)
+                        .font(.system(size: 12.2, weight: .bold, design: .rounded))
+                        .foregroundStyle(style.primaryText)
+                        .lineLimit(1)
+                    if let secondary, !secondary.isEmpty {
+                        Text(secondary)
+                            .font(.system(size: 10.2, weight: .medium))
+                            .foregroundStyle(style.secondaryText)
+                            .lineLimit(2)
+                    }
                 }
-            }
 
-            Spacer(minLength: 6)
+                Spacer(minLength: 6)
+            }
         }
-        .padding(10)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.28 : 0.40))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
-                }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .groupBoxStyle(.automatic)
     }
 }
 
@@ -1677,48 +1666,41 @@ private struct ConductorCostSignalCard: View {
     @State private var revealed = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            ConductorMiniArc(
-                percent: section.percentUsed ?? 0,
-                style: style,
-                revealed: revealed)
-                .frame(width: 48, height: 48)
+        GroupBox {
+            HStack(alignment: .center, spacing: 12) {
+                ConductorMiniArc(
+                    percent: section.percentUsed ?? 0,
+                    style: style,
+                    revealed: revealed)
+                    .frame(width: 48, height: 48)
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(codexBarLocalizedDisplayText(section.title))
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(style.tertiaryText)
-                    .lineLimit(1)
-                Text(codexBarLocalizedDisplayText(section.spendLine))
-                    .font(.system(size: 12.4, weight: .bold, design: .rounded))
-                    .foregroundStyle(style.primaryText)
-                    .lineLimit(1)
-                if let percentLine = section.percentLine {
-                    Text(codexBarLocalizedDisplayText(percentLine))
-                        .font(.system(size: 10.2, weight: .medium))
-                        .foregroundStyle(style.secondaryText)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(codexBarLocalizedDisplayText(section.title))
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(style.tertiaryText)
                         .lineLimit(1)
+                    Text(codexBarLocalizedDisplayText(section.spendLine))
+                        .font(.system(size: 12.4, weight: .bold, design: .rounded))
+                        .foregroundStyle(style.primaryText)
+                        .lineLimit(1)
+                    if let percentLine = section.percentLine {
+                        Text(codexBarLocalizedDisplayText(percentLine))
+                            .font(.system(size: 10.2, weight: .medium))
+                            .foregroundStyle(style.secondaryText)
+                            .lineLimit(1)
+                    }
                 }
+
+                Spacer(minLength: 6)
+
+                ConductorMicroRail(
+                    percent: section.percentUsed ?? 0,
+                    style: style,
+                    revealed: revealed)
+                    .frame(width: 110, height: 26)
             }
-
-            Spacer(minLength: 6)
-
-            ConductorMicroRail(
-                percent: section.percentUsed ?? 0,
-                style: style,
-                revealed: revealed)
-                .frame(width: 110, height: 26)
         }
-        .padding(10)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.28 : 0.40))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
-                }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .groupBoxStyle(.automatic)
         .onAppear {
             withAnimation(.spring(response: 0.58, dampingFraction: 0.84).delay(0.05)) {
                 revealed = true
@@ -1732,50 +1714,41 @@ private struct ConductorTokenUsageSignalCard: View {
     let style: ConductorUsagePanelStyle
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
-                Image(systemName: "chart.xyaxis.line")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(style.secondaryText)
-                    .frame(width: 24, height: 24)
-                    .background(style.controlStrongFill.opacity(style.usesDarkChrome ? 0.34 : 0.48))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .accessibilityHidden(true)
-                Text(codexBarLocalizedDisplayText(L("cost_header_estimated")))
-                    .font(.system(size: 10.8, weight: .bold))
-                    .foregroundStyle(style.tertiaryText)
-                Spacer()
-            }
-
-            HStack(spacing: 7) {
-                ConductorTokenLinePill(text: section.sessionLine, style: style, prominent: true)
-                ConductorTokenLinePill(text: section.monthLine, style: style, prominent: false)
-            }
-
-            if let hint = section.hintLine, !hint.isEmpty {
-                Text(codexBarLocalizedDisplayText(hint))
-                    .font(.system(size: 10.2, weight: .medium))
-                    .foregroundStyle(style.secondaryText)
-                    .lineLimit(2)
-            }
-
-            if let error = section.errorLine, !error.isEmpty {
-                Text(codexBarLocalizedDisplayText(error))
-                    .font(.system(size: 10.2, weight: .semibold))
-                    .foregroundStyle(Color(nsColor: .systemRed))
-                    .lineLimit(2)
-            }
-        }
-        .padding(10)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.28 : 0.40))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(style.stroke.opacity(0.24), lineWidth: 0.7)
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: "chart.xyaxis.line")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(style.secondaryText)
+                        .frame(width: 24, height: 24)
+                        .accessibilityHidden(true)
+                    Text(codexBarLocalizedDisplayText(L("cost_header_estimated")))
+                        .font(.system(size: 10.8, weight: .bold))
+                        .foregroundStyle(style.tertiaryText)
+                    Spacer()
                 }
+
+                HStack(spacing: 7) {
+                    ConductorTokenLinePill(text: section.sessionLine, style: style, prominent: true)
+                    ConductorTokenLinePill(text: section.monthLine, style: style, prominent: false)
+                }
+
+                if let hint = section.hintLine, !hint.isEmpty {
+                    Text(codexBarLocalizedDisplayText(hint))
+                        .font(.system(size: 10.2, weight: .medium))
+                        .foregroundStyle(style.secondaryText)
+                        .lineLimit(2)
+                }
+
+                if let error = section.errorLine, !error.isEmpty {
+                    Text(codexBarLocalizedDisplayText(error))
+                        .font(.system(size: 10.2, weight: .semibold))
+                        .foregroundStyle(Color(nsColor: .systemRed))
+                        .lineLimit(2)
+                }
+            }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .groupBoxStyle(.automatic)
     }
 }
 
@@ -1792,8 +1765,6 @@ private struct ConductorTokenLinePill: View {
             .minimumScaleFactor(0.72)
             .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
-            .background(style.controlStrongFill.opacity(prominent ? 0.48 : 0.32))
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
