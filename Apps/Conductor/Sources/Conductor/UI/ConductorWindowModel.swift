@@ -51,7 +51,7 @@ struct TerminalDisplayMetadata: Equatable {
     }
 }
 
-enum TerminalContextMenuAction {
+private enum TerminalContextMenuAction {
     case renameTerminal
     case restoreTerminalTitle
     case duplicateTerminal
@@ -713,6 +713,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         guard appearance.density != density else { return }
         syncAppearanceCoordinatorFromPublished()
         appearanceCoordinator.setDensity(density)
+        publishAppearanceState()
+    }
+
+    func setChromeClarity(_ chromeClarity: ChromeClarity) {
+        guard appearance.chromeClarity != chromeClarity else { return }
+        syncAppearanceCoordinatorFromPublished()
+        appearanceCoordinator.setChromeClarity(chromeClarity)
         publishAppearanceState()
     }
 
@@ -3573,18 +3580,6 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
 
         NSMenu.popUpContextMenu(menu, with: event, for: view)
         return true
-    }
-
-    @discardableResult
-    func performTerminalContextMenuAction(_ action: TerminalContextMenuAction, terminalID: TerminalID) -> Bool {
-        guard let target = terminalContextMenuTarget(for: terminalID) else { return false }
-        focusTerminal(terminalID)
-        return performTerminalContextMenuAction(
-            action,
-            terminalID: terminalID,
-            workspaceID: target.workspaceID,
-            window: NSApp.keyWindow ?? NSApp.mainWindow
-        )
     }
 
     @discardableResult

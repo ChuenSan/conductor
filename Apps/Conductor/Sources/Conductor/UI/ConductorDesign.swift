@@ -111,65 +111,44 @@ extension AppearanceFontFamily {
 }
 
 enum ConductorTokens {
-    enum Chrome {
-        static let separatorOpacity: Double = 0.055
-        static let separatorOpacityDark: Double = 0.095
-        static let structuralSeparatorOpacity: Double = 0.10
-        static let structuralSeparatorOpacityDark: Double = 0.14
-        static let hoverOpacity: Double = 0.030
-        static let hoverOpacityDark: Double = 0.040
-        static let selectionOpacity: Double = 0.070
-        static let selectionOpacityDark: Double = 0.105
-        static let controlFillOpacity: Double = 0.026
-        static let controlFillOpacityDark: Double = 0.034
-        static let controlStrongFillOpacity: Double = 0.042
-        static let controlStrongFillOpacityDark: Double = 0.052
-        static let dropTargetFillOpacity: Double = 0.075
-        static let dropTargetFillOpacityDark: Double = 0.095
-        static let dropTargetStrokeOpacity: Double = 0.46
-        static let dropTargetStrokeOpacityDark: Double = 0.54
-        static let focusRingOpacity: Double = 0.58
-        static let focusRingOpacityDark: Double = 0.68
-
-        static func separator(dark: Bool) -> Color {
-            Color.primary.opacity(dark ? separatorOpacityDark : separatorOpacity)
-        }
-
-        static func structuralSeparator(dark: Bool) -> Color {
-            Color.primary.opacity(dark ? structuralSeparatorOpacityDark : structuralSeparatorOpacity)
-        }
-
-        static func hover(dark: Bool) -> Color {
-            Color.primary.opacity(dark ? hoverOpacityDark : hoverOpacity)
-        }
-
-        static func selection(dark: Bool) -> Color {
-            Color.accentColor.opacity(dark ? selectionOpacityDark : selectionOpacity)
-        }
-
-        static func dropTargetFill(dark: Bool) -> Color {
-            Color.accentColor.opacity(dark ? dropTargetFillOpacityDark : dropTargetFillOpacity)
-        }
-
-        static func dropTargetStroke(dark: Bool) -> Color {
-            Color.accentColor.opacity(dark ? dropTargetStrokeOpacityDark : dropTargetStrokeOpacity)
-        }
-
-        static func focusRing(dark: Bool) -> Color {
-            Color.accentColor.opacity(dark ? focusRingOpacityDark : focusRingOpacity)
-        }
-    }
-
     enum Palette {
+        static let window = Color(red: 0.933, green: 0.949, blue: 0.969)
+        static let canvas = Color(red: 0.933, green: 0.949, blue: 0.969)
+        static let floatingPanelFallback = Color.white.opacity(0.62)
+        static let floatingPanelStrong = Color.white.opacity(0.82)
+        static let glassTint = Color.white.opacity(0.30)
+        static let glassTintStrong = Color.white.opacity(0.48)
+        static let glassTintOnDark = Color.white.opacity(0.035)
+        static let glassStroke = Color.white.opacity(0.60)
+        static let glassStrokeSubtle = Color.white.opacity(0.34)
+        static let glassShadow = Color.black.opacity(0.22)
+        static let terminalRaised = Color(red: 0.024, green: 0.035, blue: 0.052)
+        static let terminalChrome = Color(red: 0.047, green: 0.071, blue: 0.106)
+        static let terminalChromeSelected = Color.clear
+        static let terminalText = Color(red: 0.894, green: 0.918, blue: 0.953)
+        static let terminalTextMuted = Color(red: 0.494, green: 0.537, blue: 0.612)
+        static let splitGutter = Color(red: 0.063, green: 0.090, blue: 0.125)
+
         static let textPrimary = Color.primary
         static let textSecondary = Color.secondary
         static let textTertiary = Color.secondary.opacity(0.68)
+
+        static let selectedFill = Color.black.opacity(0.042)
+        static let inactiveFill = Color.white.opacity(0.58)
+        static let subtleFill = Color.white.opacity(0.36)
+        static let hoverFill = Color.black.opacity(0.040)
+
+        static let strokeSubtle = Color.black.opacity(0.075)
+        static let strokeMedium = Color.black.opacity(0.120)
+        static let strokeOnDark = Color.white.opacity(0.12)
+        static let warmAccent = Color(red: 0.850, green: 0.470, blue: 0.020)
     }
 
     enum Radius {
-        static let sidebar: CGFloat = 10
-        static let panel: CGFloat = 8
-        static let commandPalette: CGFloat = 8
+        static let sidebar: CGFloat = 12
+        static let panel: CGFloat = 12
+        static let commandPalette: CGFloat = 12
+        static let card: CGFloat = 8
         static let controlGroup: CGFloat = 8
         static let control: CGFloat = 6
         static let workspaceTab: CGFloat = 7
@@ -218,59 +197,280 @@ enum ConductorTokens {
     }
 
     enum Shadow {
-        static let panelOpacity = 0.045
-        static let panelRadius: CGFloat = 14
-        static let panelY: CGFloat = 6
-        static let controlOpacity = 0.018
+        static let panelOpacity = 0.22
+        static let panelRadius: CGFloat = 28
+        static let panelY: CGFloat = 12
+        static let controlOpacity = 0.025
         static let controlRadius: CGFloat = 5
         static let controlY: CGFloat = 1
-        static let selectedOpacity = 0.018
+        static let selectedOpacity = 0.035
         static let selectedRadius: CGFloat = 6
         static let selectedY: CGFloat = 1
     }
+}
 
-    enum Settings {
-        static func panelWash(dark: Bool) -> Color {
-            Color.primary.opacity(dark ? 0.018 : 0.010)
+enum ConductorGlassSurfaceStyle: Equatable {
+    case sidebar
+    case settings
+    case palette
+    case panel
+    case card
+    case controlGroup
+    case terminalToolbar
+
+    var radius: CGFloat {
+        switch self {
+        case .sidebar, .settings:
+            ConductorTokens.Radius.sidebar
+        case .palette:
+            ConductorTokens.Radius.commandPalette
+        case .panel:
+            ConductorTokens.Radius.panel
+        case .card:
+            ConductorTokens.Radius.card
+        case .controlGroup:
+            ConductorTokens.Radius.controlGroup
+        case .terminalToolbar:
+            ConductorTokens.Radius.terminalPane
         }
+    }
 
-        static func sidebarWash(dark: Bool) -> Color {
-            Color.primary.opacity(dark ? 0.026 : 0.014)
+    var fallbackMaterial: Material {
+        switch self {
+        case .sidebar, .settings, .palette, .panel:
+            .regularMaterial
+        case .card, .controlGroup:
+            .thinMaterial
+        case .terminalToolbar:
+            .ultraThinMaterial
         }
+    }
 
-        static func panelChromeWash(dark: Bool) -> Color {
-            Color.primary.opacity(dark ? 0.020 : 0.012)
+    var tint: Color {
+        switch self {
+        case .sidebar:
+            ConductorTokens.Palette.glassTintStrong
+        case .settings:
+            Color.white.opacity(0.12)
+        case .palette, .panel:
+            ConductorTokens.Palette.glassTint
+        case .card:
+            Color.white.opacity(0.20)
+        case .controlGroup:
+            ConductorTokens.Palette.glassTintOnDark
+        case .terminalToolbar:
+            Color.white.opacity(0.045)
         }
+    }
 
-        static func panelStroke(dark: Bool) -> Color {
-            ConductorTokens.Chrome.structuralSeparator(dark: dark).opacity(dark ? 0.62 : 0.52)
+    var stroke: Color {
+        switch self {
+        case .sidebar, .settings, .palette, .panel:
+            ConductorTokens.Palette.glassStroke
+        case .card:
+            ConductorTokens.Palette.glassStrokeSubtle
+        case .controlGroup, .terminalToolbar:
+            ConductorTokens.Palette.strokeOnDark.opacity(0.50)
         }
+    }
 
-        static func panelShadow(dark: Bool) -> Color {
-            Color(nsColor: .shadowColor).opacity(dark ? 0.20 : 0.11)
+    var shadow: Color {
+        switch self {
+        case .controlGroup, .terminalToolbar:
+            ConductorDesign.shadow(ConductorTokens.Shadow.controlOpacity)
+        case .card:
+            ConductorDesign.shadow(0.055)
+        case .sidebar, .settings, .palette, .panel:
+            ConductorTokens.Palette.glassShadow
         }
+    }
 
-        static func subtleSeparator(dark: Bool) -> Color {
-            ConductorTokens.Chrome.separator(dark: dark).opacity(0.58)
+    var shadowRadius: CGFloat {
+        switch self {
+        case .controlGroup, .terminalToolbar:
+            ConductorTokens.Shadow.controlRadius
+        case .card:
+            8
+        case .sidebar, .settings, .palette, .panel:
+            ConductorTokens.Shadow.panelRadius
+        }
+    }
+
+    var shadowY: CGFloat {
+        switch self {
+        case .controlGroup, .terminalToolbar:
+            ConductorTokens.Shadow.controlY
+        case .card:
+            4
+        case .sidebar, .settings, .palette, .panel:
+            ConductorTokens.Shadow.panelY
         }
     }
 }
 
+struct ConductorGlassSurface<Content: View>: View {
+    let style: ConductorGlassSurfaceStyle
+    var clarity = ChromeClarity.balanced
+    var interactive = false
+    @ViewBuilder var content: Content
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        content
+            .background {
+                surfaceFill
+            }
+            .clipShape(surfaceShape)
+            .overlay {
+                surfaceShape
+                    .strokeBorder(resolvedStroke, lineWidth: clarity == .crisp ? 1.15 : 1)
+                    .allowsHitTesting(false)
+            }
+            .overlay(alignment: .topLeading) {
+                if drawsSpecularHighlight {
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(topHighlightOpacity * clarity.highlightMultiplier),
+                            Color.white.opacity(midHighlightOpacity * clarity.highlightMultiplier),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(surfaceShape)
+                    .allowsHitTesting(false)
+                }
+            }
+            .shadow(color: style.shadow, radius: style.shadowRadius, x: 0, y: style.shadowY)
+    }
+
+    private var surfaceShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: style.radius, style: .continuous)
+    }
+
+    private var resolvedTint: Color {
+        switch style {
+        case .sidebar:
+            theme.shellPanelBackground.opacity(clarity.glassTintMultiplier)
+        case .settings, .palette, .panel:
+            theme.floatingPanelWash.opacity(clarity.glassTintMultiplier)
+        case .card, .controlGroup, .terminalToolbar:
+            style.tint.opacity(clarity.glassTintMultiplier)
+        }
+    }
+
+    private var resolvedStroke: Color {
+        switch style {
+        case .sidebar:
+            theme.shellStroke.opacity((theme.usesDarkChrome ? 0.42 : 0.50) * clarity.strokeMultiplier)
+        case .settings, .palette, .panel:
+            theme.floatingStroke.opacity(clarity.strokeMultiplier)
+        case .card, .controlGroup, .terminalToolbar:
+            style.stroke.opacity(clarity.strokeMultiplier)
+        }
+    }
+
+    private var topHighlightOpacity: Double {
+        if style == .settings || style == .palette || style == .panel {
+            return theme.usesDarkChrome ? 0.018 : 0.028
+        }
+        if theme.usesDarkChrome {
+            if style == .sidebar {
+                return 0.020
+            }
+            return style == .terminalToolbar ? 0.045 : 0.075
+        }
+        if style == .sidebar {
+            return 0.040
+        }
+        return style == .terminalToolbar ? 0.08 : 0.34
+    }
+
+    private var midHighlightOpacity: Double {
+        if style == .settings || style == .palette || style == .panel {
+            return theme.usesDarkChrome ? 0.006 : 0.010
+        }
+        if theme.usesDarkChrome {
+            return 0.012
+        }
+        return style == .sidebar ? 0.014 : 0.04
+    }
+
+    private var drawsSpecularHighlight: Bool {
+        clarity == .crisp || style == .terminalToolbar
+    }
+
+    @ViewBuilder
+    private var surfaceFill: some View {
+        if style == .palette {
+            surfaceShape
+                .fill(theme.floatingPanelBase)
+                .overlay {
+                    surfaceShape
+                        .fill(resolvedTint)
+                }
+        } else if style == .settings || style == .panel {
+            surfaceShape
+                .fill(theme.floatingPanelBase)
+        } else if style == .sidebar {
+            surfaceShape
+                .fill(theme.shellPanelBackground)
+        } else {
+            surfaceShape
+                .fill(style.fallbackMaterial)
+                .overlay {
+                    surfaceShape
+                        .fill(resolvedTint)
+                }
+        }
+    }
+}
+
+struct ConductorWindowBackdrop: View {
+    let theme: TerminalTheme
+
+    var body: some View {
+        Rectangle()
+            .fill(theme.windowBackdropStops[1])
+    }
+}
+
 enum ConductorDesign {
+    static let windowBackground = ConductorTokens.Palette.window
+    static let canvasBackground = ConductorTokens.Palette.canvas
+    static let sidebarBackground = ConductorTokens.Palette.floatingPanelFallback
+    static let sidebarBackgroundStrong = ConductorTokens.Palette.floatingPanelStrong
+    static let sidebarStroke = ConductorTokens.Palette.strokeSubtle
+    static let toolbarStroke = ConductorTokens.Palette.strokeSubtle
+    static let selectedFill = ConductorTokens.Palette.selectedFill
+    static let inactiveFill = ConductorTokens.Palette.inactiveFill
+    static let subtleFill = ConductorTokens.Palette.subtleFill
+    static let hoverFill = ConductorTokens.Palette.hoverFill
     static let primaryText = ConductorTokens.Palette.textPrimary
     static let secondaryText = ConductorTokens.Palette.textSecondary
     static let tertiaryText = ConductorTokens.Palette.textTertiary
+    static let terminalChrome = ConductorTokens.Palette.terminalChrome
+    static let terminalChromeSelected = ConductorTokens.Palette.terminalChromeSelected
+    static let terminalText = ConductorTokens.Palette.terminalText
+    static let terminalTextMuted = ConductorTokens.Palette.terminalTextMuted
+    static let divider = ConductorTokens.Palette.strokeMedium
+    static let splitGutter = ConductorTokens.Palette.splitGutter
+    static let warmAccent = ConductorTokens.Palette.warmAccent
 
     static let shellLeadingPadding = ConductorTokens.Space.shellLeading
     static let shellTrailingPadding = ConductorTokens.Space.shellTrailing
     static let shellTopPadding = ConductorTokens.Space.shellTop
     static let shellBottomPadding = ConductorTokens.Space.shellBottom
     static let shellGap = ConductorTokens.Space.shellGap
+    static let shellJoinerWidth = ConductorTokens.Space.shellJoinerWidth
     static let sidebarWidth = ConductorTokens.Space.sidebarWidth
     static let sidebarCollapsedWidth = ConductorTokens.Space.sidebarCollapsedWidth
     static let sidebarCollapsedBodyWidth = ConductorTokens.Space.sidebarCollapsedBodyWidth
     static let sidebarCollapsedCapHeight = ConductorTokens.Space.sidebarCollapsedCapHeight
+    static let sidebarCornerRadius = ConductorTokens.Radius.sidebar
     static let toolbarHeight = ConductorTokens.Space.toolbarHeight
+    static let statusBarHeight = ConductorTokens.Space.statusHeight
+    static let terminalCanvasInset = ConductorTokens.Space.terminalInset
 
     static func sidebarWidth(for appearance: AppearancePreferences) -> CGFloat {
         appearance.density.sidebarWidth
@@ -278,6 +478,10 @@ enum ConductorDesign {
 
     static func toolbarHeight(for appearance: AppearancePreferences) -> CGFloat {
         appearance.density.toolbarHeight
+    }
+
+    static func shadow(_ opacity: Double = 0.10, radius: CGFloat = 16, y: CGFloat = 8) -> Color {
+        Color.black.opacity(opacity)
     }
 }
 
@@ -481,6 +685,503 @@ enum ConductorMotion {
 
 }
 
+extension View {
+    func conductorCascade(
+        index: Int,
+        itemCount: Int,
+        edge: Edge = .top,
+        distance: CGFloat = 10,
+        scale: CGFloat = 0.988
+    ) -> some View {
+        _ = (index, itemCount, edge, distance, scale)
+        return self
+    }
+
+    func conductorFocusRing<Value: Equatable>(
+        color: Color,
+        cornerRadius: CGFloat,
+        active: Bool,
+        trigger: Value
+    ) -> some View {
+        modifier(
+            ConductorFocusRingModifier(
+                color: color,
+                cornerRadius: cornerRadius,
+                active: active,
+                trigger: trigger
+            )
+        )
+    }
+
+    func conductorHover(
+        _ hovering: Binding<Bool>,
+        animation: Animation? = ConductorMotion.hover
+    ) -> some View {
+        modifier(ConductorHoverStateModifier(hovering: hovering, animation: animation))
+    }
+}
+
+private struct ConductorHoverStateModifier: ViewModifier {
+    @Binding var hovering: Bool
+    let animation: Animation?
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { value in
+                guard hovering != value else { return }
+                ConductorMotion.perform(animation) {
+                    hovering = value
+                }
+            }
+    }
+}
+
+private enum ConductorFocusRingPhase: CaseIterable {
+    case rest
+    case flare
+    case settle
+
+    var ringOpacity: Double {
+        switch self {
+        case .rest:
+            return 0.42
+        case .flare:
+            return 0.68
+        case .settle:
+            return 0.48
+        }
+    }
+
+    var lineWidth: CGFloat {
+        switch self {
+        case .flare:
+            return 1.55
+        case .rest, .settle:
+            return 1.25
+        }
+    }
+}
+
+private struct ConductorFocusRingModifier<Value: Equatable>: ViewModifier {
+    let color: Color
+    let cornerRadius: CGFloat
+    let active: Bool
+    let trigger: Value
+
+    func body(content: Content) -> some View {
+        if active, ConductorMotion.shouldAnimateDecorative(itemCount: 1) {
+            content
+                .overlay {
+                    ConductorFocusRingOverlay(
+                        color: color,
+                        cornerRadius: cornerRadius,
+                        active: true,
+                        phase: .rest
+                    )
+                    .phaseAnimator(ConductorFocusRingPhase.allCases, trigger: trigger) { _, phase in
+                        ConductorFocusRingOverlay(
+                            color: color,
+                            cornerRadius: cornerRadius,
+                            active: true,
+                            phase: phase
+                        )
+                    } animation: { phase in
+                        switch phase {
+                        case .rest:
+                            return ConductorMotion.micro
+                        case .flare:
+                            return ConductorMotion.attention
+                        case .settle:
+                            return ConductorMotion.standard
+                        }
+                    }
+                }
+        } else {
+            content
+                .overlay {
+                    ConductorFocusRingOverlay(
+                        color: color,
+                        cornerRadius: cornerRadius,
+                        active: active,
+                        phase: .settle
+                    )
+                }
+        }
+    }
+}
+
+private struct ConductorFocusRingOverlay: View {
+    let color: Color
+    let cornerRadius: CGFloat
+    let active: Bool
+    let phase: ConductorFocusRingPhase
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .stroke(color.opacity(active ? phase.ringOpacity : 0), lineWidth: phase.lineWidth)
+            .padding(1)
+            .allowsHitTesting(false)
+    }
+}
+
+struct ConductorPressButtonStyle: ButtonStyle {
+    var pressedScale: CGFloat = 0.992
+    var pressedOpacity: Double = 0.98
+
+    private var effectivePressedScale: CGFloat {
+        max(pressedScale, 0.97)
+    }
+
+    private var effectivePressedOpacity: Double {
+        max(pressedOpacity, 0.94)
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? effectivePressedScale : 1)
+            .opacity(configuration.isPressed ? effectivePressedOpacity : 1)
+            .animation(ConductorMotion.press, value: configuration.isPressed)
+            .transaction { transaction in
+                transaction.animation = ConductorMotion.press
+                transaction.disablesAnimations = ConductorMotion.press == nil
+            }
+    }
+}
+
+private final class MacNativeTooltipView: NSView {
+    var text: String = "" {
+        didSet {
+            updateHoverStateFromWindowMouse()
+            if isHovering {
+                showTooltip()
+            }
+        }
+    }
+
+    private var isHovering = false
+    private var trackingAreaToken: NSTrackingArea?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    override func layout() {
+        super.layout()
+        rebuildTrackingArea()
+        updateHoverStateFromWindowMouse()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        rebuildTrackingArea()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        isHovering = true
+        showTooltip()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        updateHoverStateFromWindowMouse()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        isHovering = false
+        closeTooltip()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil {
+            closeTooltip()
+        }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        rebuildTrackingArea()
+    }
+
+    private func rebuildTrackingArea() {
+        if let trackingAreaToken {
+            removeTrackingArea(trackingAreaToken)
+        }
+        guard !bounds.isEmpty else {
+            trackingAreaToken = nil
+            return
+        }
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        trackingAreaToken = trackingArea
+        addTrackingArea(trackingArea)
+    }
+
+    private func updateHoverStateFromWindowMouse() {
+        guard !text.isEmpty, let window else {
+            isHovering = false
+            closeTooltip()
+            return
+        }
+        let localPoint = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        let nowHovering = bounds.contains(localPoint)
+        if nowHovering && !isHovering {
+            isHovering = true
+            showTooltip()
+        } else if isHovering {
+            isHovering = false
+            closeTooltip()
+        }
+    }
+
+    private func showTooltip() {
+        ConductorTooltipPanelManager.shared.show(text: text, relativeTo: self)
+    }
+
+    private func closeTooltip() {
+        ConductorTooltipPanelManager.shared.hide(for: self)
+    }
+}
+
+private struct MacNativeTooltipInstaller: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> MacNativeTooltipView {
+        let view = MacNativeTooltipView(frame: .zero)
+        view.text = text
+        return view
+    }
+
+    func updateNSView(_ nsView: MacNativeTooltipView, context: Context) {
+        nsView.text = text
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func macNativeTooltip(_ text: String, enabled: Bool = true) -> some View {
+        if enabled && !text.isEmpty {
+            self
+                .overlay {
+                    GeometryReader { _ in
+                        MacNativeTooltipInstaller(text: text)
+                    }
+                }
+        } else {
+            self
+        }
+    }
+}
+
+@MainActor
+private final class ConductorTooltipPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+@MainActor
+private final class ConductorTooltipPanelManager {
+    static let shared = ConductorTooltipPanelManager()
+
+    private weak var sourceView: NSView?
+    private var panel: ConductorTooltipPanel?
+    private var eventMonitor: Any?
+    private var pendingShowWorkItem: DispatchWorkItem?
+    private let initialTooltipDelay: TimeInterval = 0.34
+    private let followUpTooltipDelay: TimeInterval = 0.09
+
+    func show(text: String, relativeTo view: NSView) {
+        pendingShowWorkItem?.cancel()
+        guard !text.isEmpty, !view.bounds.isEmpty, view.window != nil else {
+            hide()
+            return
+        }
+
+        let delay = panel?.isVisible == true ? followUpTooltipDelay : initialTooltipDelay
+        let workItem = DispatchWorkItem { [weak self, weak view] in
+            Task { @MainActor in
+                guard let self, let view else { return }
+                self.showImmediately(text: text, relativeTo: view)
+            }
+        }
+        pendingShowWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func showImmediately(text: String, relativeTo view: NSView) {
+        pendingShowWorkItem = nil
+        guard !text.isEmpty,
+              !view.bounds.isEmpty,
+              let sourceWindow = view.window,
+              let screen = sourceWindow.screen ?? NSScreen.main else {
+            hide()
+            return
+        }
+        let localMousePoint = view.convert(sourceWindow.mouseLocationOutsideOfEventStream, from: nil)
+        guard view.bounds.contains(localMousePoint) else {
+            hide()
+            return
+        }
+
+        let viewController = ConductorNativeTooltipContentViewController(text: text)
+        viewController.loadViewIfNeeded()
+        let fittingSize = viewController.view.fittingSize
+        let size = NSSize(
+            width: min(260, max(48, fittingSize.width)),
+            height: max(28, fittingSize.height)
+        )
+
+        let anchorInWindow = view.convert(view.bounds, to: nil)
+        let anchorInScreen = sourceWindow.convertToScreen(anchorInWindow)
+        let visibleFrame = screen.visibleFrame
+        let spacing: CGFloat = 7
+        var origin = NSPoint(
+            x: anchorInScreen.midX - size.width / 2,
+            y: anchorInScreen.minY - size.height - spacing
+        )
+
+        if origin.y < visibleFrame.minY {
+            origin.y = anchorInScreen.maxY + spacing
+        }
+        origin.x = min(
+            max(origin.x, visibleFrame.minX + 6),
+            visibleFrame.maxX - size.width - 6
+        )
+
+        let panel = self.panel ?? makePanel()
+        self.panel = panel
+        sourceView = view
+        panel.contentViewController = viewController
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+        panel.orderFrontRegardless()
+        installEventMonitorIfNeeded()
+    }
+
+    func hide(for view: NSView) {
+        guard sourceView === view else { return }
+        hide()
+    }
+
+    func hide() {
+        pendingShowWorkItem?.cancel()
+        pendingShowWorkItem = nil
+        panel?.orderOut(nil)
+        sourceView = nil
+        uninstallEventMonitor()
+    }
+
+    private func installEventMonitorIfNeeded() {
+        guard eventMonitor == nil else { return }
+        eventMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
+        ) { [weak self] event in
+            Task { @MainActor in
+                self?.hideIfMouseLeftSource()
+            }
+            return event
+        }
+    }
+
+    private func uninstallEventMonitor() {
+        guard let eventMonitor else { return }
+        NSEvent.removeMonitor(eventMonitor)
+        self.eventMonitor = nil
+    }
+
+    private func hideIfMouseLeftSource() {
+        guard let sourceView,
+              let sourceWindow = sourceView.window,
+              !sourceView.isHidden,
+              !sourceView.bounds.isEmpty else {
+            hide()
+            return
+        }
+        let localPoint = sourceView.convert(sourceWindow.mouseLocationOutsideOfEventStream, from: nil)
+        if !sourceView.bounds.contains(localPoint) {
+            hide()
+        }
+    }
+
+    private func makePanel() -> ConductorTooltipPanel {
+        let panel = ConductorTooltipPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 52, height: 30),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.ignoresMouseEvents = true
+        panel.hidesOnDeactivate = false
+        panel.level = .floating
+        panel.collectionBehavior = [.transient, .ignoresCycle]
+        return panel
+    }
+}
+
+private final class ConductorNativeTooltipContentViewController: NSViewController {
+    private let text: String
+
+    init(text: String) {
+        self.text = text
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        self.text = ""
+        super.init(coder: coder)
+    }
+
+    override func loadView() {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 11.5, weight: .medium)
+        label.textColor = NSColor.white.withAlphaComponent(0.92)
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 0.94).cgColor
+        container.layer?.cornerRadius = 7
+        container.layer?.masksToBounds = true
+        container.layer?.borderWidth = 1 / max(NSScreen.main?.backingScaleFactor ?? 2, 1)
+        container.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
+        container.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 9),
+            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -9),
+            label.topAnchor.constraint(equalTo: container.topAnchor, constant: 5),
+            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -5),
+            container.widthAnchor.constraint(lessThanOrEqualToConstant: 260),
+            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 48)
+        ])
+
+        view = container
+    }
+}
+
 struct ConductorVerticalFadeMask: View {
     var edgeHeight: CGFloat = 16
     var fadesTop = true
@@ -501,6 +1202,81 @@ struct ConductorVerticalFadeMask: View {
                 endPoint: .bottom
             )
         }
+    }
+}
+
+struct ConductorPillGroup<Content: View>: View {
+    @ViewBuilder var content: Content
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 1) {
+            content
+        }
+        .padding(2)
+        .background(theme.usesDarkChrome ? Color.white.opacity(0.018) : theme.shellControlFill.opacity(0.22))
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup - 2, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup - 2, style: .continuous)
+                .stroke(theme.usesDarkChrome ? Color.white.opacity(0.026) : theme.shellStroke.opacity(0.14), lineWidth: 0.6)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(2)
+    }
+}
+
+struct ConductorSegmentDivider: View {
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 0.5)
+            .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.24 : 0.15))
+            .frame(width: 1, height: 14)
+    }
+}
+
+struct ConductorTerminalToolbarSurface<Content: View>: View {
+    let theme: TerminalTheme
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .background {
+                ZStack {
+                    Rectangle()
+                        .fill(theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.88 : 0.72))
+                    LinearGradient(
+                        colors: [
+                            theme.terminalRaisedBackground.opacity(theme.usesDarkChrome ? 0.82 : 0.60),
+                            theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.54 : 0.42),
+                            theme.terminalBackground.opacity(theme.usesDarkChrome ? 0.70 : 0.56)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(theme.usesDarkChrome ? 0.012 : 0.018),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            }
+            .overlay(alignment: .bottom) {
+                LinearGradient(
+                    colors: [
+                        Color.clear,
+                        theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.30 : 0.22),
+                        Color.black.opacity(theme.usesDarkChrome ? 0.10 : 0.025),
+                        Color.clear
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                    .frame(height: 1)
+            }
     }
 }
 

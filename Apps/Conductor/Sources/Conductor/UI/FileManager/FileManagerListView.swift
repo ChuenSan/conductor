@@ -24,85 +24,84 @@ struct FileManagerListView: View {
             } else if store.displaySnapshot.totalRowCount == 0 {
                 panelMessage(systemImage: "line.3.horizontal.decrease", text: fileManagerL("没有匹配的文件", "No matching files"))
             } else {
-                List(selection: selectionBinding) {
-                    if store.displaySnapshot.visibleRange.lowerBound > 0 {
-                        windowButton(
-                            systemImage: "chevron.up",
-                            title: fileManagerL("显示上一组", "Show previous")
-                        ) {
-                            store.showPreviousVisibleWindow()
-                        }
-                        .fileManagerListRow()
-                    }
-
-                    ForEach(store.displaySnapshot.rows) { row in
-                        FileManagerRowView(
-                            item: row.item,
-                            depth: row.depth,
-                            isExpanded: store.isExpanded(row.item),
-                            isLoading: store.isLoading(row.item),
-                            isSelected: store.selectedPaths.contains(row.item.url.path),
-                            selectedCount: store.selectedPaths.contains(row.item.url.path) ? store.selectedCount : 1,
-                            isRenaming: store.renamingPath == row.item.url.path,
-                            isPendingDelete: store.isPendingDelete(row.item),
-                            renamingName: $store.renamingName,
-                            renamingFocusToken: store.renamingFocusToken,
-                            primaryAction: { primaryAction(row.item) },
-                            open: { activate(row.item) },
-                            toggleExpansion: { Task { await store.toggleDirectory(row.item, selectsItem: false) } },
-                            openInWorkspace: { openInWorkspace(row.item) },
-                            openInSystemApp: { NSWorkspace.shared.open(row.item.url) },
-                            copyPath: { copyPaths(itemsForBatch(default: row.item).map(\.url)) },
-                            copyName: { copyText(row.item.name) },
-                            copyDirectoryPath: { copyPath(row.item.url.deletingLastPathComponent()) },
-                            copyRelativePath: { copyText(relativePath(for: row.item.url)) },
-                            copyShellPath: { copyText(shellEscapedPath(row.item.url.path)) },
-                            copyFile: { copyFiles(itemsForBatch(default: row.item).map(\.url)) },
-                            cutFile: { cutFiles(itemsForBatch(default: row.item).map(\.url)) },
-                            paste: { paste(into: row.item) },
-                            duplicate: { Task { await store.duplicate(row.item) } },
-                            showInfo: { infoItem = row.item },
-                            rename: { store.beginRename(row.item) },
-                            commitRename: {
-                                Task {
-                                    if let result = await store.commitRename(row.item) {
-                                        model.updateWorkspaceFileTabs(
-                                            moving: result.oldPath,
-                                            to: result.newURL,
-                                            isDirectory: result.isDirectory
-                                        )
-                                    }
-                                }
-                            },
-                            cancelRename: { store.cancelRename() },
-                            delete: { store.markForDelete(itemsForBatch(default: row.item)) },
-                            canPaste: canPaste,
-                            insertPath: { _ = model.insertPathIntoFocusedTerminal(row.item.url) },
-                            insertCDCommand: { _ = model.insertCDCommandIntoFocusedTerminal(row.item.url) },
-                            insertListCommand: { _ = model.insertListCommandIntoFocusedTerminal(row.item.url) },
-                            reveal: { reveal(row.item.url) },
-                            dropFiles: { urls, move in
-                                Task { await store.pasteItems(urls, into: row.item, move: move) }
+                ScrollView {
+                    LazyVStack(spacing: 1) {
+                        if store.displaySnapshot.visibleRange.lowerBound > 0 {
+                            windowButton(
+                                systemImage: "chevron.up",
+                                title: fileManagerL("显示上一组", "Show previous")
+                            ) {
+                                store.showPreviousVisibleWindow()
                             }
-                        )
-                        .transition(ConductorMotion.rowTransition(itemCount: store.displaySnapshot.rows.count))
-                        .tag(row.item.url.path)
-                        .fileManagerListRow()
-                    }
-
-                    if store.displaySnapshot.visibleRange.upperBound < store.displaySnapshot.totalRowCount {
-                        windowButton(
-                            systemImage: "chevron.down",
-                            title: fileManagerL("显示下一组", "Show next")
-                        ) {
-                            store.showNextVisibleWindow()
                         }
-                        .fileManagerListRow()
+
+                        ForEach(store.displaySnapshot.rows) { row in
+                            FileManagerRowView(
+                                item: row.item,
+                                depth: row.depth,
+                                isExpanded: store.isExpanded(row.item),
+                                isLoading: store.isLoading(row.item),
+                                isSelected: store.selectedPaths.contains(row.item.url.path),
+                                selectedCount: store.selectedPaths.contains(row.item.url.path) ? store.selectedCount : 1,
+                                isRenaming: store.renamingPath == row.item.url.path,
+                                isPendingDelete: store.isPendingDelete(row.item),
+                                renamingName: $store.renamingName,
+                                renamingFocusToken: store.renamingFocusToken,
+                                primaryAction: { primaryAction(row.item) },
+                                open: { activate(row.item) },
+                                toggleExpansion: { Task { await store.toggleDirectory(row.item, selectsItem: false) } },
+                                openInWorkspace: { openInWorkspace(row.item) },
+                                openInSystemApp: { NSWorkspace.shared.open(row.item.url) },
+                                copyPath: { copyPaths(itemsForBatch(default: row.item).map(\.url)) },
+                                copyName: { copyText(row.item.name) },
+                                copyDirectoryPath: { copyPath(row.item.url.deletingLastPathComponent()) },
+                                copyRelativePath: { copyText(relativePath(for: row.item.url)) },
+                                copyShellPath: { copyText(shellEscapedPath(row.item.url.path)) },
+                                copyFile: { copyFiles(itemsForBatch(default: row.item).map(\.url)) },
+                                cutFile: { cutFiles(itemsForBatch(default: row.item).map(\.url)) },
+                                paste: { paste(into: row.item) },
+                                duplicate: { Task { await store.duplicate(row.item) } },
+                                showInfo: { infoItem = row.item },
+                                rename: { store.beginRename(row.item) },
+                                commitRename: {
+                                    Task {
+                                        if let result = await store.commitRename(row.item) {
+                                            model.updateWorkspaceFileTabs(
+                                                moving: result.oldPath,
+                                                to: result.newURL,
+                                                isDirectory: result.isDirectory
+                                            )
+                                        }
+                                    }
+                                },
+                                cancelRename: { store.cancelRename() },
+                                delete: { store.markForDelete(itemsForBatch(default: row.item)) },
+                                canPaste: canPaste,
+                                insertPath: { _ = model.insertPathIntoFocusedTerminal(row.item.url) },
+                                insertCDCommand: { _ = model.insertCDCommandIntoFocusedTerminal(row.item.url) },
+                                insertListCommand: { _ = model.insertListCommandIntoFocusedTerminal(row.item.url) },
+                                reveal: { reveal(row.item.url) },
+                                dropFiles: { urls, move in
+                                    Task { await store.pasteItems(urls, into: row.item, move: move) }
+                                }
+                            )
+                            .transition(ConductorMotion.rowTransition(itemCount: store.displaySnapshot.rows.count))
+                        }
+
+                        if store.displaySnapshot.visibleRange.upperBound < store.displaySnapshot.totalRowCount {
+                            windowButton(
+                                systemImage: "chevron.down",
+                                title: fileManagerL("显示下一组", "Show next")
+                            ) {
+                                store.showNextVisibleWindow()
+                            }
+                        }
                     }
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 10)
+                    .animation(ConductorMotion.list(itemCount: store.displaySnapshot.rows.count), value: store.displaySnapshot.rows.map(\.id))
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .animation(ConductorMotion.list(itemCount: store.displaySnapshot.rows.count), value: store.displaySnapshot.rows.map(\.id))
+                .scrollIndicators(.visible)
             }
         }
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: nil) { providers in
@@ -115,54 +114,36 @@ struct FileManagerListView: View {
         }
     }
 
-    private var selectionBinding: Binding<Set<String>> {
-        Binding(
-            get: { store.selectedPaths },
-            set: { store.selectFromList($0) }
-        )
-    }
-
     private func windowButton(systemImage: String, title: String, action: @escaping () -> Void) -> some View {
+        let directionID = systemImage == "chevron.up" ? "previous" : "next"
         let visibleRange = store.displaySnapshot.visibleRange
         let rangeText = "\(visibleRange.lowerBound + 1)-\(visibleRange.upperBound)/\(store.displaySnapshot.totalRowCount)"
 
-        return Button(action: action) {
-            LabeledContent {
-                Text(rangeText)
-                    .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .layoutPriority(1)
-            } label: {
-                Label(title, systemImage: systemImage)
-            }
-            .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .help(title)
-        .accessibilityLabel(title)
+        return ConductorCommandButton(
+            state: ConductorControlState(
+                id: "file-manager.visible-window.\(directionID)",
+                title: title,
+                systemImage: systemImage,
+                tooltip: title,
+                accessibilityLabel: title
+            ),
+            fillsWidth: true,
+            trailingText: rangeText,
+            action: action
+        )
     }
 
     private func panelMessage(systemImage: String, text: String) -> some View {
-        ContentUnavailableView {
-            Label(text, systemImage: systemImage)
-        } description: {
-            if store.isLoading {
-                Text(fileManagerL("正在读取目录内容", "Reading directory contents"))
-            }
+        VStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 22, weight: .medium, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.30))
+            Text(text)
+                .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.52))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
         }
-        .overlay(alignment: .topTrailing) {
-            if store.isLoading {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(14)
-            }
-        }
-        .font(.conductorSystem(size: 12, weight: .semibold, family: fontFamily, scale: fontScale))
-        .foregroundStyle(theme.shellChromeText.opacity(0.58))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -350,6 +331,7 @@ struct FileManagerRowView: View {
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorFontFamily) private var fontFamily
     @State private var isDropTargeted = false
+    @State private var hovering = false
 
     var body: some View {
         rowContent
@@ -411,19 +393,14 @@ struct FileManagerRowView: View {
         HStack(spacing: 8) {
             if item.isDirectory {
                 Button(action: toggleExpansion) {
-                    Label(
-                        isExpanded ? fileManagerL("收起文件夹", "Collapse Folder") : fileManagerL("展开文件夹", "Expand Folder"),
-                        systemImage: "chevron.right"
-                    )
+                    Image(systemName: "chevron.right")
                         .font(.conductorSystem(size: 8.5, weight: .bold, family: fontFamily, scale: fontScale))
                         .foregroundStyle(rowIconSecondaryColor)
-                        .labelStyle(.iconOnly)
                         .frame(width: 12, height: 22)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
-                .controlSize(.mini)
+                .buttonStyle(.plain)
                 .accessibilityLabel(isExpanded ? fileManagerL("收起文件夹", "Collapse Folder") : fileManagerL("展开文件夹", "Expand Folder"))
             } else {
                 Spacer()
@@ -436,6 +413,16 @@ struct FileManagerRowView: View {
         .padding(.leading, 10 + CGFloat(min(depth, 8)) * 18)
         .padding(.trailing, 10)
         .frame(height: 34)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(backgroundColor)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(rowStrokeColor, lineWidth: isSelected || isDropTargeted ? 0.6 : 0)
+        }
+        .conductorHover($hovering, animation: nil)
+        .animation(ConductorMotion.selection, value: isSelected)
         .animation(ConductorMotion.micro, value: isExpanded)
         .animation(ConductorMotion.micro, value: isDropTargeted)
     }
@@ -449,14 +436,14 @@ struct FileManagerRowView: View {
                 rowPrimaryContent
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .accessibilityLabel(rowAccessibilityLabel)
         } else {
             Button(action: primaryAction) {
                 rowPrimaryContent
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .simultaneousGesture(
                 TapGesture(count: 2).onEnded(open)
             )
@@ -466,16 +453,13 @@ struct FileManagerRowView: View {
 
     private var rowPrimaryContent: some View {
         HStack(spacing: 8) {
-            Label {
-                nameView
-            } icon: {
-                Image(systemName: item.isDirectory ? (isExpanded ? "folder.fill" : "folder") : iconName)
-                    .font(.conductorSystem(size: 12.5, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(rowIconColor)
-                    .frame(width: 18)
-                    .accessibilityHidden(true)
-            }
-            .labelStyle(.titleAndIcon)
+            Image(systemName: item.isDirectory ? (isExpanded ? "folder.fill" : "folder") : iconName)
+                .font(.conductorSystem(size: 12.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(rowIconColor)
+                .frame(width: 18)
+                .accessibilityHidden(true)
+
+            nameView
 
             Spacer(minLength: 8)
 
@@ -574,12 +558,12 @@ struct FileManagerRowView: View {
     }
 
     private func statusBadge(systemImage: String, help: String) -> some View {
-        Label(help, systemImage: systemImage)
-            .labelStyle(.iconOnly)
+        Image(systemName: systemImage)
             .font(.conductorSystem(size: 9.5, weight: .semibold, family: fontFamily, scale: fontScale))
             .foregroundStyle(theme.shellChromeText.opacity(0.42))
             .frame(width: 14, height: 16)
-            .help(help)
+            .accessibilityLabel(help)
+            .macNativeTooltip(help)
     }
 
     private var rowIconColor: Color {
@@ -590,19 +574,37 @@ struct FileManagerRowView: View {
     }
 
     private var rowIconSecondaryColor: Color {
-        theme.shellChromeText.opacity(isSelected ? 0.62 : 0.34)
+        theme.shellChromeText.opacity(isSelected ? 0.70 : 0.34)
     }
 
     private var rowTextColor: Color {
-        theme.shellChromeText.opacity(isSelected ? 0.88 : 0.78)
+        theme.shellChromeText.opacity(isSelected ? 0.94 : 0.78)
     }
 
-}
-
-private extension View {
-    func fileManagerListRow() -> some View {
-        self
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 1, leading: 11, bottom: 1, trailing: 11))
+    private var backgroundColor: Color {
+        if isPendingDelete {
+            return Color.red.opacity(isSelected ? 0.22 : 0.12)
+        }
+        if isDropTargeted {
+            return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.62 : 0.68)
+        }
+        if isSelected {
+            return theme.floatingSelectedFill.opacity(theme.usesDarkChrome ? 0.48 : 0.54)
+        }
+        if hovering {
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.34 : 0.24)
+        }
+        return Color.clear
     }
+
+    private var rowStrokeColor: Color {
+        if isDropTargeted {
+            return theme.floatingSelectedStroke.opacity(0.90)
+        }
+        if isSelected {
+            return theme.floatingSelectedStroke.opacity(theme.usesDarkChrome ? 0.58 : 0.48)
+        }
+        return .clear
+    }
+
 }

@@ -11,6 +11,8 @@ struct ConductorWebWorkspaceView: View {
     let snapshot: ConductorWebSnapshot
 
     @State private var addressText = ""
+    @State private var addressHovering = false
+    @State private var powerMenuHovering = false
     @State private var findVisible = false
     @State private var findText = ""
     @State private var findGeneration = 0
@@ -60,53 +62,65 @@ struct ConductorWebWorkspaceView: View {
                 addressField
 
                 if let tab = snapshot.tab, tab.url != nil {
-                    pageStatusLabel(tab)
+                    pageStatusPill(tab)
                     if let downloadState = tab.downloadState {
-                        downloadStatusMenu(tab: tab, state: downloadState)
+                        downloadStatusPill(tab: tab, state: downloadState)
                     }
                     if let runtimeEvent = latestActionableRuntimeEvent(in: tab) {
-                        runtimeEventMenu(tab: tab, event: runtimeEvent)
+                        runtimeEventPill(tab: tab, event: runtimeEvent)
                     }
                 }
 
-                ControlGroup {
+                ConductorPillGroup {
                     webIconButton("magnifyingglass", help: commandTooltip(L("查找页面", "Find in Page"), command: .showTerminalSearch, fallback: "Cmd-F"), enabled: model.canPerformCommand(.showTerminalSearch)) {
                         model.performCommand(.showTerminalSearch)
                     }
+
+                    ConductorSegmentDivider()
 
                     webIconButton("link", help: commandTooltip(L("复制链接", "Copy Link"), command: .copySelectedWebTabURL, fallback: "Copy"), enabled: model.canPerformCommand(.copySelectedWebTabURL)) {
                         model.performCommand(.copySelectedWebTabURL)
                     }
 
+                    ConductorSegmentDivider()
+
                     webIconButton("arrow.up.right.square", help: commandTooltip(L("在浏览器中打开", "Open in Browser"), command: .openSelectedWebTabExternally, fallback: "Browser"), enabled: model.canPerformCommand(.openSelectedWebTabExternally)) {
                         model.performCommand(.openSelectedWebTabExternally)
                     }
                 }
-                .controlGroupStyle(.automatic)
-                .fixedSize(horizontal: true, vertical: false)
 
                 powerMenu
             }
             .padding(.horizontal, 12)
             .frame(height: 40)
-            .overlay(alignment: .bottomLeading) {
+            .background(theme.terminalChrome.opacity(theme.usesDarkChrome ? 0.48 : 0.20))
+
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.30 : 0.16))
+                    .frame(height: 1)
+
                 if snapshot.tab?.isLoading == true {
                     loadingProgressLine
                 }
             }
+            .frame(height: 2)
         }
-        .background(.regularMaterial)
     }
 
     private var navigationCluster: some View {
-        ControlGroup {
+        ConductorPillGroup {
             webIconButton("chevron.left", help: commandTooltip(L("后退", "Back"), command: .goBackSelectedWebTab, fallback: "Back"), enabled: model.canPerformCommand(.goBackSelectedWebTab)) {
                 model.performCommand(.goBackSelectedWebTab)
             }
 
+            ConductorSegmentDivider()
+
             webIconButton("chevron.right", help: commandTooltip(L("前进", "Forward"), command: .goForwardSelectedWebTab, fallback: "Forward"), enabled: model.canPerformCommand(.goForwardSelectedWebTab)) {
                 model.performCommand(.goForwardSelectedWebTab)
             }
+
+            ConductorSegmentDivider()
 
             webIconButton(
                 snapshot.tab?.isLoading == true ? "xmark" : "arrow.clockwise",
@@ -116,8 +130,6 @@ struct ConductorWebWorkspaceView: View {
                 model.performCommand(.reloadSelectedWebTab)
             }
         }
-        .controlGroupStyle(.automatic)
-        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var addressField: some View {
@@ -129,8 +141,9 @@ struct ConductorWebWorkspaceView: View {
                 .accessibilityHidden(true)
 
             TextField(L("输入网址或搜索", "Search or enter address"), text: $addressText)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 12.2, weight: .medium, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.94))
                 .focused($addressFocused)
                 .onSubmit(submitAddress)
                 .disabled(snapshot.tab == nil)
@@ -139,22 +152,30 @@ struct ConductorWebWorkspaceView: View {
                 Button {
                     addressText = ""
                 } label: {
-                    Label(L("清空地址栏", "Clear address field"), systemImage: "xmark.circle.fill")
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeTextMuted.opacity(0.62))
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .controlSize(.small)
+                .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
                 .accessibilityLabel(L("清空地址栏", "Clear address field"))
             }
         }
+        .padding(.horizontal, 10)
         .frame(maxWidth: .infinity)
         .frame(height: 28)
-        .contentShape(Rectangle())
+        .background(addressFieldBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(addressStroke, lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onTapGesture {
             startAddressFocused = false
             addressFocused = true
         }
-        .help(commandTooltip(L("聚焦地址栏", "Focus Address Bar"), command: .focusWebAddress, fallback: "Cmd-L"))
+        .macNativeTooltip(commandTooltip(L("聚焦地址栏", "Focus Address Bar"), command: .focusWebAddress, fallback: "Cmd-L"))
+        .conductorHover($addressHovering)
     }
 
     private var powerMenu: some View {
@@ -202,21 +223,27 @@ struct ConductorWebWorkspaceView: View {
                 .disabled(clipboardAddressText() == nil)
             }
         } label: {
-            Label(L("网页操作", "Web Actions"), systemImage: "ellipsis")
+            Image(systemName: "ellipsis")
                 .font(.conductorSystem(size: 10.8, weight: .semibold, family: fontFamily, scale: fontScale))
-                .labelStyle(.iconOnly)
+                .foregroundStyle(powerMenuHovering ? theme.floatingEmphasis : theme.shellChromeText.opacity(0.70))
                 .frame(width: 28, height: 28)
+                .background(powerMenuHovering ? theme.shellHoverFill.opacity(0.72) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.34 : 0.22))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(theme.shellStroke.opacity(powerMenuHovering ? 0.38 : 0.20), lineWidth: 1)
+                }
         }
         .menuStyle(.button)
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .help(L("网页操作", "Web Actions"))
+        .buttonStyle(.plain)
+        .macNativeTooltip(L("网页操作", "Web Actions"))
         .accessibilityLabel(L("网页操作", "Web Actions"))
+        .conductorHover($powerMenuHovering)
     }
 
     private var loadingProgressLine: some View {
         GeometryReader { proxy in
-            Rectangle()
+            Capsule()
                 .fill(theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.82 : 0.70))
                 .frame(width: max(18, proxy.size.width * CGFloat(clampedProgress)))
                 .frame(height: 2)
@@ -271,11 +298,7 @@ struct ConductorWebWorkspaceView: View {
         GeometryReader { proxy in
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
-                    Image(systemName: "globe")
-                        .font(.conductorSystem(size: 21, weight: .semibold, family: fontFamily, scale: fontScale))
-                        .foregroundStyle(theme.floatingEmphasis.opacity(0.86))
-                        .frame(width: 30, height: 30)
-                        .accessibilityHidden(true)
+                    WebStartGlyph(systemImage: "globe", emphasis: theme.floatingEmphasis)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L("网页", "Web"))
                             .font(.conductorSystem(size: 17, weight: .semibold, family: fontFamily, scale: fontScale))
@@ -333,8 +356,9 @@ struct ConductorWebWorkspaceView: View {
                 .accessibilityHidden(true)
 
             TextField(L("输入网址、端口或搜索", "Enter URL, port, or search"), text: $addressText)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 15, weight: .medium, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.94))
                 .focused($startAddressFocused)
                 .onSubmit {
                     submitStartAddress(tab)
@@ -343,17 +367,32 @@ struct ConductorWebWorkspaceView: View {
             Button {
                 submitStartAddress(tab)
             } label: {
-                Label(L("打开", "Open"), systemImage: "arrow.right")
-                    .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
+                HStack(spacing: 5) {
+                    Text(L("打开", "Open"))
+                        .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
+                    Image(systemName: "arrow.right")
+                        .font(.conductorSystem(size: 10.5, weight: .bold, family: fontFamily, scale: fontScale))
+                }
+                .foregroundStyle(theme.shellChromeText.opacity(addressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.30 : 0.88))
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.36 : 0.26))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
             .disabled(addressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .accessibilityLabel(L("打开", "Open"))
         }
-        .padding(.leading, 4)
-        .padding(.trailing, 0)
+        .padding(.leading, 14)
+        .padding(.trailing, 7)
         .frame(height: 48)
+        .background(theme.shellPanelStrong.opacity(theme.usesDarkChrome ? 0.52 : 0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(startAddressFocused ? theme.floatingEmphasis.opacity(0.50) : theme.shellStroke.opacity(0.24), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.10 : 0.04), radius: 10, y: 4)
     }
 
     private func recentWebTabs(tab: WorkspaceWebTabState) -> some View {
@@ -381,16 +420,28 @@ struct ConductorWebWorkspaceView: View {
         systemImage: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        GroupBox {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.68))
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.conductorSystem(size: 10.8, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.76))
+                    .textCase(.uppercase)
+            }
+
             content()
-                .padding(.top, 2)
-        } label: {
-            Label(title, systemImage: systemImage)
-                .font(.conductorSystem(size: 10.8, weight: .semibold, family: fontFamily, scale: fontScale))
-                .foregroundStyle(theme.shellChromeTextMuted.opacity(0.78))
         }
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .groupBoxStyle(.automatic)
+        .background(theme.shellPanelStrong.opacity(theme.usesDarkChrome ? 0.34 : 0.54))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.16 : 0.24), lineWidth: 1)
+        }
     }
 
     private func launchShortcut(
@@ -400,32 +451,40 @@ struct ConductorWebWorkspaceView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Label {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(title)
-                            .font(.conductorSystem(size: 12.2, weight: .semibold, family: fontFamily, scale: fontScale))
-                            .lineLimit(1)
-                        Text(subtitle)
-                            .font(.conductorSystem(size: 10.1, weight: .medium, family: fontFamily, scale: fontScale))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                } icon: {
-                    Image(systemName: systemImage)
-                        .font(.conductorSystem(size: 12.5, weight: .semibold, family: fontFamily, scale: fontScale))
+            VStack(alignment: .leading, spacing: 9) {
+                Image(systemName: systemImage)
+                    .font(.conductorSystem(size: 12.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis.opacity(0.86))
+                    .frame(width: 22, height: 22)
+                    .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.38 : 0.22))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.conductorSystem(size: 12.2, weight: .semibold, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.88))
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.conductorSystem(size: 10.1, weight: .medium, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeTextMuted.opacity(0.62))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+            .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.24 : 0.16))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(alignment: .topTrailing) {
                 Image(systemName: "arrow.up.forward")
                     .font(.conductorSystem(size: 8.5, weight: .bold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.42))
+                    .padding(9)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.992, pressedOpacity: 0.96))
     }
 
     private func recentTabRow(_ recent: WorkspaceWebTabState) -> some View {
@@ -433,34 +492,38 @@ struct ConductorWebWorkspaceView: View {
             model.selectWorkspaceWebTab(recent.id)
         } label: {
             HStack(spacing: 9) {
-                Label {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(recent.displayTitle)
-                            .font(.conductorSystem(size: 11.6, weight: .medium, family: fontFamily, scale: fontScale))
-                            .lineLimit(1)
+                Image(systemName: recent.errorMessage == nil ? "globe" : "exclamationmark.triangle")
+                    .font(.conductorSystem(size: 10.8, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.68))
+                    .frame(width: 18)
+                    .accessibilityHidden(true)
 
-                        Text(recent.hostDisplay ?? "")
-                            .font(.conductorSystem(size: 9.8, weight: .medium, family: fontFamily, scale: fontScale))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                } icon: {
-                    Image(systemName: recent.errorMessage == nil ? "globe" : "exclamationmark.triangle")
-                        .font(.conductorSystem(size: 10.8, weight: .semibold, family: fontFamily, scale: fontScale))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(recent.displayTitle)
+                        .font(.conductorSystem(size: 11.6, weight: .medium, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(0.84))
+                        .lineLimit(1)
+
+                    Text(recent.hostDisplay ?? "")
+                        .font(.conductorSystem(size: 9.8, weight: .medium, family: fontFamily, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeTextMuted.opacity(0.58))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
 
                 Spacer(minLength: 8)
 
                 Image(systemName: "arrow.right")
                     .font(.conductorSystem(size: 8.8, weight: .bold, family: fontFamily, scale: fontScale))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.42))
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 9)
             .frame(height: 38)
+            .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.22 : 0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.992, pressedOpacity: 0.96))
     }
 
     private var terminalFallback: some View {
@@ -471,23 +534,33 @@ struct ConductorWebWorkspaceView: View {
 
     private func errorState(tab: WorkspaceWebTabState, message: String) -> some View {
         VStack(spacing: 14) {
-            ContentUnavailableView {
-                Label(L("页面没有打开", "Page Did Not Open"), systemImage: "exclamationmark.triangle")
-            } description: {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.conductorSystem(size: 26, weight: .semibold, family: fontFamily, scale: fontScale))
+                .foregroundStyle(Color(nsColor: .systemOrange).opacity(0.86))
+
+            VStack(spacing: 4) {
+                Text(L("页面没有打开", "Page Did Not Open"))
+                    .font(.conductorSystem(size: 17, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(0.92))
+
                 Text(tab.url?.absoluteString ?? tab.pendingAddress)
+                    .font(.conductorSystem(size: 11.2, weight: .medium, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.74))
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .frame(maxWidth: 420)
 
                 Text(message)
+                    .font(.conductorSystem(size: 11, weight: .medium, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.64))
                     .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
             }
-            .font(.conductorSystem(size: 12, weight: .medium, family: fontFamily, scale: fontScale))
-            .foregroundStyle(theme.shellChromeText.opacity(0.86))
-            .frame(maxWidth: 420)
 
             errorAddressField(tab)
 
-            ControlGroup {
+            HStack(spacing: 8) {
                 errorActionButton(L("重试", "Retry"), systemImage: "arrow.clockwise") {
                     model.performCommand(.reloadSelectedWebTab)
                 }
@@ -500,11 +573,16 @@ struct ConductorWebWorkspaceView: View {
                 }
                 .disabled(!model.canPerformCommand(.copySelectedWebTabURL))
             }
-            .controlSize(.small)
         }
         .padding(22)
         .frame(width: 480)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ConductorTokens.Radius.panel, style: .continuous))
+        .background(theme.shellPanelStrong.opacity(theme.usesDarkChrome ? 0.88 : 0.96))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(theme.shellStroke.opacity(0.16), lineWidth: 0.6)
+        }
+        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.08 : 0.035), radius: 8, y: 3)
     }
 
     private func errorAddressField(_ tab: WorkspaceWebTabState) -> some View {
@@ -515,8 +593,9 @@ struct ConductorWebWorkspaceView: View {
                 .accessibilityHidden(true)
 
             TextField(L("修改地址", "Edit address"), text: $addressText)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 11.6, weight: .medium, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.90))
                 .onSubmit {
                     navigate(tab, to: addressText)
                 }
@@ -526,20 +605,45 @@ struct ConductorWebWorkspaceView: View {
             } label: {
                 Image(systemName: "arrow.right")
                     .font(.conductorSystem(size: 9.5, weight: .bold, family: fontFamily, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeText.opacity(0.74))
                     .frame(width: 22, height: 22)
+                    .background(theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.32 : 0.22))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
             .accessibilityLabel(L("打开地址", "Open Address"))
         }
+        .padding(.horizontal, 10)
         .frame(maxWidth: 420)
         .frame(height: 34)
+        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.34 : 0.20))
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(theme.shellStroke.opacity(0.22), lineWidth: 1)
+        }
     }
 
     private func errorActionButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.conductorSystem(size: 11, weight: .semibold, family: fontFamily, scale: fontScale))
+            }
+            .foregroundStyle(theme.shellChromeText.opacity(0.82))
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.42 : 0.24))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(theme.shellStroke.opacity(0.24), lineWidth: 1)
+            }
         }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
     }
 
     private var findBar: some View {
@@ -550,32 +654,36 @@ struct ConductorWebWorkspaceView: View {
                 .accessibilityHidden(true)
 
             TextField(L("查找页面", "Find in Page"), text: $findText)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 11.5, weight: .medium, family: fontFamily, scale: fontScale))
+                .foregroundStyle(theme.shellChromeText.opacity(0.92))
                 .focused($findFocused)
                 .onSubmit {
                     runFind(backwards: false)
                 }
                 .frame(width: 180)
 
-            ControlGroup {
-                webIconButton("chevron.up", help: commandTooltip(L("上一个", "Previous"), command: .findPrevious, fallback: "Cmd-Shift-G"), enabled: !findText.isEmpty) {
-                    model.performCommand(.findPrevious)
-                }
-
-                webIconButton("chevron.down", help: commandTooltip(L("下一个", "Next"), command: .findNext, fallback: "Cmd-G"), enabled: !findText.isEmpty) {
-                    model.performCommand(.findNext)
-                }
-
-                webIconButton("xmark", help: L("关闭查找", "Close Find")) {
-                    hideFind()
-                }
+            webIconButton("chevron.up", help: commandTooltip(L("上一个", "Previous"), command: .findPrevious, fallback: "Cmd-Shift-G"), enabled: !findText.isEmpty) {
+                model.performCommand(.findPrevious)
             }
-            .controlSize(.small)
+
+            webIconButton("chevron.down", help: commandTooltip(L("下一个", "Next"), command: .findNext, fallback: "Cmd-G"), enabled: !findText.isEmpty) {
+                model.performCommand(.findNext)
+            }
+
+            webIconButton("xmark", help: L("关闭查找", "Close Find")) {
+                hideFind()
+            }
         }
         .padding(.horizontal, 8)
         .frame(height: 34)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+        .background(theme.shellPanelStrong.opacity(theme.usesDarkChrome ? 0.90 : 0.94))
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(theme.shellStroke.opacity(0.18), lineWidth: 0.6)
+        }
+        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.06 : 0.025), radius: 4, y: 2)
     }
 
     private func webIconButton(
@@ -584,13 +692,15 @@ struct ConductorWebWorkspaceView: View {
         enabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
-            Label(help, systemImage: systemImage)
-        }
-        .labelStyle(.iconOnly)
-        .disabled(!enabled)
-        .help(help)
-        .accessibilityLabel(help)
+        ConductorIconButton(
+            state: ConductorControlState(
+                id: "web-\(systemImage)-\(help)",
+                systemImage: systemImage,
+                isEnabled: enabled,
+                tooltip: help,
+                accessibilityLabel: help
+            ),
+            action: action)
     }
 
     private func commandTooltip(_ title: String, command: ConductorShellCommand, fallback: String) -> String {
@@ -632,25 +742,46 @@ struct ConductorWebWorkspaceView: View {
         return theme.shellChromeText.opacity(0.52)
     }
 
-    private func pageStatusLabel(_ tab: WorkspaceWebTabState) -> some View {
-        Label {
+    private var addressFieldBackground: Color {
+        if addressFocused {
+            return theme.shellPanelStrong.opacity(theme.usesDarkChrome ? 0.62 : 0.50)
+        }
+        if addressHovering {
+            return theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.52 : 0.30)
+        }
+        return theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.42 : 0.22)
+    }
+
+    private var addressStroke: Color {
+        if addressFocused {
+            return theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.56 : 0.44)
+        }
+        return theme.shellStroke.opacity(addressHovering ? 0.34 : 0.20)
+    }
+
+    private func pageStatusPill(_ tab: WorkspaceWebTabState) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(statusColor(for: tab))
+                .frame(width: 6, height: 6)
             Text(statusText(for: tab))
                 .font(.conductorSystem(size: 10.4, weight: .semibold, family: fontFamily, scale: fontScale))
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
-        } icon: {
-            Image(systemName: "circle.fill")
-                .font(.system(size: 6, weight: .semibold))
-                .foregroundStyle(statusColor(for: tab))
-                .accessibilityHidden(true)
         }
-        .labelStyle(.titleAndIcon)
         .foregroundStyle(theme.shellChromeText.opacity(0.72))
+        .padding(.horizontal, 9)
         .frame(height: 28)
-        .help(tab.url?.absoluteString ?? "")
+        .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.32 : 0.20))
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .stroke(theme.shellStroke.opacity(0.20), lineWidth: 1)
+        }
+        .macNativeTooltip(tab.url?.absoluteString ?? "")
     }
 
-    private func downloadStatusMenu(tab: WorkspaceWebTabState, state: WorkspaceWebDownloadState) -> some View {
+    private func downloadStatusPill(tab: WorkspaceWebTabState, state: WorkspaceWebDownloadState) -> some View {
         Menu {
             Section(downloadMenuTitle(state)) {
                 if let path = state.destinationPath {
@@ -669,27 +800,32 @@ struct ConductorWebWorkspaceView: View {
                 }
             }
         } label: {
-            Label {
+            HStack(spacing: 5) {
+                Image(systemName: downloadSystemImage(for: state.phase))
+                    .font(.conductorSystem(size: 9.8, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .accessibilityHidden(true)
                 Text(downloadStatusText(state))
                     .font(.conductorSystem(size: 10.4, weight: .semibold, family: fontFamily, scale: fontScale))
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
-            } icon: {
-                Image(systemName: downloadSystemImage(for: state.phase))
-                    .font(.conductorSystem(size: 9.8, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .accessibilityHidden(true)
             }
-            .labelStyle(.titleAndIcon)
-            .foregroundStyle(downloadColor(for: state.phase).opacity(0.88))
+            .foregroundStyle(downloadColor(for: state.phase).opacity(0.90))
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .background(downloadColor(for: state.phase).opacity(theme.usesDarkChrome ? 0.13 : 0.10))
+            .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(downloadColor(for: state.phase).opacity(theme.usesDarkChrome ? 0.24 : 0.20), lineWidth: 1)
+            }
         }
         .menuStyle(.button)
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .help(downloadTooltip(state))
+        .buttonStyle(.plain)
+        .macNativeTooltip(downloadTooltip(state))
         .accessibilityLabel(downloadTooltip(state))
     }
 
-    private func runtimeEventMenu(tab: WorkspaceWebTabState, event: WorkspaceWebRuntimeEvent) -> some View {
+    private func runtimeEventPill(tab: WorkspaceWebTabState, event: WorkspaceWebRuntimeEvent) -> some View {
         Menu {
             Section(runtimeEventTitle(event)) {
                 Button(L("复制最近错误", "Copy Latest Error"), systemImage: "doc.on.clipboard") {
@@ -707,23 +843,28 @@ struct ConductorWebWorkspaceView: View {
                 }
             }
         } label: {
-            Label {
+            HStack(spacing: 5) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.conductorSystem(size: 9.8, weight: .semibold, family: fontFamily, scale: fontScale))
+                    .accessibilityHidden(true)
                 Text(L("页面错误", "Page Error"))
                     .font(.conductorSystem(size: 10.4, weight: .semibold, family: fontFamily, scale: fontScale))
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
-            } icon: {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.conductorSystem(size: 9.8, weight: .semibold, family: fontFamily, scale: fontScale))
-                    .accessibilityHidden(true)
             }
-            .labelStyle(.titleAndIcon)
             .foregroundStyle(Color(nsColor: .systemOrange).opacity(0.92))
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .background(Color(nsColor: .systemOrange).opacity(theme.usesDarkChrome ? 0.13 : 0.10))
+            .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color(nsColor: .systemOrange).opacity(theme.usesDarkChrome ? 0.25 : 0.20), lineWidth: 1)
+            }
         }
         .menuStyle(.button)
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .help(runtimeEventTooltip(event))
+        .buttonStyle(.plain)
+        .macNativeTooltip(runtimeEventTooltip(event))
         .accessibilityLabel(runtimeEventTooltip(event))
     }
 
@@ -962,5 +1103,27 @@ struct ConductorWebWorkspaceView: View {
                 startAddressFocused = true
             }
         }
+    }
+}
+
+private struct WebStartGlyph: View {
+    let systemImage: String
+    let emphasis: Color
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorFontFamily) private var fontFamily
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.conductorSystem(size: 15.5, weight: .semibold, family: fontFamily, scale: fontScale))
+            .foregroundStyle(emphasis.opacity(0.88))
+            .frame(width: 30, height: 30)
+            .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.42 : 0.26))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.16 : 0.22), lineWidth: 1)
+            }
+            .accessibilityHidden(true)
     }
 }

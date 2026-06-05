@@ -37,6 +37,10 @@ struct AppearanceCoordinator: Equatable {
         appearance.density = density
     }
 
+    mutating func setChromeClarity(_ chromeClarity: ChromeClarity) {
+        appearance.chromeClarity = chromeClarity
+    }
+
     mutating func setFontScale(_ fontScale: AppearanceFontScale) {
         appearance.fontScale = fontScale
     }

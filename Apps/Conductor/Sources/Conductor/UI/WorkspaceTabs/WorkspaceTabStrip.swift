@@ -41,6 +41,7 @@ private enum WorkspaceTabMetrics {
     static let minWidth: CGFloat = 56
     static let maxWidth: CGFloat = 210
     static let cornerRadius: CGFloat = 7
+    static let separatorHeight: CGFloat = 16
     static let topInset: CGFloat = 0
     static let spacing: CGFloat = 0
     static let edgePadding: CGFloat = 0
@@ -50,6 +51,10 @@ private enum WorkspaceTabMetrics {
         let raw = availableWidth / CGFloat(count)
         return min(max(raw, minWidth), maxWidth)
     }
+}
+
+private func chromeTabShape() -> some Shape {
+    RoundedRectangle(cornerRadius: WorkspaceTabMetrics.cornerRadius, style: .continuous)
 }
 
 struct WorkspaceTabStrip: View {
@@ -96,7 +101,7 @@ struct WorkspaceTabStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: WorkspaceTabMetrics.spacing) {
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                        chromeTab(for: entry, width: tabWidth)
+                        chromeTab(for: entry, width: tabWidth, showsLeadingSeparator: showsSeparator(at: index, in: entries))
                             .transition(ConductorMotion.tabTransition)
                     }
                 }
@@ -131,11 +136,18 @@ struct WorkspaceTabStrip: View {
         .animation(model.shellAnimation(ConductorMotion.list), value: snapshot.workspaceIDs)
     }
 
+    /// A divider sits between two tabs only when neither is selected, mirroring
+    /// the way Chrome hides the separator next to the active tab.
+    private func showsSeparator(at index: Int, in entries: [ChromeTabEntry]) -> Bool {
+        guard index > 0 else { return false }
+        return !entries[index].selected && !entries[index - 1].selected
+    }
+
     @ViewBuilder
-    private func chromeTab(for entry: ChromeTabEntry, width: CGFloat) -> some View {
+    private func chromeTab(for entry: ChromeTabEntry, width: CGFloat, showsLeadingSeparator: Bool) -> some View {
         switch entry.kind {
         case .workspace(let row):
-            workspaceTabView(for: row, width: width)
+            workspaceTabView(for: row, width: width, showsLeadingSeparator: showsLeadingSeparator)
                 .id(WorkspaceTopTabScrollTarget.workspace(row.id))
         case .file(let fileTab):
             WorkspaceFileTopTab(
@@ -144,6 +156,7 @@ struct WorkspaceTabStrip: View {
                 appearance: appearance,
                 selected: fileTab.selected,
                 dirty: fileTab.dirty,
+                showsLeadingSeparator: showsLeadingSeparator,
                 onSelect: {
                     finishWorkspaceRenameIfNeeded()
                     model.selectWorkspaceFileTab(fileTab.id)
@@ -174,6 +187,7 @@ struct WorkspaceTabStrip: View {
                 width: width,
                 appearance: appearance,
                 selected: webTab.selected,
+                showsLeadingSeparator: showsLeadingSeparator,
                 onSelect: {
                     finishWorkspaceRenameIfNeeded()
                     model.selectWorkspaceWebTab(webTab.id)
@@ -220,7 +234,7 @@ struct WorkspaceTabStrip: View {
         }
     }
 
-    private func workspaceTabView(for row: WorkspaceChromeDisplayModel, width: CGFloat) -> some View {
+    private func workspaceTabView(for row: WorkspaceChromeDisplayModel, width: CGFloat, showsLeadingSeparator: Bool) -> some View {
         WorkspaceTopTab(
             row: row,
             width: width,
@@ -229,6 +243,7 @@ struct WorkspaceTabStrip: View {
             canClose: snapshot.canCloseWorkspace,
             canCloseRight: canCloseWorkspacesToRight(of: row.id),
             editing: editingWorkspaceID == row.id,
+            showsLeadingSeparator: showsLeadingSeparator,
             titleDraft: $workspaceTitleDraft,
             onSelect: {
                 finishWorkspaceRenameIfNeeded(except: row.id)
@@ -309,43 +324,108 @@ private struct ChromeTabShell<Content: View>: View {
     let railHeight: CGFloat
     let height: CGFloat
     let selected: Bool
+    let hovering: Bool
+    let showsLeadingSeparator: Bool
     @ViewBuilder var content: Content
     @Environment(\.conductorTheme) private var theme
 
-    private var tabFill: Color {
-        if selected {
-            return theme.floatingSelectedFill
+    private var tabShape: some Shape {
+        chromeTabShape()
+    }
+
+    private var baseFill: Color {
+        if hovering {
+            return theme.shellHoverFill.opacity(0.64 * theme.chromeMaterial.controlOpacityBoost)
         }
         return Color.clear
     }
 
+    private var selectedFill: Color {
+        if theme == .microGlass {
+            return Color.white.opacity(0.105)
+        }
+        return theme.shellSelectedFill.opacity(theme.usesDarkChrome ? 0.90 : 0.74)
+    }
+
+    private var topStroke: Color {
+        guard selected else { return Color.clear }
+        if theme == .microGlass {
+            return Color.white.opacity(0.18)
+        }
+        return theme.usesDarkChrome
+            ? Color.white.opacity(0.055)
+            : theme.shellStroke.opacity(0.12)
+    }
+
     var body: some View {
-        content
-            .frame(width: width, height: height, alignment: .leading)
-            .background(tabFill, in: RoundedRectangle(cornerRadius: WorkspaceTabMetrics.cornerRadius, style: .continuous))
+        ZStack(alignment: .leading) {
+            if showsLeadingSeparator {
+                RoundedRectangle(cornerRadius: 0.5)
+                    .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.22 : 0.14))
+                    .frame(width: 1, height: WorkspaceTabMetrics.separatorHeight)
+                    .frame(maxHeight: .infinity, alignment: .center)
+            }
+
+            content
+                .frame(width: width, height: height, alignment: .leading)
+        }
         .frame(width: width, height: railHeight, alignment: .center)
+        .background(alignment: .center) {
+            ZStack {
+                tabShape
+                    .fill(baseFill)
+                    .frame(width: width, height: height)
+                if selected {
+                    tabShape
+                        .fill(selectedFill)
+                        .overlay {
+                            tabShape
+                                .stroke(topStroke, lineWidth: 0.6)
+                        }
+                        .frame(width: width, height: height)
+                        .shadow(
+                            color: Color.black.opacity(theme.chromeMaterial.shadowOpacity),
+                            radius: 5,
+                            y: 1.5
+                        )
+                }
+                if theme.chromeMaterial.highlightOpacity > 0 {
+                    tabShape
+                        .stroke(Color.white.opacity(theme.chromeMaterial.highlightOpacity), lineWidth: 0.5)
+                        .frame(width: width, height: height)
+                        .blendMode(.screen)
+                }
+            }
+        }
         .contentShape(Rectangle())
         .accessibilityIdentifier("ConductorWorkspaceTabInteractiveRegion")
     }
 }
 
-@MainActor
-private func chromeTabCloseButton(
-    visible: Bool,
-    accessibility: String,
-    tooltip: String,
-    action: @escaping () -> Void
-) -> some View {
-    Button(action: action) {
-        Label(accessibility, systemImage: "xmark")
+private struct ChromeTabCloseButton: View {
+    let visible: Bool
+    let titleColor: Color
+    let accessibility: String
+    let tooltip: String
+    let action: () -> Void
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.conductorSystem(size: 8.5, weight: .bold, scale: fontScale))
+                .foregroundStyle(titleColor.opacity(visible ? 0.74 : 0.0))
+                .frame(width: 16, height: 16)
+                .background(visible ? theme.shellHoverFill.opacity(0.52) : Color.clear)
+                .clipShape(Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+        .disabled(!visible)
+        .accessibilityLabel(accessibility)
+        .macNativeTooltip(tooltip)
     }
-    .labelStyle(.iconOnly)
-    .buttonStyle(.borderless)
-    .controlSize(.mini)
-    .disabled(!visible)
-    .opacity(visible ? 1 : 0)
-    .accessibilityLabel(accessibility)
-    .help(tooltip)
 }
 
 private struct WorkspaceFileTopTab: View {
@@ -354,12 +434,21 @@ private struct WorkspaceFileTopTab: View {
     let appearance: AppearancePreferences
     let selected: Bool
     let dirty: Bool
+    let showsLeadingSeparator: Bool
     let onSelect: () -> Void
     let onClose: () -> Void
     let onOpenExternal: () -> Void
     let onReveal: () -> Void
+    @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
+
+    private var titleColor: Color {
+        if selected {
+            return theme.shellChromeText.opacity(0.95)
+        }
+        return theme.shellChromeTextMuted.opacity(hovering ? 0.88 : 0.64)
+    }
 
     private var fileIcon: String {
         let ext = tab.fileURL.pathExtension.lowercased()
@@ -383,25 +472,23 @@ private struct WorkspaceFileTopTab: View {
             width: width,
             railHeight: WorkspaceTabMetrics.railHeight(for: appearance),
             height: WorkspaceTabMetrics.height(for: appearance),
-            selected: selected
+            selected: selected,
+            hovering: hovering,
+            showsLeadingSeparator: showsLeadingSeparator
         ) {
             HStack(spacing: 6) {
-                Button(action: onSelect) {
-                    WorkspaceFileTopTabContent(
-                        title: tab.title,
-                        systemImage: fileIcon,
-                        selected: selected,
-                        dirty: dirty,
-                        themeID: theme.id,
-                        fontScaleID: fontScale.id
-                    )
-                    .equatable()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(accessibilityTitle)
-                chromeTabCloseButton(
-                    visible: selected,
+                WorkspaceFileTopTabContent(
+                    title: tab.title,
+                    systemImage: fileIcon,
+                    selected: selected,
+                    dirty: dirty,
+                    themeID: theme.id,
+                    fontScaleID: fontScale.id
+                )
+                .equatable()
+                ChromeTabCloseButton(
+                    visible: selected || hovering,
+                    titleColor: titleColor,
                     accessibility: L("关闭文件", "Close File"),
                     tooltip: L("关闭文件", "Close File"),
                     action: onClose
@@ -411,7 +498,12 @@ private struct WorkspaceFileTopTab: View {
             .padding(.trailing, 5)
             .padding(.top, WorkspaceTabMetrics.topInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onSelect)
+            .accessibilityLabel(accessibilityTitle)
+            .accessibilityAddTraits(.isButton)
         }
+        .conductorHover($hovering)
         .contextMenu {
             Button(L("关闭文件", "Close File")) {
                 onClose()
@@ -447,25 +539,20 @@ private struct WorkspaceFileTopTabContent: View, Equatable {
 
     var body: some View {
         HStack(spacing: 6) {
-            Label {
-                Text(title)
-                    .font(.conductorSystem(size: 11.3, weight: selected ? .semibold : .medium, scale: fontScale))
-                    .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } icon: {
-                Image(systemName: systemImage)
-                    .font(.system(size: 10.8, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
-                    .frame(width: 15, height: 15)
-            }
-            .labelStyle(.titleAndIcon)
-            Image(systemName: "circle.fill")
-                .font(.system(size: 5.2, weight: .bold))
-                .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
-                .frame(width: 7, height: 7)
+            Image(systemName: systemImage)
+                .font(.system(size: 10.8, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
+                .frame(width: 15, height: 15)
+            Text(title)
+                .font(.conductorSystem(size: 11.3, weight: selected ? .semibold : .medium, scale: fontScale))
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Circle()
+                .fill(theme.floatingEmphasis.opacity(0.92))
+                .frame(width: 5, height: 5)
                 .opacity(dirty ? 1 : 0)
         }
     }
@@ -476,11 +563,20 @@ private struct WorkspaceWebTopTab: View {
     let width: CGFloat
     let appearance: AppearancePreferences
     let selected: Bool
+    let showsLeadingSeparator: Bool
     let onSelect: () -> Void
     let onClose: () -> Void
     let onOpenExternal: () -> Void
+    @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
+
+    private var titleColor: Color {
+        if selected {
+            return theme.shellChromeText.opacity(0.95)
+        }
+        return theme.shellChromeTextMuted.opacity(hovering ? 0.88 : 0.64)
+    }
 
     private var webIcon: String {
         tab.errorMessage == nil ? "globe" : "globe.badge.chevron.backward"
@@ -501,25 +597,23 @@ private struct WorkspaceWebTopTab: View {
             width: width,
             railHeight: WorkspaceTabMetrics.railHeight(for: appearance),
             height: WorkspaceTabMetrics.height(for: appearance),
-            selected: selected
+            selected: selected,
+            hovering: hovering,
+            showsLeadingSeparator: showsLeadingSeparator
         ) {
             HStack(spacing: 6) {
-                Button(action: onSelect) {
-                    WorkspaceWebTopTabContent(
-                        title: displayTitle,
-                        systemImage: webIcon,
-                        selected: selected,
-                        loading: tab.isLoading,
-                        themeID: theme.id,
-                        fontScaleID: fontScale.id
-                    )
-                    .equatable()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(displayTitle)
-                chromeTabCloseButton(
-                    visible: selected,
+                WorkspaceWebTopTabContent(
+                    title: displayTitle,
+                    systemImage: webIcon,
+                    selected: selected,
+                    loading: tab.isLoading,
+                    themeID: theme.id,
+                    fontScaleID: fontScale.id
+                )
+                .equatable()
+                ChromeTabCloseButton(
+                    visible: selected || hovering,
+                    titleColor: titleColor,
                     accessibility: L("关闭网页", "Close Web Tab"),
                     tooltip: L("关闭网页", "Close Web Tab"),
                     action: onClose
@@ -529,7 +623,10 @@ private struct WorkspaceWebTopTab: View {
             .padding(.trailing, 5)
             .padding(.top, WorkspaceTabMetrics.topInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onSelect)
         }
+        .conductorHover($hovering)
         .contextMenu {
             Button(L("关闭网页", "Close Web Tab")) {
                 onClose()
@@ -563,25 +660,20 @@ private struct WorkspaceWebTopTabContent: View, Equatable {
 
     var body: some View {
         HStack(spacing: 6) {
-            Label {
-                Text(title)
-                    .font(.conductorSystem(size: 11.3, weight: selected ? .semibold : .medium, scale: fontScale))
-                    .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } icon: {
-                Image(systemName: systemImage)
-                    .font(.system(size: 10.8, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
-                    .frame(width: 15, height: 15)
-            }
-            .labelStyle(.titleAndIcon)
-            Image(systemName: "circle.fill")
-                .font(.system(size: 5.2, weight: .bold))
-                .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
-                .frame(width: 7, height: 7)
+            Image(systemName: systemImage)
+                .font(.system(size: 10.8, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.shellChromeTextMuted.opacity(0.70))
+                .frame(width: 15, height: 15)
+            Text(title)
+                .font(.conductorSystem(size: 11.3, weight: selected ? .semibold : .medium, scale: fontScale))
+                .foregroundStyle(selected ? theme.shellChromeText.opacity(0.94) : theme.shellChromeTextMuted.opacity(0.86))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Circle()
+                .fill(theme.floatingEmphasis.opacity(0.92))
+                .frame(width: 5, height: 5)
                 .opacity(loading ? 1 : 0)
         }
     }
@@ -595,6 +687,7 @@ private struct WorkspaceTopTab: View {
     let canClose: Bool
     let canCloseRight: Bool
     let editing: Bool
+    let showsLeadingSeparator: Bool
     @Binding var titleDraft: String
     let onSelect: () -> Void
     let onRename: () -> Void
@@ -606,6 +699,7 @@ private struct WorkspaceTopTab: View {
     let onCloseRight: () -> Void
     let onOpenRoot: () -> Void
     let onOpenFirstPort: () -> Void
+    @State private var hovering = false
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
 
@@ -617,7 +711,7 @@ private struct WorkspaceTopTab: View {
         if selected {
             return theme.shellChromeText.opacity(0.95)
         }
-        return theme.shellChromeTextMuted.opacity(0.64)
+        return theme.shellChromeTextMuted.opacity(hovering ? 0.88 : 0.64)
     }
 
     private var tabAccessibilityTitle: String {
@@ -646,21 +740,21 @@ private struct WorkspaceTopTab: View {
         return lines
     }
 
-    private var primaryStatusLabel: WorkspaceTabStatusModel? {
+    private var primaryStatusPill: WorkspaceTabStatusPillModel? {
         nil
     }
 
-    private var portStatusLabel: WorkspaceTabStatusModel? {
+    private var portStatusPill: WorkspaceTabStatusPillModel? {
         guard let port = row.metadata?.runningPorts.first else { return nil }
-        return WorkspaceTabStatusModel(systemImage: "network", text: ":\(port)", tone: .accent)
+        return WorkspaceTabStatusPillModel(systemImage: "network", text: ":\(port)", tone: .accent)
     }
 
-    private var healthStatusLabel: WorkspaceTabStatusModel? {
+    private var healthStatusPill: WorkspaceTabStatusPillModel? {
         guard let health = row.metadata?.health,
               health != "ok" else {
             return nil
         }
-        return WorkspaceTabStatusModel(
+        return WorkspaceTabStatusPillModel(
             systemImage: health == "metadata_partial" ? "exclamationmark.circle.fill" : "questionmark.circle.fill",
             text: "",
             tone: .attention
@@ -672,7 +766,9 @@ private struct WorkspaceTopTab: View {
             width: width,
             railHeight: WorkspaceTabMetrics.railHeight(for: appearance),
             height: WorkspaceTabMetrics.height(for: appearance),
-            selected: selected || editing
+            selected: selected || editing,
+            hovering: hovering,
+            showsLeadingSeparator: showsLeadingSeparator
         ) {
             Group {
                 if editing {
@@ -686,7 +782,8 @@ private struct WorkspaceTopTab: View {
             .padding(.top, WorkspaceTabMetrics.topInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .help(tabAccessibilityTitle)
+        .conductorHover($hovering)
+        .macNativeTooltip(tabAccessibilityTitle)
         .contextMenu {
             Button(L("重命名工作区...", "Rename Workspace...")) { onRename() }
             Button(L("复制工作区", "Duplicate Workspace")) { onDuplicate() }
@@ -710,60 +807,56 @@ private struct WorkspaceTopTab: View {
 
     private var displayContent: some View {
         HStack(spacing: 6) {
-            Button(action: onSelect) {
-                HStack(spacing: 6) {
-                    Label {
-                        Text(row.title)
-                            .font(.conductorSystem(size: 11.3, weight: selected ? .semibold : .medium, scale: fontScale))
-                            .foregroundStyle(titleColor)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } icon: {
-                        tabGlyph(selected: selected)
-                    }
-                    .labelStyle(.titleAndIcon)
-                    if width > 118,
-                       let primaryStatusLabel,
-                       selected {
-                        tabStatusLabel(primaryStatusLabel)
-                    }
-                    if width > 158,
-                       let portStatusLabel,
-                       selected {
-                        tabStatusLabel(portStatusLabel)
-                    }
-                    if let healthStatusLabel {
-                        tabStatusLabel(healthStatusLabel)
-                    }
-                    if row.unreadCount > 0 {
-                        WorkspaceTabUnreadDot(selected: selected)
-                    }
-                    if activeAgentCount > 0 {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(theme.floatingEmphasis)
-                            .scaleEffect(0.55)
-                            .frame(width: 13, height: 13)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            WorkspaceTabGlyph(selected: selected)
+            Text(row.title)
+                .font(.conductorSystem(size: 11.3, weight: selected ? .semibold : .medium, scale: fontScale))
+                .foregroundStyle(titleColor)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if width > 118,
+               let primaryStatusPill,
+               selected || hovering {
+                WorkspaceTabStatusPill(model: primaryStatusPill)
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(tabAccessibilityTitle)
-            chromeTabCloseButton(
-                visible: canClose && selected,
+            if width > 158,
+               let portStatusPill,
+               selected || hovering {
+                WorkspaceTabStatusPill(model: portStatusPill)
+            }
+            if let healthStatusPill {
+                WorkspaceTabStatusPill(model: healthStatusPill)
+            }
+            if row.unreadCount > 0 {
+                WorkspaceTabUnreadDot(selected: selected)
+            }
+            if activeAgentCount > 0 {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(theme.floatingEmphasis)
+                    .scaleEffect(0.55)
+                    .frame(width: 13, height: 13)
+                    .accessibilityHidden(true)
+            }
+            ChromeTabCloseButton(
+                visible: canClose && (selected || hovering),
+                titleColor: titleColor,
                 accessibility: L("关闭工作区", "Close Workspace"),
                 tooltip: L("关闭工作区", "Close Workspace"),
                 action: onClose
             )
             .opacity(canClose ? 1 : 0)
         }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onSelect)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(tabAccessibilityTitle)
+        .accessibilityAddTraits(.isButton)
     }
 
     private var editingContent: some View {
-        Label {
+        HStack(spacing: 6) {
+            WorkspaceTabGlyph(selected: true)
             RenameTextField(
                 text: $titleDraft,
                 placeholder: L("工作区名称", "Workspace Name"),
@@ -773,73 +866,68 @@ private struct WorkspaceTopTab: View {
                 onCancel: onCancelRename
             )
             .frame(maxWidth: .infinity, alignment: .leading)
-        } icon: {
-            tabGlyph(selected: true)
-        }
-        .labelStyle(.titleAndIcon)
-    }
-
-    private func tabGlyph(selected: Bool) -> some View {
-        Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
-            .font(.system(size: 10.5, weight: .bold))
-            .symbolRenderingMode(.monochrome)
-            .foregroundStyle(selected ? theme.shellChromeText.opacity(0.86) : theme.shellChromeTextMuted.opacity(0.70))
-            .frame(width: 16, height: 16)
-            .accessibilityHidden(true)
-    }
-
-    @ViewBuilder
-    private func tabStatusLabel(_ model: WorkspaceTabStatusModel) -> some View {
-        if model.text.isEmpty {
-            Label(model.accessibilityTitle, systemImage: model.systemImage)
-                .labelStyle(.iconOnly)
-                .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
-                .foregroundStyle(statusForeground(for: model.tone))
-                .frame(width: 13, height: 15)
-                .accessibilityHidden(true)
-        } else {
-            Label {
-                Text(model.text)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: 62)
-            } icon: {
-                Image(systemName: model.systemImage)
-                    .accessibilityHidden(true)
-            }
-            .labelStyle(.titleAndIcon)
-            .font(.conductorSystem(size: 8.8, weight: .semibold, scale: fontScale))
-            .foregroundStyle(statusForeground(for: model.tone))
-            .frame(height: 15)
-            .accessibilityHidden(true)
-        }
-    }
-
-    private func statusForeground(for tone: WorkspaceTabStatusTone) -> Color {
-        switch tone {
-        case .neutral:
-            return theme.shellChromeTextMuted.opacity(0.74)
-        case .accent:
-            return theme.floatingEmphasis.opacity(0.78)
-        case .attention:
-            return theme.usesDarkChrome ? Color.orange.opacity(0.94) : Color.orange.opacity(0.82)
         }
     }
 }
 
-private enum WorkspaceTabStatusTone {
+private enum WorkspaceTabStatusPillTone {
     case neutral
     case accent
     case attention
 }
 
-private struct WorkspaceTabStatusModel: Equatable {
+private struct WorkspaceTabStatusPillModel: Equatable {
     let systemImage: String
     let text: String
-    let tone: WorkspaceTabStatusTone
+    let tone: WorkspaceTabStatusPillTone
+}
 
-    var accessibilityTitle: String {
-        text.isEmpty ? systemImage : text
+private struct WorkspaceTabStatusPill: View {
+    let model: WorkspaceTabStatusPillModel
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        HStack(spacing: model.text.isEmpty ? 0 : 3) {
+            Image(systemName: model.systemImage)
+                .font(.conductorSystem(size: model.text.isEmpty ? 9.5 : 7.5, weight: .semibold, scale: fontScale))
+                .accessibilityHidden(true)
+            if !model.text.isEmpty {
+                Text(model.text)
+                    .font(.conductorSystem(size: 8.8, weight: .semibold, scale: fontScale))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 62)
+            }
+        }
+        .foregroundStyle(foreground)
+        .padding(.horizontal, model.text.isEmpty ? 0 : 4)
+        .frame(width: model.text.isEmpty ? 15 : nil, height: 15)
+        .background(background)
+        .clipShape(Capsule())
+        .accessibilityHidden(true)
+    }
+
+    private var foreground: Color {
+        switch model.tone {
+        case .neutral:
+            return theme.shellChromeTextMuted.opacity(0.74)
+        case .accent:
+            return theme.floatingEmphasis.opacity(0.92)
+        case .attention:
+            return theme.usesDarkChrome ? Color.orange.opacity(0.94) : Color.orange.opacity(0.82)
+        }
+    }
+
+    private var background: Color {
+        switch model.tone {
+        case .neutral:
+            return theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.30 : 0.18)
+        case .accent:
+            return theme.shellSelectedFill.opacity(theme.usesDarkChrome ? 0.58 : 0.44)
+        case .attention:
+            return Color.orange.opacity(theme.usesDarkChrome ? 0.16 : 0.10)
+        }
     }
 }
 
@@ -848,11 +936,30 @@ private struct WorkspaceTabUnreadDot: View {
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        Label(L("未读通知", "Unread notifications"), systemImage: "bell.fill")
-            .labelStyle(.iconOnly)
-            .font(.system(size: 8, weight: .semibold))
-            .foregroundStyle(theme.floatingEmphasis.opacity(selected ? 0.74 : 0.58))
-            .frame(width: 10, height: 10)
+        Circle()
+            .fill(theme.floatingEmphasis.opacity(selected ? 0.92 : 0.74))
+            .frame(width: 5.5, height: 5.5)
+            .overlay {
+                Circle()
+                    .stroke((selected ? Color.white.opacity(0.24) : theme.shellPanelBackground.opacity(0.70)), lineWidth: 0.8)
+            }
+            .shadow(color: theme.floatingEmphasis.opacity(selected ? 0.22 : 0.10), radius: 2, y: 0.5)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct WorkspaceTabGlyph: View {
+    let selected: Bool
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
+            .font(.system(size: 10.5, weight: .bold))
+            .symbolRenderingMode(.monochrome)
+            .foregroundStyle(selected ? Color.white.opacity(0.96) : theme.shellChromeTextMuted.opacity(0.70))
+            .frame(width: selected ? 20 : 15, height: selected ? 20 : 15)
+            .background(selected ? theme.shellControlRaisedFill.opacity(0.44) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             .accessibilityHidden(true)
     }
 }

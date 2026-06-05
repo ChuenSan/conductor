@@ -39,7 +39,7 @@ struct ShellRootView: View {
             maxHeight: .infinity,
             alignment: .topLeading
         )
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(ConductorWindowBackdrop(theme: model.theme))
         .ignoresSafeArea(.container, edges: .top)
         .environment(\.colorScheme, model.theme.chromeColorScheme)
         .preferredColorScheme(model.theme.chromeColorScheme)
@@ -175,6 +175,7 @@ struct ShellRootView: View {
                 appearance: model.appearance,
                 sidebarVisible: model.sidebarVisible
             )
+            ConductorShellJoiner(theme: model.theme)
 
             VStack(spacing: 0) {
                 ConductorToolbar(
@@ -203,6 +204,10 @@ struct ShellRootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(model.theme.terminalBackground)
+            .overlay(alignment: .leading) {
+                TerminalSidebarContactWash(theme: model.theme)
+                    .allowsHitTesting(false)
+            }
         }
     }
 
@@ -220,6 +225,7 @@ struct ShellRootView: View {
             .frame(maxHeight: .infinity)
             .offset(x: fileManagerTrayVisible ? 0 : fileManagerTargetWidth)
             .clipped()
+            .shadow(color: Color.black.opacity(model.theme.usesDarkChrome ? 0.14 : 0.08), radius: 12, x: -4, y: 0)
             .animation(fileManagerTrayAnimation, value: fileManagerTrayVisible)
         }
     }
@@ -347,8 +353,9 @@ private struct TerminalSearchBar: View {
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .accessibilityHidden(true)
             TextField(L("搜索终端输出", "Search terminal output"), text: query)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 12, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.primaryText)
                 .focused(focus)
                 .frame(width: 220)
                 .onSubmit {
@@ -359,22 +366,26 @@ private struct TerminalSearchBar: View {
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .monospacedDigit()
                 .frame(minWidth: 38, alignment: .trailing)
-            ControlGroup {
-                terminalSearchButton("chevron.up", help: L("上一个搜索结果", "Previous Search Result")) {
-                    model.performCommand(.findPrevious)
-                }
-                terminalSearchButton("chevron.down", help: L("下一个搜索结果", "Next Search Result")) {
-                    model.performCommand(.findNext)
-                }
-                terminalSearchButton("xmark", help: L("关闭搜索", "Close Search")) {
-                    model.closeTerminalSearch()
-                }
+            terminalSearchButton("chevron.up", help: L("上一个搜索结果", "Previous Search Result")) {
+                model.performCommand(.findPrevious)
             }
-            .controlSize(.small)
+            terminalSearchButton("chevron.down", help: L("下一个搜索结果", "Next Search Result")) {
+                model.performCommand(.findNext)
+            }
+            terminalSearchButton("xmark", help: L("关闭搜索", "Close Search")) {
+                model.closeTerminalSearch()
+            }
         }
-        .padding(.horizontal, 8)
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
         .frame(height: 34)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+        .background(theme.floatingControlStrongFill)
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.42), lineWidth: 0.6)
+        }
+        .shadow(color: Color.black.opacity(theme.usesDarkChrome ? 0.10 : 0.05), radius: 8, x: 0, y: 4)
         .onAppear {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(30))
@@ -385,11 +396,38 @@ private struct TerminalSearchBar: View {
 
     private func terminalSearchButton(_ systemImage: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(help, systemImage: systemImage)
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .frame(width: 24, height: 24)
+                .background(theme.floatingControlFill)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .accessibilityHidden(true)
         }
-        .labelStyle(.iconOnly)
+        .buttonStyle(.plain)
         .accessibilityLabel(help)
-        .help(help)
+        .macNativeTooltip(help)
+    }
+}
+
+private struct ConductorShellJoiner: View {
+    let theme: TerminalTheme
+
+    var body: some View {
+        Color.clear
+            .frame(width: ConductorDesign.shellJoinerWidth)
+            .frame(maxHeight: .infinity)
+            .allowsHitTesting(false)
+    }
+}
+
+private struct TerminalSidebarContactWash: View {
+    let theme: TerminalTheme
+
+    var body: some View {
+        Rectangle()
+            .fill(theme.terminalOuterStroke.opacity(theme.usesDarkChrome ? 0.30 : 0.20))
+            .frame(width: 1)
     }
 }
 
@@ -425,7 +463,9 @@ struct FloatingPanelHeader<Trailing: View>: View {
                 .accessibilityHidden(true)
                 .font(.conductorSystem(size: 12, weight: .semibold, scale: fontScale))
                 .foregroundStyle(theme.floatingEmphasis.opacity(0.92))
-                .frame(width: 20, height: 20)
+                .frame(width: 24, height: 24)
+                .background(theme.floatingControlFill)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
@@ -446,15 +486,17 @@ struct FloatingPanelHeader<Trailing: View>: View {
             Button {
                 onClose()
             } label: {
-                Label(closeHelp, systemImage: "xmark")
+                Image(systemName: "xmark")
                     .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                    .labelStyle(.iconOnly)
+                    .foregroundStyle(ConductorDesign.secondaryText)
                     .frame(width: 24, height: 24)
+                    .background(theme.floatingControlFill)
+                    .clipShape(Circle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
             .keyboardShortcut(.cancelAction)
             .accessibilityLabel(closeHelp)
-            .help(closeHelp)
+            .macNativeTooltip(closeHelp)
         }
     }
 }
@@ -479,14 +521,26 @@ extension FloatingPanelHeader where Trailing == EmptyView {
     }
 }
 
+struct FloatingPanelDivider: View {
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Rectangle()
+            .fill(theme.floatingSeparator)
+            .frame(height: 1)
+    }
+}
+
 private struct CommandPaletteSnapshot: Equatable {
     let subtitle: String
+    let chromeClarity: ChromeClarity
     let commands: [CommandPaletteItem]
     let jumpTargetCount: Int
 
     @MainActor
     init(model: ConductorWindowModel) {
         self.subtitle = model.workspace.title
+        self.chromeClarity = model.appearance.chromeClarity
         let commands = ConductorCommandCatalog.items(model: model)
         self.commands = commands
         self.jumpTargetCount = commands.filter(\.isJumpTarget).count
@@ -499,6 +553,7 @@ private struct CommandPaletteView: View {
     @State private var query = ""
     @State private var selectedCommandID: String?
     @State private var filteredResult: CommandPaletteFilterResult
+    @Namespace private var commandSelectionNamespace
     @FocusState private var searchFocused: Bool
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
@@ -515,13 +570,14 @@ private struct CommandPaletteView: View {
 
     var body: some View {
         ZStack {
-            VStack(alignment: .leading, spacing: 6) {
-                commandHeader
-                commandSearchField
-                commandResults
+            ConductorGlassSurface(style: .palette, clarity: snapshot.chromeClarity, interactive: true) {
+                VStack(alignment: .leading, spacing: 6) {
+                    commandHeader
+                    commandSearchField
+                    commandResults
+                }
+                .padding(8)
             }
-            .padding(8)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ConductorTokens.Radius.commandPalette, style: .continuous))
             .frame(width: 604, height: 372)
             .onAppear {
                 refreshFilteredCommands()
@@ -572,109 +628,73 @@ private struct CommandPaletteView: View {
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .accessibilityHidden(true)
             TextField(L("搜索命令、工作区、终端或网页", "Search commands, workspaces, terminals, or web"), text: $query)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 12.4, weight: .medium, scale: fontScale))
                 .focused($searchFocused)
             Text("↵")
                 .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
         }
-        .padding(.horizontal, 2)
+        .padding(.horizontal, 9)
         .frame(height: 30)
+        .background(theme.floatingControlFill.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(theme.floatingStroke.opacity(0.72), lineWidth: 0.8)
+        }
     }
 
     private var commandResults: some View {
         Group {
             if filteredResult.rows.isEmpty {
-                ContentUnavailableView {
-                    Label(L("没有匹配的结果", "No matching results"), systemImage: "command")
-                } description: {
-                    Text(L("换个关键词再试", "Try another keyword"))
+                VStack(spacing: 8) {
+                    Image(systemName: "command")
+                        .font(.conductorSystem(size: 22, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                    Text(L("没有匹配的结果", "No matching results"))
+                        .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.secondaryText)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 190)
             } else {
-                List(selection: $selectedCommandID) {
-                    ForEach(filteredResult.rows) { row in
-                        if row.showsSectionTitle {
-                            CommandSectionTitle(row.command.section, compact: true)
-                                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 1, trailing: 0))
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 1) {
+                        ForEach(filteredResult.rows) { row in
+                            if row.showsSectionTitle {
+                                CommandSectionTitle(row.command.section, compact: true)
+                            }
+                            CommandButton(
+                                command: row.command,
+                                selected: row.id == selectedCommandID,
+                                selectionNamespace: commandSelectionNamespace,
+                                action: {
+                                    execute(row.command)
+                                },
+                                onHover: {
+                                    if !row.command.disabled {
+                                        selectedCommandID = row.id
+                                    }
+                                }
+                            )
+                            .transition(ConductorMotion.rowTransition(itemCount: filteredResult.rows.count))
+                            .conductorCascade(
+                                index: row.presentationIndex,
+                                itemCount: filteredResult.rows.count,
+                                edge: .top,
+                                distance: 8,
+                                scale: 0.99
+                            )
                         }
-                        commandRowButton(row.command, selected: row.id == selectedCommandID) {
-                            execute(row.command)
-                        }
-                        .tag(row.id)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                        .listRowSeparator(.hidden)
                     }
+                    .padding(.vertical, 1)
+                    .animation(ConductorMotion.list(itemCount: filteredResult.rows.count), value: filteredResult.commandIDs)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
                 .scrollIndicators(.visible)
-                .animation(ConductorMotion.list(itemCount: filteredResult.rows.count), value: filteredResult.commandIDs)
             }
         }
         .frame(maxHeight: .infinity)
-    }
-
-    private func commandRowButton(
-        _ command: CommandPaletteItem,
-        selected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Label {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(command.title)
-                            .font(.conductorSystem(size: 11.8, weight: selected ? .semibold : .medium, scale: fontScale))
-                            .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.primaryText)
-                            .lineLimit(1)
-                        Text(command.disabled ? (command.disabledReason ?? command.outcome) : command.outcome)
-                            .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.tertiaryText)
-                            .lineLimit(1)
-                    }
-                } icon: {
-                    Image(systemName: command.systemImage)
-                        .font(.conductorSystem(size: 10.4, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(commandIconColor(command, selected: selected))
-                        .frame(width: 20, height: 20)
-                        .accessibilityHidden(true)
-                }
-                .labelStyle(.titleAndIcon)
-
-                Spacer(minLength: 8)
-
-                if let rankingBadge = command.rankingBadge {
-                    Text(rankingBadge)
-                        .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : theme.floatingEmphasis.opacity(0.9))
-                        .frame(height: 17)
-                }
-
-                Text(command.shortcut)
-                    .font(.conductorSystem(size: 9.8, weight: .medium, scale: fontScale))
-                    .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
-                    .frame(height: 17)
-            }
-            .padding(.horizontal, 7)
-            .frame(height: 38)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.borderless)
-        .disabled(command.disabled)
-        .opacity(command.disabled ? 0.62 : 1)
-        .help(command.rankingHint ?? command.outcome)
-    }
-
-    private func commandIconColor(_ command: CommandPaletteItem, selected: Bool) -> Color {
-        if command.disabled {
-            return ConductorDesign.tertiaryText
-        }
-        return selected ? theme.floatingEmphasis : ConductorDesign.secondaryText
     }
 
     private func ensureSelection() {
@@ -1235,15 +1255,16 @@ private struct CommandPaletteHeader: View {
             Button {
                 onClose()
             } label: {
-                Label(closeHelp, systemImage: "xmark")
+                Image(systemName: "xmark")
                     .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
                     .foregroundStyle(ConductorDesign.tertiaryText)
-                    .labelStyle(.iconOnly)
                     .frame(width: 20, height: 20)
+                    .background(theme.floatingControlFill.opacity(0.58))
+                    .clipShape(Circle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .accessibilityLabel(closeHelp)
-            .help(closeHelp)
+            .macNativeTooltip(closeHelp)
         }
         .frame(height: 22)
     }
@@ -1266,7 +1287,7 @@ private struct CommandSectionTitle: View {
                 .font(.conductorSystem(size: compact ? 9.2 : 10.2, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
             Rectangle()
-                .fill(ConductorTokens.Settings.subtleSeparator(dark: theme.usesDarkChrome))
+                .fill(theme.floatingSeparator.opacity(0.72))
                 .frame(height: 1)
         }
         .padding(.top, compact ? 4 : 5)
@@ -1274,12 +1295,111 @@ private struct CommandSectionTitle: View {
     }
 }
 
+private struct CommandButton: View {
+    let command: CommandPaletteItem
+    var selected = false
+    let selectionNamespace: Namespace.ID
+    let action: () -> Void
+    var onHover: () -> Void = {}
+    @State private var hovering = false
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: command.systemImage)
+                    .font(.conductorSystem(size: 10.4, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 20, height: 20)
+                    .background(iconFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(command.title)
+                        .font(.conductorSystem(size: 11.8, weight: selected ? .semibold : .medium, scale: fontScale))
+                        .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.primaryText)
+                        .lineLimit(1)
+                    Text(command.disabled ? (command.disabledReason ?? command.outcome) : command.outcome)
+                        .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                if let rankingBadge = command.rankingBadge {
+                    Text(rankingBadge)
+                        .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : theme.floatingEmphasis.opacity(0.9))
+                        .padding(.horizontal, 6)
+                        .frame(height: 17)
+                        .background(theme.floatingSelectedFill.opacity(command.disabled ? 0.24 : 0.5))
+                        .clipShape(Capsule())
+                }
+
+                Text(command.shortcut)
+                    .font(.conductorSystem(size: 9.8, weight: .medium, scale: fontScale))
+                    .foregroundStyle(command.disabled ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
+                    .padding(.horizontal, 6)
+                    .frame(height: 17)
+                    .background(command.disabled ? theme.floatingControlFill.opacity(0.34) : theme.floatingControlFill.opacity(0.56))
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 38)
+            .background(rowBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(command.disabled)
+        .opacity(command.disabled ? 0.62 : 1)
+        .macNativeTooltip(command.rankingHint ?? command.outcome)
+        .onHover { value in
+            guard hovering != value else { return }
+            hovering = value
+            if value {
+                onHover()
+            }
+        }
+    }
+
+    private var rowBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        return ZStack {
+            shape
+                .fill(hovering ? theme.floatingHoverFill.opacity(0.54) : Color.clear)
+            if selected {
+                shape
+                    .fill(theme.floatingSelectedFill.opacity(0.66))
+            }
+        }
+    }
+
+    private var iconColor: Color {
+        if command.disabled {
+            return ConductorDesign.tertiaryText
+        }
+        return selected ? theme.floatingEmphasis : ConductorDesign.secondaryText
+    }
+
+    private var iconFill: Color {
+        if selected {
+            return theme.floatingControlFill.opacity(0.76)
+        }
+        return command.disabled ? theme.floatingControlFill.opacity(0.24) : theme.floatingControlFill.opacity(0.42)
+    }
+}
+
 private struct WorkspaceOverviewSnapshot: Equatable {
+    let chromeClarity: ChromeClarity
     let items: [WorkspaceOverviewItemSnapshot]
     let selectedWorkspaceID: WorkspaceID
 
     @MainActor
     init(model: ConductorWindowModel) {
+        self.chromeClarity = model.appearance.chromeClarity
         self.items = model.workspaces.map { workspace in
             WorkspaceOverviewItemSnapshot(
                 workspace: workspace,
@@ -1460,38 +1580,62 @@ private struct WorkspaceOverviewPanel: View {
         let result = filteredResult
         let selectedItem = inspectorItem(in: result)
         ZStack {
-            VStack(alignment: .leading, spacing: 11) {
-                header
-                workspaceOverviewSeparator
-                    .frame(height: 1)
+            ConductorGlassSurface(style: .panel, clarity: snapshot.chromeClarity, interactive: true) {
+                VStack(alignment: .leading, spacing: 11) {
+                    header
+                    FloatingPanelDivider()
 
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        searchField
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            searchField
 
-                        if result.items.isEmpty {
-                            emptyState
-                        } else {
-                            workspaceList(result)
+                            if result.items.isEmpty {
+                                emptyState
+                            } else {
+                                ScrollView {
+                                    LazyVStack(alignment: .leading, spacing: 6) {
+                                        ForEach(result.items) { item in
+                                            WorkspaceOverviewListRow(
+                                                item: item,
+                                                selected: item.id == snapshot.selectedWorkspaceID,
+                                                highlighted: item.id == highlightedWorkspaceID
+                                            ) {
+                                                highlightedWorkspaceID = item.id
+                                            } open: {
+                                                openWorkspace(item.id)
+                                            } openRoot: {
+                                                openWorkspaceRoot(item.id)
+                                            } openFirstService: {
+                                                openWorkspaceFirstService(item.id)
+                                            }
+                                            .transition(ConductorMotion.rowTransition(itemCount: result.items.count))
+                                        }
+                                    }
+                                    .padding(.vertical, 1)
+                                    .animation(ConductorMotion.list(itemCount: result.items.count), value: result.ids)
+                                }
+                                .scrollIndicators(.visible)
+                                .frame(maxHeight: .infinity)
+                            }
                         }
+                        .frame(width: 286)
+
+                        Rectangle()
+                            .fill(theme.floatingSeparator.opacity(0.82))
+                            .frame(width: 1)
+                            .frame(maxHeight: .infinity)
+
+                        WorkspaceInspectorPane(
+                            model: model,
+                            item: selectedItem,
+                            selectedWorkspaceID: snapshot.selectedWorkspaceID,
+                            openWorkspace: openWorkspace
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    .frame(width: 286)
-
-                    workspaceOverviewSeparator
-                        .frame(width: 1)
-                        .frame(maxHeight: .infinity)
-
-                    WorkspaceInspectorPane(
-                        model: model,
-                        item: selectedItem,
-                        selectedWorkspaceID: snapshot.selectedWorkspaceID,
-                        openWorkspace: openWorkspace
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .padding(12)
             }
-            .padding(12)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ConductorTokens.Radius.panel, style: .continuous))
             .frame(width: 760, height: 510)
             .onAppear {
                 highlightedWorkspaceID = snapshot.selectedWorkspaceID
@@ -1528,11 +1672,6 @@ private struct WorkspaceOverviewPanel: View {
         }
     }
 
-    private var workspaceOverviewSeparator: some View {
-        Rectangle()
-            .fill(ConductorTokens.Settings.subtleSeparator(dark: theme.usesDarkChrome))
-    }
-
     private var header: some View {
         FloatingPanelHeader(
             systemImage: WorkspaceChromeGlyph.systemName(selected: false),
@@ -1551,50 +1690,34 @@ private struct WorkspaceOverviewPanel: View {
                 .foregroundStyle(ConductorDesign.tertiaryText)
                 .accessibilityHidden(true)
             TextField(L("搜索工作区", "Search workspaces"), text: $query)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
                 .font(.conductorSystem(size: 13, weight: .medium, scale: fontScale))
                 .focused($searchFocused)
             Text("↵")
                 .font(.conductorSystem(size: 11, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.tertiaryText)
         }
-        .padding(.horizontal, 2)
+        .padding(.horizontal, 10)
         .frame(height: 32)
+        .background(theme.floatingControlStrongFill)
+        .clipShape(RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup))
+        .overlay {
+            RoundedRectangle(cornerRadius: ConductorTokens.Radius.controlGroup)
+                .stroke(theme.floatingStroke.opacity(0.42), lineWidth: 0.6)
+        }
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label(L("没有匹配的工作区", "No matching workspaces"), systemImage: WorkspaceChromeGlyph.systemName(selected: false))
-        } description: {
-            Text(L("换个关键词再试", "Try another keyword"))
+        VStack(spacing: 8) {
+            Image(systemName: WorkspaceChromeGlyph.systemName(selected: false))
+                .font(.conductorSystem(size: 24, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+            Text(L("没有匹配的工作区", "No matching workspaces"))
+                .font(.conductorSystem(size: 12.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
         }
         .frame(maxWidth: .infinity)
         .frame(height: 220)
-    }
-
-    private func workspaceList(_ result: WorkspaceOverviewFilterResult) -> some View {
-        List(result.items, selection: $highlightedWorkspaceID) { item in
-            WorkspaceOverviewListRow(
-                item: item,
-                selected: item.id == snapshot.selectedWorkspaceID,
-                highlighted: item.id == highlightedWorkspaceID
-            ) {
-                highlightedWorkspaceID = item.id
-            } open: {
-                openWorkspace(item.id)
-            } openRoot: {
-                openWorkspaceRoot(item.id)
-            } openFirstService: {
-                openWorkspaceFirstService(item.id)
-            }
-            .tag(item.id)
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 4))
-        }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
-        .animation(ConductorMotion.list(itemCount: result.items.count), value: result.ids)
-        .frame(maxHeight: .infinity)
     }
 
     private func inspectorItem(in result: WorkspaceOverviewFilterResult) -> WorkspaceOverviewItemSnapshot? {
@@ -1679,13 +1802,64 @@ private struct WorkspaceOverviewListRow: View {
     let open: () -> Void
     let openRoot: () -> Void
     let openFirstService: () -> Void
+    @State private var hovering = false
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
-        rowContent
-            .onTapGesture(perform: inspect)
-            .onTapGesture(count: 2, perform: open)
+        Button(action: inspect) {
+            HStack(spacing: 8) {
+                Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
+                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
+                    .frame(width: 22, height: 22)
+                    .background(iconFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        Text(item.workspace.title)
+                            .font(.conductorSystem(size: 11.8, weight: highlighted ? .semibold : .medium, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.primaryText)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if item.unreadCount > 0 {
+                            WorkspaceInspectorPill(systemImage: "bell.fill", value: "\(item.unreadCount)", tone: .attention)
+                        }
+                        if item.activeAgentCount > 0 {
+                            WorkspaceInspectorPill(systemImage: "sparkles", value: "\(item.activeAgentCount)", tone: .accent)
+                        }
+                    }
+
+                    Text(item.rootDisplay)
+                        .font(.conductorSystem(size: 9.6, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer(minLength: 4)
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(item.portDisplay)
+                        .font(.conductorSystem(size: 9.2, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                }
+                .frame(width: 58, alignment: .trailing)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 48)
+            .background(rowFill)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(borderColor, lineWidth: highlighted || selected ? 0.9 : 0.6)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
         .contextMenu {
             Button(L("切到工作区", "Switch to Workspace"), action: open)
             if item.workspaceMetadata?.rootPath != nil {
@@ -1701,58 +1875,31 @@ private struct WorkspaceOverviewListRow: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(item.workspace.title), \(item.rootDisplay), \(item.portDisplay)")
-        .help(L("查看工作区状态", "Inspect workspace status"))
+        .macNativeTooltip(L("查看工作区状态", "Inspect workspace status"))
         .onHover { value in
+            hovering = value
             if value {
                 inspect()
             }
         }
     }
 
-    private var rowContent: some View {
-        HStack(spacing: 8) {
-            Label {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 5) {
-                        Text(item.workspace.title)
-                            .font(.conductorSystem(size: 11.8, weight: highlighted ? .semibold : .medium, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.primaryText)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        if item.unreadCount > 0 {
-                            workspaceInspectorStatusLabel(systemImage: "bell.fill", value: "\(item.unreadCount)", tone: .attention, theme: theme, fontScale: fontScale)
-                        }
-                        if item.activeAgentCount > 0 {
-                            workspaceInspectorStatusLabel(systemImage: "sparkles", value: "\(item.activeAgentCount)", tone: .accent, theme: theme, fontScale: fontScale)
-                        }
-                    }
-
-                    Text(item.rootDisplay)
-                        .font(.conductorSystem(size: 9.6, weight: .medium, scale: fontScale))
-                        .foregroundStyle(ConductorDesign.tertiaryText)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            } icon: {
-                Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
-                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
-                    .foregroundStyle(selected ? theme.floatingEmphasis : ConductorDesign.secondaryText)
-                    .frame(width: 22, height: 22)
-                    .accessibilityHidden(true)
-            }
-            .labelStyle(.titleAndIcon)
-
-            Spacer(minLength: 4)
-
-            Text(item.portDisplay)
-                .font(.conductorSystem(size: 9.2, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-                .lineLimit(1)
-                .frame(width: 58, alignment: .trailing)
+    private var rowFill: Color {
+        if highlighted || selected {
+            return theme.floatingSelectedFill.opacity(selected ? 0.84 : 0.62)
         }
-        .padding(.horizontal, 4)
-        .frame(height: 46)
-        .contentShape(Rectangle())
+        return hovering ? theme.floatingHoverFill.opacity(0.66) : theme.floatingControlFill.opacity(0.42)
+    }
+
+    private var iconFill: Color {
+        selected ? theme.floatingControlFill.opacity(0.82) : theme.floatingControlFill.opacity(0.42)
+    }
+
+    private var borderColor: Color {
+        if selected || highlighted {
+            return theme.floatingSelectedStroke.opacity(0.80)
+        }
+        return theme.floatingStroke.opacity(0.64)
     }
 }
 
@@ -1770,11 +1917,11 @@ private struct WorkspaceInspectorPane: View {
                 VStack(alignment: .leading, spacing: 10) {
                     inspectorHeader(item)
                     HStack(spacing: 6) {
-                        workspaceInspectorStatusLabel(systemImage: "square.split.2x2", value: "\(item.workspace.panes.count)", tone: .neutral, theme: theme, fontScale: fontScale)
-                        workspaceInspectorStatusLabel(systemImage: "terminal", value: "\(item.terminalCount)", tone: .neutral, theme: theme, fontScale: fontScale)
-                        workspaceInspectorStatusLabel(systemImage: "doc.text", value: "\(item.fileSummaries.count)", tone: item.fileSummaries.isEmpty ? .neutral : .accent, theme: theme, fontScale: fontScale)
-                        workspaceInspectorStatusLabel(systemImage: "globe", value: "\(item.webSummaries.count)", tone: item.webSummaries.isEmpty ? .neutral : .accent, theme: theme, fontScale: fontScale)
-                        workspaceInspectorStatusLabel(systemImage: "network", value: item.portDisplay, tone: item.workspaceMetadata?.runningPorts.isEmpty == false ? .accent : .neutral, theme: theme, fontScale: fontScale)
+                        WorkspaceInspectorPill(systemImage: "square.split.2x2", value: "\(item.workspace.panes.count)", tone: .neutral)
+                        WorkspaceInspectorPill(systemImage: "terminal", value: "\(item.terminalCount)", tone: .neutral)
+                        WorkspaceInspectorPill(systemImage: "doc.text", value: "\(item.fileSummaries.count)", tone: item.fileSummaries.isEmpty ? .neutral : .accent)
+                        WorkspaceInspectorPill(systemImage: "globe", value: "\(item.webSummaries.count)", tone: item.webSummaries.isEmpty ? .neutral : .accent)
+                        WorkspaceInspectorPill(systemImage: "network", value: item.portDisplay, tone: item.workspaceMetadata?.runningPorts.isEmpty == false ? .accent : .neutral)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1788,15 +1935,13 @@ private struct WorkspaceInspectorPane: View {
 
                     WorkspaceInspectorSection(title: L("接续", "Continuity")) {
                         HStack(spacing: 6) {
-                            Button {
+                            WorkspaceInspectorActionButton(
+                                title: item.resumableAgents.isEmpty ? L("无可续接", "No Agents") : L("续接全部", "Resume All"),
+                                systemImage: "arrow.triangle.2.circlepath",
+                                disabled: item.resumableAgents.isEmpty
+                            ) {
                                 resumeAgents(in: item.id)
-                            } label: {
-                                Label(item.resumableAgents.isEmpty ? L("无可续接", "No Agents") : L("续接全部", "Resume All"), systemImage: "arrow.triangle.2.circlepath")
-                                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(item.resumableAgents.isEmpty)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1900,7 +2045,9 @@ private struct WorkspaceInspectorPane: View {
             Image(systemName: WorkspaceChromeGlyph.systemName(selected: item.id == selectedWorkspaceID))
                 .font(.conductorSystem(size: 13, weight: .bold, scale: fontScale))
                 .foregroundStyle(item.id == selectedWorkspaceID ? theme.floatingEmphasis : ConductorDesign.secondaryText)
-                .frame(width: 22, height: 22)
+                .frame(width: 28, height: 28)
+                .background(theme.floatingControlFill.opacity(0.70))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.workspace.title)
@@ -1918,48 +2065,38 @@ private struct WorkspaceInspectorPane: View {
             Spacer(minLength: 8)
 
             if item.id == selectedWorkspaceID {
-                workspaceInspectorStatusLabel(systemImage: "checkmark", value: L("当前", "Current"), tone: .accent, theme: theme, fontScale: fontScale)
+                WorkspaceInspectorPill(systemImage: "checkmark", value: L("当前", "Current"), tone: .accent)
             }
         }
     }
 
     private func inspectorActions(_ item: WorkspaceOverviewItemSnapshot) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            ControlGroup {
-                Button {
+            HStack(spacing: 7) {
+                WorkspaceInspectorActionButton(
+                    title: item.id == selectedWorkspaceID ? L("已打开", "Current") : L("切到工作区", "Switch"),
+                    systemImage: item.id == selectedWorkspaceID ? "checkmark" : "arrow.right",
+                    disabled: item.id == selectedWorkspaceID
+                ) {
                     openWorkspace(item.id)
-                } label: {
-                    Label(item.id == selectedWorkspaceID ? L("已打开", "Current") : L("切到工作区", "Switch"), systemImage: item.id == selectedWorkspaceID ? "checkmark" : "arrow.right")
-                        .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                 }
-                .disabled(item.id == selectedWorkspaceID)
 
                 if let server = item.workspaceMetadata?.devServers.first {
-                    Button {
+                    WorkspaceInspectorActionButton(title: L("打开 :\(server.port)", "Open :\(server.port)"), systemImage: "network") {
                         openFirstLocalService(in: item.id)
-                    } label: {
-                        Label(L("打开 :\(server.port)", "Open :\(server.port)"), systemImage: "network")
-                            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     }
                 } else if let port = item.workspaceMetadata?.runningPorts.first {
-                    Button {
+                    WorkspaceInspectorActionButton(title: L("打开 :\(port)", "Open :\(port)"), systemImage: "network") {
                         openFirstLocalService(in: item.id)
-                    } label: {
-                        Label(L("打开 :\(port)", "Open :\(port)"), systemImage: "network")
-                            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     }
                 }
 
                 if item.workspaceMetadata?.rootPath != nil {
-                    Button {
+                    WorkspaceInspectorActionButton(title: L("Finder", "Finder"), systemImage: "folder") {
                         openRoot(in: item.id)
-                    } label: {
-                        Label(L("Finder", "Finder"), systemImage: "folder")
-                            .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
                     }
                 }
             }
-            .controlSize(.small)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2032,18 +2169,22 @@ private struct WorkspaceInspectorPane: View {
 private struct WorkspaceInspectorSection<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
+    @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
-        GroupBox {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(ConductorDesign.tertiaryText)
+                Rectangle()
+                    .fill(theme.floatingSeparator.opacity(0.70))
+                    .frame(height: 1)
+            }
             VStack(alignment: .leading, spacing: 5) {
                 content
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } label: {
-            Text(title)
-                .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
         }
     }
 }
@@ -2055,17 +2196,20 @@ private struct WorkspaceInspectorFact: View {
     @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
-        LabeledContent {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .frame(width: 14)
+            Text(label)
+                .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
+                .foregroundStyle(ConductorDesign.tertiaryText)
+                .frame(width: 44, alignment: .leading)
             Text(value)
                 .font(.conductorSystem(size: 10.6, weight: .semibold, scale: fontScale))
                 .foregroundStyle(ConductorDesign.secondaryText)
                 .lineLimit(1)
                 .truncationMode(.middle)
-        } label: {
-            Label(label, systemImage: systemImage)
-                .font(.conductorSystem(size: 10.2, weight: .medium, scale: fontScale))
-                .foregroundStyle(ConductorDesign.tertiaryText)
-                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -2081,51 +2225,52 @@ private struct WorkspaceInspectorResumeAgentLine: View {
 
     var body: some View {
         HStack(spacing: 7) {
+            Image(systemName: "sparkles")
+                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(theme.floatingEmphasis)
+                .frame(width: 18, height: 18)
+                .background(theme.floatingControlFill.opacity(0.54))
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .accessibilityHidden(true)
+
             Button(action: focus) {
-                Label {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(agent.displayName)
-                            .font(.conductorSystem(size: 10.7, weight: .semibold, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.secondaryText)
-                            .lineLimit(1)
-                        Text(agent.terminalTitle)
-                            .font(.conductorSystem(size: 9.4, weight: .medium, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.tertiaryText)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                } icon: {
-                    Image(systemName: "sparkles")
-                        .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(theme.floatingEmphasis)
-                        .frame(width: 18, height: 18)
-                        .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(agent.displayName)
+                        .font(.conductorSystem(size: 10.7, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.secondaryText)
+                        .lineLimit(1)
+                    Text(agent.terminalTitle)
+                        .font(.conductorSystem(size: 9.4, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
                 }
-                .labelStyle(.titleAndIcon)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
-            .help(L("定位到这个 Agent 终端", "Focus this agent terminal"))
+            .buttonStyle(.plain)
+            .macNativeTooltip(L("定位到这个 Agent 终端", "Focus this agent terminal"))
 
-            ControlGroup {
-                Button(action: resume) {
-                    Label(L("发送续接命令", "Send resume command"), systemImage: "paperplane")
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityLabel(L("发送续接命令", "Send resume command"))
-                .help(L("发送续接命令", "Send resume command"))
-
-                Button(action: copyCommand) {
-                    Label(L("复制续接命令", "Copy resume command"), systemImage: "doc.on.doc")
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityLabel(L("复制续接命令", "Copy resume command"))
-                .help(L("复制续接命令", "Copy resume command"))
+            HStack(spacing: 4) {
+                iconButton(systemImage: "paperplane", tooltip: L("发送续接命令", "Send resume command"), action: resume)
+                iconButton(systemImage: "doc.on.doc", tooltip: L("复制续接命令", "Copy resume command"), action: copyCommand)
             }
-            .controlSize(.small)
         }
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func iconButton(systemImage: String, tooltip: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 9.2, weight: .semibold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
+                .frame(width: 22, height: 22)
+                .background(theme.floatingControlFill.opacity(0.62))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.94, pressedOpacity: 0.88))
+        .accessibilityLabel(tooltip)
+        .macNativeTooltip(tooltip)
     }
 }
 
@@ -2135,7 +2280,13 @@ private struct WorkspaceInspectorTerminalLine: View {
     @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
-        Label {
+        HStack(spacing: 7) {
+            Image(systemName: terminal.activeAgentTitle == nil ? "terminal" : "sparkles")
+                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                .foregroundStyle(terminal.activeAgentTitle == nil ? ConductorDesign.tertiaryText : theme.floatingEmphasis)
+                .frame(width: 16, height: 16)
+                .background(theme.floatingControlFill.opacity(0.46))
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
                 Text(terminal.title)
                     .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
@@ -2147,13 +2298,7 @@ private struct WorkspaceInspectorTerminalLine: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-        } icon: {
-            Image(systemName: terminal.activeAgentTitle == nil ? "terminal" : "sparkles")
-                .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
-                .foregroundStyle(terminal.activeAgentTitle == nil ? ConductorDesign.tertiaryText : theme.floatingEmphasis)
-                .frame(width: 16, height: 16)
         }
-        .labelStyle(.titleAndIcon)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -2161,33 +2306,33 @@ private struct WorkspaceInspectorTerminalLine: View {
 private struct WorkspaceInspectorDevServerLine: View {
     let server: WorkspaceMetadataSnapshot.DevServerSummary
     let action: () -> Void
+    @State private var hovering = false
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 7) {
-                Label {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(server.label)
-                            .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.secondaryText)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Text(server.workingDirectory.map(workspaceInspectorAbbreviatedPath) ?? server.url)
-                            .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.tertiaryText)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                } icon: {
-                    Image(systemName: "network")
-                        .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(theme.floatingEmphasis)
-                        .frame(width: 16, height: 16)
-                        .accessibilityHidden(true)
+                Image(systemName: "network")
+                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.floatingEmphasis)
+                    .frame(width: 16, height: 16)
+                    .background(theme.floatingSelectedFill.opacity(0.48))
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(server.label)
+                        .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(server.workingDirectory.map(workspaceInspectorAbbreviatedPath) ?? server.url)
+                        .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                .labelStyle(.titleAndIcon)
 
                 Spacer(minLength: 4)
 
@@ -2198,51 +2343,54 @@ private struct WorkspaceInspectorDevServerLine: View {
             }
             .padding(.horizontal, 6)
             .frame(height: 34)
-            .contentShape(Rectangle())
+            .background(hovering ? theme.floatingHoverFill.opacity(0.52) : theme.floatingControlFill.opacity(0.24))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.borderless)
-        .help(L("打开 \(server.url)", "Open \(server.url)"))
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+        .macNativeTooltip(L("打开 \(server.url)", "Open \(server.url)"))
+        .onHover { hovering = $0 }
     }
 }
 
 private struct WorkspaceInspectorFileLine: View {
     let file: WorkspaceMetadataSnapshot.FileSummary
     let action: () -> Void
+    @State private var hovering = false
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 7) {
-                Label {
-                    VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 4) {
-                            Text(file.title)
-                                .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
-                                .foregroundStyle(ConductorDesign.secondaryText)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            if file.dirty {
-                                Text(L("未保存", "Unsaved"))
-                                    .font(.conductorSystem(size: 8.7, weight: .bold, scale: fontScale))
-                                    .foregroundStyle(theme.usesDarkChrome ? Color.orange.opacity(0.94) : Color.orange.opacity(0.82))
-                                    .lineLimit(1)
-                            }
-                        }
-                        Text(workspaceInspectorAbbreviatedPath(file.path))
-                            .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.tertiaryText)
+                Image(systemName: file.dirty ? "doc.text.fill" : "doc.text")
+                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 16, height: 16)
+                    .background(iconFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        Text(file.title)
+                            .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
+                            .foregroundStyle(ConductorDesign.secondaryText)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                        if file.dirty {
+                            Text(L("未保存", "Unsaved"))
+                                .font(.conductorSystem(size: 8.7, weight: .bold, scale: fontScale))
+                                .foregroundStyle(theme.usesDarkChrome ? Color.orange.opacity(0.94) : Color.orange.opacity(0.82))
+                                .lineLimit(1)
+                        }
                     }
-                } icon: {
-                    Image(systemName: file.dirty ? "doc.text.fill" : "doc.text")
-                        .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(iconColor)
-                        .frame(width: 16, height: 16)
-                        .accessibilityHidden(true)
+                    Text(workspaceInspectorAbbreviatedPath(file.path))
+                        .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                .labelStyle(.titleAndIcon)
 
                 Spacer(minLength: 4)
 
@@ -2255,46 +2403,81 @@ private struct WorkspaceInspectorFileLine: View {
             }
             .padding(.horizontal, 6)
             .frame(height: 34)
-            .contentShape(Rectangle())
+            .background(rowFill)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.borderless)
-        .help(L("打开文件标签", "Open file tab"))
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+        .macNativeTooltip(L("打开文件标签", "Open file tab"))
+        .onHover { hovering = $0 }
     }
 
     private var iconColor: Color {
         file.dirty || file.selected ? theme.floatingEmphasis : ConductorDesign.tertiaryText
     }
 
+    private var iconFill: Color {
+        file.selected ? theme.floatingSelectedFill.opacity(0.56) : theme.floatingControlFill.opacity(0.46)
+    }
+
+    private var rowFill: Color {
+        if file.selected {
+            return theme.floatingSelectedFill.opacity(0.34)
+        }
+        return hovering ? theme.floatingHoverFill.opacity(0.52) : theme.floatingControlFill.opacity(0.24)
+    }
 }
 
-private enum WorkspaceInspectorStatusTone {
+private struct WorkspaceInspectorPill: View {
+    let systemImage: String
+    let value: String
+    let tone: WorkspaceInspectorPillTone
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: systemImage)
+                .font(.conductorSystem(size: 8.8, weight: .semibold, scale: fontScale))
+                .accessibilityHidden(true)
+            Text(value)
+                .font(.conductorSystem(size: 9.4, weight: .semibold, scale: fontScale))
+                .lineLimit(1)
+        }
+        .foregroundStyle(foreground)
+        .padding(.horizontal, 5)
+        .frame(height: 17)
+        .background(background)
+        .clipShape(Capsule())
+    }
+
+    private var foreground: Color {
+        switch tone {
+        case .neutral:
+            return ConductorDesign.secondaryText
+        case .accent:
+            return theme.floatingEmphasis
+        case .attention:
+            return theme.usesDarkChrome ? Color.orange.opacity(0.94) : Color.orange.opacity(0.82)
+        }
+    }
+
+    private var background: Color {
+        switch tone {
+        case .neutral:
+            return theme.floatingControlFill.opacity(0.54)
+        case .accent:
+            return theme.floatingSelectedFill.opacity(0.68)
+        case .attention:
+            return Color.orange.opacity(theme.usesDarkChrome ? 0.16 : 0.10)
+        }
+    }
+}
+
+private enum WorkspaceInspectorPillTone {
     case neutral
     case accent
     case attention
-}
-
-private func workspaceInspectorStatusLabel(
-    systemImage: String,
-    value: String,
-    tone: WorkspaceInspectorStatusTone,
-    theme: TerminalTheme,
-    fontScale: AppearanceFontScale
-) -> some View {
-    Label(value, systemImage: systemImage)
-        .font(.conductorSystem(size: 9.4, weight: .semibold, scale: fontScale))
-        .foregroundStyle(workspaceInspectorStatusColor(tone: tone, theme: theme))
-        .frame(height: 17)
-}
-
-private func workspaceInspectorStatusColor(tone: WorkspaceInspectorStatusTone, theme: TerminalTheme) -> Color {
-    switch tone {
-    case .neutral:
-        return ConductorDesign.secondaryText
-    case .accent:
-        return theme.floatingEmphasis
-    case .attention:
-        return theme.usesDarkChrome ? Color.orange.opacity(0.94) : Color.orange.opacity(0.82)
-    }
 }
 
 private func workspaceInspectorAbbreviatedPath(_ path: String) -> String {
@@ -2326,33 +2509,33 @@ private struct WorkspaceInspectorEmptyLine: View {
 private struct WorkspaceInspectorWebLine: View {
     let webTab: WorkspaceMetadataSnapshot.WebSummary
     let action: () -> Void
+    @State private var hovering = false
     @Environment(\.conductorTheme) private var theme
     @Environment(\.conductorFontScale) private var fontScale
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 7) {
-                Label {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(webTab.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? webTab.title! : webTab.pendingAddress)
-                            .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.secondaryText)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Text(webTab.url ?? webTab.pendingAddress)
-                            .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
-                            .foregroundStyle(ConductorDesign.tertiaryText)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                } icon: {
-                    Image(systemName: webTab.loading ? "arrow.triangle.2.circlepath" : "globe")
-                        .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
-                        .foregroundStyle(webTab.selected ? theme.floatingEmphasis : ConductorDesign.tertiaryText)
-                        .frame(width: 16, height: 16)
-                        .accessibilityHidden(true)
+                Image(systemName: webTab.loading ? "arrow.triangle.2.circlepath" : "globe")
+                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(webTab.selected ? theme.floatingEmphasis : ConductorDesign.tertiaryText)
+                    .frame(width: 16, height: 16)
+                    .background(webTab.selected ? theme.floatingSelectedFill.opacity(0.56) : theme.floatingControlFill.opacity(0.46))
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(webTab.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? webTab.title! : webTab.pendingAddress)
+                        .font(.conductorSystem(size: 10.8, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(webTab.url ?? webTab.pendingAddress)
+                        .font(.conductorSystem(size: 9.3, weight: .medium, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.tertiaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                .labelStyle(.titleAndIcon)
 
                 Spacer(minLength: 4)
 
@@ -2365,10 +2548,47 @@ private struct WorkspaceInspectorWebLine: View {
             }
             .padding(.horizontal, 6)
             .frame(height: 34)
-            .contentShape(Rectangle())
+            .background(hovering ? theme.floatingHoverFill.opacity(0.52) : theme.floatingControlFill.opacity(0.24))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.borderless)
-        .help(L("打开网页标签", "Open web tab"))
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.985, pressedOpacity: 0.96))
+        .macNativeTooltip(L("打开网页标签", "Open web tab"))
+        .onHover { hovering = $0 }
+    }
+}
+
+private struct WorkspaceInspectorActionButton: View {
+    let title: String
+    let systemImage: String
+    var disabled = false
+    let action: () -> Void
+    @Environment(\.conductorTheme) private var theme
+    @Environment(\.conductorFontScale) private var fontScale
+
+    var body: some View {
+        Button(action: {
+            guard !disabled else { return }
+            action()
+        }) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.conductorSystem(size: 10.5, weight: .semibold, scale: fontScale))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(disabled ? ConductorDesign.tertiaryText : ConductorDesign.secondaryText)
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .background(disabled ? theme.floatingControlFill.opacity(0.28) : theme.floatingControlFill.opacity(0.64))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.97, pressedOpacity: 0.94))
+        .disabled(disabled)
+        .accessibilityLabel(title)
+        .macNativeTooltip(title)
     }
 }
 

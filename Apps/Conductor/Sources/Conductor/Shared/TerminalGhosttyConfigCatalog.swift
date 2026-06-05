@@ -137,7 +137,7 @@ enum TerminalGhosttyConfigCatalog {
         GhosttyConfigFunctionGroup(
             id: "background",
             title: ConductorLocalization.text(zh: "背景与颜色", en: "Background and Colors"),
-            subtitle: ConductorLocalization.text(zh: "终端背景、背景图、模糊、选区和搜索高亮；窗口模式只保留浅色和暗色。", en: "Terminal background, image, blur, selection, and search highlights; window mode is limited to light and dark."),
+            subtitle: ConductorLocalization.text(zh: "终端背景、背景图、模糊、选区和搜索高亮；主题本身仍在主题页管理。", en: "Terminal background, image, blur, selection, and search highlights; full themes stay in the Theme page."),
             systemImage: "paintpalette",
             keys: [
                 "background-opacity", "background-blur", "background-image",

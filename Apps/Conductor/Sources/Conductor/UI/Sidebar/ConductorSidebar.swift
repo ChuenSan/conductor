@@ -11,6 +11,101 @@ private func L(_ zh: String, _ en: String) -> String {
     ConductorLocalization.text(zh: zh, en: en)
 }
 
+private struct WindowControlButtons: View {
+    let spacing: CGFloat
+    @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.conductorTheme) private var theme
+    @State private var isHoveringGroup = false
+
+    init(spacing: CGFloat = 8) {
+        self.spacing = spacing
+    }
+
+    private var isWindowActive: Bool {
+        controlActiveState != .inactive
+    }
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            // Close Button (Red)
+            controlButton(
+                id: "close",
+                activeColor: Color(red: 1.0, green: 0.38, blue: 0.34),
+                inactiveColor: theme.usesDarkChrome ? Color(white: 0.30) : Color(white: 0.84),
+                symbolName: "xmark",
+                symbolSize: 5.5,
+                symbolColor: Color(red: 0.35, green: 0.03, blue: 0.02),
+                accessibilityLabel: L("关闭窗口", "Close Window")
+            ) {
+                NSApp.keyWindow?.performClose(nil)
+            }
+
+            // Minimize Button (Yellow)
+            controlButton(
+                id: "minimize",
+                activeColor: Color(red: 1.0, green: 0.74, blue: 0.18),
+                inactiveColor: theme.usesDarkChrome ? Color(white: 0.30) : Color(white: 0.84),
+                symbolName: "minus",
+                symbolSize: 5.5,
+                symbolColor: Color(red: 0.38, green: 0.20, blue: 0.01),
+                accessibilityLabel: L("最小化窗口", "Minimize Window")
+            ) {
+                NSApp.keyWindow?.performMiniaturize(nil)
+            }
+
+            // Fullscreen Button (Green)
+            controlButton(
+                id: "fullscreen",
+                activeColor: Color(red: 0.15, green: 0.79, blue: 0.25),
+                inactiveColor: theme.usesDarkChrome ? Color(white: 0.30) : Color(white: 0.84),
+                symbolName: "arrow.up.left.and.arrow.down.right",
+                symbolSize: 4.5,
+                symbolColor: Color(red: 0.01, green: 0.32, blue: 0.04),
+                accessibilityLabel: L("切换全屏", "Toggle Full Screen")
+            ) {
+                NSApp.keyWindow?.toggleFullScreen(nil)
+            }
+        }
+        .frame(height: 16)
+        .onHover { hovering in
+            isHoveringGroup = hovering
+        }
+    }
+
+    @ViewBuilder
+    private func controlButton(
+        id: String,
+        activeColor: Color,
+        inactiveColor: Color,
+        symbolName: String,
+        symbolSize: CGFloat,
+        symbolColor: Color,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Circle()
+                .fill(isWindowActive ? activeColor : inactiveColor)
+                .overlay {
+                    Circle()
+                        .stroke(isWindowActive ? Color.black.opacity(0.12) : Color.black.opacity(0.06), lineWidth: 0.7)
+                }
+                .overlay {
+                    if isHoveringGroup && isWindowActive {
+                        Image(systemName: symbolName)
+                            .font(.system(size: symbolSize, weight: .bold))
+                            .foregroundStyle(symbolColor)
+                    }
+                }
+                .frame(width: 12, height: 12)
+        }
+        .buttonStyle(.plain)
+        .frame(width: 12, height: 12)
+        .accessibilityLabel(accessibilityLabel)
+        .macNativeTooltip(accessibilityLabel)
+    }
+}
+
 struct ConductorSidebar: View {
     let model: ConductorWindowModel
     let snapshot: WorkspaceChromeSnapshot
@@ -19,6 +114,9 @@ struct ConductorSidebar: View {
     let sidebarVisible: Bool
     @State private var renamingWorkspaceID: WorkspaceID?
     @State private var workspaceTitleDraft = ""
+    @State private var sidebarToggleHovering = false
+    @Namespace private var sidebarSelectionNamespace
+    @Namespace private var railSelectionNamespace
     @Environment(\.conductorFontScale) private var fontScale
 
     private var sidebarHeaderHeight: CGFloat {
@@ -43,7 +141,18 @@ struct ConductorSidebar: View {
         .padding(.bottom, ConductorTokens.Space.sidebarBottom)
         .frame(width: sidebarVisible ? ConductorDesign.sidebarWidth(for: appearance) : ConductorDesign.sidebarCollapsedWidth, alignment: .topLeading)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(.regularMaterial)
+        .background {
+            SidebarRailSurface(theme: theme, clarity: appearance.chromeClarity, isCollapsed: !sidebarVisible)
+        }
+        .overlay {
+            SidebarBookSpineChrome(
+                collapsed: !sidebarVisible,
+                theme: theme,
+                clarity: appearance.chromeClarity
+            )
+            .allowsHitTesting(false)
+        }
+        .clipShape(SidebarRailShape())
         .animation(model.shellAnimation(ConductorMotion.layout), value: sidebarVisible)
         .animation(model.shellAnimation(ConductorMotion.standard), value: theme)
     }
@@ -53,7 +162,8 @@ struct ConductorSidebar: View {
         if sidebarVisible {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    Spacer(minLength: 0)
+                    WindowControlButtons(spacing: 8)
+                    Spacer(minLength: 8)
                     sidebarToggleButton
                 }
                 .padding(.horizontal, ConductorTokens.Space.sidebarX + 4)
@@ -61,7 +171,14 @@ struct ConductorSidebar: View {
             }
             .frame(height: sidebarHeaderHeight, alignment: .top)
         } else {
-            Color.clear
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    Spacer()
+                    WindowControlButtons(spacing: 6)
+                    Spacer()
+                }
+                .padding(.top, 16)
+            }
             .frame(height: sidebarHeaderHeight, alignment: .top)
         }
     }
@@ -73,18 +190,31 @@ struct ConductorSidebar: View {
         } label: {
             Image(systemName: sidebarVisible ? "chevron.left" : "sidebar.left")
                 .font(.conductorSystem(size: 11.5, weight: .bold, scale: fontScale))
+                .foregroundStyle(ConductorDesign.secondaryText)
                 .frame(width: 26, height: 24)
+                .background(sidebarToggleFill)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
                 .accessibilityHidden(true)
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(ConductorPressButtonStyle())
         .accessibilityLabel(sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
-        .help(sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
+        .conductorHover($sidebarToggleHovering)
+        .macNativeTooltip(sidebarVisible ? L("收起侧边栏", "Collapse Sidebar") : L("展开侧边栏", "Expand Sidebar"))
+    }
+
+    private var sidebarToggleFill: Color {
+        if sidebarToggleHovering {
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.95 : 0.70)
+        }
+        return theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.36 : 0.18)
     }
 
     private var expandedSidebar: some View {
         VStack(alignment: .leading, spacing: 8) {
             workspaceSection
                 .frame(maxHeight: .infinity)
+
+            tokenRecordsSidebarEntry
 
             Spacer(minLength: 8)
 
@@ -94,53 +224,36 @@ struct ConductorSidebar: View {
     }
 
     private var expandedSidebarDock: some View {
-        HStack(spacing: 6) {
-            ControlGroup {
-                sidebarDockButton(icon: "plus.rectangle.on.rectangle", help: commandTooltip(L("新开终端", "New Terminal"), command: .newTerminal, fallback: "Cmd-T")) {
+        SidebarDockSurface {
+            HStack(spacing: 6) {
+                SidebarDockButton(id: "sidebar-dock.new-terminal", icon: "plus.rectangle.on.rectangle", help: commandTooltip(L("新开终端", "New Terminal"), command: .newTerminal, fallback: "Cmd-T")) {
                     finishWorkspaceRenameIfNeeded()
                     model.performCommand(.newTerminal)
                 }
-                sidebarDockButton(icon: "command", help: commandTooltip(L("打开命令面板", "Open Command Palette"), command: .toggleCommandPalette, fallback: "Cmd-K")) {
+                SidebarDockButton(id: "sidebar-dock.command-palette", icon: "command", help: commandTooltip(L("打开命令面板", "Open Command Palette"), command: .toggleCommandPalette, fallback: "Cmd-K")) {
                     finishWorkspaceRenameIfNeeded()
                     model.performCommand(.toggleCommandPalette)
                 }
-                sidebarDockButton(icon: "chart.bar", help: L("打开 Token 记录", "Open Token Records")) {
-                    finishWorkspaceRenameIfNeeded()
-                    model.performCommand(.openTokenRecords)
-                }
-            }
-            .controlSize(.small)
-
-            Spacer(minLength: 0)
-
-            ControlGroup {
-                sidebarDockButton(icon: "gearshape", help: commandTooltip(L("设置", "Settings"), command: .toggleSettings, fallback: "Cmd-,")) {
+                Spacer(minLength: 0)
+                SidebarDockButton(id: "sidebar-dock.settings", icon: "gearshape", help: commandTooltip(L("设置", "Settings"), command: .toggleSettings, fallback: "Cmd-,")) {
                     finishWorkspaceRenameIfNeeded()
                     ConductorMotion.perform(ConductorMotion.panel) {
                         model.performCommand(.toggleSettings)
                     }
                 }
             }
-            .controlSize(.small)
+            .padding(.horizontal, 2)
         }
-        .padding(.horizontal, 2)
         .padding(.bottom, 3)
     }
 
-    private func sidebarDockButton(
-        icon: String,
-        help: String,
-        disabled: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(help, systemImage: icon)
+    private var tokenRecordsSidebarEntry: some View {
+        SidebarDockSurface(horizontalPadding: 0) {
+            TokenRecordsSidebarCard {
+                finishWorkspaceRenameIfNeeded()
+                model.performCommand(.openTokenRecords)
+            }
         }
-        .labelStyle(.iconOnly)
-        .disabled(disabled)
-        .opacity(disabled ? 0.42 : 1)
-        .help(help)
-        .accessibilityLabel(help)
     }
 
     private func commandTooltip(_ title: String, command: ConductorShellCommand, fallback: String) -> String {
@@ -165,51 +278,41 @@ struct ConductorSidebar: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.conductorSystem(size: 10, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(ConductorDesign.secondaryText)
                         .frame(width: 18, height: 18)
-                        .contentShape(Rectangle())
+                        .contentShape(RoundedRectangle(cornerRadius: 5))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(ConductorPressButtonStyle())
                 .accessibilityLabel(commandTooltip(L("新建工作区", "New Workspace"), command: .newWorkspace, fallback: "Cmd-N"))
-                .help(commandTooltip(L("新建工作区", "New Workspace"), command: .newWorkspace, fallback: "Cmd-N"))
+                .macNativeTooltip(commandTooltip(L("新建工作区", "New Workspace"), command: .newWorkspace, fallback: "Cmd-N"))
             }
             .padding(.trailing, 5)
 
-            List(selection: selectedWorkspaceBinding) {
-                ForEach(snapshot.rows) { row in
-                    workspaceRow(for: row)
-                        .id(row.id)
-                        .tag(row.id)
-                        .listRowInsets(EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0))
-                        .listRowSeparator(.hidden)
-                        .transition(ConductorMotion.rowTransition(itemCount: snapshot.rows.count))
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(spacing: 3) {
+                    ForEach(snapshot.rows) { row in
+                        workspaceRow(for: row)
+                            .id(row.id)
+                            .transition(ConductorMotion.rowTransition(itemCount: snapshot.rows.count))
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.vertical, 2)
             }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
+            .mask(ConductorVerticalFadeMask(fadesTop: false))
             .frame(minHeight: 72, maxHeight: .infinity)
             .animation(nil, value: snapshot.selectedWorkspaceID)
             .animation(model.shellAnimation(ConductorMotion.list(itemCount: snapshot.rows.count)), value: snapshot.workspaceIDs)
         }
     }
 
-    private var selectedWorkspaceBinding: Binding<WorkspaceID?> {
-        Binding(
-            get: { snapshot.selectedWorkspaceID },
-            set: { newValue in
-                guard let newValue else { return }
-                finishWorkspaceRenameIfNeeded(except: newValue)
-                withoutShellAnimation {
-                    model.activateWorkspace(newValue, source: .sidebar)
-                }
-            }
-        )
-    }
-
     private var collapsedSidebar: some View {
         VStack(spacing: 6) {
-            sidebarRailButton(
+            SidebarRailButton(
+                id: "sidebar-rail.toggle-sidebar",
                 icon: "sidebar.left",
-                help: L("展开侧边栏", "Expand Sidebar")
+                help: L("展开侧边栏", "Expand Sidebar"),
+                namespace: railSelectionNamespace
             ) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.layout) {
@@ -223,12 +326,14 @@ struct ConductorSidebar: View {
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 8) {
                     ForEach(snapshot.rows) { row in
-                        sidebarRailButton(
+                        SidebarRailButton(
+                            id: "sidebar-rail.workspace.\(row.id)",
                             icon: WorkspaceChromeGlyph.systemName(selected: row.selected),
                             selected: row.selected,
                             activeAgentCount: row.activeAgentCount,
                             unreadCount: row.unreadCount,
-                            help: workspaceTooltip(for: row)
+                            help: workspaceTooltip(for: row),
+                            namespace: railSelectionNamespace
                         ) {
                             withoutShellAnimation {
                                 model.activateWorkspace(row.id, source: .sidebar)
@@ -255,23 +360,29 @@ struct ConductorSidebar: View {
 
     private var collapsedSidebarActions: some View {
         VStack(spacing: 8) {
-            sidebarRailButton(
+            SidebarRailButton(
+                id: "sidebar-rail.new-terminal",
                 icon: "plus.rectangle.on.rectangle",
-                help: commandTooltip(L("新开终端", "New Terminal"), command: .newTerminal, fallback: "Cmd-T")
+                help: commandTooltip(L("新开终端", "New Terminal"), command: .newTerminal, fallback: "Cmd-T"),
+                namespace: railSelectionNamespace
             ) {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.newTerminal)
             }
-            sidebarRailButton(
+            SidebarRailButton(
+                id: "sidebar-rail.command-palette",
                 icon: "command",
-                help: commandTooltip(L("打开命令面板", "Open Command Palette"), command: .toggleCommandPalette, fallback: "Cmd-K")
+                help: commandTooltip(L("打开命令面板", "Open Command Palette"), command: .toggleCommandPalette, fallback: "Cmd-K"),
+                namespace: railSelectionNamespace
             ) {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.toggleCommandPalette)
             }
-            sidebarRailButton(
+            SidebarRailButton(
+                id: "sidebar-rail.token-records",
                 icon: "chart.bar.fill",
-                help: commandTooltip(L("Token 记录", "Token Records"), command: .openTokenRecords, fallback: "Usage")
+                help: commandTooltip(L("Token 记录", "Token Records"), command: .openTokenRecords, fallback: "Usage"),
+                namespace: railSelectionNamespace
             ) {
                 finishWorkspaceRenameIfNeeded()
                 model.performCommand(.openTokenRecords)
@@ -281,9 +392,11 @@ struct ConductorSidebar: View {
 
     private var collapsedSidebarFooter: some View {
         VStack(spacing: 0) {
-            sidebarRailButton(
+            SidebarRailButton(
+                id: "sidebar-rail.settings",
                 icon: "gearshape",
-                help: commandTooltip(L("设置", "Settings"), command: .toggleSettings, fallback: "Cmd-,")
+                help: commandTooltip(L("设置", "Settings"), command: .toggleSettings, fallback: "Cmd-,"),
+                namespace: railSelectionNamespace
             ) {
                 finishWorkspaceRenameIfNeeded()
                 ConductorMotion.perform(ConductorMotion.panel) {
@@ -293,66 +406,6 @@ struct ConductorSidebar: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 4)
-    }
-
-    private func sidebarRailButton(
-        icon: String,
-        selected: Bool = false,
-        disabled: Bool = false,
-        activeAgentCount: Int = 0,
-        unreadCount: Int = 0,
-        help: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            guard !disabled else { return }
-            action()
-        } label: {
-            Label {
-                Text(help)
-            } icon: {
-                ZStack {
-                    Image(systemName: icon)
-                        .font(.conductorSystem(size: 13, weight: selected ? .bold : .semibold, scale: fontScale))
-                        .foregroundStyle(selected ? theme.shellChromeText : ConductorDesign.secondaryText)
-
-                    if activeAgentCount > 0 {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(theme.floatingEmphasis)
-                            .scaleEffect(0.44)
-                            .frame(width: 11, height: 11)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                            .accessibilityHidden(true)
-                    }
-
-                    if unreadCount > 0 {
-                        sidebarRailUnreadBadge(count: unreadCount)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .frame(width: 34, height: 34)
-                .contentShape(Rectangle())
-            }
-            .labelStyle(.iconOnly)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .tint(selected ? theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.34 : 0.24) : Color.clear)
-        .disabled(disabled)
-        .opacity(disabled ? 0.35 : 1.0)
-        .help(help)
-        .accessibilityLabel(help)
-    }
-
-    private func sidebarRailUnreadBadge(count: Int) -> some View {
-        Text(count > 99 ? "99+" : "\(count)")
-            .font(.conductorSystem(size: 7.5, weight: .black, scale: fontScale))
-            .monospacedDigit()
-            .foregroundStyle(theme.usesDarkChrome ? Color.primary.opacity(0.95) : theme.floatingEmphasis)
-            .frame(minWidth: 13)
-            .frame(height: 13)
     }
 
     @ViewBuilder
@@ -377,13 +430,23 @@ struct ConductorSidebar: View {
             unreadCount: row.unreadCount,
             metadata: row.metadata,
             selected: row.selected,
+            visuallySelected: row.selected,
+            selectionNamespace: sidebarSelectionNamespace,
             editing: renamingWorkspaceID == row.id,
             titleDraft: $workspaceTitleDraft,
             onCommitRename: commitWorkspaceRename,
             onCancelRename: cancelWorkspaceRename
-        )
+        ) {
+            finishWorkspaceRenameIfNeeded(except: row.id)
+            withoutShellAnimation {
+                model.activateWorkspace(row.id, source: .sidebar)
+            }
+        } onRename: {
+            finishWorkspaceRenameIfNeeded(except: row.id)
+            beginRenameWorkspace(row)
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .help(workspaceTooltip(for: row))
+        .macNativeTooltip(workspaceTooltip(for: row))
         .contextMenu {
             Button(L("重命名工作区...", "Rename Workspace...")) {
                 ConductorMotion.perform(ConductorMotion.selection) {
@@ -511,6 +574,112 @@ struct ConductorSidebar: View {
         renamingWorkspaceID = nil
     }
 
+}
+
+private struct SidebarRailShape: InsettableShape {
+    var bottomLeadingRadius: CGFloat = ConductorDesign.sidebarCornerRadius
+    var bottomTrailingRadius: CGFloat = 0
+    var insetAmount: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        return uniformPath(in: r)
+    }
+
+    private func uniformPath(in r: CGRect) -> Path {
+        let leading = min(bottomLeadingRadius, r.width / 2, r.height / 2)
+        let trailing = min(bottomTrailingRadius, r.width / 2, r.height / 2)
+
+        var path = Path()
+        path.move(to: CGPoint(x: r.minX, y: r.minY))
+        path.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+        path.addLine(to: CGPoint(x: r.maxX, y: r.maxY - trailing))
+        if trailing > 0 {
+            path.addQuadCurve(
+                to: CGPoint(x: r.maxX - trailing, y: r.maxY),
+                control: CGPoint(x: r.maxX, y: r.maxY)
+            )
+        }
+        path.addLine(to: CGPoint(x: r.minX + leading, y: r.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: r.minX, y: r.maxY - leading),
+            control: CGPoint(x: r.minX, y: r.maxY)
+        )
+        path.addLine(to: CGPoint(x: r.minX, y: r.minY))
+        path.closeSubpath()
+        return path
+    }
+
+    func inset(by amount: CGFloat) -> SidebarRailShape {
+        var shape = self
+        shape.insetAmount += amount
+        return shape
+    }
+}
+
+private struct SidebarRailSurface: View {
+    let theme: TerminalTheme
+    let clarity: ChromeClarity
+    let isCollapsed: Bool
+
+    var body: some View {
+        let shape = SidebarRailShape()
+        
+        ZStack {
+            shape
+                .fill(theme.shellPanelBackground)
+
+            if theme.chromeMaterial.glassIntensity > 0 {
+                shape
+                    .fill(Color.white.opacity(theme.chromeMaterial.highlightOpacity * 0.32))
+                    .blendMode(.screen)
+                shape
+                    .fill(theme.shellControlFill.opacity(theme.chromeMaterial.glassIntensity * 0.22))
+            }
+
+            if isCollapsed {
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(theme.usesDarkChrome ? 0.018 : 0.05),
+                                Color.clear,
+                                Color.black.opacity(theme.usesDarkChrome ? 0.018 : 0.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .blendMode(.overlay)
+            }
+        }
+        .overlay {
+            shape
+                .strokeBorder(
+                    LinearGradient(
+                            colors: [
+                            Color.white.opacity((theme.usesDarkChrome ? 0.07 : 0.24) * theme.chromeMaterial.strokeOpacityBoost),
+                            theme.shellStroke.opacity((theme.usesDarkChrome ? 0.12 : 0.08) * theme.chromeMaterial.strokeOpacityBoost),
+                            Color.black.opacity(theme.usesDarkChrome ? 0.06 : 0.03)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.6
+                )
+        }
+        .shadow(color: Color.black.opacity(theme.chromeMaterial.shadowOpacity), radius: 12, x: 0, y: 2)
+    }
+}
+
+private struct SidebarBookSpineChrome: View {
+    let collapsed: Bool
+    let theme: TerminalTheme
+    let clarity: ChromeClarity
+
+    var body: some View {
+        Color.clear
+    }
 }
 
 struct WorkspaceChromeSnapshot: Equatable {
@@ -692,18 +861,19 @@ private struct SidebarWorkspaceHeaderStats: View {
         emphasis: Bool = false,
         help: String
     ) -> some View {
-        Label {
-            Text(valueText)
-                .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
-        } icon: {
+        HStack(spacing: 3) {
             Image(systemName: systemImage)
                 .font(.conductorSystem(size: 9.5, weight: .semibold, scale: fontScale))
                 .accessibilityHidden(true)
+            Text(valueText)
+                .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
         }
-        .labelStyle(.titleAndIcon)
         .foregroundStyle(emphasis ? theme.floatingEmphasis : theme.shellChromeTextMuted.opacity(0.72))
+        .padding(.horizontal, 5)
         .frame(height: 16)
-        .help(help)
+        .background(emphasis ? theme.shellSelectedFill.opacity(0.90) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.22 : 0.14))
+        .clipShape(Capsule())
+        .macNativeTooltip(help)
     }
 
     private func agentMetric(count: Int) -> some View {
@@ -718,8 +888,94 @@ private struct SidebarWorkspaceHeaderStats: View {
                 .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
         }
         .foregroundStyle(theme.floatingEmphasis)
+        .padding(.horizontal, 5)
         .frame(height: 16)
-        .help(L("AI 终端运行中", "AI terminal running"))
+        .background(theme.shellSelectedFill.opacity(0.90))
+        .clipShape(Capsule())
+        .macNativeTooltip(L("AI 终端运行中", "AI terminal running"))
+    }
+}
+
+private struct TokenRecordsSidebarCard: View {
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "chart.bar.fill")
+                    .font(.conductorSystem(size: 11.5, weight: .semibold, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(0.86))
+                    .frame(width: 22, height: 22)
+                    .background(iconFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("Token 记录", "Token Records"))
+                        .font(.conductorSystem(size: 11.7, weight: .semibold, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText)
+                        .lineLimit(1)
+                    Text(L("用量详情", "Usage details"))
+                        .font(.conductorSystem(size: 9.8, weight: .medium, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeTextMuted.opacity(0.66))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.right")
+                    .font(.conductorSystem(size: 9.5, weight: .bold, scale: fontScale))
+                    .foregroundStyle(theme.shellChromeTextMuted.opacity(hovering ? 0.78 : 0.50))
+            }
+            .padding(.horizontal, 7)
+            .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
+            .background(cardFill)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(theme.shellStroke.opacity(hovering ? 0.34 : 0.18), lineWidth: 0.7)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .conductorHover($hovering)
+        .macNativeTooltip(L("打开 Token 记录", "Open Token Records"))
+    }
+
+    private var iconFill: Color {
+        hovering ? theme.shellHoverFill.opacity(0.62) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.42 : 0.30)
+    }
+
+    private var cardFill: Color {
+        if hovering {
+            return theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.58 : 0.46)
+        }
+        return theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.20 : 0.12)
+    }
+}
+
+private struct SidebarDockButton: View {
+    let id: String
+    let icon: String
+    var disabled = false
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        ConductorIconButton(
+            state: ConductorControlState(
+                id: id,
+                systemImage: icon,
+                isEnabled: !disabled,
+                tooltip: help,
+                accessibilityLabel: help
+            ),
+            variant: .sidebarDock,
+            action: action
+        )
     }
 }
 
@@ -727,11 +983,146 @@ private struct CollapsedRailSeparator: View {
     @Environment(\.conductorTheme) private var theme
 
     var body: some View {
-        Rectangle()
-            .fill(ConductorTokens.Settings.subtleSeparator(dark: theme.usesDarkChrome))
-            .frame(height: 1)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 2)
+        LinearGradient(
+            colors: [
+                Color.clear,
+                theme.shellStroke.opacity(theme.usesDarkChrome ? 0.38 : 0.22),
+                Color.clear
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .frame(height: 1)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+    }
+}
+
+private struct SidebarDockSurface<Content: View>: View {
+    var horizontalPadding: CGFloat = 2
+    @ViewBuilder var content: Content
+    @Environment(\.conductorTheme) private var theme
+
+    init(horizontalPadding: CGFloat = 2, @ViewBuilder content: () -> Content) {
+        self.horizontalPadding = horizontalPadding
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Rectangle()
+                .fill(theme.shellStroke.opacity(theme.usesDarkChrome ? 0.18 : 0.14))
+                .frame(height: 1)
+                .padding(.horizontal, horizontalPadding == 0 ? 9 : 4)
+
+            content
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, horizontalPadding)
+        .padding(.top, 2)
+    }
+}
+
+private struct SidebarRailButton: View {
+    let id: String
+    let icon: String
+    var selected = false
+    var disabled = false
+    var activeAgentCount = 0
+    var unreadCount = 0
+    let help: String
+    let namespace: Namespace.ID
+    let action: () -> Void
+
+    @State private var hovering = false
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    var body: some View {
+        Button(action: {
+            guard !disabled else { return }
+            action()
+        }) {
+            ZStack {
+                if selected {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.18 : 0.11))
+                }
+
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(hovering ? theme.shellHoverFill.opacity(theme.usesDarkChrome ? 0.44 : 0.30) : Color.clear)
+                    .animation(ConductorMotion.hover, value: hovering)
+
+                Image(systemName: icon)
+                    .font(.conductorSystem(size: 13, weight: selected ? .bold : .semibold, scale: fontScale))
+                    .foregroundStyle(
+                        selected ? theme.floatingEmphasis : (hovering ? theme.shellChromeText.opacity(0.92) : ConductorDesign.secondaryText)
+                    )
+                    .scaleEffect(hovering ? 1.04 : 1.0)
+                    .animation(ConductorMotion.hover, value: hovering)
+
+                if activeAgentCount > 0 {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(theme.floatingEmphasis)
+                        .scaleEffect(0.44)
+                        .frame(width: 11, height: 11)
+                        .padding(3)
+                        .background(theme.shellPanelBackground.opacity(0.94))
+                        .clipShape(Circle())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .accessibilityHidden(true)
+                }
+
+                if unreadCount > 0 {
+                    SidebarRailUnreadBadge(count: unreadCount)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(width: 34, height: 34)
+            .background {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(theme.shellStroke.opacity(selected ? 0.24 : 0.12), lineWidth: 0.6)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        }
+        .buttonStyle(ConductorPressButtonStyle(pressedScale: 0.94, pressedOpacity: 0.95))
+        .disabled(disabled)
+        .opacity(disabled ? 0.35 : 1.0)
+        .macNativeTooltip(help)
+        .accessibilityLabel(help)
+        .conductorHover($hovering)
+    }
+}
+
+private struct SidebarRailUnreadBadge: View {
+    let count: Int
+    @Environment(\.conductorFontScale) private var fontScale
+    @Environment(\.conductorTheme) private var theme
+
+    private var title: String {
+        count > 99 ? "99+" : "\(count)"
+    }
+
+    private var foreground: Color {
+        theme.usesDarkChrome ? Color.white.opacity(0.95) : theme.floatingEmphasis
+    }
+
+    private var fill: Color {
+        theme.shellPanelBackground.opacity(theme.usesDarkChrome ? 0.98 : 0.94)
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.conductorSystem(size: 7.5, weight: .black, scale: fontScale))
+            .monospacedDigit()
+            .foregroundStyle(foreground)
+            .padding(.horizontal, count > 9 ? 3.5 : 4)
+            .frame(minWidth: 13)
+            .frame(height: 13)
+            .background(Capsule().fill(fill))
+            .overlay(Capsule().stroke(theme.floatingEmphasis.opacity(0.55), lineWidth: 0.7))
     }
 }
 
@@ -762,12 +1153,23 @@ private struct WorkspaceSidebarRow: View {
     let unreadCount: Int
     let metadata: WorkspaceMetadataSnapshot?
     let selected: Bool
+    let visuallySelected: Bool
+    let selectionNamespace: Namespace.ID
     let editing: Bool
     @Binding var titleDraft: String
     let onCommitRename: () -> Void
     let onCancelRename: () -> Void
+    let action: () -> Void
+    let onRename: () -> Void
+    @State private var hovering = false
+    @State private var renameCancelled = false
+    @FocusState private var titleFieldFocused: Bool
     @Environment(\.conductorFontScale) private var fontScale
     @Environment(\.conductorTheme) private var theme
+
+    private var rowShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: ConductorTokens.Radius.row, style: .continuous)
+    }
 
     var body: some View {
         Group {
@@ -780,11 +1182,16 @@ private struct WorkspaceSidebarRow: View {
             }
         }
         .frame(height: editing ? 32 : 46)
-        .contentShape(Rectangle())
+        .background {
+            sidebarRowBackground
+        }
+        .clipShape(rowShape)
+        .contentShape(rowShape)
         .animation(nil, value: editing)
         .animation(ConductorMotion.emphasized, value: activeAgentCount)
         .animation(ConductorMotion.selection, value: unreadCount)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .conductorHover($hovering)
     }
 
     private var editingRow: some View {
@@ -804,25 +1211,45 @@ private struct WorkspaceSidebarRow: View {
         }
         .padding(.horizontal, 7)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .onAppear {
+            renameCancelled = false
+        }
     }
 
     private var displayTab: some View {
-        WorkspaceSidebarRowContent(
-            title: title,
-            subtitle: subtitle,
-            splitCount: splitCount,
-            terminalCount: terminalCount,
-            activeAgentCount: activeAgentCount,
-            unreadCount: unreadCount,
-            metadata: metadata,
-            selected: selected,
-            themeID: theme.id,
-            fontScaleID: fontScale.id
-        )
-        .equatable()
-        .padding(.leading, 7)
-        .padding(.trailing, 7)
+        Button(action: action) {
+            WorkspaceSidebarRowContent(
+                title: title,
+                subtitle: subtitle,
+                splitCount: splitCount,
+                terminalCount: terminalCount,
+                activeAgentCount: activeAgentCount,
+                unreadCount: unreadCount,
+                metadata: metadata,
+                selected: selected,
+                themeID: theme.id,
+                fontScaleID: fontScale.id
+            )
+            .equatable()
+            .padding(.leading, 7)
+            .padding(.trailing, 7)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(rowShape)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .buttonStyle(ConductorPressButtonStyle())
+    }
+
+    private var sidebarRowBackground: some View {
+        return ZStack {
+            rowShape
+                .fill(hovering ? theme.shellHoverFill.opacity(0.64) : Color.clear)
+            if visuallySelected {
+                rowShape
+                    .fill(theme.shellSelectedFill.opacity(theme.usesDarkChrome ? 0.90 : 0.74))
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -855,53 +1282,47 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
 
     var body: some View {
         HStack(alignment: .center, spacing: 9) {
-            Label {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(title)
-                            .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
-                            .foregroundStyle(theme.shellChromeText.opacity(selected ? 0.94 : 0.84))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer(minLength: 4)
-                        if unreadCount > 0 {
-                            unreadMetric(count: unreadCount)
-                        }
-                        if activeAgentCount > 0 {
-                            agentMetric(count: activeAgentCount)
-                        }
-                        if let health = metadata?.health,
-                           health != "ok" {
-                            healthMetric(health)
-                        }
-                    }
+            Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
+                .font(.conductorSystem(size: 11, weight: .bold, scale: fontScale))
+                .foregroundStyle(selected ? Color.white.opacity(0.96) : theme.shellChromeTextMuted.opacity(0.62))
+                .frame(width: 20, height: 20)
+                .background(selected ? theme.shellControlRaisedFill.opacity(0.44) : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .accessibilityHidden(true)
 
-                    Label {
-                        HStack(spacing: 4) {
-                            Text(subtitle)
-                                .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Text(workspaceMetaText)
-                                .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
-                                .lineLimit(1)
-                        }
-                    } icon: {
-                        Image(systemName: "folder")
-                            .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
-                            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(title)
+                        .font(.conductorSystem(size: 12, weight: selected ? .semibold : .medium, scale: fontScale))
+                        .foregroundStyle(theme.shellChromeText.opacity(selected ? 0.94 : 0.84))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 4)
+                    if unreadCount > 0 {
+                        unreadMetric(count: unreadCount)
                     }
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(theme.shellChromeTextMuted.opacity(selected ? 0.72 : 0.58))
+                    if activeAgentCount > 0 {
+                        agentMetric(count: activeAgentCount)
+                    }
+                    if let health = metadata?.health,
+                       health != "ok" {
+                        healthMetric(health)
+                    }
                 }
-            } icon: {
-                Image(systemName: WorkspaceChromeGlyph.systemName(selected: selected))
-                    .font(.conductorSystem(size: 11, weight: .bold, scale: fontScale))
-                    .foregroundStyle(selected ? theme.shellChromeText.opacity(0.86) : theme.shellChromeTextMuted.opacity(0.62))
-                    .frame(width: 20, height: 20)
-                    .accessibilityHidden(true)
+                HStack(spacing: 4) {
+                    Image(systemName: "folder")
+                        .font(.conductorSystem(size: 8.5, weight: .semibold, scale: fontScale))
+                        .accessibilityHidden(true)
+                    Text(subtitle)
+                        .font(.conductorSystem(size: 10, weight: .medium, scale: fontScale))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(workspaceMetaText)
+                        .font(.conductorSystem(size: 9.5, weight: .medium, scale: fontScale))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(theme.shellChromeTextMuted.opacity(selected ? 0.72 : 0.58))
             }
-            .labelStyle(.titleAndIcon)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -923,6 +1344,8 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
             .font(.conductorSystem(size: 9, weight: .semibold, scale: fontScale))
             .foregroundStyle(theme.usesDarkChrome ? Color.orange.opacity(0.92) : Color.orange.opacity(0.82))
             .frame(width: 15, height: 15)
+            .background(theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.18 : 0.10))
+            .clipShape(Circle())
             .accessibilityLabel(L("工作区状态需要检查：\(health)", "Workspace needs attention: \(health)"))
     }
 
@@ -939,7 +1362,10 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
                 .monospacedDigit()
         }
         .foregroundStyle(theme.floatingEmphasis)
+        .padding(.horizontal, 4)
         .frame(height: 15)
+        .background(selected ? theme.shellHoverFill.opacity(0.42) : theme.shellControlFill.opacity(theme.usesDarkChrome ? 0.14 : 0.08))
+        .clipShape(Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L("\(count) 个 AI 终端运行中", "\(count) AI terminals running"))
     }
@@ -948,8 +1374,17 @@ private struct WorkspaceSidebarRowContent: View, Equatable {
         Text(count > 99 ? "99+" : "\(count)")
             .font(.conductorSystem(size: 8.5, weight: .black, scale: fontScale))
             .monospacedDigit()
-            .foregroundStyle(selected ? theme.shellChromeText.opacity(0.90) : theme.floatingEmphasis)
+            .foregroundStyle(selected ? Color.white.opacity(0.96) : theme.floatingEmphasis)
+            .padding(.horizontal, 4.5)
             .frame(height: 15)
+            .background {
+                Capsule()
+                    .fill(selected ? theme.shellHoverFill.opacity(0.44) : theme.floatingEmphasis.opacity(theme.usesDarkChrome ? 0.18 : 0.11))
+            }
+            .overlay {
+                Capsule()
+                    .stroke(theme.floatingEmphasis.opacity(selected ? 0.30 : 0.22), lineWidth: 0.6)
+            }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(L("\(count) 条未读通知", "\(count) unread notifications"))
     }
