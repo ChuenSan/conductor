@@ -3039,6 +3039,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private func insertTextIntoTerminal(_ text: String, terminalID: TerminalID) -> Bool {
         guard let target = terminalContextMenuTarget(for: terminalID) else { return false }
         focusTerminal(target.tab.id)
+        recordTerminalInput(target.tab.id)
         surface(for: target.tab).sendText(text)
         refreshSurfaceAfterNavigation(target.tab.id)
         return true
@@ -4530,9 +4531,13 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     ) {
         guard terminalLocation(for: terminalID) != nil else { return }
         if reason == .input {
-            restoredTerminalContentByID.removeValue(forKey: terminalID)
+            recordTerminalInput(terminalID)
         }
         attendTerminal(terminalID)
+    }
+
+    private func recordTerminalInput(_ terminalID: TerminalID) {
+        restoredTerminalContentByID.removeValue(forKey: terminalID)
     }
 
     private func attendSelectedTerminal(in paneID: PaneID) {
@@ -6228,6 +6233,7 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         focusTerminal(target.tab.id)
         let surface = surface(for: target.tab)
         refreshSurfaceAfterNavigation(target.tab.id)
+        recordTerminalInput(target.tab.id)
         return surface.sendSyntheticKey(
             characters: syntheticKey.characters,
             charactersIgnoringModifiers: syntheticKey.ignoring,
