@@ -64,8 +64,36 @@ import Testing
         persistedAgentSnapshot: nil
     )
 
-    let hintCount = restored?.text.components(separatedBy: "Conductor restore hint:").count ?? 0
-    #expect(hintCount == 2)
+    let expected = "previous output\nConductor restore hint: codex resume abc123-session"
+    let hintCount = (restored?.text.components(separatedBy: "Conductor restore hint:").count ?? 1) - 1
+    #expect(restored?.text == expected)
+    #expect(restored?.text.split(separator: "\n").last == "Conductor restore hint: codex resume abc123-session")
+    #expect(hintCount == 1)
+}
+
+@Test func restoredTerminalContentPrefersCurrentTabMetadataOverPersistedMetadata() {
+    let restored = RestoredTerminalContent.make(
+        terminalID: TerminalID(),
+        capturedAt: Date(timeIntervalSince1970: 2),
+        rawText: "last output",
+        tabAgentSnapshot: TerminalAgentSnapshot(
+            providerID: "codex",
+            displayName: "Codex",
+            state: .completed,
+            updatedAt: Date(timeIntervalSince1970: 2),
+            sessionIdentifier: "tab-session"
+        ),
+        persistedAgentSnapshot: TerminalAgentSnapshot(
+            providerID: "claude",
+            displayName: "Claude Code",
+            state: .completed,
+            updatedAt: Date(timeIntervalSince1970: 1),
+            sessionIdentifier: "persisted-session"
+        )
+    )
+
+    #expect(restored?.resumeHint == "codex resume tab-session")
+    #expect(restored?.text == "last output\nConductor restore hint: codex resume tab-session")
 }
 
 @Test func restoredTerminalContentRemovesStaleHintWhenNoValidHintExists() {
@@ -93,6 +121,32 @@ import Testing
     #expect(restored?.text.contains("Conductor restore hint:") == false)
 }
 
+@Test func restoredTerminalContentRemovesWrappedStaleHintContinuation() {
+    let restored = RestoredTerminalContent.make(
+        terminalID: TerminalID(),
+        capturedAt: Date(timeIntervalSince1970: 2),
+        rawText: "previous output\nConductor restore hint: codex resume\nabc123-session\nfinal output",
+        tabAgentSnapshot: nil,
+        persistedAgentSnapshot: nil
+    )
+
+    #expect(restored?.text == "previous output\nfinal output")
+    #expect(restored?.text.contains("Conductor restore hint:") == false)
+    #expect(restored?.text.contains("abc123-session") == false)
+}
+
+@Test func restoredTerminalContentKeepsNormalOutputAfterStaleHint() {
+    let restored = RestoredTerminalContent.make(
+        terminalID: TerminalID(),
+        capturedAt: Date(timeIntervalSince1970: 2),
+        rawText: "previous output\nConductor restore hint: codex resume\ndone",
+        tabAgentSnapshot: nil,
+        persistedAgentSnapshot: nil
+    )
+
+    #expect(restored?.text == "previous output\ndone")
+}
+
 @Test func terminalContentSnapshotSanitizesAndCapsText() {
     let raw = "line 1\u{0007}\nline 2\n\n"
     let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(raw, maxUTF8Bytes: 64)
@@ -101,6 +155,11 @@ import Testing
     let long = String(repeating: "x", count: 80)
     let capped = TerminalContentSnapshotSanitizer.sanitizedText(long, maxUTF8Bytes: 32)
     #expect(capped.utf8.count <= 32)
+}
+
+@Test func terminalContentSnapshotReturnsEmptyForInvalidByteLimits() {
+    #expect(TerminalContentSnapshotSanitizer.sanitizedText("text", maxUTF8Bytes: 0) == "")
+    #expect(TerminalContentSnapshotSanitizer.sanitizedText("text", maxUTF8Bytes: -1) == "")
 }
 
 @Test func terminalContentSnapshotDropsNonNewlineControlsAndPreservesTabs() {

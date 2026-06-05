@@ -113,11 +113,39 @@ public struct RestoredTerminalContent: Codable, Equatable, Sendable {
     }
 
     private static func textWithoutExistingRestoreHints(_ text: String) -> String {
-        text
-            .components(separatedBy: .newlines)
-            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix(restoreHintPrefix) }
+        var lines: [String] = []
+        var strippingContinuation = false
+        for line in text.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix(restoreHintPrefix) {
+                strippingContinuation = true
+                continue
+            }
+            if strippingContinuation {
+                if trimmed.isEmpty {
+                    strippingContinuation = false
+                    lines.append(line)
+                    continue
+                }
+                if isRestoreHintContinuation(trimmed) {
+                    continue
+                }
+                strippingContinuation = false
+            }
+            lines.append(line)
+        }
+        return lines
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isRestoreHintContinuation(_ line: String) -> Bool {
+        guard line.count >= 6, line.count <= 160 else { return false }
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")
+        guard line.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return false }
+        return line.unicodeScalars.contains { scalar in
+            CharacterSet.decimalDigits.contains(scalar) || "._:-".unicodeScalars.contains(scalar)
+        }
     }
 }
 
@@ -146,14 +174,22 @@ public enum TerminalContentSnapshotSanitizer {
     }
 
     private static func suffixWithinUTF8Limit(_ text: String, maxBytes: Int) -> String {
-        guard maxBytes > 0, text.utf8.count > maxBytes else { return text }
-        var result = ""
-        for character in text.reversed() {
-            let next = String(character) + result
-            if next.utf8.count > maxBytes { break }
-            result = next
+        guard maxBytes > 0 else { return "" }
+        guard text.utf8.count > maxBytes else { return text }
+        var byteCount = 0
+        var startIndex = text.endIndex
+        var index = text.endIndex
+        while index > text.startIndex {
+            let previousIndex = text.index(before: index)
+            let characterByteCount = text[previousIndex..<index].utf8.count
+            if byteCount + characterByteCount > maxBytes {
+                break
+            }
+            byteCount += characterByteCount
+            startIndex = previousIndex
+            index = previousIndex
         }
-        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(text[startIndex...]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
