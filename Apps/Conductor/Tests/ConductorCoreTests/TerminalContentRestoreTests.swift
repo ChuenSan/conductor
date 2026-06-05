@@ -68,6 +68,31 @@ import Testing
     #expect(hintCount == 2)
 }
 
+@Test func restoredTerminalContentRemovesStaleHintWhenNoValidHintExists() {
+    let raw = """
+    previous output
+    Conductor restore hint: codex resume stale-session
+    final output
+    """
+    let restored = RestoredTerminalContent.make(
+        terminalID: TerminalID(),
+        capturedAt: Date(timeIntervalSince1970: 2),
+        rawText: raw,
+        tabAgentSnapshot: nil,
+        persistedAgentSnapshot: TerminalAgentSnapshot(
+            providerID: "unknown",
+            displayName: "Unknown",
+            state: .completed,
+            updatedAt: Date(timeIntervalSince1970: 1),
+            sessionIdentifier: "stale-session"
+        )
+    )
+
+    #expect(restored?.text == "previous output\nfinal output")
+    #expect(restored?.resumeHint == nil)
+    #expect(restored?.text.contains("Conductor restore hint:") == false)
+}
+
 @Test func terminalContentSnapshotSanitizesAndCapsText() {
     let raw = "line 1\u{0007}\nline 2\n\n"
     let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(raw, maxUTF8Bytes: 64)
@@ -76,6 +101,12 @@ import Testing
     let long = String(repeating: "x", count: 80)
     let capped = TerminalContentSnapshotSanitizer.sanitizedText(long, maxUTF8Bytes: 32)
     #expect(capped.utf8.count <= 32)
+}
+
+@Test func terminalContentSnapshotNormalizesCRLFAndCRBoundaries() {
+    let raw = "line 1\r\nline 2\rline 3"
+    let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(raw, maxUTF8Bytes: 64)
+    #expect(sanitized == "line 1\nline 2\nline 3")
 }
 
 @Test func terminalContentSnapshotFileDropsStaleTerminals() {

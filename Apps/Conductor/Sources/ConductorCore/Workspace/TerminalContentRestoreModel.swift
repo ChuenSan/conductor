@@ -78,9 +78,9 @@ public struct RestoredTerminalContent: Codable, Equatable, Sendable {
         maxUTF8Bytes: Int = TerminalContentSnapshotSanitizer.defaultMaxUTF8Bytes
     ) -> RestoredTerminalContent? {
         var text = TerminalContentSnapshotSanitizer.sanitizedText(rawText, maxUTF8Bytes: maxUTF8Bytes)
+        text = textWithoutExistingRestoreHints(text)
         let resumeHint = resumeCommand(tabAgentSnapshot: tabAgentSnapshot, persistedAgentSnapshot: persistedAgentSnapshot)
         if let resumeHint {
-            text = textWithoutExistingRestoreHints(text)
             text = text.isEmpty ? "\(restoreHintPrefix) \(resumeHint)" : "\(text)\n\(restoreHintPrefix) \(resumeHint)"
         }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
@@ -128,15 +128,16 @@ public enum TerminalContentSnapshotSanitizer {
         _ rawText: String,
         maxUTF8Bytes: Int = defaultMaxUTF8Bytes
     ) -> String {
-        let printable = rawText.unicodeScalars.map { scalar -> Character in
+        let lineNormalized = rawText
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let printable = lineNormalized.unicodeScalars.map { scalar -> Character in
             if scalar == "\n" || scalar == "\t" || !CharacterSet.controlCharacters.contains(scalar) {
                 return Character(scalar)
             }
             return "\n"
         }
         let normalized = String(printable)
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .joined(separator: "\n")
