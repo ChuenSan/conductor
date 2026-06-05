@@ -411,12 +411,21 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
     private static let automaticUpdateMaximumIntervalNanoseconds: UInt64 = 21_600_000_000_000
 
     init() {
-        let initialWorkspace = WorkspaceState()
-        self.workspaces = [initialWorkspace]
+        let restoredState = persistence.load()
+        let restoredWorkspaces = restoredState?.workspaces ?? []
+        let initialWorkspace = restoredWorkspaces.first { $0.id == restoredState?.selectedWorkspaceID }
+            ?? restoredWorkspaces.first
+            ?? WorkspaceState()
+        let restoredContentStates = restoredState.map {
+            Self.restoredWorkspaceContentStates(from: $0, workspaces: restoredWorkspaces)
+        } ?? [:]
+        let selectedRuntimeContent = restoredContentStates[initialWorkspace.id] ?? WorkspaceContentRuntimeState()
+
+        self.workspaces = restoredWorkspaces.isEmpty ? [initialWorkspace] : restoredWorkspaces
         self.selectedWorkspaceID = initialWorkspace.id
         self.workspace = initialWorkspace
-        self.theme = .codexDark
-        let resolvedAppearance = AppearancePreferences()
+        self.theme = restoredState?.theme ?? .codexDark
+        let resolvedAppearance = restoredState?.appearance ?? AppearancePreferences()
         self.appearance = resolvedAppearance
         self.recentShellCommandIDs = Self.loadRecentShellCommandIDs()
         self.appearanceCoordinator = AppearanceCoordinator(appearance: resolvedAppearance)
@@ -425,12 +434,18 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         self.updatePreferences = updatePreferencesStore.load()
         self.updateState = ConductorUpdateState(currentVersion: ConductorAppVersion.current())
         self.attentionEvents = attentionStore.events(limit: 80)
-        self.workspaceContentStatesByWorkspaceID = [:]
-        self.workspaceWebTabs = []
-        self.workspaceFileTabs = []
+        self.workspaceContentStatesByWorkspaceID = restoredContentStates
+        self.workspaceWebTabs = selectedRuntimeContent.webTabs
+        self.workspaceFileTabs = selectedRuntimeContent.fileTabs
         self.dirtyWorkspaceFileTabIDs = []
         self.externallyChangedWorkspaceFileTabIDs = []
-        self.selectedWorkspaceContentTabID = nil
+        self.selectedWorkspaceContentTabID = Self.restoredSelectedContent(
+            selectedRuntimeContent.selectedContentTabID,
+            workspace: initialWorkspace,
+            webTabs: selectedRuntimeContent.webTabs,
+            fileTabs: selectedRuntimeContent.fileTabs,
+            useTerminalFallback: restoredState != nil
+        )
         syncPanelCoordinatorFromPublished()
         syncFileWorkspaceCoordinatorFromPublished()
         ConductorAppearanceRuntime.apply(self.appearance)
@@ -441,6 +456,98 @@ final class ConductorWindowModel: ObservableObject, GhosttyAppRuntimeActionDeleg
         configureNotificationDeliveryIssueHandler()
         startAgentRuntimePolling()
         scheduleWorkspaceMetadataRefresh(reason: "launch", debounceNanoseconds: 300_000_000)
+    }
+
+    private static func restoredWorkspaceContentStates(
+        from state: PersistedWindowState,
+        workspaces: [WorkspaceState]
+    ) -> [WorkspaceID: WorkspaceContentRuntimeState] {
+        let workspaceByID = Dictionary(uniqueKeysWithValues: workspaces.map { ($0.id, $0) })
+        var result: [WorkspaceID: WorkspaceContentRuntimeState] = [:]
+
+        for persisted in state.workspaceContentStates {
+            guard let workspace = workspaceByID[persisted.workspaceID] else { continue }
+            let fileTabs = restoredFileTabs(persisted.workspaceFileTabs)
+            let selected = restoredSelectedContent(
+                Self.conductorWorkspaceContentSelection(persisted.selectedWorkspaceContentTabID),
+                workspace: workspace,
+                webTabs: persisted.workspaceWebTabs,
+                fileTabs: fileTabs,
+                useTerminalFallback: false
+            )
+            guard !persisted.workspaceWebTabs.isEmpty || !fileTabs.isEmpty || selected != nil else { continue }
+            result[persisted.workspaceID] = WorkspaceContentRuntimeState(
+                webTabs: persisted.workspaceWebTabs,
+                fileTabs: fileTabs,
+                selectedContentTabID: selected
+            )
+        }
+
+        if result[state.selectedWorkspaceID] == nil,
+           !state.workspaceWebTabs.isEmpty || !state.workspaceFileTabs.isEmpty || state.selectedWorkspaceContentTabID != nil,
+           let workspace = workspaceByID[state.selectedWorkspaceID] {
+            let fileTabs = restoredFileTabs(state.workspaceFileTabs)
+            let selected = restoredSelectedContent(
+                Self.conductorWorkspaceContentSelection(state.selectedWorkspaceContentTabID),
+                workspace: workspace,
+                webTabs: state.workspaceWebTabs,
+                fileTabs: fileTabs,
+                useTerminalFallback: false
+            )
+            result[state.selectedWorkspaceID] = WorkspaceContentRuntimeState(
+                webTabs: state.workspaceWebTabs,
+                fileTabs: fileTabs,
+                selectedContentTabID: selected
+            )
+        }
+
+        return result
+    }
+
+    private static func restoredFileTabs(_ tabs: [PersistedFileTab]) -> [ConductorWorkspaceFileTab] {
+        tabs.map {
+            ConductorWorkspaceFileTab(
+                fileURL: URL(fileURLWithPath: $0.filePath),
+                rootURL: URL(fileURLWithPath: $0.rootPath.isEmpty ? $0.filePath : $0.rootPath)
+            )
+        }
+    }
+
+    private static func conductorWorkspaceContentSelection(
+        _ selection: PersistedWorkspaceContentTabID?
+    ) -> ConductorWorkspaceContentTabID? {
+        switch selection {
+        case .terminal(let terminalID):
+            return .terminal(terminalID)
+        case .file(let tabID):
+            return .file(tabID)
+        case .web(let tabID):
+            return .web(tabID)
+        case nil:
+            return nil
+        }
+    }
+
+    private static func restoredSelectedContent(
+        _ selection: ConductorWorkspaceContentTabID?,
+        workspace: WorkspaceState,
+        webTabs: [WorkspaceWebTabState],
+        fileTabs: [ConductorWorkspaceFileTab],
+        useTerminalFallback: Bool
+    ) -> ConductorWorkspaceContentTabID? {
+        let fileTabIDs = Set(fileTabs.map(\.id))
+        if let validated = validatedWorkspaceContentSelection(
+            persistedWorkspaceContentSelection(selection),
+            workspace: workspace,
+            webTabs: webTabs,
+            fileTabIDs: fileTabIDs
+        ) {
+            return validated
+        }
+        guard useTerminalFallback, let selectedTerminalID = workspace.focusedPane?.selectedTabID else {
+            return nil
+        }
+        return .terminal(selectedTerminalID)
     }
 
     #if DEBUG

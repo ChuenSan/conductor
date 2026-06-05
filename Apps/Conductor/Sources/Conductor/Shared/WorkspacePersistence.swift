@@ -136,6 +136,42 @@ final class WorkspacePersistence {
         }
     }
 
+    func load() -> PersistedWindowState? {
+        guard isEnabled else { return nil }
+        if ProcessInfo.processInfo.environment["CONDUCTOR_RESET_STATE"] == "1" {
+            reset()
+            return nil
+        }
+        guard let state = loadState() else { return nil }
+
+        let validWorkspaces = state.workspaces.map(sanitizedWorkspace).filter(isValid)
+        guard !validWorkspaces.isEmpty else { return nil }
+        let selectedWorkspaceID = validWorkspaces.contains { $0.id == state.selectedWorkspaceID }
+            ? state.selectedWorkspaceID
+            : validWorkspaces[0].id
+        let validWorkspaceIDs = Set(validWorkspaces.map(\.id))
+        let sanitizedContentStates = sanitizedWorkspaceContentStates(
+            state.workspaceContentStates,
+            validWorkspaceIDs: validWorkspaceIDs,
+            legacyWebTabs: state.workspaceWebTabs,
+            legacyFileTabs: state.workspaceFileTabs,
+            legacySelection: state.selectedWorkspaceContentTabID,
+            selectedWorkspaceID: selectedWorkspaceID
+        ).states
+        let selectedContent = sanitizedContentStates.first { $0.workspaceID == selectedWorkspaceID }
+
+        return PersistedWindowState(
+            workspaces: validWorkspaces,
+            selectedWorkspaceID: selectedWorkspaceID,
+            theme: state.theme,
+            appearance: state.appearance,
+            workspaceWebTabs: selectedContent?.workspaceWebTabs ?? [],
+            workspaceFileTabs: selectedContent?.workspaceFileTabs ?? [],
+            selectedWorkspaceContentTabID: selectedContent?.selectedWorkspaceContentTabID,
+            workspaceContentStates: sanitizedContentStates
+        )
+    }
+
     func save(
         workspaces: [WorkspaceState],
         selectedWorkspaceID: WorkspaceID,
@@ -192,6 +228,27 @@ final class WorkspacePersistence {
         var states: [PersistedWorkspaceContentState]
     }
 
+    private func loadState() -> PersistedWindowState? {
+        let candidates = [fileURL, legacyJSONFileURL].compactMap(\.self)
+        for url in candidates {
+            guard FileManager.default.fileExists(atPath: url.path),
+                  let state = decodeState(at: url) else {
+                continue
+            }
+            return state
+        }
+        return nil
+    }
+
+    private func decodeState(at url: URL) -> PersistedWindowState? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        if url.pathExtension.lowercased() == "json" {
+            return try? JSONDecoder().decode(PersistedWindowState.self, from: data)
+        }
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
+        return try? YAMLDecoder().decode(PersistedWindowState.self, from: text)
+    }
+
     private func encodeState(_ state: PersistedWindowState, for url: URL) -> Data? {
         if url.pathExtension.lowercased() == "json" {
             return try? JSONEncoder().encode(state)
@@ -244,7 +301,7 @@ final class WorkspacePersistence {
             let webTabs = sanitizedWebTabs(state.workspaceWebTabs)
             let fileReport = sanitizedFileTabs(state.workspaceFileTabs)
             guard validWorkspaceIDs.contains(state.workspaceID) else { continue }
-            guard seenWorkspaceIDs.insert(state.workspaceID).inserted else { continue }
+            guard !seenWorkspaceIDs.contains(state.workspaceID) else { continue }
             let fileTabs = fileReport.tabs
             let selection = sanitizedSelection(
                 state.selectedWorkspaceContentTabID,
@@ -252,6 +309,7 @@ final class WorkspacePersistence {
                 fileTabs: fileTabs
             )
             guard !webTabs.isEmpty || !fileTabs.isEmpty || selection != nil else { continue }
+            seenWorkspaceIDs.insert(state.workspaceID)
             result.append(PersistedWorkspaceContentState(
                 workspaceID: state.workspaceID,
                 workspaceWebTabs: webTabs,
