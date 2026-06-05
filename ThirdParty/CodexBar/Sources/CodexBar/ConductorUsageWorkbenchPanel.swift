@@ -112,23 +112,6 @@ struct ConductorUsageWorkbenchPanel: View {
             }
         }
         .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(style.panelBase.opacity(style.usesDarkChrome ? 0.24 : 0.50))
-                .overlay(
-                    LinearGradient(
-                        colors: [
-                            style.panelWash.opacity(style.usesDarkChrome ? 0.10 : 0.20),
-                            style.controlFill.opacity(style.usesDarkChrome ? 0.08 : 0.14),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing))
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(style.stroke.opacity(0.24), lineWidth: 0.8)
-        }
         .onAppear {
             normalizeSelection()
             prime()
@@ -149,8 +132,6 @@ struct ConductorUsageWorkbenchPanel: View {
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(style.emphasis)
                 .frame(width: 26, height: 26)
-                .background(style.emphasis.opacity(style.usesDarkChrome ? 0.14 : 0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -1147,7 +1128,7 @@ private struct ConductorUsageWorkbenchCard<Summary: View, Detail: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        GroupBox {
             DisclosureGroup(isExpanded: expansion) {
                 Rectangle()
                     .fill(style.separator.opacity(0.44))
@@ -1161,8 +1142,6 @@ private struct ConductorUsageWorkbenchCard<Summary: View, Detail: View>: View {
                             .font(.system(size: 11.5, weight: .semibold))
                             .foregroundStyle(style.emphasis)
                             .frame(width: 22, height: 22)
-                            .background(style.emphasis.opacity(style.usesDarkChrome ? 0.14 : 0.10))
-                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 1) {
@@ -1185,16 +1164,8 @@ private struct ConductorUsageWorkbenchCard<Summary: View, Detail: View>: View {
             .tint(style.tertiaryText)
             .accessibilityLabel(section.title(languageIdentifier: languageIdentifier))
         }
-        .padding(11)
+        .groupBoxStyle(.automatic)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(style.controlFill.opacity(style.usesDarkChrome ? 0.34 : 0.52))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(style.stroke.opacity(isExpanded ? 0.34 : 0.22), lineWidth: 0.8)
-        }
     }
 }
 
