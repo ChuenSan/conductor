@@ -135,6 +135,30 @@ import Testing
     #expect(restored?.text.contains("abc123-session") == false)
 }
 
+@Test func restoredTerminalContentRemovesOnlyOneWrappedCodexContinuation() {
+    let restored = RestoredTerminalContent.make(
+        terminalID: TerminalID(),
+        capturedAt: Date(timeIntervalSince1970: 2),
+        rawText: "previous\nConductor restore hint: codex resume\nabc123-session\n2026-06-05\nfinal",
+        tabAgentSnapshot: nil,
+        persistedAgentSnapshot: nil
+    )
+
+    #expect(restored?.text == "previous\n2026-06-05\nfinal")
+}
+
+@Test func restoredTerminalContentRemovesOnlyOneWrappedClaudeContinuation() {
+    let restored = RestoredTerminalContent.make(
+        terminalID: TerminalID(),
+        capturedAt: Date(timeIntervalSince1970: 2),
+        rawText: "previous\nConductor restore hint: claude --resume\nabc123-session\nbuild-123\nfinal",
+        tabAgentSnapshot: nil,
+        persistedAgentSnapshot: nil
+    )
+
+    #expect(restored?.text == "previous\nbuild-123\nfinal")
+}
+
 @Test func restoredTerminalContentKeepsNormalOutputAfterStaleHint() {
     let restored = RestoredTerminalContent.make(
         terminalID: TerminalID(),
@@ -188,6 +212,20 @@ import Testing
 @Test func terminalContentSnapshotReturnsEmptyForInvalidByteLimits() {
     #expect(TerminalContentSnapshotSanitizer.sanitizedText("text", maxUTF8Bytes: 0) == "")
     #expect(TerminalContentSnapshotSanitizer.sanitizedText("text", maxUTF8Bytes: -1) == "")
+}
+
+@Test func terminalContentSnapshotKeepsOnlyBoundedSuffixForLargeInput() {
+    let raw = String(repeating: "drop me\n", count: 2_000) + " final-suffix \n"
+    let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(raw, maxUTF8Bytes: 16)
+    #expect(sanitized.contains("final-suffix"))
+    #expect(sanitized.contains("drop me") == false)
+    #expect(sanitized.utf8.count <= 16)
+}
+
+@Test func terminalContentSnapshotCapsAtMultibyteCharacterBoundary() {
+    let sanitized = TerminalContentSnapshotSanitizer.sanitizedText("a🙂b🙂c", maxUTF8Bytes: 5)
+    #expect(sanitized == "🙂c")
+    #expect(sanitized.utf8.count <= 5)
 }
 
 @Test func terminalContentSnapshotDropsNonNewlineControlsAndPreservesTabs() {

@@ -114,23 +114,24 @@ public struct RestoredTerminalContent: Codable, Equatable, Sendable {
 
     private static func textWithoutExistingRestoreHints(_ text: String) -> String {
         var lines: [String] = []
-        var strippingContinuation = false
+        var continuationLinesRemaining = 0
         for line in text.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.hasPrefix(restoreHintPrefix) {
-                strippingContinuation = shouldStripRestoreHintContinuation(trimmed)
+                continuationLinesRemaining = shouldStripRestoreHintContinuation(trimmed) ? 1 : 0
                 continue
             }
-            if strippingContinuation {
+            if continuationLinesRemaining > 0 {
                 if trimmed.isEmpty {
-                    strippingContinuation = false
+                    continuationLinesRemaining = 0
                     lines.append(line)
                     continue
                 }
                 if isRestoreHintContinuation(trimmed) {
+                    continuationLinesRemaining = 0
                     continue
                 }
-                strippingContinuation = false
+                continuationLinesRemaining = 0
             }
             lines.append(line)
         }
@@ -165,21 +166,65 @@ public enum TerminalContentSnapshotSanitizer {
         _ rawText: String,
         maxUTF8Bytes: Int = defaultMaxUTF8Bytes
     ) -> String {
-        let lineNormalized = rawText
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-        let printable = lineNormalized.unicodeScalars.compactMap { scalar -> Character? in
-            if scalar == "\n" || scalar == "\t" || !CharacterSet.controlCharacters.contains(scalar) {
-                return Character(scalar)
-            }
-            return nil
-        }
-        let normalized = String(printable)
+        guard maxUTF8Bytes > 0 else { return "" }
+        let normalized = boundedPrintableTail(rawText, maxBytes: maxUTF8Bytes)
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .spaces) }
             .joined(separator: "\n")
             .trimmingCharacters(in: .spacesAndNewlines)
         return suffixWithinUTF8Limit(normalized, maxBytes: maxUTF8Bytes)
+    }
+
+    private static func boundedPrintableTail(_ rawText: String, maxBytes: Int) -> String {
+        let safetyWindow = tailSafetyWindow(maxBytes: maxBytes)
+        var tail = ""
+        var tailByteCount = 0
+        var index = rawText.unicodeScalars.startIndex
+        while index < rawText.unicodeScalars.endIndex {
+            let scalar = rawText.unicodeScalars[index]
+            let character: Character?
+            if scalar == "\r" {
+                character = "\n"
+                let nextIndex = rawText.unicodeScalars.index(after: index)
+                if nextIndex < rawText.unicodeScalars.endIndex,
+                   rawText.unicodeScalars[nextIndex] == "\n" {
+                    index = rawText.unicodeScalars.index(after: nextIndex)
+                } else {
+                    index = nextIndex
+                }
+            } else {
+                if scalar == "\n" || scalar == "\t" || !CharacterSet.controlCharacters.contains(scalar) {
+                    character = Character(scalar)
+                } else {
+                    character = nil
+                }
+                index = rawText.unicodeScalars.index(after: index)
+            }
+            if let character {
+                append(character, to: &tail, byteCount: &tailByteCount, maxBytes: safetyWindow)
+            }
+        }
+        return tail
+    }
+
+    private static func append(
+        _ character: Character,
+        to tail: inout String,
+        byteCount: inout Int,
+        maxBytes: Int
+    ) {
+        tail.append(character)
+        byteCount += String(character).utf8.count
+        while byteCount > maxBytes, let first = tail.first {
+            byteCount -= String(first).utf8.count
+            tail.removeFirst()
+        }
+    }
+
+    private static func tailSafetyWindow(maxBytes: Int) -> Int {
+        let multiplied = maxBytes > Int.max / 4 ? Int.max : maxBytes * 4
+        let added = maxBytes > Int.max - 4_096 ? Int.max : maxBytes + 4_096
+        return max(multiplied, added)
     }
 
     private static func suffixWithinUTF8Limit(_ text: String, maxBytes: Int) -> String {
