@@ -118,7 +118,7 @@ public struct RestoredTerminalContent: Codable, Equatable, Sendable {
         for line in text.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.hasPrefix(restoreHintPrefix) {
-                strippingContinuation = true
+                strippingContinuation = shouldStripRestoreHintContinuation(trimmed)
                 continue
             }
             if strippingContinuation {
@@ -147,6 +147,15 @@ public struct RestoredTerminalContent: Codable, Equatable, Sendable {
             CharacterSet.decimalDigits.contains(scalar) || "._:-".unicodeScalars.contains(scalar)
         }
     }
+
+    private static func shouldStripRestoreHintContinuation(_ line: String) -> Bool {
+        guard AgentResumeDetector.detect(in: line) == nil else { return false }
+        let command = line
+            .dropFirst(restoreHintPrefix.count)
+            .trimmingCharacters(in: .whitespaces)
+            .lowercased()
+        return command == "codex resume" || command == "claude --resume" || command == "claude -r"
+    }
 }
 
 public enum TerminalContentSnapshotSanitizer {
@@ -167,9 +176,9 @@ public enum TerminalContentSnapshotSanitizer {
         }
         let normalized = String(printable)
             .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .map { $0.trimmingCharacters(in: .spaces) }
             .joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: .spacesAndNewlines)
         return suffixWithinUTF8Limit(normalized, maxBytes: maxUTF8Bytes)
     }
 
@@ -189,7 +198,7 @@ public enum TerminalContentSnapshotSanitizer {
             startIndex = previousIndex
             index = previousIndex
         }
-        return String(text[startIndex...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(text[startIndex...]).trimmingCharacters(in: .spacesAndNewlines)
     }
 }
 
@@ -197,4 +206,9 @@ private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
     }
+}
+
+private extension CharacterSet {
+    static let spaces = CharacterSet(charactersIn: " ")
+    static let spacesAndNewlines = CharacterSet(charactersIn: " \n")
 }

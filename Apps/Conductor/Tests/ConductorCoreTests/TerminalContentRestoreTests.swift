@@ -147,6 +147,22 @@ import Testing
     #expect(restored?.text == "previous output\ndone")
 }
 
+@Test func restoredTerminalContentKeepsTokenLikeOutputAfterCompleteStaleHint() {
+    let tokenLikeLines = ["2026-06-05", "build-123", "abc123-session"]
+
+    for tokenLikeLine in tokenLikeLines {
+        let restored = RestoredTerminalContent.make(
+            terminalID: TerminalID(),
+            capturedAt: Date(timeIntervalSince1970: 2),
+            rawText: "previous output\nConductor restore hint: codex resume stale-session\n\(tokenLikeLine)\nfinal output",
+            tabAgentSnapshot: nil,
+            persistedAgentSnapshot: nil
+        )
+
+        #expect(restored?.text == "previous output\n\(tokenLikeLine)\nfinal output")
+    }
+}
+
 @Test func terminalContentSnapshotSanitizesAndCapsText() {
     let raw = "line 1\u{0007}\nline 2\n\n"
     let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(raw, maxUTF8Bytes: 64)
@@ -166,6 +182,12 @@ import Testing
     let raw = "first\u{0007}\nsecond\tcolumn\u{0008}\n"
     let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(raw, maxUTF8Bytes: 64)
     #expect(sanitized == "first\nsecond\tcolumn")
+}
+
+@Test func terminalContentSnapshotTrimsSpacesWithoutStrippingTabs() {
+    let raw = "\tfirst\t\n second \n"
+    let sanitized = TerminalContentSnapshotSanitizer.sanitizedText(raw, maxUTF8Bytes: 64)
+    #expect(sanitized == "\tfirst\t\nsecond")
 }
 
 @Test func terminalContentSnapshotNormalizesCRLFAndCRBoundaries() {
