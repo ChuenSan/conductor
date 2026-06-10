@@ -1022,6 +1022,8 @@ final class AppCoordinator: ObservableObject {
         tree.frame = containerView.bounds
         tree.autoresizingMask = [.width, .height]
         containerView.addSubview(tree)
+        tree.needsLayout = true
+        tree.layoutSubtreeIfNeeded()
         if let transition = pendingAreaTransition {
             animateTerminalArea(tree, transition: transition)
             pendingAreaTransition = nil

@@ -36,6 +36,7 @@ final class RatioSplitView: NSSplitView, NSSplitViewDelegate {
     var splitID: SplitID?
     var onRatioChange: ((SplitID, Double) -> Void)?
     private var applied = false
+    private var applyingInitialRatio = false
 
     override var dividerColor: NSColor { NSColor(AppStyle.windowBackground) }
 
@@ -63,18 +64,68 @@ final class RatioSplitView: NSSplitView, NSSplitViewDelegate {
 
     override func layout() {
         super.layout()
-        guard !applied, bounds.width > 1, bounds.height > 1 else { return }
-        applied = true
-        let total = isVertical ? bounds.width : bounds.height
-        setPosition(initialRatio * total, ofDividerAt: 0)
+        applyInitialRatioIfNeeded()
     }
 
     func splitViewDidResizeSubviews(_ notification: Notification) {
-        guard applied, let splitID, arrangedSubviews.count == 2 else { return }
-        let total = isVertical ? bounds.width : bounds.height
-        guard total > 1 else { return }
+        guard applied, !applyingInitialRatio, let splitID, arrangedSubviews.count == 2 else { return }
+        let total = splitExtent
+        guard total > 1, visiblePaneCount == 2 else { return }
         let firstSize = isVertical ? arrangedSubviews[0].frame.width : arrangedSubviews[0].frame.height
-        let ratio = max(0.05, min(0.95, Double(firstSize / total)))
+        let minRatio = min(0.45, Double(minimumPaneExtent(for: total) / total))
+        let ratio = max(minRatio, min(1 - minRatio, Double(firstSize / total)))
         onRatioChange?(splitID, ratio)
+    }
+
+    func splitView(_ splitView: NSSplitView, canCollapseSubview subview: NSView) -> Bool {
+        false
+    }
+
+    func splitView(_ splitView: NSSplitView,
+                   constrainMinCoordinate proposedMinimumPosition: CGFloat,
+                   ofSubviewAt dividerIndex: Int) -> CGFloat {
+        minimumPaneExtent(for: splitExtent)
+    }
+
+    func splitView(_ splitView: NSSplitView,
+                   constrainMaxCoordinate proposedMaximumPosition: CGFloat,
+                   ofSubviewAt dividerIndex: Int) -> CGFloat {
+        splitExtent - minimumPaneExtent(for: splitExtent)
+    }
+
+    private var splitExtent: CGFloat {
+        isVertical ? bounds.width : bounds.height
+    }
+
+    private var visiblePaneCount: Int {
+        arrangedSubviews.filter { view in
+            let extent = isVertical ? view.frame.width : view.frame.height
+            return extent > 1
+        }.count
+    }
+
+    private func applyInitialRatioIfNeeded() {
+        guard !applied, arrangedSubviews.count == 2 else { return }
+        let total = splitExtent
+        guard total >= 24 else { return }
+
+        let minExtent = minimumPaneExtent(for: total)
+        let proposed = initialRatio * total
+        let position = min(max(proposed, minExtent), total - minExtent)
+
+        applyingInitialRatio = true
+        setPosition(position, ofDividerAt: 0)
+        adjustSubviews()
+        applyingInitialRatio = false
+
+        if visiblePaneCount == 2 {
+            applied = true
+        }
+    }
+
+    private func minimumPaneExtent(for total: CGFloat) -> CGFloat {
+        let available = max(0, total - dividerThickness)
+        guard available > 0 else { return 0 }
+        return min(72, max(24, floor(available * 0.18)))
     }
 }
