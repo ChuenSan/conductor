@@ -851,10 +851,8 @@ final class AppCoordinator: ObservableObject {
         guard let wsIndex = activeWorkspaceIndex(),
               let current = store.workspaces[wsIndex].activeTab,
               current != id,
-              let from = store.workspaces[wsIndex].tabs.firstIndex(where: { $0.id == current }),
-              let to = store.workspaces[wsIndex].tabs.firstIndex(where: { $0.id == id })
+              store.workspaces[wsIndex].tabs.contains(where: { $0.id == id })
         else { return }
-        pendingAreaTransition = .horizontal(direction: to > from ? 1 : -1)
         run(.selectTab(id))
     }
 
