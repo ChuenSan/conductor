@@ -3,7 +3,6 @@ import Combine
 import CmuxCore
 
 private enum TerminalAreaTransition: Equatable {
-    case horizontal(direction: CGFloat)
     case zoom(expanding: Bool)
 }
 
@@ -859,10 +858,8 @@ final class AppCoordinator: ObservableObject {
     func selectWorkspace(_ id: WorkspaceID) {
         guard let current = store.activeWorkspace,
               current != id,
-              let from = store.workspaces.firstIndex(where: { $0.id == current }),
-              let to = store.workspaces.firstIndex(where: { $0.id == id })
+              store.workspaces.contains(where: { $0.id == id })
         else { return }
-        pendingAreaTransition = .horizontal(direction: to > from ? 1 : -1)
         store.activeWorkspace = id
         rebuild()
         scheduleSave()
@@ -1039,24 +1036,11 @@ final class AppCoordinator: ObservableObject {
         layer.removeAnimation(forKey: "terminalAreaTransition")
 
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let distance = min(max(containerView.bounds.width * 0.075, 28), 92)
         let transformFrom: CATransform3D
         let opacityFrom: Float
         let duration: CFTimeInterval
 
         switch transition {
-        case let .horizontal(direction):
-            if reduceMotion {
-                transformFrom = CATransform3DIdentity
-                opacityFrom = 0.92
-                duration = 0.12
-            } else {
-                let offset = distance * direction
-                let t = CGAffineTransform(translationX: offset, y: 0).scaledBy(x: 0.985, y: 0.985)
-                transformFrom = CATransform3DMakeAffineTransform(t)
-                opacityFrom = 0.72
-                duration = 0.24
-            }
         case let .zoom(expanding):
             if reduceMotion {
                 transformFrom = CATransform3DIdentity
