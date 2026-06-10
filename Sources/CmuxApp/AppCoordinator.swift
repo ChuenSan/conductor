@@ -4,6 +4,7 @@ import CmuxCore
 
 private enum TerminalAreaTransition: Equatable {
     case horizontal(direction: CGFloat)
+    case zoom(expanding: Bool)
 }
 
 /// 应用协调器：持有 WorkspaceStore + SessionRegistry，把命令经 reducer 应用到状态、
@@ -774,7 +775,9 @@ final class AppCoordinator: ObservableObject {
     /// ⌘Enter：把当前 pane 放大占满 tab，再按还原。
     func toggleZoom() {
         guard let active = activePane() else { return }
-        zoomedPane = (zoomedPane == active) ? nil : active
+        let expanding = zoomedPane != active
+        pendingAreaTransition = .zoom(expanding: expanding)
+        zoomedPane = expanding ? active : nil
         rebuild()
     }
 
@@ -1038,18 +1041,32 @@ final class AppCoordinator: ObservableObject {
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         let distance = min(max(containerView.bounds.width * 0.075, 28), 92)
         let transformFrom: CATransform3D
+        let opacityFrom: Float
         let duration: CFTimeInterval
 
         switch transition {
         case let .horizontal(direction):
             if reduceMotion {
                 transformFrom = CATransform3DIdentity
+                opacityFrom = 0.92
                 duration = 0.12
             } else {
                 let offset = distance * direction
                 let t = CGAffineTransform(translationX: offset, y: 0).scaledBy(x: 0.985, y: 0.985)
                 transformFrom = CATransform3DMakeAffineTransform(t)
+                opacityFrom = 0.72
                 duration = 0.24
+            }
+        case let .zoom(expanding):
+            if reduceMotion {
+                transformFrom = CATransform3DIdentity
+                opacityFrom = 0.92
+                duration = 0.12
+            } else {
+                let scale: CGFloat = expanding ? 0.93 : 1.035
+                transformFrom = CATransform3DMakeAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
+                opacityFrom = expanding ? 0.78 : 0.88
+                duration = expanding ? 0.28 : 0.22
             }
         }
 
@@ -1057,7 +1074,7 @@ final class AppCoordinator: ObservableObject {
         layer.transform = CATransform3DIdentity
 
         let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = reduceMotion ? 0.92 : 0.72
+        fade.fromValue = opacityFrom
         fade.toValue = 1
 
         let transform = CABasicAnimation(keyPath: "transform")
