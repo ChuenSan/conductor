@@ -1,21 +1,34 @@
-# Local build artifacts
-**/.build/
-**/.swiftpm/
-DerivedData/
-.worktrees/
-
-# Heavy binary dependencies prepared locally by scripts
-**/Vendor/GhosttyKit.xcframework/
-
-# Local evidence archives. Keep them on disk, but do not commit them.
-Backups/
-
-# Packaged apps and DMGs generated locally.
-Artifacts/
-
-# macOS filesystem metadata
+# macOS
 .DS_Store
-**/.DS_Store
 
-# Python helper cache
-**/__pycache__/
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Zig (libghostty build artifacts)
+zig-cache/
+zig-out/
+.zig-cache/
+
+# Vendored prebuilt GhosttyKit (~536MB) — fetched via Scripts/prepare-ghosttykit.sh
+Vendor/GhosttyKit.xcframework/
+
+# Misc
+*.log

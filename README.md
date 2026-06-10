@@ -1,193 +1,75 @@
-# Conductor
+# cmux
 
-Native macOS workbench for terminal-heavy development.
+一个原生 macOS 多终端管理器：工作区 / Tab / 自由分屏，每个分屏是一个真 **libghostty** 终端。
+对标 [manaflow-ai/cmux](https://github.com/manaflow-ai/cmux)。Swift + SwiftUI + AppKit，仅 macOS。
 
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-111827)
-![SwiftPM](https://img.shields.io/badge/build-SwiftPM-F05138)
-![Public Preview](https://img.shields.io/badge/status-public%20preview-2DA44E)
-![GitHub Releases](https://img.shields.io/badge/updates-GitHub%20Releases-2F81F7)
+## 构建与运行
 
-Conductor brings terminals, web tabs, files, command actions, notifications, usage insight, local service awareness, and runtime updates into one compact desktop workspace.
-
-[Install](#install) ·
-[Quick start](#quick-start) ·
-[Screenshots](#screenshots) ·
-[Features](#features) ·
-[Docs by goal](#docs-by-goal) ·
-[Contributing](#contributing) ·
-[Releases](https://github.com/zhengzizhe/conductor/releases)
-
-![Conductor workbench](docs/media/conductor-screenshot-workbench.png)
-
-## Features
-
-Conductor is for local development sessions where terminal panes, browser references, files, notifications, and update tooling need to stay close without turning the whole screen into a dashboard.
-
-- Native terminal workspaces with tabs, splits, pane movement, zoom, and command actions.
-- Lightweight web tabs for docs, dashboards, local apps, and quick references.
-- File manager and preview surfaces for staying close to the current project.
-- Notification and command panels for common workspace actions.
-- Usage records, local storage insight, service status, local dev-server links, and quick maintenance controls.
-- Polished settings for appearance, terminal behavior, startup/proxy, notifications, shortcuts, themes, and updates.
-- GitHub Release powered runtime updates with checksum verification.
-
-## What Users Get
-
-- **Less context loss:** workspaces, terminal layout, browser tabs, file tabs, and appearance are persisted locally.
-- **A scriptable workbench:** the local control API can create workspaces, split panes, send terminal input, open web tabs, run commands, and create in-app attention events.
-- **Attention that points somewhere:** notifications are stored in-app with workspace and surface context, so a missed macOS banner is not the only evidence.
-- **Project state at a glance:** workspace rows and inspectors expose path, open files, web tabs, unread work, and local services without making users read every terminal.
-- **A quieter update flow:** normal update UI focuses on available, downloading, ready, and failed states instead of exposing release internals.
-- **Better troubleshooting:** diagnostics expose app, protocol, session, update, and notification state for bug reports.
-
-## Install
-
-Download the latest release, unzip it, and move `Conductor.app` to `/Applications`.
-
-```text
-https://github.com/zhengzizhe/conductor/releases/latest
-```
-
-> Conductor is currently a public preview. Builds are ad-hoc signed unless a release explicitly says otherwise, so macOS may ask you to confirm the first launch.
-
-## Quick Start
-
-Build and run from source:
+需要 macOS 14+ 与 Xcode（Swift 6 工具链）。
 
 ```bash
-git clone https://github.com/zhengzizhe/conductor.git
-cd conductor/Apps/Conductor
+# 1. 拉取预编译的 GhosttyKit.xcframework（~536MB，不入 git）
 ./Scripts/prepare-ghosttykit.sh
-swift build
-swift run ConductorModelCheck
-./Scripts/run-conductor.sh
+
+# 2. 构建 + 运行
+swift run CmuxApp
 ```
 
-Build a clickable app bundle:
+`swift test` 运行 CmuxCore（模型 + 持久化）的单元测试。
+
+### 打包成 .app（启用系统通知）
+
+完成通知（agent 答完发 macOS 通知、点击跳回对应 pane）依赖 **app 有 bundle id**，
+所以要用打包后的 `cmux.app` 运行，而不是 `swift run`：
 
 ```bash
-cd Apps/Conductor
-./Scripts/build-app-bundle.sh
-open .build/Conductor.app
+# 打包（默认 release）并启动
+./Scripts/make-app.sh && open cmux.app
 ```
 
-## Project Layout
+首次运行后，到 CLI 面板（Tab 栏右侧）的「完成通知」卡片里点「安装通知 hook」，
+会写入 `~/.cmux/bin/cmux-notify` 并配置 Codex / Claude。若系统把通知拦了（ad-hoc 签名常见），
+卡片里点「去系统设置授权」打开「系统设置 › 通知 › cmux」手动开启即可恢复点击跳转；
+否则会自动回退成普通横幅（看得到、点了不跳转）。
 
-```text
-Apps/Conductor/           macOS application, scripts, updater, and UI
-Apps/Conductor/Sources/   Swift source modules
-Apps/Conductor/Scripts/   build, validation, release, and updater packaging scripts
-docs/                     architecture, update, security, and planning notes
-ThirdParty/               imported third-party source used by app features
-```
+## 功能
 
-## Screenshots
+- **工作区**：左侧栏，每个工作区绑定一个目录（`+` 选目录新建）。
+- **Tab**：每个工作区顶部多个 tab，标签显示当前目录名。
+- **自由分屏**：tab 内水平/竖直分屏，可拖分隔条调大小。
+- **真终端**：每个分屏是一个 libghostty surface（GPU 渲染 + PTY）。
+- **拖放重排**：`⌘ + 拖动`某个终端到另一个终端上松手，把它移到那一侧。
+- **持久化**：退出/重开恢复工作区 / tab / 分屏布局，每个 pane 回到上次的目录；分屏新 pane 继承当前 pane 的目录。
+- **内容恢复**：正常退出时给每个 pane 拍「屏幕+回滚」文本快照（截尾 2000 行 / 256KB），下次启动在新终端里回放（可滚动可复制，末尾有分隔线提示）；进程本身不复活，crash 退出无快照。
+- **误关恢复**：`⌘⇧T` 弹栈恢复最近关闭的 tab/pane（分屏结构、目录、关闭前的终端内容一并回来，最多 10 条，会话内有效）。
+- **Agent 会话续聊**：关闭/退出时若 pane 里在跑 claude/codex，会按 cwd 记下最近的会话 ID；恢复该 pane 时把 `claude --resume <id>` / `codex resume <id>` 预输入到提示符上，按 Enter 即可接着聊（不会自动执行）。
+- **会话管理**：侧边栏「会话」虚拟列表列出当前工作区全部 Claude/Codex 历史（悬停 0.3s 弹出毛玻璃预览浮层，虚拟滚动浏览完整对话；点击新标签续聊）；每个 pane 右键可「续聊会话」或「管理会话」；右侧管理面板点开展开完整 transcript（LazyVStack 虚拟滚动、可选中复制）。
+- 选字即复制、`⌘V` 粘贴、macOS 浅色主题。
 
-Generated from the current macOS build with `Apps/Conductor/Scripts/capture-release-screenshots.sh`.
+### 工具面板（Tab 栏右侧按钮）
 
-### Workbench
+右侧工具面板分四个分段：
 
-![Workbench with terminal splits](docs/media/conductor-screenshot-workbench.png)
+- **CLI**：检测本机 Codex / Claude / Gemini / Cursor / Copilot / Grok，显示版本、用量配额、一键启动到新终端，以及「完成通知」hook 安装。
+- **用量**：扫描 `~/.claude/projects` 与 `~/.codex/sessions` 的会话日志（ccusage 思路，价目表见 `ModelPricing`），含：今日/区间成本、总 token、会话数；按来源堆叠的每日成本图（点柱子看单日 Claude/Codex 明细）；token 构成（输入/输出/缓存读写）；**按项目**排行（取会话 cwd）；按模型占比明细。7/30/90 天切换；启动时后台预扫 + 磁盘缓存，面板秒开。
+- **Skills**：扫描 Claude / Codex / Cursor 的 `SKILL.md`，按来源筛选 + 搜索；行展开看完整描述/作者/路径，可在 Finder 显示、打开 SKILL.md、拷贝路径；开关即启用/禁用（重命名 `SKILL.md.disabled`，可逆）。
+- **Hooks**：已配置 hooks 按事件分组展示（点命令展开全文），市场配方显示 Claude/Codex 双端安装状态，一键安装/移除（完成通知 / 提示音 / 横幅 / 完成日志）；可直接打开两侧配置文件。安装的命令带 `$CMUX_PANE_ID` 网关，只对 cmux 启动的 agent 生效，其它配置原样保留。
 
-### Usage Records
+## 键位
 
-![Usage records card](docs/media/conductor-screenshot-token-records-panel.png)
+| 键 | 作用 |
+|---|---|
+| `⌘T` | 新建 tab |
+| `⌘D` / `⌘⇧D` | 向右竖分 / 向下横分 |
+| `⌘W` | 关闭当前 pane（最后一个则关 tab）|
+| `⌘⇧T` | 恢复最近关闭的 tab/pane（回到原目录与原分屏位置，tab 右键菜单也有入口）|
+| `⌘⌥← / →` | 在分屏间切换焦点 |
+| `⌘ + 拖动终端` | 把该 pane 拖到别处重排 |
 
-### Notifications
+## 架构
 
-![Notifications panel](docs/media/conductor-screenshot-notifications.png)
+- **`CmuxCore`**（纯 Swift 库，单测覆盖）：数据模型（`SplitNode` 分屏树 / `Tab` / `Workspace` / `WorkspaceStore`）、命令 reducer（`WorkspaceCommand`）、`SessionRegistry`、持久化（`StateStore`），以及引擎无关的 `TerminalSurface` 协议。
+- **`CmuxApp`**（可执行）：SwiftUI 外壳（侧栏 / Tab 栏，自绘）+ AppKit 终端区；`GhosttySurface` 封装 libghostty（`TerminalSurface` 的实现），`AppCoordinator` 把命令应用到状态并重建视图。
+- **GhosttyKit**：预编译的 libghostty C API（vendored，非源码构建），用 Apple 工具链链接。
 
-### Browser Surface
-
-![Browser tab surface](docs/media/conductor-screenshot-browser.png)
-
-### Command Palette
-
-![Command palette](docs/media/conductor-screenshot-command-palette.png)
-
-### Settings
-
-![Settings panel](docs/media/conductor-screenshot-settings.png)
-
-## Docs By Goal
-
-| Goal | Start here |
-| --- | --- |
-| Run the app locally | [Getting started](docs/getting-started.md) |
-| Script the app | [Local control API](docs/api.md) |
-| Understand notifications | [Notifications](docs/notifications.md) |
-| Ship a GitHub Release update | [Updating Conductor](docs/updating.md) |
-| Understand runtime replacement safety | [Security model](docs/security.md) |
-| Troubleshoot install/update/notification issues | [Troubleshooting](docs/troubleshooting.md) |
-| Work on shell, panes, web tabs, and UI | [Architecture notes](docs/architecture.md) |
-| Review active planning docs | [Superpower plans](docs/superpowers/plans) |
-| Review design specs | [Superpower specs](docs/superpowers/specs) |
-
-## Runtime Updates
-
-Conductor checks GitHub Releases, compares the latest available build with the local app version, verifies the downloaded package, and stages replacement through an external installer after the app exits.
-
-For maintainer release asset details, see [Updating Conductor](docs/updating.md). The app downloads the selected package, verifies its SHA-256 checksum, stages the update, then lets an external installer replace the app after Conductor exits.
-
-## Current Preview Limits
-
-- Browser tabs support navigation, snapshots, screenshots, DOM actions, typed waits, downloads, runtime-error diagnostics, and same-origin frame automation; cross-origin action routing and richer user-facing automation error UI are still under active development.
-- Native macOS notifications, targetable attention events, unread badges, toast fallback, and focus actions are available; broader permission-state test coverage is still being expanded.
-- Workspace intelligence exposes project metadata and local service summaries; real-agent resume context and richer per-tab file/editor state are still being built.
-- Public preview builds may be ad-hoc signed. See [Security model](docs/security.md) and [Troubleshooting](docs/troubleshooting.md).
-
-## Security Defaults
-
-- Update packages must match the SHA-256 in release metadata.
-- The staged app must match the expected bundle identifier.
-- The staged app must pass `codesign --verify --deep --strict`.
-- Runtime replacement happens from an external installer after Conductor exits.
-
-## Release
-
-Create versioned full/delta artifacts and GitHub updater metadata from `Apps/Conductor`:
-
-```bash
-CONDUCTOR_GITHUB_REPO=owner/repo \
-./Scripts/package-release.sh 0.0.3 3
-```
-
-Publish the generated assets:
-
-```bash
-CONDUCTOR_GITHUB_REPO=owner/repo \
-./Scripts/publish-github-release.sh \
-../../Artifacts/releases/0.0.3-3-macos-arm64 v0.0.3
-```
-
-For signed production builds:
-
-```bash
-CONDUCTOR_BUNDLE_IDENTIFIER=com.example.conductor \
-CONDUCTOR_CODE_SIGN_IDENTITY="Developer ID Application: Example" \
-CONDUCTOR_GITHUB_REPO=owner/repo \
-./Scripts/package-release.sh 0.0.3 3
-```
-
-## Validation
-
-```bash
-cd Apps/Conductor
-swift run ConductorModelCheck
-./Scripts/check-conductor.sh
-```
-
-The automated gate verifies core workspace invariants, smoke-runs the app, checks the local update fixture, and captures release screenshots without touching persisted user state.
-
-## Contributing
-
-Issues are open for bug reports, crash reports, usability feedback, and feature requests. Pull requests are welcome, but please keep changes focused and include validation notes.
-
-The default branch is `main` and is protected. Direct write access is limited to the owner account; external contributions should go through forks and pull requests.
-
-Useful links:
-
-- [Issues](https://github.com/zhengzizhe/conductor/issues)
-- [Releases](https://github.com/zhengzizhe/conductor/releases)
-- [Pulse](https://github.com/zhengzizhe/conductor/pulse)
-- [Contributors](https://github.com/zhengzizhe/conductor/graphs/contributors)
+> ⚠️ 渲染坑：libghostty 终端视图（`CAMetalLayer`）的容器里**不能放非 Metal 的 layer-backed 兄弟视图，父级也不能重写 `draw()`**，否则会破坏 Metal 呈现导致非聚焦 pane 白屏。pane 容器因此只放终端视图本身，chrome（焦点环用图层边框）另行处理。

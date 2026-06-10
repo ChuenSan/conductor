@@ -1,0 +1,114 @@
+import CmuxCore
+import SwiftUI
+
+/// 侧边栏会话行悬停时弹出的 transcript 浮层（毛玻璃 + 虚拟滚动全量对话）。
+struct SessionHoverPreviewPanel: View {
+    let record: AgentSessionRecord
+    var onResume: () -> Void
+
+    @ObservedObject private var configStore = ConfigStore.shared
+    @State private var messages: [AgentSessionMessage]?
+    @State private var loading = false
+
+    private let panelWidth: CGFloat = 360
+    private let panelMaxHeight: CGFloat = 520
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider().overlay(AppStyle.separator)
+            transcriptBody
+            Divider().overlay(AppStyle.separator)
+            footer
+        }
+        .frame(width: panelWidth, height: panelHeight)
+        .cmuxInWindowPanel(cornerRadius: Radius.lg)
+        .onAppear { loadIfNeeded() }
+        .onChange(of: record.id) { _, _ in
+            messages = nil
+            loadIfNeeded()
+        }
+    }
+
+    private var panelHeight: CGFloat {
+        guard let messages, !messages.isEmpty else { return 160 }
+        return panelMaxHeight
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(record.title)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(AppStyle.textPrimary)
+                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(record.agent.capitalized)
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(AppStyle.accent)
+                    if let count = messages?.count {
+                        Text("\(count) 条消息")
+                            .font(.system(size: 10))
+                            .foregroundStyle(AppStyle.textTertiary)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private var transcriptBody: some View {
+        if loading, messages == nil {
+            VStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("读取对话…")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppStyle.textTertiary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let messages, !messages.isEmpty {
+            SessionTranscriptView(messages: messages, maxHeight: panelMaxHeight - 108, fontSize: 10.5)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+        } else {
+            Text("没有可预览的对话")
+                .font(.system(size: 11))
+                .foregroundStyle(AppStyle.textTertiary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var footer: some View {
+        HStack {
+            Text(record.shortID)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(AppStyle.textTertiary)
+            Spacer()
+            Button("续聊", action: onResume)
+                .buttonStyle(PrimaryButtonStyle())
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private func loadIfNeeded() {
+        guard messages == nil, !loading, record.filePath != nil else { return }
+        loading = true
+        Task {
+            let loaded = await SessionPreviewCache.shared.messages(for: record)
+            messages = loaded
+            loading = false
+        }
+    }
+}
+
+/// 侧边栏行 frame，用于定位悬停浮层。
+struct SidebarRowFrameKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
