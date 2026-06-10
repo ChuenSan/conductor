@@ -2,6 +2,10 @@ import AppKit
 import Combine
 import CmuxCore
 
+private enum TerminalAreaTransition: Equatable {
+    case horizontal(direction: CGFloat)
+}
+
 /// 应用协调器：持有 WorkspaceStore + SessionRegistry，把命令经 reducer 应用到状态、
 /// 执行副作用（建/关/聚焦真终端），并把当前 active tab 的分屏树重建进窗口。
 /// ObservableObject：SwiftUI 外壳（Tab 栏/侧栏）观察 store 变化自动刷新。
@@ -25,6 +29,8 @@ final class AppCoordinator: ObservableObject {
     private var plannedEntrances: [PaneID: PaneEntranceMotion] = [:]
     /// 本次刚新建、需要入场动画的 pane。
     private var pendingEntrances: [PaneID: PaneEntranceMotion] = [:]
+    /// 下一次终端区整体重建的空间转场（tab/workspace 切换用）。
+    private var pendingAreaTransition: TerminalAreaTransition?
     /// 被放大占满 tab 的 pane（会话级，不持久化）。
     private var zoomedPane: PaneID?
     /// config.yaml 文件监听（热更新）。
@@ -839,11 +845,23 @@ final class AppCoordinator: ObservableObject {
     }
 
     func selectTab(_ id: TabID) {
+        guard let wsIndex = activeWorkspaceIndex(),
+              let current = store.workspaces[wsIndex].activeTab,
+              current != id,
+              let from = store.workspaces[wsIndex].tabs.firstIndex(where: { $0.id == current }),
+              let to = store.workspaces[wsIndex].tabs.firstIndex(where: { $0.id == id })
+        else { return }
+        pendingAreaTransition = .horizontal(direction: to > from ? 1 : -1)
         run(.selectTab(id))
     }
 
     func selectWorkspace(_ id: WorkspaceID) {
-        guard store.activeWorkspace != id, store.workspaces.contains(where: { $0.id == id }) else { return }
+        guard let current = store.activeWorkspace,
+              current != id,
+              let from = store.workspaces.firstIndex(where: { $0.id == current }),
+              let to = store.workspaces.firstIndex(where: { $0.id == id })
+        else { return }
+        pendingAreaTransition = .horizontal(direction: to > from ? 1 : -1)
         store.activeWorkspace = id
         rebuild()
         scheduleSave()
@@ -969,7 +987,10 @@ final class AppCoordinator: ObservableObject {
     private func rebuild() {
         containerView.subviews.forEach { $0.removeFromSuperview() }
         paneContainers = paneContainers.filter { registry.surface(for: $0.key) != nil }
-        guard let tab = activeTabModel() else { return }
+        guard let tab = activeTabModel() else {
+            pendingAreaTransition = nil
+            return
+        }
         let active = self.activePane()
         // 放大态校验：被放大的 pane 不在当前 tab 了 → 取消放大。
         if let zp = zoomedPane, !tab.rootSplit.contains(zp) { zoomedPane = nil }
@@ -998,11 +1019,57 @@ final class AppCoordinator: ObservableObject {
         tree.frame = containerView.bounds
         tree.autoresizingMask = [.width, .height]
         containerView.addSubview(tree)
+        if let transition = pendingAreaTransition {
+            animateTerminalArea(tree, transition: transition)
+            pendingAreaTransition = nil
+        }
         // 新建的 pane 入场淡入
         for (pane, motion) in pendingEntrances { paneContainers[pane]?.animateEntrance(motion) }
         pendingEntrances.removeAll()
         focusActivePane()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.refreshVisibleSurfaces() }
+    }
+
+    private func animateTerminalArea(_ tree: NSView, transition: TerminalAreaTransition) {
+        tree.wantsLayer = true
+        guard let layer = tree.layer else { return }
+        layer.removeAnimation(forKey: "terminalAreaTransition")
+
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let distance = min(max(containerView.bounds.width * 0.075, 28), 92)
+        let transformFrom: CATransform3D
+        let duration: CFTimeInterval
+
+        switch transition {
+        case let .horizontal(direction):
+            if reduceMotion {
+                transformFrom = CATransform3DIdentity
+                duration = 0.12
+            } else {
+                let offset = distance * direction
+                let t = CGAffineTransform(translationX: offset, y: 0).scaledBy(x: 0.985, y: 0.985)
+                transformFrom = CATransform3DMakeAffineTransform(t)
+                duration = 0.24
+            }
+        }
+
+        layer.opacity = 1
+        layer.transform = CATransform3DIdentity
+
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = reduceMotion ? 0.92 : 0.72
+        fade.toValue = 1
+
+        let transform = CABasicAnimation(keyPath: "transform")
+        transform.fromValue = NSValue(caTransform3D: transformFrom)
+        transform.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+
+        let group = CAAnimationGroup()
+        group.animations = [fade, transform]
+        group.duration = duration
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        group.isRemovedOnCompletion = true
+        layer.add(group, forKey: "terminalAreaTransition")
     }
 
     /// 复用每个 pane 的容器（终端视图常驻其中），避免 reparent 活动 Metal 视图导致变白。
