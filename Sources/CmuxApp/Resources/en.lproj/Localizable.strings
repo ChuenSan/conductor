@@ -91,8 +91,10 @@
 "复制续聊命令" = "Copy Resume Command";
 "读取完整对话…" = "Loading full conversation…";
 "%ld 条消息" = "%ld messages";
+"最近 %ld 条消息" = "Latest %ld messages";
 "没有可预览的对话内容" = "No conversation content to preview";
 "读取对话…" = "Loading conversation…";
+"读取最近对话…" = "Loading recent conversation…";
 "没有可预览的对话" = "No conversation to preview";
 "续聊" = "Resume";
 "我" = "Me";

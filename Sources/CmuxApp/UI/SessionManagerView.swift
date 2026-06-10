@@ -278,7 +278,10 @@ private struct SessionRow: View {
         guard record.filePath != nil else { return }
         loadingPreview = true
         Task {
-            let messages = await SessionPreviewCache.shared.messages(for: record)
+            let messages = await SessionPreviewCache.shared.messages(
+                for: record,
+                limit: SessionPreviewCache.expandedPreviewLimit,
+                tailBytes: SessionPreviewCache.expandedTailBytes)
             preview = messages
             loadingPreview = false
         }
@@ -290,14 +293,14 @@ private struct SessionRow: View {
             if loadingPreview, preview == nil {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small).scaleEffect(0.65)
-                    Text(L("读取完整对话…"))
+                    Text(L("读取最近对话…"))
                         .font(.system(size: 10.5))
                         .foregroundStyle(AppStyle.textTertiary)
                 }
                 .frame(maxWidth: .infinity, minHeight: 120)
             } else if let preview, !preview.isEmpty {
                 HStack {
-                    Text(L("%ld 条消息", preview.count))
+                    Text(L("最近 %ld 条消息", preview.count))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(AppStyle.textTertiary)
                     Spacer()

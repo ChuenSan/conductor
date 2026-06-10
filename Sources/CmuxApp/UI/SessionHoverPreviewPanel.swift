@@ -1,7 +1,7 @@
 import CmuxCore
 import SwiftUI
 
-/// 侧边栏会话行悬停时弹出的 transcript 预览（作为 popover 内容；虚拟滚动全量对话）。
+/// 侧边栏会话行悬停时弹出的 transcript 预览（只读取尾部窗口，避免大 transcript 卡顿）。
 struct SessionHoverPreviewPanel: View {
     let record: AgentSessionRecord
     var onResume: () -> Void
@@ -47,7 +47,7 @@ struct SessionHoverPreviewPanel: View {
                         .font(.system(size: 9.5, weight: .semibold))
                         .foregroundStyle(AppStyle.accent)
                     if let count = messages?.count {
-                        Text(L("%ld 条消息", count))
+                        Text(L("最近 %ld 条消息", count))
                             .font(.system(size: 10))
                             .foregroundStyle(AppStyle.textTertiary)
                     }
@@ -64,7 +64,7 @@ struct SessionHoverPreviewPanel: View {
         if loading, messages == nil {
             VStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text(L("读取对话…"))
+                Text(L("读取最近对话…"))
                     .font(.system(size: 11))
                     .foregroundStyle(AppStyle.textTertiary)
             }
@@ -98,7 +98,10 @@ struct SessionHoverPreviewPanel: View {
         guard messages == nil, !loading, record.filePath != nil else { return }
         loading = true
         Task {
-            let loaded = await SessionPreviewCache.shared.messages(for: record)
+            let loaded = await SessionPreviewCache.shared.messages(
+                for: record,
+                limit: SessionPreviewCache.hoverPreviewLimit,
+                tailBytes: SessionPreviewCache.hoverTailBytes)
             messages = loaded
             loading = false
         }
