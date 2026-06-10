@@ -21,8 +21,10 @@ final class AppCoordinator: ObservableObject {
     let containerView = NSView()
     /// 按 PaneID 复用 pane 容器：避免每次重建都 reparent 活动的 Metal 终端视图（会变白）。
     private var paneContainers: [PaneID: PaneContainerView] = [:]
-    /// 本次刚新建、需要入场淡入的 pane。
-    private var pendingEntrance: Set<PaneID> = []
+    /// 即将创建的 pane → 入场动势；container 首次上树时取走。
+    private var plannedEntrances: [PaneID: PaneEntranceMotion] = [:]
+    /// 本次刚新建、需要入场动画的 pane。
+    private var pendingEntrances: [PaneID: PaneEntranceMotion] = [:]
     /// 被放大占满 tab 的 pane（会话级，不持久化）。
     private var zoomedPane: PaneID?
     /// config.yaml 文件监听（热更新）。
@@ -568,6 +570,7 @@ final class AppCoordinator: ObservableObject {
     /// 在当前 tab 内分屏启动 Agent。
     func launchAgentInSplit(command: String, axis: SplitAxis) {
         let paneID = PaneID(nextID("p"))
+        plannedEntrances[paneID] = .split(axis: axis)
         run(.split(axis: axis, newPaneID: paneID, splitID: SplitID(nextID("s")), cwd: inheritableCwd()))
         (registry.surface(for: paneID) as? GhosttySurface)?.enqueueCommand(launchCommand(command, pane: paneID))
         tagPaneAgentOptimistically(paneID, command: command)
@@ -592,7 +595,9 @@ final class AppCoordinator: ObservableObject {
     }
 
     func split(_ axis: SplitAxis) {
-        run(.split(axis: axis, newPaneID: PaneID(nextID("p")), splitID: SplitID(nextID("s")), cwd: inheritableCwd()))
+        let paneID = PaneID(nextID("p"))
+        plannedEntrances[paneID] = .split(axis: axis)
+        run(.split(axis: axis, newPaneID: paneID, splitID: SplitID(nextID("s")), cwd: inheritableCwd()))
     }
 
     /// 分屏新 pane 继承当前 pane 的目录（目录已不存在则回退工作区根/家目录）。
@@ -704,6 +709,7 @@ final class AppCoordinator: ObservableObject {
             let tabAlive = store.workspaces.first(where: { $0.id == workspaceID })?
                 .tabs.contains(where: { $0.id == tabID }) ?? false
             if tabAlive {
+                plannedEntrances[pane] = .split(axis: axis)
                 run(.restorePane(pane: pane, tabID: tabID, workspaceID: workspaceID,
                                  cwd: cwd, axis: axis, splitID: SplitID(nextID("s"))))
             } else {
@@ -993,8 +999,8 @@ final class AppCoordinator: ObservableObject {
         tree.autoresizingMask = [.width, .height]
         containerView.addSubview(tree)
         // 新建的 pane 入场淡入
-        for pane in pendingEntrance { paneContainers[pane]?.animateEntrance() }
-        pendingEntrance.removeAll()
+        for (pane, motion) in pendingEntrances { paneContainers[pane]?.animateEntrance(motion) }
+        pendingEntrances.removeAll()
         focusActivePane()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.refreshVisibleSurfaces() }
     }
@@ -1047,7 +1053,7 @@ final class AppCoordinator: ObservableObject {
         container.onScroll = { [weak surface] dy in surface?.scrollByPixels(dy) }
         container.setAgentLogo(agentLogoImage(for: paneAgents[pane]))
         paneContainers[pane] = container
-        pendingEntrance.insert(pane)   // 新建 → 入场淡入
+        pendingEntrances[pane] = plannedEntrances.removeValue(forKey: pane) ?? .fade
         return container
     }
 

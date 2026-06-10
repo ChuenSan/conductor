@@ -4,6 +4,12 @@ import CmuxCore
 /// 落点边缘：决定把被拖 pane 放到目标 pane 的哪一侧。
 enum PaneDropEdge { case left, right, top, bottom }
 
+/// 新 pane 的入场动势：区分普通出现与分屏打开。
+enum PaneEntranceMotion: Equatable {
+    case fade
+    case split(axis: SplitAxis)
+}
+
 /// pane 右键「新建终端运行」子菜单的一项：要执行的命令 + 显示标题 + 品牌 logo。
 struct PaneAgentMenuItem {
     let command: String
@@ -217,13 +223,46 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     /// 设置头条左侧的 Agent logo（nil 表示无 agent 在跑）。
     func setAgentLogo(_ image: NSImage?) { header.agentLogo = image }
 
-    /// 新建/分屏出现时淡入（避免硬蹦出来）。
-    func animateEntrance() {
-        alphaValue = 0
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.28
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            animator().alphaValue = 1
+    /// 新 pane 入场：新 tab 保持轻淡入；分屏从分割缝方向打开。
+    func animateEntrance(_ motion: PaneEntranceMotion) {
+        guard let layer else { return }
+        layer.removeAnimation(forKey: "paneEntrance")
+
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let initialTransform = reduceMotion ? CATransform3DIdentity : entranceTransform(for: motion)
+        let duration = (motion == .fade || reduceMotion) ? 0.22 : 0.34
+
+        layer.opacity = 1
+        layer.transform = CATransform3DIdentity
+
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+
+        let transform = CABasicAnimation(keyPath: "transform")
+        transform.fromValue = NSValue(caTransform3D: initialTransform)
+        transform.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+
+        let group = CAAnimationGroup()
+        group.animations = [fade, transform]
+        group.duration = duration
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        group.isRemovedOnCompletion = true
+        layer.add(group, forKey: "paneEntrance")
+    }
+
+    private func entranceTransform(for motion: PaneEntranceMotion) -> CATransform3D {
+        switch motion {
+        case .fade:
+            return CATransform3DIdentity
+        case .split(.vertical):
+            let travel = -min(max(bounds.width * 0.18, 18), 72)
+            let t = CGAffineTransform(translationX: travel, y: 0).scaledBy(x: 0.88, y: 1)
+            return CATransform3DMakeAffineTransform(t)
+        case .split(.horizontal):
+            let travel = min(max(bounds.height * 0.18, 18), 72)
+            let t = CGAffineTransform(translationX: 0, y: travel).scaledBy(x: 1, y: 0.88)
+            return CATransform3DMakeAffineTransform(t)
         }
     }
 

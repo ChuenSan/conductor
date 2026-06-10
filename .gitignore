@@ -21,6 +21,7 @@ xcuserdata/
 .build/
 .swiftpm/
 Package.resolved
+cmux.app/
 
 # Zig (libghostty build artifacts)
 zig-cache/
