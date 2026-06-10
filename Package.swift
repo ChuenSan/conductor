@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Cmux",
+    defaultLocalization: "zh-Hans",
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "CmuxCore", targets: ["CmuxCore"]),
@@ -13,7 +14,13 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.1.0"),
     ],
     targets: [
-        .target(name: "CmuxCore"),
+        .target(
+            name: "CmuxCore",
+            resources: [
+                .process("Resources/en.lproj"),
+                .process("Resources/zh-Hans.lproj"),
+            ]
+        ),
         .testTarget(name: "CmuxCoreTests", dependencies: ["CmuxCore"]),
         .testTarget(name: "CmuxAppTests", dependencies: ["CmuxApp"]),
 
@@ -28,6 +35,8 @@ let package = Package(
             dependencies: ["CmuxCore", "GhosttyKit", .product(name: "Yams", package: "Yams")],
             resources: [
                 .copy("Resources/Logos"),
+                .process("Resources/en.lproj"),
+                .process("Resources/zh-Hans.lproj"),
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v5),

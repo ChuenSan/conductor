@@ -17,7 +17,7 @@ struct SidebarWorkspaceSummary: Equatable {
         let tabCount = workspace.tabs.count
         let paneCount = workspace.tabs.reduce(0) { $0 + $1.paneCount }
         let pathText = Self.compactPath(workspace.path)
-        let metricsText = "\(tabCount) 标签 · \(paneCount) 面板"
+        let metricsText = L("%1$ld 标签 · %2$ld 面板", tabCount, paneCount)
         let activeDetailText = Self.activeDetailText(
             workspace: workspace,
             isSelected: isSelected,
@@ -49,9 +49,9 @@ struct SidebarWorkspaceSummary: Equatable {
 
         let tabTitle = activeTab.customTitle ?? paneTitles[activeTab.activePane] ?? activeTab.title
         guard let cwd = paneCwds[activeTab.activePane] else {
-            return "当前：\(tabTitle)"
+            return L("当前：%@", tabTitle)
         }
-        return "当前：\(tabTitle) · \(compactPath(cwd))"
+        return L("当前：%1$@ · %2$@", tabTitle, compactPath(cwd))
     }
 
     private static func compactPath(_ path: String) -> String {

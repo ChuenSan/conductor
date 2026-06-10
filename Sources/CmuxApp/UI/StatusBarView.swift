@@ -61,7 +61,7 @@ private struct CodexUsageChip: View {
     private var headline: (label: String, window: CodexUsageSnapshot.Window)? {
         guard let snapshot else { return nil }
         let candidates: [(String, CodexUsageSnapshot.Window)] =
-            [("会话", snapshot.session), ("本周", snapshot.weekly)].compactMap { label, win in
+            [(L("会话"), snapshot.session), (L("本周"), snapshot.weekly)].compactMap { label, win in
                 win.map { (label, $0) }
             }
         return candidates.min { $0.1.remainingPercent < $1.1.remainingPercent }
@@ -83,7 +83,7 @@ private struct CodexUsageChip: View {
                         Image(nsImage: logo).resizable().interpolation(.high).scaledToFit()
                             .frame(width: 13, height: 13)
                     }
-                    Text("\(headline.label) 剩 \(headline.window.remainingPercent)%")
+                    Text(L("%1$@ 剩 %2$ld%%", headline.label, headline.window.remainingPercent))
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(color(headline.window.usedPercent))
@@ -99,11 +99,11 @@ private struct CodexUsageChip: View {
         guard let snapshot else { return "" }
         var lines: [String] = []
         if let s = snapshot.session {
-            lines.append("会话：剩 \(s.remainingPercent)% · \(UsageFormatting.resetText(s.resetAt))")
+            lines.append(L("会话：剩 %1$ld%% · %2$@", s.remainingPercent, UsageFormatting.resetText(s.resetAt)))
         }
         if let w = snapshot.weekly {
-            lines.append("本周：剩 \(w.remainingPercent)% · \(UsageFormatting.resetText(w.resetAt))")
+            lines.append(L("本周：剩 %1$ld%% · %2$@", w.remainingPercent, UsageFormatting.resetText(w.resetAt)))
         }
-        return "Codex 用量\n" + lines.joined(separator: "\n")
+        return L("Codex 用量") + "\n" + lines.joined(separator: "\n")
     }
 }

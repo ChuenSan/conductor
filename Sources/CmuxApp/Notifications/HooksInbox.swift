@@ -49,7 +49,7 @@ final class HooksInbox {
             let paneRaw = (obj["paneId"] as? String) ?? (obj["paneID"] as? String)
             let pane = (paneRaw?.isEmpty == false) ? paneRaw : nil
             let title = (obj["title"] as? String)?.isEmpty == false
-                ? (obj["title"] as! String) : "AI 已完成"
+                ? (obj["title"] as! String) : L("AI 已完成")
             let message = (obj["message"] as? String) ?? ""
             onEvent?(HookEvent(paneID: pane, title: title, message: message))
         }

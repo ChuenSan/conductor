@@ -25,16 +25,16 @@ enum PaneHeaderActionPresentation {
 
     static func title(for action: PaneContextAction) -> String {
         switch action {
-        case .copy: return "复制"
-        case .paste: return "粘贴"
-        case .selectAll: return "全选"
-        case .clear: return "清屏"
-        case .splitRight: return "向右分屏"
-        case .splitDown: return "向下分屏"
-        case .zoom: return "放大 / 还原"
-        case .copyCwd: return "复制路径"
-        case .openInFinder: return "在 Finder 中显示"
-        case .close: return "关闭面板"
+        case .copy: return L("复制")
+        case .paste: return L("粘贴")
+        case .selectAll: return L("全选")
+        case .clear: return L("清屏")
+        case .splitRight: return L("向右分屏")
+        case .splitDown: return L("向下分屏")
+        case .zoom: return L("放大 / 还原")
+        case .copyCwd: return L("复制路径")
+        case .openInFinder: return L("在 Finder 中显示")
+        case .close: return L("关闭面板")
         }
     }
 
@@ -243,18 +243,18 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         add(PaneHeaderActionPresentation.title(for: .copyCwd), PaneHeaderActionPresentation.systemImage(for: .copyCwd), .copyCwd)
         add(PaneHeaderActionPresentation.title(for: .openInFinder), PaneHeaderActionPresentation.systemImage(for: .openInFinder), .openInFinder)
         menu.addItem(.separator())
-        let sessionItem = NSMenuItem(title: "续聊会话", action: nil, keyEquivalent: "")
+        let sessionItem = NSMenuItem(title: L("续聊会话"), action: nil, keyEquivalent: "")
         sessionItem.image = NSImage(systemSymbolName: "bubble.left.and.text.bubble.right", accessibilityDescription: nil)
         let sessionMenu = NSMenu()
         sessionMenu.delegate = self
         sessionItem.submenu = sessionMenu
         sessionSubmenu = sessionMenu
         menu.addItem(sessionItem)
-        menu.addItem(ClosureMenuItem("管理会话…", systemImage: "list.bullet.rectangle") { [weak self] in
+        menu.addItem(ClosureMenuItem(L("管理会话…"), systemImage: "list.bullet.rectangle") { [weak self] in
             self?.onManageSessions?()
         })
         menu.addItem(.separator())
-        let launchItem = NSMenuItem(title: "新建终端运行", action: nil, keyEquivalent: "")
+        let launchItem = NSMenuItem(title: L("新建终端运行"), action: nil, keyEquivalent: "")
         launchItem.image = NSImage(systemSymbolName: "play.circle", accessibilityDescription: nil)
         let submenu = NSMenu()
         submenu.delegate = self
@@ -278,7 +278,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         guard menu === agentSubmenu else { return }
         let agents = agentItemsProvider?() ?? []
         guard !agents.isEmpty else {
-            let empty = NSMenuItem(title: "未检测到可用 CLI", action: nil, keyEquivalent: "")
+            let empty = NSMenuItem(title: L("未检测到可用 CLI"), action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
             return
@@ -293,7 +293,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     private func populateSessionSubmenu(_ menu: NSMenu) {
         let sessions = sessionItemsProvider?() ?? []
         guard !sessions.isEmpty else {
-            let empty = NSMenuItem(title: "此目录暂无会话", action: nil, keyEquivalent: "")
+            let empty = NSMenuItem(title: L("此目录暂无会话"), action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
             return
@@ -311,7 +311,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        menu.addItem(ClosureMenuItem("管理全部会话…", systemImage: "list.bullet.rectangle") { [weak self] in
+        menu.addItem(ClosureMenuItem(L("管理全部会话…"), systemImage: "list.bullet.rectangle") { [weak self] in
             self?.onManageSessions?()
         })
     }
@@ -486,7 +486,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
 /// pane 头条：拖动发起整块 pane 的拖拽；单击聚焦；显示标题。layer-backed（是 card 的兄弟，非终端兄弟，安全）。
 @MainActor
 final class PaneHeaderView: NSView {
-    var title = "终端" { didSet { needsDisplay = true } }
+    var title = L("终端") { didSet { needsDisplay = true } }
     var isActive = false { didSet { restyleButtons(); needsDisplay = true } }
     /// 头条左侧的 Agent logo（如该 pane 在跑 codex/claude…）。
     var agentLogo: NSImage? { didSet { needsDisplay = true } }
@@ -498,7 +498,7 @@ final class PaneHeaderView: NSView {
     private var controlButtons: [PaneHeaderButton] = []
     private let moreButton = PaneHeaderButton(
         symbolName: "ellipsis",
-        label: "更多操作",
+        label: L("更多操作"),
         action: nil
     )
 

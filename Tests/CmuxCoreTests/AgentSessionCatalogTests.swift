@@ -75,6 +75,31 @@ final class AgentSessionCatalogTests: XCTestCase {
         XCTAssertFalse(record.belongsToDirectory("/elsewhere"))
     }
 
+    func testUtilityCommandTitleDetection() {
+        XCTAssertTrue(AgentSessionCatalog.isUtilityCommandTitle("/usage"))
+        XCTAssertTrue(AgentSessionCatalog.isUtilityCommandTitle("  /status  "))
+        XCTAssertTrue(AgentSessionCatalog.isUtilityCommandTitle(
+            "<command-name>/usage</command-name> <command-message>usage</command-message> <command-args></command-args>"))
+        XCTAssertFalse(AgentSessionCatalog.isUtilityCommandTitle("/review 这个 PR"))
+        XCTAssertFalse(AgentSessionCatalog.isUtilityCommandTitle(
+            "<command-name>/review</command-name> <command-args>fix bug</command-args>"))
+        XCTAssertFalse(AgentSessionCatalog.isUtilityCommandTitle("修复滚动条"))
+        XCTAssertFalse(AgentSessionCatalog.isUtilityCommandTitle("/"))
+    }
+
+    func testScanClaudeSkipsUtilityCommandSessions() throws {
+        let root = tempDir.appendingPathComponent("claude", isDirectory: true)
+        let dir = root.appendingPathComponent("-tmp-proj", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try "{\"type\":\"user\",\"message\":{\"content\":\"/usage\"},\"cwd\":\"/tmp/proj\"}\n"
+            .write(to: dir.appendingPathComponent("usage-1.jsonl"), atomically: true, encoding: .utf8)
+        try "{\"type\":\"user\",\"message\":{\"content\":\"真实对话\"},\"cwd\":\"/tmp/proj\"}\n"
+            .write(to: dir.appendingPathComponent("real-1.jsonl"), atomically: true, encoding: .utf8)
+
+        let records = AgentSessionCatalog.scanClaude(limit: 10, projectsRoot: root)
+        XCTAssertEqual(records.map(\.sessionID), ["real-1"])
+    }
+
     func testInferCwdFromSlug() {
         XCTAssertEqual(
             AgentSessionCatalog.inferCwdFromSlug("-Users-me-Desktop-c"),

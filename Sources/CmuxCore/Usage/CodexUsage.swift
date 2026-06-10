@@ -43,11 +43,11 @@ public enum CodexUsageError: LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .notLoggedIn: "未找到 Codex 登录信息，请先运行 `codex` 登录"
-        case .unauthorized: "Codex 令牌已过期，请重新运行 `codex` 登录"
-        case .invalidResponse: "Codex 用量接口返回异常"
-        case let .server(code): "Codex 接口错误（\(code)）"
-        case let .network(msg): "网络错误：\(msg)"
+        case .notLoggedIn: L("未找到 Codex 登录信息，请先运行 `codex` 登录")
+        case .unauthorized: L("Codex 令牌已过期，请重新运行 `codex` 登录")
+        case .invalidResponse: L("Codex 用量接口返回异常")
+        case let .server(code): L("Codex 接口错误（%ld）", code)
+        case let .network(msg): L("网络错误：%@", msg)
         }
     }
 }

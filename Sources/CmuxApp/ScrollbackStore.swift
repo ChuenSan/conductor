@@ -20,7 +20,7 @@ enum ScrollbackStore {
     static func save(_ text: String, for pane: PaneID) {
         let trimmed = ScrollbackTrimmer.trim(text)
         guard !trimmed.isEmpty else { return }
-        let separator = "\n\u{001B}[2m── 以上为上次会话回放（进程未恢复）──\u{001B}[0m\n"
+        let separator = "\n\u{001B}[2m\(L("── 以上为上次会话回放（进程未恢复）──"))\u{001B}[0m\n"
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? Data((trimmed + separator).utf8).write(to: fileURL(for: pane), options: .atomic)
     }

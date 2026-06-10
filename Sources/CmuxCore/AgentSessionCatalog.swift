@@ -107,7 +107,8 @@ public enum AgentSessionCatalog {
             for file in files where file.pathExtension == "jsonl" {
                 let sessionID = file.deletingPathExtension().lastPathComponent
                 let meta = readClaudeMeta(file)
-                let title = meta.title ?? "Claude 会话"
+                let title = meta.title ?? L("Claude 会话")
+                guard !isUtilityCommandTitle(title) else { continue }
                 let cwd = meta.cwd ?? inferCwdFromSlug(projectDir.lastPathComponent)
                 records.append(AgentSessionRecord(
                     agent: "claude", sessionID: sessionID, cwd: cwd, title: title,
@@ -179,9 +180,10 @@ public enum AgentSessionCatalog {
         var records: [AgentSessionRecord] = []
         for file in files.prefix(limit * 2) {
             guard let meta = readCodexMeta(file) else { continue }
+            if let title = meta.title, isUtilityCommandTitle(title) { continue }
             records.append(AgentSessionRecord(
                 agent: "codex", sessionID: meta.id, cwd: meta.cwd,
-                title: meta.title ?? "Codex 会话",
+                title: meta.title ?? L("Codex 会话"),
                 modifiedAt: modificationDate(file), filePath: file.path))
             if records.count >= limit { break }
         }
@@ -225,11 +227,23 @@ public enum AgentSessionCatalog {
 
     // MARK: - Helpers
 
+    /// 纯斜杠命令会话（如 `/usage`、`/status`）：一次性工具调用，没有真实对话，列表里全是噪音。
+    /// 带参数/正文的命令（如 `/review 这个 PR`）仍视为真实会话保留。
+    public static func isUtilityCommandTitle(_ title: String) -> Bool {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        // claude 把斜杠命令存成 XML 包裹形式：args 为空即裸命令
+        if t.hasPrefix("<command-name>"), t.contains("<command-args></command-args>") {
+            return true
+        }
+        guard t.hasPrefix("/"), t.count > 1 else { return false }
+        return !t.contains(" ")
+    }
+
     static func trimTitle(_ raw: String) -> String {
         let collapsed = raw
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !collapsed.isEmpty else { return "会话" }
+        guard !collapsed.isEmpty else { return L("会话") }
         if collapsed.count <= 72 { return collapsed }
         return String(collapsed.prefix(69)) + "…"
     }

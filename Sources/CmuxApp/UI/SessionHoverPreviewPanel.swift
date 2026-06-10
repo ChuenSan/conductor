@@ -1,7 +1,7 @@
 import CmuxCore
 import SwiftUI
 
-/// 侧边栏会话行悬停时弹出的 transcript 浮层（毛玻璃 + 虚拟滚动全量对话）。
+/// 侧边栏会话行悬停时弹出的 transcript 预览（作为 popover 内容；虚拟滚动全量对话）。
 struct SessionHoverPreviewPanel: View {
     let record: AgentSessionRecord
     var onResume: () -> Void
@@ -22,7 +22,7 @@ struct SessionHoverPreviewPanel: View {
             footer
         }
         .frame(width: panelWidth, height: panelHeight)
-        .cmuxInWindowPanel(cornerRadius: Radius.lg)
+        .presentationBackground(AppStyle.elevated)   // popover 背景跟随 app 主题（含箭头）
         .onAppear { loadIfNeeded() }
         .onChange(of: record.id) { _, _ in
             messages = nil
@@ -47,7 +47,7 @@ struct SessionHoverPreviewPanel: View {
                         .font(.system(size: 9.5, weight: .semibold))
                         .foregroundStyle(AppStyle.accent)
                     if let count = messages?.count {
-                        Text("\(count) 条消息")
+                        Text(L("%ld 条消息", count))
                             .font(.system(size: 10))
                             .foregroundStyle(AppStyle.textTertiary)
                     }
@@ -64,7 +64,7 @@ struct SessionHoverPreviewPanel: View {
         if loading, messages == nil {
             VStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("读取对话…")
+                Text(L("读取对话…"))
                     .font(.system(size: 11))
                     .foregroundStyle(AppStyle.textTertiary)
             }
@@ -74,7 +74,7 @@ struct SessionHoverPreviewPanel: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
         } else {
-            Text("没有可预览的对话")
+            Text(L("没有可预览的对话"))
                 .font(.system(size: 11))
                 .foregroundStyle(AppStyle.textTertiary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -87,7 +87,7 @@ struct SessionHoverPreviewPanel: View {
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(AppStyle.textTertiary)
             Spacer()
-            Button("续聊", action: onResume)
+            Button(L("续聊"), action: onResume)
                 .buttonStyle(PrimaryButtonStyle())
         }
         .padding(.horizontal, 14)
@@ -102,13 +102,5 @@ struct SessionHoverPreviewPanel: View {
             messages = loaded
             loading = false
         }
-    }
-}
-
-/// 侧边栏行 frame，用于定位悬停浮层。
-struct SidebarRowFrameKey: PreferenceKey {
-    static var defaultValue: [String: CGRect] = [:]
-    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
-        value.merge(nextValue()) { _, new in new }
     }
 }

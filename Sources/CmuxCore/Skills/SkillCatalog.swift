@@ -39,7 +39,7 @@ public enum SkillSource: String, Sendable, CaseIterable, Codable {
         case .claude: return "Claude"
         case .codex: return "Codex"
         case .cursor: return "Cursor"
-        case .other: return "其他"
+        case .other: return L("其他")
         }
     }
 }

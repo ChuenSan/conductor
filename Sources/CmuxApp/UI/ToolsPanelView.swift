@@ -11,7 +11,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .cli: return "CLI"
-        case .usage: return "用量"
+        case .usage: return L("用量")
         case .skills: return "Skills"
         case .hooks: return "Hooks"
         }

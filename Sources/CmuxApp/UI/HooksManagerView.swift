@@ -32,7 +32,7 @@ struct HooksManagerView: View {
 
     private var marketSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Hook 市场", trailing: nil)
+            sectionTitle(L("Hook 市场"), trailing: nil)
             ForEach(HookRecipes.all) { recipe in
                 recipeRow(recipe)
             }
@@ -72,7 +72,7 @@ struct HooksManagerView: View {
             Button {
                 installed ? uninstall(recipe) : install(recipe)
             } label: {
-                Text(installed ? "移除" : "安装")
+                Text(installed ? L("移除") : L("安装"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(installed ? AppStyle.textSecondary : AppStyle.theme.primarySolidText)
                     .padding(.horizontal, 11).frame(height: 25)
@@ -95,15 +95,15 @@ struct HooksManagerView: View {
 
     private var configuredSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("已配置 hooks", trailing: "\(entries.count)")
+            sectionTitle(L("已配置 hooks"), trailing: "\(entries.count)")
             if loading && entries.isEmpty {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("读取中…").font(.system(size: 12)).foregroundStyle(AppStyle.textSecondary)
+                    Text(L("读取中…")).font(.system(size: 12)).foregroundStyle(AppStyle.textSecondary)
                     Spacer()
                 }.padding(.vertical, 12)
             } else if entries.isEmpty {
-                Text("还没有任何 hook").font(.system(size: 12)).foregroundStyle(AppStyle.textTertiary)
+                Text(L("还没有任何 hook")).font(.system(size: 12)).foregroundStyle(AppStyle.textTertiary)
                     .padding(.vertical, 12)
             } else {
                 ForEach(groupedEntries, id: \.event) { group in
@@ -143,7 +143,7 @@ struct HooksManagerView: View {
 
     private var configFilesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("配置文件", trailing: nil)
+            sectionTitle(L("配置文件"), trailing: nil)
             HStack(spacing: 8) {
                 ForEach(HookSource.allCases, id: \.self) { src in
                     Button {
@@ -162,7 +162,7 @@ struct HooksManagerView: View {
                         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppStyle.hoverFill))
                     }
                     .buttonStyle(PressScaleStyle())
-                    .help("用默认编辑器打开 \(src.configURL.path)")
+                    .help(L("用默认编辑器打开 %@", src.configURL.path))
                 }
             }
         }
@@ -181,7 +181,7 @@ struct HooksManagerView: View {
                 Text(trailing).font(.system(size: 10.5, weight: .medium)).foregroundStyle(AppStyle.textTertiary)
             }
             Spacer()
-            if title == "Hook 市场" {
+            if title == L("Hook 市场") {
                 Button(action: reload) {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 10.5, weight: .bold))
@@ -196,7 +196,7 @@ struct HooksManagerView: View {
     }
 
     private var footnote: some View {
-        Text("安装写入 Claude（~/.claude/settings.json）与 Codex（~/.codex/hooks.json）的 Stop 事件；命令带 $CMUX_PANE_ID 网关，只对 cmux 启动的 agent 生效。其它配置项原样保留，移除只删 cmux 自己安装的条目。")
+        Text(L("安装写入 Claude（~/.claude/settings.json）与 Codex（~/.codex/hooks.json）的 Stop 事件；命令带 $CMUX_PANE_ID 网关，只对 cmux 启动的 agent 生效。其它配置项原样保留，移除只删 cmux 自己安装的条目。"))
             .font(.system(size: 9.5)).foregroundStyle(AppStyle.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -226,13 +226,13 @@ struct HooksManagerView: View {
     private func install(_ recipe: HookRecipe) {
         error = nil
         do { try HookRecipes.install(recipe); reload() }
-        catch { self.error = "安装失败：\(error.localizedDescription)" }
+        catch { self.error = L("安装失败：%@", error.localizedDescription) }
     }
 
     private func uninstall(_ recipe: HookRecipe) {
         error = nil
         do { try HookRecipes.uninstall(recipe); reload() }
-        catch { self.error = "移除失败：\(error.localizedDescription)" }
+        catch { self.error = L("移除失败：%@", error.localizedDescription) }
     }
 
     private func remove(_ entry: HookEntry) {
@@ -240,7 +240,7 @@ struct HooksManagerView: View {
         do {
             try HookConfigDocument(source: entry.source).removeCommands(containing: entry.command)
             reload()
-        } catch { self.error = "移除失败：\(error.localizedDescription)" }
+        } catch { self.error = L("移除失败：%@", error.localizedDescription) }
     }
 }
 
@@ -288,7 +288,7 @@ private struct HookEntryRow: View {
                         .background(Circle().fill(AppStyle.hoverFill))
                 }
                 .buttonStyle(PressScaleStyle())
-                .help("移除该 cmux hook")
+                .help(L("移除该 cmux hook"))
             }
         }
         .padding(.horizontal, 11).padding(.vertical, 8)

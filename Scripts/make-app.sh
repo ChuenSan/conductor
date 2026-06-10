@@ -20,17 +20,21 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN_DIR/CmuxApp" "$APP/Contents/MacOS/CmuxApp"
 
-# SwiftPM 资源 bundle（logo 等）放到 Resources/，Bundle.module 会在 main bundle 资源路径里找到，
-# 且不会像放在 MacOS/ 那样破坏 codesign。
-if [ -d "$BIN_DIR/Cmux_CmuxApp.bundle" ]; then
-  cp -R "$BIN_DIR/Cmux_CmuxApp.bundle" "$APP/Contents/Resources/"
-fi
+# SwiftPM 资源 bundle（logo、本地化文案等）放到 Resources/，Bundle.module 会在 main bundle
+# 资源路径里找到，且不会像放在 MacOS/ 那样破坏 codesign。
+# 注意：每个带资源的 target 都有自己的 bundle（CmuxApp / CmuxCore），缺一个就会在
+# Bundle.module 访问时 fatalError。
+for bundle in "$BIN_DIR"/Cmux_*.bundle; do
+  [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
+done
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>zh-Hans</string>
   <key>CFBundleExecutable</key>
   <string>CmuxApp</string>
   <key>CFBundleIdentifier</key>

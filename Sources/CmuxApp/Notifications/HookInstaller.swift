@@ -54,7 +54,7 @@ enum HookInstaller {
             try HookConfigDocument(source: .claude).addCommand(event: HookEventName.stop, command: stopCommand)
             try HookConfigDocument(source: .codex).addCommand(event: HookEventName.stop, command: stopCommand)
         } catch {
-            throw InstallError.write("写 hook 配置失败：\(error.localizedDescription)")
+            throw InstallError.write(L("写 hook 配置失败：%@", error.localizedDescription))
         }
         return status()
     }
@@ -66,7 +66,7 @@ enum HookInstaller {
             try scriptBody.write(to: scriptURL, atomically: true, encoding: .utf8)
             try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
         } catch {
-            throw InstallError.write("写 cmux-notify 脚本失败：\(error.localizedDescription)")
+            throw InstallError.write(L("写 cmux-notify 脚本失败：%@", error.localizedDescription))
         }
     }
 

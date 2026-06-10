@@ -20,7 +20,7 @@ struct TabBarView: View {
             ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
                 let pill = TabPill(
                     tab: tab,
-                    title: tab.customTitle ?? (coordinator.paneTitles[tab.activePane] ?? "终端"),
+                    title: tab.customTitle ?? (coordinator.paneTitles[tab.activePane] ?? L("终端")),
                     selected: tab.id == activeTab,
                     index: index,
                     tabCount: tabs.count,
@@ -53,21 +53,21 @@ struct TabBarView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                 }
                 .buttonStyle(IconButtonStyle(size: 26))
-                .help("切换深/浅主题")
+                .help(L("切换深/浅主题"))
                 Button(action: { coordinator.toggleCLITools() }) {
                     Image(systemName: "wand.and.stars")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(coordinator.cliToolsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary)
                 }
                 .buttonStyle(IconButtonStyle(size: 26))
-                .help("检测命令行工具")
+                .help(L("检测命令行工具"))
                 Button(action: { coordinator.openSettings() }) {
                     Image(systemName: "gearshape")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(coordinator.settingsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary)
                 }
                 .buttonStyle(IconButtonStyle(size: 26))
-                .help("设置")
+                .help(L("设置"))
             }
             .padding(3)
             .background(
@@ -145,24 +145,24 @@ private struct TabPill: View {
         }
         .animation(.easeOut(duration: 0.16), value: hovering)
         .contextMenu {
-            Button { onStartEdit() } label: { Label("重命名", systemImage: "pencil") }
+            Button { onStartEdit() } label: { Label(L("重命名"), systemImage: "pencil") }
             Divider()
             Button { coordinator.moveTab(tab.id, toIndex: index - 1) } label: {
-                Label("向左移动", systemImage: "arrow.left")
+                Label(L("向左移动"), systemImage: "arrow.left")
             }
             .disabled(index <= 0)
             Button { coordinator.moveTab(tab.id, toIndex: index + 1) } label: {
-                Label("向右移动", systemImage: "arrow.right")
+                Label(L("向右移动"), systemImage: "arrow.right")
             }
             .disabled(index >= tabCount - 1)
             Divider()
-            Button { coordinator.newTab() } label: { Label("新建标签", systemImage: "plus") }
+            Button { coordinator.newTab() } label: { Label(L("新建标签"), systemImage: "plus") }
             Button { coordinator.reopenClosed() } label: {
-                Label("恢复最近关闭", systemImage: "arrow.uturn.backward")
+                Label(L("恢复最近关闭"), systemImage: "arrow.uturn.backward")
             }
             .disabled(!coordinator.hasRecentlyClosed)
             Button(role: .destructive) { coordinator.closeTab(tab.id) } label: {
-                Label("关闭标签", systemImage: "xmark")
+                Label(L("关闭标签"), systemImage: "xmark")
             }
         }
         .onHover { hovering = $0 }
@@ -261,6 +261,6 @@ private struct TabPill: View {
         }
         .buttonStyle(.plain)
         .onHover { inside in withAnimation(.easeOut(duration: 0.14)) { closeHovering = inside } }
-        .help("关闭标签")
+        .help(L("关闭标签"))
     }
 }

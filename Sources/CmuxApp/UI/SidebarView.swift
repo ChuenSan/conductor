@@ -13,18 +13,12 @@ struct SidebarView: View {
     @FocusState private var renameFocused: Bool
     @State private var hoverRecord: AgentSessionRecord?
     @State private var hoverPanelPinned = false
-    @State private var rowFrames: [String: CGRect] = [:]
     @State private var hoverTask: Task<Void, Never>?
+    /// 一次性引导：用户首次触发悬停预览后永久隐藏提示。
+    @AppStorage("sidebar.sessionHoverHintSeen") private var hoverHintSeen = false
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .topLeading) {
-                sidebarContent
-                hoverPreviewLayer(sidebarWidth: geo.size.width)
-            }
-        }
-        .coordinateSpace(name: "sidebarRoot")
-        .onPreferenceChange(SidebarRowFrameKey.self) { rowFrames = $0 }
+        sidebarContent
     }
 
     private var sidebarContent: some View {
@@ -53,16 +47,16 @@ struct SidebarView: View {
                             onCommit: { commitRename() }
                         )
                         .contextMenu {
-                            Button { beginRename(ws) } label: { Label("重命名", systemImage: "pencil") }
+                            Button { beginRename(ws) } label: { Label(L("重命名"), systemImage: "pencil") }
                             Button { coordinator.revealInFinder(ws.path) } label: {
-                                Label("在 Finder 中显示", systemImage: "folder")
+                                Label(L("在 Finder 中显示"), systemImage: "folder")
                             }
                             Button { coordinator.copyToClipboard(ws.path) } label: {
-                                Label("复制路径", systemImage: "doc.on.doc")
+                                Label(L("复制路径"), systemImage: "doc.on.doc")
                             }
                             Divider()
                             Button(role: .destructive) { coordinator.removeWorkspace(ws.id) } label: {
-                                Label("删除工作区", systemImage: "trash")
+                                Label(L("删除工作区"), systemImage: "trash")
                             }
                             .disabled(workspaces.count <= 1)
                         }
@@ -90,7 +84,7 @@ struct SidebarView: View {
                         .padding(.top, 14)
                 }
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)   // `.hidden` 在系统“始终显示滚动条”下仍会画 legacy 滚动条
             Spacer(minLength: 0)
         }
         .frame(maxHeight: .infinity)
@@ -105,21 +99,15 @@ struct SidebarView: View {
         .clipShape(Rectangle())
     }
 
-    @ViewBuilder
-    private func hoverPreviewLayer(sidebarWidth: CGFloat) -> some View {
-        if !isCollapsed, let record = hoverRecord, let frame = rowFrames[record.id] {
-            SessionHoverPreviewPanel(record: record) {
-                coordinator.resumeSession(record, inPane: nil)
-                hoverRecord = nil
+    /// 悬停预览绑定：popover 是独立 NSWindow，能浮在终端区的 Metal 视图之上
+    /// （SwiftUI 越界 overlay 会被 ghostty 的 AppKit 视图盖住，所以不能画在侧栏内）。
+    private func hoverPreviewBinding(for record: AgentSessionRecord) -> Binding<Bool> {
+        Binding(
+            get: { hoverRecord?.id == record.id },
+            set: { presented in
+                if !presented, hoverRecord?.id == record.id { hoverRecord = nil }
             }
-            .offset(x: sidebarWidth + 10, y: max(8, frame.minY - 4))
-            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .leading)))
-            .zIndex(100)
-            .onHover { pinned in
-                hoverPanelPinned = pinned
-                if !pinned { scheduleClearHover(after: 0.15) }
-            }
-        }
+        )
     }
 
     private func handleSessionHover(_ record: AgentSessionRecord, inside: Bool) {
@@ -130,11 +118,16 @@ struct SidebarView: View {
                 try? await Task.sleep(nanoseconds: 280_000_000)
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    withAnimation(.easeOut(duration: 0.16)) { hoverRecord = record }
+                    hoverRecord = record
+                    // 预览已出现，引导完成使命
+                    if !hoverHintSeen {
+                        withAnimation(.easeOut(duration: 0.3)) { hoverHintSeen = true }
+                    }
                 }
             }
         } else if !hoverPanelPinned {
-            scheduleClearHover(after: 0.12)
+            // 留出从行移入 popover 的时间，否则中途就被关掉
+            scheduleClearHover(after: 0.25)
         }
     }
 
@@ -143,9 +136,7 @@ struct SidebarView: View {
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                if !hoverPanelPinned {
-                    withAnimation(.easeOut(duration: 0.12)) { hoverRecord = nil }
-                }
+                if !hoverPanelPinned { hoverRecord = nil }
             }
         }
     }
@@ -168,8 +159,8 @@ struct SidebarView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                 }
                 .buttonStyle(IconButtonStyle(size: 28))
-                .help(isCollapsed ? "展开侧边栏" : "收起侧边栏")
-                .accessibilityLabel(isCollapsed ? "展开侧边栏" : "收起侧边栏")
+                .help(isCollapsed ? L("展开侧边栏") : L("收起侧边栏"))
+                .accessibilityLabel(isCollapsed ? L("展开侧边栏") : L("收起侧边栏"))
             }
             .frame(maxWidth: .infinity, alignment: isCollapsed ? .center : .leading)
             .padding(.horizontal, isCollapsed ? 0 : 16)
@@ -188,19 +179,19 @@ struct SidebarView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                 }
                 .buttonStyle(IconButtonStyle(size: 30))
-                .help("Agent 会话")
-                .accessibilityLabel("Agent 会话")
+                .help(L("Agent 会话"))
+                .accessibilityLabel(L("Agent 会话"))
                 Button(action: addWorkspace) {
                     Image(systemName: "plus").font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppStyle.textSecondary)
                 }
                 .buttonStyle(IconButtonStyle(size: 30))
-                .help("新增工作区")
-                .accessibilityLabel("新增工作区")
+                .help(L("新增工作区"))
+                .accessibilityLabel(L("新增工作区"))
                 .padding(.bottom, 6)
             } else {
                 HStack {
-                    Text("工作区")
+                    Text(L("工作区"))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AppStyle.textTertiary)
                         .textCase(.uppercase)
@@ -211,8 +202,8 @@ struct SidebarView: View {
                             .foregroundStyle(AppStyle.textSecondary)
                     }
                     .buttonStyle(IconButtonStyle(size: 22))
-                    .help("新增工作区")
-                    .accessibilityLabel("新增工作区")
+                    .help(L("新增工作区"))
+                    .accessibilityLabel(L("新增工作区"))
                 }
                 .padding(.leading, 14)
                 .padding(.trailing, 10)
@@ -241,13 +232,13 @@ struct SidebarView: View {
 
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("会话")
+                Text(L("会话"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(AppStyle.textTertiary)
                     .textCase(.uppercase)
                     .tracking(0.5)
                 Spacer()
-                Button("全部") {
+                Button(L("全部")) {
                     coordinator.openSessionManager(scopePath: workspacePath.isEmpty ? nil : workspacePath)
                 }
                 .font(.system(size: 11, weight: .medium))
@@ -259,17 +250,29 @@ struct SidebarView: View {
             if sessionStore.isLoading, sessions.isEmpty {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small).scaleEffect(0.65)
-                    Text("扫描中…")
+                    Text(L("扫描中…"))
                         .font(.system(size: 11))
                         .foregroundStyle(AppStyle.textTertiary)
                 }
                 .padding(.leading, 4)
             } else if sessions.isEmpty {
-                Text("暂无 Agent 会话")
+                Text(L("暂无 Agent 会话"))
                     .font(.system(size: 11))
                     .foregroundStyle(AppStyle.textTertiary)
                     .padding(.leading, 4)
             } else {
+                if !hoverHintSeen {
+                    HStack(spacing: 5) {
+                        Image(systemName: "cursorarrow.rays")
+                            .font(.system(size: 10, weight: .medium))
+                        Text(L("鼠标悬停可预览对话"))
+                            .font(.system(size: 10.5))
+                    }
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .padding(.leading, 4)
+                    .padding(.bottom, 2)
+                    .transition(.opacity)
+                }
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(sessions) { record in
                         SidebarSessionRow(
@@ -277,6 +280,20 @@ struct SidebarView: View {
                             onResume: { coordinator.resumeSession(record, inPane: nil) },
                             onHover: { handleSessionHover(record, inside: $0) }
                         )
+                        .popover(isPresented: hoverPreviewBinding(for: record), arrowEdge: .trailing) {
+                            SessionHoverPreviewPanel(record: record) {
+                                coordinator.resumeSession(record, inPane: nil)
+                                hoverRecord = nil
+                            }
+                            .onHover { pinned in
+                                hoverPanelPinned = pinned
+                                if pinned {
+                                    hoverTask?.cancel()
+                                } else {
+                                    scheduleClearHover(after: 0.15)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -288,7 +305,7 @@ struct SidebarView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "选为工作区"
+        panel.prompt = L("选为工作区")
         if panel.runModal() == .OK, let url = panel.url {
             coordinator.addWorkspace(path: url.path)
         }
@@ -326,13 +343,6 @@ private struct SidebarSessionRow: View {
                     .fill(hovering ? AppStyle.hoverFill : Color.clear))
         }
         .buttonStyle(.plain)
-        .background(
-            GeometryReader { geo in
-                Color.clear.preference(
-                    key: SidebarRowFrameKey.self,
-                    value: [record.id: geo.frame(in: .named("sidebarRoot"))])
-            }
-        )
         .onHover { inside in
             hovering = inside
             onHover(inside)

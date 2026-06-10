@@ -64,7 +64,7 @@ struct SkillsManagerView: View {
             HStack(spacing: 5) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 10.5)).foregroundStyle(AppStyle.textTertiary)
-                TextField("搜索 skill 名称或描述", text: $query)
+                TextField(L("搜索 skill 名称或描述"), text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
             }
@@ -87,7 +87,7 @@ struct SkillsManagerView: View {
     /// 来源筛选（全部 / Claude / Codex / Cursor，带各自数量）。
     private var filterBar: some View {
         HStack(spacing: 5) {
-            filterChip(nil, label: "全部", count: skills.count)
+            filterChip(nil, label: L("全部"), count: skills.count)
             ForEach([SkillSource.claude, .codex, .cursor], id: \.self) { src in
                 let count = skills.filter { $0.source == src }.count
                 if count > 0 {
@@ -95,7 +95,7 @@ struct SkillsManagerView: View {
                 }
             }
             Spacer()
-            Text("启用 \(skills.filter(\.enabled).count)")
+            Text(L("启用 %ld", skills.filter(\.enabled).count))
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(AppStyle.textTertiary)
         }
@@ -120,19 +120,19 @@ struct SkillsManagerView: View {
     private var loadingRow: some View {
         HStack(spacing: 8) {
             ProgressView().controlSize(.small)
-            Text("正在扫描 skills…").font(.system(size: 12)).foregroundStyle(AppStyle.textSecondary)
+            Text(L("正在扫描 skills…")).font(.system(size: 12)).foregroundStyle(AppStyle.textSecondary)
             Spacer()
         }.padding(.vertical, 20)
     }
 
     private var emptyRow: some View {
-        Text(query.isEmpty ? "没有找到 skill" : "无匹配结果")
+        Text(query.isEmpty ? L("没有找到 skill") : L("无匹配结果"))
             .font(.system(size: 12)).foregroundStyle(AppStyle.textTertiary)
             .padding(.vertical, 20)
     }
 
     private var footnote: some View {
-        Text("扫描 ~/.claude、~/.codex、~/.cursor 下的 SKILL.md。禁用 = 把文件重命名为 SKILL.md.disabled（可逆，agent 即不再加载）。同名副本只显示一份。")
+        Text(L("扫描 ~/.claude、~/.codex、~/.cursor 下的 SKILL.md。禁用 = 把文件重命名为 SKILL.md.disabled（可逆，agent 即不再加载）。同名副本只显示一份。"))
             .font(.system(size: 9.5)).foregroundStyle(AppStyle.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 4)
@@ -153,7 +153,7 @@ struct SkillsManagerView: View {
             try SkillCatalog.setEnabled(skill, on)
             reload()
         } catch {
-            self.error = "切换失败：\(error.localizedDescription)"
+            self.error = L("切换失败：%@", error.localizedDescription)
         }
     }
 }
@@ -179,14 +179,14 @@ private struct SkillRow: View {
                             Text("v\(v)").font(.system(size: 9.5)).foregroundStyle(AppStyle.textTertiary)
                         }
                         if !skill.enabled {
-                            Text("已禁用")
+                            Text(L("已禁用"))
                                 .font(.system(size: 8.5, weight: .bold))
                                 .foregroundStyle(AppStyle.textTertiary)
                                 .padding(.horizontal, 5).padding(.vertical, 1.5)
                                 .background(Capsule().stroke(AppStyle.separator, lineWidth: 1))
                         }
                     }
-                    Text(skill.description.isEmpty ? "（无描述）" : skill.description)
+                    Text(skill.description.isEmpty ? L("（无描述）") : skill.description)
                         .font(.system(size: 10.5))
                         .foregroundStyle(AppStyle.textSecondary)
                         .lineLimit(expanded ? nil : 2)
@@ -214,18 +214,18 @@ private struct SkillRow: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Divider().overlay(AppStyle.separator).padding(.vertical, 6)
                     if let author = skill.author {
-                        metaRow("作者", author)
+                        metaRow(L("作者"), author)
                     }
-                    metaRow("路径", collapsedPath)
+                    metaRow(L("路径"), collapsedPath)
                     HStack(spacing: 6) {
-                        actionButton("在 Finder 显示", icon: "folder") {
+                        actionButton(L("在 Finder 显示"), icon: "folder") {
                             NSWorkspace.shared.activateFileViewerSelecting(
                                 [URL(fileURLWithPath: skill.markdownPath)])
                         }
-                        actionButton("打开 SKILL.md", icon: "doc.text") {
+                        actionButton(L("打开 SKILL.md"), icon: "doc.text") {
                             NSWorkspace.shared.open(URL(fileURLWithPath: skill.markdownPath))
                         }
-                        actionButton("拷贝路径", icon: "doc.on.doc") {
+                        actionButton(L("拷贝路径"), icon: "doc.on.doc") {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(skill.directory, forType: .string)
                         }

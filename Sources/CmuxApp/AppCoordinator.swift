@@ -95,19 +95,19 @@ final class AppCoordinator: ObservableObject {
 
     private func registerCommands() {
         commandRegistry.register([
-            AppCommand(id: "newTab", title: "新建标签", defaultKeybinding: "cmd+t") { [weak self] in self?.newTab() },
-            AppCommand(id: "splitRight", title: "向右分屏", defaultKeybinding: "cmd+d") { [weak self] in self?.split(.vertical) },
-            AppCommand(id: "splitDown", title: "向下分屏", defaultKeybinding: "cmd+shift+d") { [weak self] in self?.split(.horizontal) },
-            AppCommand(id: "closePane", title: "关闭面板", defaultKeybinding: "cmd+w") { [weak self] in self?.closeActivePane() },
-            AppCommand(id: "reopenClosedTab", title: "恢复最近关闭", defaultKeybinding: "cmd+shift+t") { [weak self] in self?.reopenClosed() },
-            AppCommand(id: "focusNextPane", title: "聚焦下一面板", defaultKeybinding: "cmd+alt+right") { [weak self] in self?.focusNext() },
-            AppCommand(id: "focusPrevPane", title: "聚焦上一面板", defaultKeybinding: "cmd+alt+left") { [weak self] in self?.focusPrev() },
-            AppCommand(id: "increaseFontSize", title: "放大字号", defaultKeybinding: "cmd+=") { [weak self] in self?.adjustFontSize(1) },
-            AppCommand(id: "decreaseFontSize", title: "缩小字号", defaultKeybinding: "cmd+-") { [weak self] in self?.adjustFontSize(-1) },
-            AppCommand(id: "resetFontSize", title: "复位字号", defaultKeybinding: "cmd+0") { [weak self] in self?.resetFontSize() },
-            AppCommand(id: "openSettings", title: "打开设置", defaultKeybinding: "cmd+,") { [weak self] in self?.openSettings() },
-            AppCommand(id: "toggleZoom", title: "放大/还原面板", defaultKeybinding: "cmd+enter") { [weak self] in self?.toggleZoom() },
-            AppCommand(id: "commandPalette", title: "命令面板", defaultKeybinding: "cmd+k") { [weak self] in self?.openCommandPalette() },
+            AppCommand(id: "newTab", title: L("新建标签"), defaultKeybinding: "cmd+t") { [weak self] in self?.newTab() },
+            AppCommand(id: "splitRight", title: L("向右分屏"), defaultKeybinding: "cmd+d") { [weak self] in self?.split(.vertical) },
+            AppCommand(id: "splitDown", title: L("向下分屏"), defaultKeybinding: "cmd+shift+d") { [weak self] in self?.split(.horizontal) },
+            AppCommand(id: "closePane", title: L("关闭面板"), defaultKeybinding: "cmd+w") { [weak self] in self?.closeActivePane() },
+            AppCommand(id: "reopenClosedTab", title: L("恢复最近关闭"), defaultKeybinding: "cmd+shift+t") { [weak self] in self?.reopenClosed() },
+            AppCommand(id: "focusNextPane", title: L("聚焦下一面板"), defaultKeybinding: "cmd+alt+right") { [weak self] in self?.focusNext() },
+            AppCommand(id: "focusPrevPane", title: L("聚焦上一面板"), defaultKeybinding: "cmd+alt+left") { [weak self] in self?.focusPrev() },
+            AppCommand(id: "increaseFontSize", title: L("放大字号"), defaultKeybinding: "cmd+=") { [weak self] in self?.adjustFontSize(1) },
+            AppCommand(id: "decreaseFontSize", title: L("缩小字号"), defaultKeybinding: "cmd+-") { [weak self] in self?.adjustFontSize(-1) },
+            AppCommand(id: "resetFontSize", title: L("复位字号"), defaultKeybinding: "cmd+0") { [weak self] in self?.resetFontSize() },
+            AppCommand(id: "openSettings", title: L("打开设置"), defaultKeybinding: "cmd+,") { [weak self] in self?.openSettings() },
+            AppCommand(id: "toggleZoom", title: L("放大/还原面板"), defaultKeybinding: "cmd+enter") { [weak self] in self?.toggleZoom() },
+            AppCommand(id: "commandPalette", title: L("命令面板"), defaultKeybinding: "cmd+k") { [weak self] in self?.openCommandPalette() },
         ])
     }
 
@@ -131,14 +131,14 @@ final class AppCoordinator: ObservableObject {
         }
         for ws in store.workspaces {
             let id = ws.id
-            items.append(PaletteItem(id: "ws:\(id.value)", icon: "folder", title: "工作区：\(ws.name)",
+            items.append(PaletteItem(id: "ws:\(id.value)", icon: "folder", title: L("工作区：%@", ws.name),
                                      subtitle: ws.path) { [weak self] in self?.selectWorkspace(id) })
         }
         if let ws = activeWorkspace() {
             for tab in ws.tabs {
                 let tid = tab.id
-                let t = tab.customTitle ?? (paneTitles[tab.activePane] ?? "终端")
-                items.append(PaletteItem(id: "tab:\(tid.value)", icon: "macwindow", title: "标签：\(t)",
+                let t = tab.customTitle ?? (paneTitles[tab.activePane] ?? L("终端"))
+                items.append(PaletteItem(id: "tab:\(tid.value)", icon: "macwindow", title: L("标签：%@", t),
                                          subtitle: "") { [weak self] in self?.selectTab(tid) })
             }
         }
@@ -903,7 +903,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     private func setPaneLabel(_ pane: PaneID, _ label: String) {
-        let value = label.isEmpty ? "终端" : label
+        let value = label.isEmpty ? L("终端") : label
         guard paneTitles[pane] != value else { return }
         paneTitles[pane] = value
         func walk(_ view: NSView) {
@@ -1003,7 +1003,7 @@ final class AppCoordinator: ObservableObject {
     private func container(for pane: PaneID) -> PaneContainerView? {
         if let existing = paneContainers[pane] { return existing }
         guard let surface = registry.surface(for: pane) as? GhosttySurface else { return nil }
-        let container = PaneContainerView(paneID: pane, hostView: surface.hostView, title: paneTitles[pane] ?? "终端")
+        let container = PaneContainerView(paneID: pane, hostView: surface.hostView, title: paneTitles[pane] ?? L("终端"))
         container.onFocus = { [weak self] p in self?.markActive(p) }
         container.onMove = { [weak self] moving, target, edge in self?.movePane(moving, relativeTo: target, edge: edge) }
         container.onContextAction = { [weak self] action in

@@ -16,7 +16,7 @@ struct SessionManagerView: View {
         if let path = scopePath {
             return (path as NSString).abbreviatingWithTildeInPath
         }
-        return "全部目录"
+        return L("全部目录")
     }
 
     private var filtered: [AgentSessionRecord] {
@@ -55,7 +55,7 @@ struct SessionManagerView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Agent 会话")
+                Text(L("Agent 会话"))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(AppStyle.textPrimary)
                 Text(scopeLabel)
@@ -63,7 +63,7 @@ struct SessionManagerView: View {
                     .foregroundStyle(AppStyle.textTertiary)
                     .lineLimit(1)
                 if let scanned = store.lastScannedAt {
-                    Text("更新于 \(scanned, style: .relative)前")
+                    Text("更新于 \(scanned, style: .relative)前", bundle: .module)
                         .font(.system(size: 10))
                         .foregroundStyle(AppStyle.textTertiary)
                 }
@@ -95,7 +95,7 @@ struct SessionManagerView: View {
     private var filterBar: some View {
         VStack(spacing: 8) {
             HStack(spacing: 6) {
-                filterChip("全部", agent: nil)
+                filterChip(L("全部"), agent: nil)
                 filterChip("Claude", agent: "claude")
                 filterChip("Codex", agent: "codex")
                 Spacer()
@@ -104,7 +104,7 @@ struct SessionManagerView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 11))
                     .foregroundStyle(AppStyle.textTertiary)
-                TextField("搜索标题、目录或 ID", text: $query)
+                TextField(L("搜索标题、目录或 ID"), text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .foregroundStyle(AppStyle.textPrimary)
@@ -140,17 +140,17 @@ struct SessionManagerView: View {
         if store.isLoading, store.records.isEmpty {
             VStack(spacing: 10) {
                 ProgressView().controlSize(.small)
-                Text("正在扫描会话…")
+                Text(L("正在扫描会话…"))
                     .font(.system(size: 12))
                     .foregroundStyle(AppStyle.textTertiary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let err = store.scanError {
-            emptyState("扫描失败", err)
+            emptyState(L("扫描失败"), err)
         } else if filtered.isEmpty {
-            emptyState("暂无会话", store.records.isEmpty
-                ? "本机还没找到 Claude / Codex 会话记录"
-                : "当前筛选条件下没有匹配的会话")
+            emptyState(L("暂无会话"), store.records.isEmpty
+                ? L("本机还没找到 Claude / Codex 会话记录")
+                : L("当前筛选条件下没有匹配的会话"))
         } else {
             ScrollView {
                 LazyVStack(spacing: 8) {
@@ -243,15 +243,15 @@ private struct SessionRow: View {
             if expanded { previewSection }
 
             HStack(spacing: 8) {
-                Button("当前面板") { coordinator.resumeSession(record, inPane: coordinator.sessionTargetPane) }
+                Button(L("当前面板")) { coordinator.resumeSession(record, inPane: coordinator.sessionTargetPane) }
                     .buttonStyle(SecondaryButtonStyle())
                     .disabled(coordinator.sessionTargetPane == nil)
-                Button("新标签") { coordinator.resumeSession(record, inPane: nil) }
+                Button(L("新标签")) { coordinator.resumeSession(record, inPane: nil) }
                     .buttonStyle(PrimaryButtonStyle())
                 Menu {
-                    Button("复制会话 ID") { coordinator.copyToClipboard(record.sessionID) }
+                    Button(L("复制会话 ID")) { coordinator.copyToClipboard(record.sessionID) }
                     if let cmd = record.resumeCommand {
-                        Button("复制续聊命令") { coordinator.copyToClipboard(cmd) }
+                        Button(L("复制续聊命令")) { coordinator.copyToClipboard(cmd) }
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -290,21 +290,21 @@ private struct SessionRow: View {
             if loadingPreview, preview == nil {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small).scaleEffect(0.65)
-                    Text("读取完整对话…")
+                    Text(L("读取完整对话…"))
                         .font(.system(size: 10.5))
                         .foregroundStyle(AppStyle.textTertiary)
                 }
                 .frame(maxWidth: .infinity, minHeight: 120)
             } else if let preview, !preview.isEmpty {
                 HStack {
-                    Text("\(preview.count) 条消息")
+                    Text(L("%ld 条消息", preview.count))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(AppStyle.textTertiary)
                     Spacer()
                 }
                 SessionTranscriptView(messages: preview, maxHeight: 420)
             } else {
-                Text("没有可预览的对话内容")
+                Text(L("没有可预览的对话内容"))
                     .font(.system(size: 10.5))
                     .foregroundStyle(AppStyle.textTertiary)
                     .frame(maxWidth: .infinity, minHeight: 80)

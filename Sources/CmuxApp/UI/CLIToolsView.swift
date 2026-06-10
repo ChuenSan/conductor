@@ -131,7 +131,7 @@ struct CLIToolsView: View {
                         loadingPlaceholder
                     } else {
                         if !installedTools.isEmpty {
-                            ToolsSectionLabel("已安装")
+                            ToolsSectionLabel(L("已安装"))
                             ForEach(installedTools) { tool in
                                 CLIToolRow(
                                     tool: tool,
@@ -146,7 +146,7 @@ struct CLIToolsView: View {
                             }
                         }
                         if !missingTools.isEmpty {
-                            ToolsSectionLabel("未检测到")
+                            ToolsSectionLabel(L("未检测到"))
                                 .padding(.top, installedTools.isEmpty ? 0 : Space.xxs)
                             missingList
                         }
@@ -182,7 +182,7 @@ struct CLIToolsView: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppStyle.textSecondary)
                     Spacer()
-                    Text("未检测到")
+                    Text(L("未检测到"))
                         .font(.system(size: 10.5))
                         .foregroundStyle(AppStyle.textTertiary)
                 }
@@ -222,16 +222,16 @@ struct CLIToolsView: View {
     private var embeddedToolbar: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("AI 编码 CLI")
+                Text(L("AI 编码 CLI"))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(AppStyle.textPrimary)
                 if let lastDetectedAt {
-                    Text("上次检测 \(UsageFormatting.agoText(lastDetectedAt))")
+                    Text(L("上次检测 %@", UsageFormatting.agoText(lastDetectedAt)))
                         .font(.system(size: 10.5))
                         .foregroundStyle(AppStyle.textTertiary)
                         .help(lastDetectedAt.formatted(date: .abbreviated, time: .standard))
                 } else {
-                    Text("从登录 Shell 的 PATH 与常见安装路径中查找")
+                    Text(L("从登录 Shell 的 PATH 与常见安装路径中查找"))
                         .font(.system(size: 10.5))
                         .foregroundStyle(AppStyle.textTertiary)
                 }
@@ -244,7 +244,7 @@ struct CLIToolsView: View {
                     } else {
                         Image(systemName: "arrow.clockwise").font(.system(size: 10.5, weight: .bold))
                     }
-                    Text(detecting ? "检测中" : "重新检测")
+                    Text(detecting ? L("检测中") : L("重新检测"))
                         .font(.system(size: 11, weight: .semibold))
                 }
                 .foregroundStyle(AppStyle.textSecondary)
@@ -271,10 +271,10 @@ struct CLIToolsView: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(AppStyle.accent.opacity(0.12)))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("完成通知")
+                    Text(L("完成通知"))
                         .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(AppStyle.textPrimary)
-                    Text("Agent 答完后发 macOS 通知，点击跳回对应 pane。")
+                    Text(L("Agent 答完后发 macOS 通知，点击跳回对应 pane。"))
                         .font(.system(size: 11))
                         .foregroundStyle(AppStyle.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -283,7 +283,7 @@ struct CLIToolsView: View {
             }
 
             HStack(spacing: 6) {
-                hookBadge("脚本", hookStatus.scriptInstalled)
+                hookBadge(L("脚本"), hookStatus.scriptInstalled)
                 hookBadge("Codex", hookStatus.codexConfigured)
                 hookBadge("Claude", hookStatus.claudeConfigured)
                 Spacer()
@@ -291,7 +291,7 @@ struct CLIToolsView: View {
 
             HStack(spacing: 8) {
                 Button(action: installHooks) {
-                    Text(hookStatus.allDone ? "重新安装 hook" : "安装通知 hook")
+                    Text(hookStatus.allDone ? L("重新安装 hook") : L("安装通知 hook"))
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(AppStyle.theme.primarySolidText)
                         .padding(.horizontal, 12)
@@ -303,7 +303,7 @@ struct CLIToolsView: View {
 
                 if !NotificationManager.shared.canDeliverRich {
                     Button { NotificationManager.shared.openSystemNotificationSettings() } label: {
-                        Text("去系统设置授权")
+                        Text(L("去系统设置授权"))
                             .font(.system(size: 11.5, weight: .medium))
                             .foregroundStyle(AppStyle.textSecondary)
                             .padding(.horizontal, 12)
@@ -312,13 +312,13 @@ struct CLIToolsView: View {
                             .contentShape(Capsule())
                     }
                     .buttonStyle(PressScaleStyle())
-                    .help("ad-hoc 签名的 app 通知可能被系统默认拒绝；在此手动开启即可恢复点击跳转。")
+                    .help(L("ad-hoc 签名的 app 通知可能被系统默认拒绝；在此手动开启即可恢复点击跳转。"))
                 }
                 Spacer()
             }
 
             if !NotificationManager.shared.canDeliverRich {
-                Text("当前无法发送可点击通知，已自动回退为普通横幅（看得到、点了不跳转）。")
+                Text(L("当前无法发送可点击通知，已自动回退为普通横幅（看得到、点了不跳转）。"))
                     .font(.system(size: 10))
                     .foregroundStyle(AppStyle.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -363,7 +363,7 @@ struct CLIToolsView: View {
     private var loadingPlaceholder: some View {
         HStack(spacing: 8) {
             ProgressView().controlSize(.small)
-            Text("正在检测…")
+            Text(L("正在检测…"))
                 .font(.system(size: 12))
                 .foregroundStyle(AppStyle.textSecondary)
             Spacer()
@@ -498,19 +498,19 @@ private struct CLIToolRow: View {
                         .foregroundStyle(AppStyle.textTertiary)
                 }
                 .buttonStyle(IconButtonStyle(size: 24))
-                .help("复制路径")
+                .help(L("复制路径"))
                 Button { onReveal(path) } label: {
                     Image(systemName: "folder")
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(AppStyle.textTertiary)
                 }
                 .buttonStyle(IconButtonStyle(size: 24))
-                .help("在 Finder 中显示")
+                .help(L("在 Finder 中显示"))
                 Button(action: onLaunch) {
                     HStack(spacing: 4) {
                         Image(systemName: "play.fill")
                             .font(.system(size: 8.5, weight: .bold))
-                        Text("启动")
+                        Text(L("启动"))
                             .font(.system(size: 11, weight: .semibold))
                     }
                     .foregroundStyle(AppStyle.theme.primarySolidText)
@@ -520,7 +520,7 @@ private struct CLIToolRow: View {
                     .contentShape(Capsule())
                 }
                 .buttonStyle(PressScaleStyle())
-                .help("在新标签页启动 \(tool.name)")
+                .help(L("在新标签页启动 %@", tool.name))
             }
         }
     }
@@ -533,7 +533,7 @@ private struct CLIToolRow: View {
         case .loading:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small).scaleEffect(0.7)
-                Text("读取用量…")
+                Text(L("读取用量…"))
                     .font(.system(size: 10.5))
                     .foregroundStyle(AppStyle.textTertiary)
                 Spacer()
@@ -550,10 +550,10 @@ private struct CLIToolRow: View {
         case let .loaded(snap):
             VStack(alignment: .leading, spacing: 7) {
                 if let session = snap.session {
-                    UsageBar(title: "会话", window: session)
+                    UsageBar(title: L("会话"), window: session)
                 }
                 if let weekly = snap.weekly {
-                    UsageBar(title: "本周", window: weekly)
+                    UsageBar(title: L("本周"), window: weekly)
                 }
             }
             .padding(.top, 9)
@@ -587,7 +587,7 @@ private struct UsageBar: View {
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(AppStyle.textSecondary)
                     .frame(width: 28, alignment: .leading)
-                Text("剩 \(window.remainingPercent)%")
+                Text(L("剩 %ld%%", window.remainingPercent))
                     .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(AppStyle.textPrimary)
@@ -614,30 +614,30 @@ enum UsageFormatting {
     /// 把过去时间格式化成「刚刚」「8 分钟前」「3 小时前」「2 天前」。
     static func agoText(_ date: Date) -> String {
         let seconds = -date.timeIntervalSinceNow
-        guard seconds > 0 else { return "刚刚" }
-        if seconds < 60 { return "刚刚" }
+        guard seconds > 0 else { return L("刚刚") }
+        if seconds < 60 { return L("刚刚") }
         let minutes = Int(seconds / 60)
-        if minutes < 60 { return "\(minutes) 分钟前" }
+        if minutes < 60 { return L("%ld 分钟前", minutes) }
         let hours = minutes / 60
-        if hours < 24 { return "\(hours) 小时前" }
+        if hours < 24 { return L("%ld 小时前", hours) }
         let days = hours / 24
-        if days < 30 { return "\(days) 天前" }
+        if days < 30 { return L("%ld 天前", days) }
         return date.formatted(date: .abbreviated, time: .omitted)
     }
 
     /// 把重置时间格式化成「4 小时后重置」「2 天后重置」「8 分钟后重置」。
     static func resetText(_ date: Date) -> String {
         let seconds = date.timeIntervalSinceNow
-        guard seconds > 0 else { return "已重置" }
+        guard seconds > 0 else { return L("已重置") }
         let minutes = Int(seconds / 60)
-        if minutes < 60 { return "\(max(1, minutes)) 分钟后重置" }
+        if minutes < 60 { return L("%ld 分钟后重置", max(1, minutes)) }
         let hours = minutes / 60
         if hours < 24 {
             let remMin = minutes % 60
-            return remMin > 0 ? "\(hours) 小时 \(remMin) 分后重置" : "\(hours) 小时后重置"
+            return remMin > 0 ? L("%1$ld 小时 %2$ld 分后重置", hours, remMin) : L("%ld 小时后重置", hours)
         }
         let days = hours / 24
         let remHours = hours % 24
-        return remHours > 0 ? "\(days) 天 \(remHours) 小时后重置" : "\(days) 天后重置"
+        return remHours > 0 ? L("%1$ld 天 %2$ld 小时后重置", days, remHours) : L("%ld 天后重置", days)
     }
 }

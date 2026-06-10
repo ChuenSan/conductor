@@ -62,7 +62,7 @@ struct UsageStatsView: View {
 
     private func sourcePicker(_ r: UsageReport) -> some View {
         HStack(spacing: 5) {
-            sourceChip(nil, label: "全部", cost: r.grand.costUSD)
+            sourceChip(nil, label: L("全部"), cost: r.grand.costUSD)
             ForEach(UsageSource.allCases, id: \.self) { src in
                 sourceChip(src, label: src.displayName, cost: r.bySource[src]?.costUSD ?? 0)
             }
@@ -98,13 +98,13 @@ struct UsageStatsView: View {
 
     private var rangePicker: some View {
         HStack(spacing: 8) {
-            Text("Token 用量")
+            Text(L("Token 用量"))
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(AppStyle.textPrimary)
             Spacer()
             ForEach([7, 30, 90], id: \.self) { d in
                 Button { daysBack = d; selectedDay = nil; reload() } label: {
-                    Text("\(d)天")
+                    Text(L("%ld天", d))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(daysBack == d ? .white : AppStyle.textSecondary)
                         .padding(.horizontal, 9)
@@ -139,16 +139,16 @@ struct UsageStatsView: View {
         let avg = activeDays == 0 ? 0 : grand.costUSD / Double(activeDays)
         return VStack(spacing: 10) {
             HStack(spacing: 10) {
-                statTile("今日成本", "$" + UsageNumber.money(todayUsage.costUSD),
+                statTile(L("今日成本"), "$" + UsageNumber.money(todayUsage.costUSD),
                          sub: "\(UsageNumber.compact(todayUsage.totalTokens)) tok", highlight: true)
-                statTile("\(daysBack)天成本", "$" + UsageNumber.money(grand.costUSD),
-                         sub: "日均 $" + UsageNumber.money(avg))
+                statTile(L("%ld天成本", daysBack), "$" + UsageNumber.money(grand.costUSD),
+                         sub: L("日均 $%@", UsageNumber.money(avg)))
             }
             HStack(spacing: 10) {
-                statTile("总 Token", UsageNumber.compact(grand.totalTokens),
-                         sub: "输出 \(UsageNumber.compact(grand.outputTokens))")
-                statTile("会话数", "\(filteredSessions(r))",
-                         sub: "活跃 \(activeDays) 天")
+                statTile(L("总 Token"), UsageNumber.compact(grand.totalTokens),
+                         sub: L("输出 %@", UsageNumber.compact(grand.outputTokens)))
+                statTile(L("会话数"), "\(filteredSessions(r))",
+                         sub: L("活跃 %ld 天", activeDays))
             }
         }
     }
@@ -179,7 +179,7 @@ struct UsageStatsView: View {
         let maxCost = max(days.map { filteredDay($0).costUSD }.max() ?? 0, 0.0001)
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Text("每日成本")
+                Text(L("每日成本"))
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(AppStyle.textSecondary)
                 if let f = sourceFilter {
@@ -191,7 +191,7 @@ struct UsageStatsView: View {
                 Spacer()
                 if selectedDay != nil {
                     Button { selectedDay = nil } label: {
-                        Text("取消选中")
+                        Text(L("取消选中"))
                             .font(.system(size: 9.5, weight: .medium))
                             .foregroundStyle(AppStyle.textTertiary)
                     }
@@ -258,7 +258,7 @@ struct UsageStatsView: View {
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(AppStyle.textPrimary)
             HStack(spacing: 14) {
-                detailItem("合计", "$" + UsageNumber.money(total.costUSD),
+                detailItem(L("合计"), "$" + UsageNumber.money(total.costUSD),
                            UsageNumber.compact(total.totalTokens) + " tok")
                 if sourceFilter == nil || sourceFilter == .claude {
                     detailItem("Claude", "$" + UsageNumber.money(c.costUSD),
@@ -315,14 +315,14 @@ struct UsageStatsView: View {
     private func tokenComposition(_ r: UsageReport) -> some View {
         let g = filteredGrand(r)
         let parts: [(String, Int, Color)] = [
-            ("输入", g.inputTokens, .blue),
-            ("输出", g.outputTokens, .purple),
-            ("缓存写", g.cacheCreationTokens, .teal),
-            ("缓存读", g.cacheReadTokens, Color.gray.opacity(0.55)),
+            (L("输入"), g.inputTokens, .blue),
+            (L("输出"), g.outputTokens, .purple),
+            (L("缓存写"), g.cacheCreationTokens, .teal),
+            (L("缓存读"), g.cacheReadTokens, Color.gray.opacity(0.55)),
         ]
         let total = max(g.totalTokens, 1)
         return VStack(alignment: .leading, spacing: 8) {
-            Text("Token 构成")
+            Text(L("Token 构成"))
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(AppStyle.textSecondary)
             GeometryReader { geo in
@@ -377,7 +377,7 @@ struct UsageStatsView: View {
                         Text("$" + UsageNumber.money(t.costUSD))
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundStyle(AppStyle.accent)
-                        Text("\(UsageNumber.compact(t.totalTokens)) tok · \(r.sessionsBySource[src] ?? 0) 会话")
+                        Text(L("%1$@ tok · %2$ld 会话", UsageNumber.compact(t.totalTokens), r.sessionsBySource[src] ?? 0))
                             .font(.system(size: 10))
                             .foregroundStyle(AppStyle.textTertiary)
                     }
@@ -389,7 +389,7 @@ struct UsageStatsView: View {
                     .contentShape(RoundedRectangle(cornerRadius: 9))
                 }
                 .buttonStyle(PressScaleStyle())
-                .help("只看 \(src.displayName)")
+                .help(L("只看 %@", src.displayName))
             }
         }
     }
@@ -411,7 +411,7 @@ struct UsageStatsView: View {
         return Group {
             if !items.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    ToolsSectionLabel("按项目")
+                    ToolsSectionLabel(L("按项目"))
                     ForEach(items, id: \.project.id) { item in
                         projectRow(item.project, totals: item.totals, maxCost: maxCost)
                     }
@@ -468,7 +468,7 @@ struct UsageStatsView: View {
         let grandCost = filteredGrand(r).costUSD
         let maxCost = max(models.map { $0.totals.costUSD }.max() ?? 0, 0.0001)
         return VStack(alignment: .leading, spacing: 6) {
-            ToolsSectionLabel("按模型")
+            ToolsSectionLabel(L("按模型"))
             ForEach(models) { m in
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
@@ -506,10 +506,10 @@ struct UsageStatsView: View {
 
     private func footnote(_ r: UsageReport) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(loading ? "更新中…" : "更新于 \(UsageRelative.text(r.generatedAt))")
+            Text(loading ? L("更新中…") : L("更新于 %@", UsageRelative.text(r.generatedAt)))
                 .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(AppStyle.textTertiary)
-            Text("成本按公开价目表估算，第三方代理/订阅实际计费可能不同。扫描自 ~/.claude 与 ~/.codex 会话日志。")
+            Text(L("成本按公开价目表估算，第三方代理/订阅实际计费可能不同。扫描自 ~/.claude 与 ~/.codex 会话日志。"))
                 .font(.system(size: 9.5))
                 .foregroundStyle(AppStyle.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -519,13 +519,13 @@ struct UsageStatsView: View {
     private var loadingRow: some View {
         HStack(spacing: 8) {
             ProgressView().controlSize(.small)
-            Text("正在扫描会话日志…").font(.system(size: 12)).foregroundStyle(AppStyle.textSecondary)
+            Text(L("正在扫描会话日志…")).font(.system(size: 12)).foregroundStyle(AppStyle.textSecondary)
             Spacer()
         }.padding(.vertical, 20)
     }
 
     private var emptyRow: some View {
-        Text("没有找到用量数据").font(.system(size: 12)).foregroundStyle(AppStyle.textTertiary)
+        Text(L("没有找到用量数据")).font(.system(size: 12)).foregroundStyle(AppStyle.textTertiary)
             .padding(.vertical, 20)
     }
 
@@ -604,9 +604,9 @@ enum UsageNumber {
 enum UsageRelative {
     static func text(_ date: Date) -> String {
         let s = Int(Date().timeIntervalSince(date))
-        if s < 60 { return "刚刚" }
-        if s < 3600 { return "\(s / 60) 分钟前" }
-        if s < 86400 { return "\(s / 3600) 小时前" }
-        return "\(s / 86400) 天前"
+        if s < 60 { return L("刚刚") }
+        if s < 3600 { return L("%ld 分钟前", s / 60) }
+        if s < 86400 { return L("%ld 小时前", s / 3600) }
+        return L("%ld 天前", s / 86400)
     }
 }

@@ -12,8 +12,22 @@ struct SettingsView: View {
     @State private var selectedSection: SettingsSectionID = .default
     /// 键位编辑用本地草稿：避免每个按键都落盘，提交（回车）时才生效。
     @State private var keybindingDrafts: [String: String] = [:]
+    @State private var languageChoice: String = AppLanguage.current
+    @State private var showLanguageRestartHint = false
 
     private var config: AppConfig { configStore.config }
+
+    private var languageBinding: Binding<String> {
+        Binding(
+            get: { languageChoice },
+            set: { choice in
+                guard choice != languageChoice else { return }
+                languageChoice = choice
+                AppLanguage.apply(choice)
+                withAnimation(.easeOut(duration: 0.15)) { showLanguageRestartHint = true }
+            }
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -45,7 +59,7 @@ struct SettingsView: View {
 
     private var header: some View {
         HStack {
-            Text("设置")
+            Text(L("设置"))
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(AppStyle.textPrimary)
             Spacer()
@@ -103,48 +117,64 @@ struct SettingsView: View {
     }
 
     private var appearanceSection: some View {
-        SettingsSection(title: "外观") {
-            SettingsRow(label: "主题", first: true) {
-                ThemedSegmented(options: [("深色", "dark"), ("浅色", "light"), ("自定义", "custom")],
+        SettingsSection(title: L("外观")) {
+            SettingsRow(label: L("主题"), first: true) {
+                ThemedSegmented(options: [(L("深色"), "dark"), (L("浅色"), "light"), (L("自定义"), "custom")],
                                 selection: bind(\.appearance.theme))
             }
-            SettingsRow(label: "字体") {
+            SettingsRow(label: L("语言")) {
+                VStack(alignment: .trailing, spacing: 5) {
+                    // 语言名按惯例保持各自语言原文，不随界面语言翻译
+                    ThemedSegmented(
+                        options: [(L("跟随系统"), AppLanguage.system),
+                                  ("简体中文", AppLanguage.simplifiedChinese),
+                                  ("English", AppLanguage.english)],
+                        selection: languageBinding)
+                    if showLanguageRestartHint {
+                        Text(L("重启 cmux 后生效"))
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(AppStyle.accent)
+                            .transition(.opacity)
+                    }
+                }
+            }
+            SettingsRow(label: L("字体")) {
                 Picker("", selection: bind(\.appearance.font.family)) {
                     ForEach(SystemFonts.monospaced, id: \.self) { Text($0).tag($0) }
                 }
                 .labelsHidden()
                 .frame(maxWidth: 190)
             }
-            SettingsRow(label: "字号") {
+            SettingsRow(label: L("字号")) {
                 ThemedStepper(value: bind(\.appearance.font.size), range: 6...72)
             }
-            SettingsRow(label: "光标") {
-                ThemedSegmented(options: [("竖线", "bar"), ("方块", "block"), ("下划线", "underline")],
+            SettingsRow(label: L("光标")) {
+                ThemedSegmented(options: [(L("竖线"), "bar"), (L("方块"), "block"), (L("下划线"), "underline")],
                                 selection: bind(\.appearance.cursorStyle))
             }
-            SettingsRow(label: "水平内边距") {
+            SettingsRow(label: L("水平内边距")) {
                 ThemedStepper(value: bind(\.appearance.padding.x), range: 0...60)
             }
-            SettingsRow(label: "垂直内边距") {
+            SettingsRow(label: L("垂直内边距")) {
                 ThemedStepper(value: bind(\.appearance.padding.y), range: 0...60)
             }
         }
     }
 
     private var terminalSection: some View {
-        SettingsSection(title: "终端") {
+        SettingsSection(title: L("终端")) {
             SettingsRow(label: "Shell", first: true) {
-                ThemedTextField(placeholder: "登录 shell", text: $shell) {
+                ThemedTextField(placeholder: L("登录 shell"), text: $shell) {
                     update { $0.terminal.shell = shell.isEmpty ? nil : shell }
                 }
             }
-            SettingsRow(label: "回滚行数") {
+            SettingsRow(label: L("回滚行数")) {
                 ThemedStepper(value: bind(\.terminal.scrollback), range: 0...1_000_000, step: 1000)
             }
-            SettingsRow(label: "选中即复制") {
+            SettingsRow(label: L("选中即复制")) {
                 ThemedToggle(isOn: bind(\.terminal.copyOnSelect))
             }
-            SettingsRow(label: "有运行进程时关闭需确认") {
+            SettingsRow(label: L("有运行进程时关闭需确认")) {
                 ThemedToggle(isOn: bind(\.terminal.confirmCloseRunning))
             }
         }
@@ -152,21 +182,21 @@ struct SettingsView: View {
 
     private var ghosttySection: some View {
         VStack(spacing: 16) {
-            SettingsSection(title: "常用能力") {
+            SettingsSection(title: L("常用能力")) {
                 GhosttyMappedConfigRow(
-                    title: "字体与字号",
-                    summary: "字体、字号和字格微调会直接影响终端阅读感",
+                    title: L("字体与字号"),
+                    summary: L("字体、字号和字格微调会直接影响终端阅读感"),
                     keys: ["font-family", "font-size", "adjust-cell-height"],
                     first: true
                 )
                 GhosttyMappedConfigRow(
-                    title: "窗口与光标",
-                    summary: "窗口留白、光标样式和颜色会跟随下方设置即时生效",
+                    title: L("窗口与光标"),
+                    summary: L("窗口留白、光标样式和颜色会跟随下方设置即时生效"),
                     keys: ["cursor-style", "cursor-color"]
                 )
                 GhosttyMappedConfigRow(
-                    title: "主题颜色",
-                    summary: "背景、文字、选区和搜索颜色统一归到颜色分类里"
+                    title: L("主题颜色"),
+                    summary: L("背景、文字、选区和搜索颜色统一归到颜色分类里")
                 )
             }
 
@@ -187,12 +217,12 @@ struct SettingsView: View {
     }
 
     private var behaviorSection: some View {
-        SettingsSection(title: "行为") {
-            SettingsRow(label: "启动时恢复布局", first: true) {
+        SettingsSection(title: L("行为")) {
+            SettingsRow(label: L("启动时恢复布局"), first: true) {
                 ThemedToggle(isOn: bind(\.behavior.restoreLayoutOnLaunch))
             }
-            SettingsRow(label: "新标签目录") {
-                ThemedSegmented(options: [("工作区", "workspace"), ("当前", "activePane"), ("主目录", "home")],
+            SettingsRow(label: L("新标签目录")) {
+                ThemedSegmented(options: [(L("工作区"), "workspace"), (L("当前"), "activePane"), (L("主目录"), "home")],
                                 selection: bind(\.behavior.newTabCwd))
             }
         }
@@ -201,17 +231,17 @@ struct SettingsView: View {
     // MARK: 自定义配色（仅 theme=custom 时显示）
 
     private var colorsSection: some View {
-        SettingsSection(title: "自定义配色") {
-            SettingsRow(label: "背景", first: true) {
+        SettingsSection(title: L("自定义配色")) {
+            SettingsRow(label: L("背景"), first: true) {
                 ColorPicker("", selection: colorBinding({ $0?.background }, "1b1c22", { $0.background = $1 })).labelsHidden()
             }
-            SettingsRow(label: "前景") {
+            SettingsRow(label: L("前景")) {
                 ColorPicker("", selection: colorBinding({ $0?.foreground }, "e6e6e6", { $0.foreground = $1 })).labelsHidden()
             }
-            SettingsRow(label: "光标") {
+            SettingsRow(label: L("光标")) {
                 ColorPicker("", selection: colorBinding({ $0?.cursor }, "7aa2f7", { $0.cursor = $1 })).labelsHidden()
             }
-            SettingsRow(label: "选区") {
+            SettingsRow(label: L("选区")) {
                 ColorPicker("", selection: colorBinding({ $0?.selection }, "33467c", { $0.selection = $1 })).labelsHidden()
             }
         }
@@ -233,10 +263,10 @@ struct SettingsView: View {
     // MARK: 快捷键自定义（输入键位串，回车生效；留空回落内置默认）
 
     private var keybindingsSection: some View {
-        SettingsSection(title: "快捷键") {
+        SettingsSection(title: L("快捷键")) {
             ForEach(Array(coordinator.commandRegistry.commands.enumerated()), id: \.element.id) { idx, cmd in
                 SettingsRow(label: cmd.title, first: idx == 0) {
-                    ThemedTextField(placeholder: cmd.defaultKeybinding ?? "未设置",
+                    ThemedTextField(placeholder: cmd.defaultKeybinding ?? L("未设置"),
                                     text: keybindingDraftBinding(cmd.id)) {
                         commitKeybinding(cmd.id)
                     }
@@ -390,7 +420,7 @@ private struct GhosttyOverrideRow: View {
                     .font(.system(size: 11))
                     .foregroundStyle(AppStyle.textSecondary)
                     .lineLimit(2)
-                Text(isOverridden ? "已自定义" : "使用默认值")
+                Text(isOverridden ? L("已自定义") : L("使用默认值"))
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(isOverridden ? AppStyle.accent : AppStyle.textTertiary)
             }
@@ -406,7 +436,7 @@ private struct GhosttyOverrideRow: View {
             }
             .buttonStyle(PressScaleStyle())
             .disabled(!isOverridden)
-            .help("恢复默认")
+            .help(L("恢复默认"))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -423,12 +453,12 @@ private struct GhosttyOverrideRow: View {
         switch CmuxGhosttyConfigCatalog.controlKind(for: key) {
         case .boolean:
             ThemedSegmented(
-                options: [("默认", ""), ("开", "true"), ("关", "false")],
+                options: [(L("默认"), ""), (L("开"), "true"), (L("关"), "false")],
                 selection: Binding(get: { value }, set: setValue)
             )
         case let .choice(options):
             Picker("", selection: Binding(get: { value }, set: setValue)) {
-                Text("默认").tag("")
+                Text(L("默认")).tag("")
                 ForEach(options, id: \.value) { option in
                     Text(option.label).tag(option.value)
                 }
@@ -441,7 +471,7 @@ private struct GhosttyOverrideRow: View {
             GhosttyPathControl(key: key, value: value, setValue: setValue)
         case .fontFamily:
             Picker("", selection: Binding(get: { value }, set: setValue)) {
-                Text("默认").tag("")
+                Text(L("默认")).tag("")
                 ForEach(SystemFonts.monospaced, id: \.self) { family in
                     Text(family).tag(family)
                 }
@@ -471,7 +501,7 @@ private struct GhosttyFreeTextControl: View {
     var body: some View {
         if showsEditor {
             ThemedTextField(
-                placeholder: "输入自定义值",
+                placeholder: L("输入自定义值"),
                 text: Binding(get: { value }, set: setValue)
             )
             .focused($focused)
@@ -482,7 +512,7 @@ private struct GhosttyFreeTextControl: View {
             }
         } else {
             HStack(spacing: 8) {
-                Text("默认")
+                Text(L("默认"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppStyle.textTertiary)
                     .frame(width: 48, alignment: .trailing)
@@ -494,7 +524,7 @@ private struct GhosttyFreeTextControl: View {
                         .foregroundStyle(AppStyle.textSecondary)
                 }
                 .buttonStyle(IconButtonStyle(size: 28))
-                .help("添加自定义值")
+                .help(L("添加自定义值"))
             }
         }
     }
@@ -618,7 +648,7 @@ private struct GhosttyColorControl: View {
             ColorPicker("", selection: colorBinding)
                 .labelsHidden()
                 .frame(width: 36)
-            Text(value.isEmpty ? "默认" : "#\(value.trimmingCharacters(in: CharacterSet(charactersIn: "#")))")
+            Text(value.isEmpty ? L("默认") : "#\(value.trimmingCharacters(in: CharacterSet(charactersIn: "#")))")
                 .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
                 .foregroundStyle(value.isEmpty ? AppStyle.textTertiary : AppStyle.accent)
                 .frame(width: 74, alignment: .leading)
@@ -638,7 +668,7 @@ private struct GhosttyPathControl: View {
             HStack(spacing: 6) {
                 Image(systemName: isImagePicker ? "photo" : "folder")
                     .font(.system(size: 11.5, weight: .semibold))
-                Text(value.isEmpty ? "选择" : URL(fileURLWithPath: value).lastPathComponent)
+                Text(value.isEmpty ? L("选择") : URL(fileURLWithPath: value).lastPathComponent)
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
             }
@@ -660,7 +690,7 @@ private struct GhosttyPathControl: View {
         if isImagePicker {
             panel.allowedContentTypes = [.png, .jpeg]
         }
-        panel.prompt = isImagePicker ? "选择图片" : "选择目录"
+        panel.prompt = isImagePicker ? L("选择图片") : L("选择目录")
         if panel.runModal() == .OK, let url = panel.url, isUsableSelection(url) {
             setValue(url.path)
         }

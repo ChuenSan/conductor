@@ -22,7 +22,7 @@ struct RootView: View {
                     ) {
                         QuickStartLaunchPanel(
                             title: activeWorkspaceName,
-                            subtitle: "空工作区",
+                            subtitle: L("空工作区"),
                             primaryActions: terminalPrimaryActions,
                             secondaryActions: terminalSecondaryActions
                         )
@@ -70,12 +70,12 @@ struct RootView: View {
     }
 
     private var activeWorkspaceName: String {
-        coordinator.store.workspaces.first { $0.id == coordinator.store.activeWorkspace }?.name ?? "工作区"
+        coordinator.store.workspaces.first { $0.id == coordinator.store.activeWorkspace }?.name ?? L("工作区")
     }
 
     private var terminalPrimaryActions: [QuickStartAction] {
         [
-            QuickStartAction(id: "newTab", title: "新标签", systemImage: "plus", isPrimary: true) {
+            QuickStartAction(id: "newTab", title: L("新标签"), systemImage: "plus", isPrimary: true) {
                 coordinator.newTab()
             },
         ]
@@ -83,10 +83,10 @@ struct RootView: View {
 
     private var terminalSecondaryActions: [QuickStartAction] {
         [
-            QuickStartAction(id: "commandPalette", title: "命令", systemImage: "command") {
+            QuickStartAction(id: "commandPalette", title: L("命令"), systemImage: "command") {
                 coordinator.openCommandPalette()
             },
-            QuickStartAction(id: "openSettings", title: "设置", systemImage: "gearshape") {
+            QuickStartAction(id: "openSettings", title: L("设置"), systemImage: "gearshape") {
                 coordinator.openSettings()
             },
         ]

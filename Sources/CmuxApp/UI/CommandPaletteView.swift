@@ -34,7 +34,7 @@ struct CommandPaletteView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppStyle.textTertiary)
-                TextField("搜索命令、标签、工作区…", text: $query)
+                TextField(L("搜索命令、标签、工作区…"), text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 15))
                     .foregroundStyle(AppStyle.textPrimary)

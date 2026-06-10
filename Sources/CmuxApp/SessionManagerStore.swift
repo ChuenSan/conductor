@@ -61,7 +61,8 @@ final class SessionManagerStore: ObservableObject {
         guard let data = try? Data(contentsOf: cacheURL),
               let cache = try? JSONDecoder().decode(CacheFile.self, from: data)
         else { return }
-        records = cache.records
+        // 旧缓存可能还存着 /usage 这类纯命令会话，加载时一并滤掉
+        records = cache.records.filter { !AgentSessionCatalog.isUtilityCommandTitle($0.title) }
         lastScannedAt = cache.scannedAt
     }
 }

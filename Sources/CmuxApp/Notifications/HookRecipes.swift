@@ -22,29 +22,29 @@ enum HookRecipes {
     static let all: [HookRecipe] = [
         HookRecipe(
             id: HookInstaller.recipeID,
-            title: "cmux 完成通知",
-            detail: "agent 答完发系统通知，点击跳回对应 pane（推荐）",
+            title: L("cmux 完成通知"),
+            detail: L("agent 答完发系统通知，点击跳回对应 pane（推荐）"),
             icon: "bell.badge.fill",
             command: HookInstaller.stopCommand,
             ensureScript: { try HookInstaller.installScript() }),
         HookRecipe(
             id: "sound",
-            title: "完成提示音",
-            detail: "agent 完成时播放系统提示音（Glass）",
+            title: L("完成提示音"),
+            detail: L("agent 完成时播放系统提示音（Glass）"),
             icon: "speaker.wave.2.fill",
             command: gated("afplay /System/Library/Sounds/Glass.aiff", id: "sound"),
             ensureScript: nil),
         HookRecipe(
             id: "banner",
-            title: "系统横幅",
-            detail: "用 osascript 弹系统横幅（不支持点击跳转）",
+            title: L("系统横幅"),
+            detail: L("用 osascript 弹系统横幅（不支持点击跳转）"),
             icon: "rectangle.badge.checkmark",
             command: gated("osascript -e 'display notification \"AI 已完成\" with title \"cmux\"'", id: "banner"),
             ensureScript: nil),
         HookRecipe(
             id: "log",
-            title: "完成日志",
-            detail: "agent 每次完成追加一行到 ~/.cmux/agent-events.log（时间 + pane）",
+            title: L("完成日志"),
+            detail: L("agent 每次完成追加一行到 ~/.cmux/agent-events.log（时间 + pane）"),
             icon: "doc.append",
             command: gated(
                 "mkdir -p \"$HOME/.cmux\" && printf '%s stop pane=%s\\n' \"$(date '+%Y-%m-%d %H:%M:%S')\" \"$CMUX_PANE_ID\" >> \"$HOME/.cmux/agent-events.log\"",
