@@ -494,12 +494,14 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     }
 
     /// 边框脉冲两下（广播送达 / 通知跳转定位用），结束后回到当前焦点环样式。
-    func flashHighlight() {
+    /// `tint` 可换信号色（如完成绿），默认 accent。
+    func flashHighlight(tint: NSColor? = nil) {
         guard let layer = frameView.layer else { return }
         layer.removeAnimation(forKey: "paneFlash")
         let resting = layer.borderColor ?? AppStyle.theme.cardBorder.cgColor
-        let accent = NSColor(AppStyle.accent).cgColor
-        let faint = NSColor(AppStyle.accent).withAlphaComponent(0.25).cgColor
+        let tintColor = tint ?? NSColor(AppStyle.accent)
+        let accent = tintColor.cgColor
+        let faint = tintColor.withAlphaComponent(0.25).cgColor
 
         let color = CAKeyframeAnimation(keyPath: "borderColor")
         color.values = [resting, accent, faint, accent, resting]

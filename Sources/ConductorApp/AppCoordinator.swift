@@ -585,8 +585,13 @@ final class AppCoordinator: ObservableObject {
             body = body.isEmpty ? took : body + "\n" + took
         }
         NotificationManager.shared.notify(paneID: event.paneID, title: title, body: body)
-        // 完成时不在屏上 → 记未读绿点；app 在后台 → Dock 角标 +1
-        if let pane { markUnseenDoneIfHidden(pane) }
+        // 完成时不在屏上 → 记未读绿点；就在屏上 → 边框闪绿两下；app 在后台 → Dock 角标 +1
+        if let pane {
+            markUnseenDoneIfHidden(pane)
+            if activeTabModel()?.rootSplit.contains(pane) == true {
+                paneContainers[pane]?.flashHighlight(tint: NSColor(AppStyle.doneGreen))
+            }
+        }
         bumpDockBadgeIfInactive()
     }
 
