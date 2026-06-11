@@ -478,6 +478,7 @@
 "没有匹配「%@」的结果" = "No results for \"%@\"";
 "清空搜索" = "Clear Search";
 "切到标签 %ld" = "Go to Tab %ld";
+"最近使用过" = "Recently used";
 "有 Agent 已完成，点击查看" = "An agent finished here — click to view";
 "%ld 个 Agent 已完成，等你来看" = "%ld agent task(s) finished, waiting for you";
 "耗时 %@" = "Took %@";

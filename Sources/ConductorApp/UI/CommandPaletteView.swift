@@ -9,7 +9,25 @@ struct PaletteItem: Identifiable {
     let run: () -> Void
 }
 
+/// 最近执行过的面板条目 id（MRU 去重置顶，最多 6 条），UserDefaults 持久化。
+enum PaletteRecents {
+    private static let key = "palette.recents"
+    private static let limit = 6
+
+    static func load() -> [String] {
+        UserDefaults.standard.stringArray(forKey: key) ?? []
+    }
+
+    static func record(_ id: String) {
+        var items = load()
+        items.removeAll { $0 == id }
+        items.insert(id, at: 0)
+        UserDefaults.standard.set(Array(items.prefix(limit)), forKey: key)
+    }
+}
+
 /// 命令面板（自绘，跟主题）：搜索框 + 模糊过滤列表，↑↓选、回车执行、Esc 关。
+/// 空查询时最近执行过的条目浮顶；模糊匹配兼顾标题与副标题（可按路径搜工作区）。
 struct CommandPaletteView: View {
     let items: [PaletteItem]
     let onClose: () -> Void
@@ -17,15 +35,37 @@ struct CommandPaletteView: View {
     @State private var query = ""
     @State private var selection = 0
     @FocusState private var fieldFocused: Bool
+    /// 打开面板那一刻的最近使用快照（面板生命周期内不变，避免执行后列表跳动）。
+    private let recents = PaletteRecents.load()
 
     private var filtered: [PaletteItem] {
-        guard !query.isEmpty else { return items }
+        guard !query.isEmpty else { return orderedForEmptyQuery }
         return items
             .compactMap { item -> (PaletteItem, Int)? in
-                CommandPaletteView.fuzzy(query, item.title).map { (item, $0) }
+                // 标题命中优先级远高于副标题（路径/键位）命中
+                if let score = CommandPaletteView.fuzzy(query, item.title) { return (item, score + 1000) }
+                if !item.subtitle.isEmpty,
+                   let score = CommandPaletteView.fuzzy(query, item.subtitle) { return (item, score) }
+                return nil
             }
             .sorted { $0.1 > $1.1 }
             .map(\.0)
+    }
+
+    /// 空查询：最近使用的按其使用序浮顶，其余保持原序。
+    private var orderedForEmptyQuery: [PaletteItem] {
+        guard !recents.isEmpty else { return items }
+        var byID: [String: PaletteItem] = [:]
+        for item in items { byID[item.id] = item }
+        let top = recents.compactMap { byID[$0] }
+        guard !top.isEmpty else { return items }
+        let topIDs = Set(top.map(\.id))
+        return top + items.filter { !topIDs.contains($0.id) }
+    }
+
+    /// 该条目此刻是否以「最近使用」身份展示（空查询且在浮顶区）。
+    private func isRecentRow(_ index: Int, _ item: PaletteItem) -> Bool {
+        query.isEmpty && index < recents.count && recents.contains(item.id)
     }
 
     var body: some View {
@@ -65,7 +105,8 @@ struct CommandPaletteView: View {
                             emptyState
                         } else {
                             ForEach(Array(filtered.enumerated()), id: \.element.id) { index, item in
-                                row(item, selected: index == selection)
+                                row(item, selected: index == selection,
+                                    recent: isRecentRow(index, item))
                                     .id(index)
                                     .contentShape(Rectangle())
                                     .onTapGesture { selection = index; runSelected() }
@@ -90,7 +131,7 @@ struct CommandPaletteView: View {
         .onAppear { fieldFocused = true }
     }
 
-    private func row(_ item: PaletteItem, selected: Bool) -> some View {
+    private func row(_ item: PaletteItem, selected: Bool, recent: Bool) -> some View {
         HStack(spacing: 11) {
             Image(systemName: item.icon)
                 .font(.system(size: 13, weight: .medium))
@@ -109,6 +150,12 @@ struct CommandPaletteView: View {
                 }
             }
             Spacer(minLength: 0)
+            if recent {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AppStyle.textTertiary.opacity(0.8))
+                    .help(L("最近使用过"))
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -139,6 +186,7 @@ struct CommandPaletteView: View {
     private func runSelected() {
         guard filtered.indices.contains(selection) else { return }
         let item = filtered[selection]
+        PaletteRecents.record(item.id)
         onClose()
         item.run()
     }
