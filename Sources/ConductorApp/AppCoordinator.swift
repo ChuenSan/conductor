@@ -1211,7 +1211,20 @@ final class AppCoordinator: ObservableObject {
               let tabIndex = store.workspaces[wsIndex].tabs.firstIndex(where: { $0.id == id }) else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         store.workspaces[wsIndex].tabs[tabIndex].customTitle = trimmed.isEmpty ? nil : trimmed
+        refreshWindowTitle()
         scheduleSave()
+    }
+
+    /// 窗口标题跟随「工作区 · 标签」，Mission Control / ⌘` 窗口切换器里一眼可辨。
+    private func refreshWindowTitle() {
+        guard let window else { return }
+        var parts: [String] = []
+        if let ws = activeWorkspace() { parts.append(ws.name) }
+        if let tab = activeTabModel() {
+            parts.append(tab.customTitle ?? (paneTitles[tab.activePane] ?? L("终端")))
+        }
+        let title = parts.isEmpty ? "Conductor" : parts.joined(separator: " · ")
+        if window.title != title { window.title = title }
     }
 
     // MARK: - 通用动作（右键菜单等共用）
@@ -1310,6 +1323,7 @@ final class AppCoordinator: ObservableObject {
         guard !trimmed.isEmpty, let i = store.workspaces.firstIndex(where: { $0.id == id }) else { return }
         guard store.workspaces[i].name != trimmed else { return }
         store.workspaces[i].name = trimmed
+        refreshWindowTitle()
         scheduleSave()
     }
 
@@ -1477,6 +1491,7 @@ final class AppCoordinator: ObservableObject {
         paneTitles[pane] = value
         // 容器按 pane 常驻缓存，直接查表；不在屏上的也一并更新（切回来即正确）
         paneContainers[pane]?.setTitle(value)
+        refreshWindowTitle()   // 活动标签若无自定义名，窗口标题跟着 shell 标题走
     }
 
     /// cwd 变化：更新标签 + 全路径 + git 分支（状态栏）。防抖 100ms，避免频繁 cd 时 SwiftUI 过载。
@@ -1540,6 +1555,7 @@ final class AppCoordinator: ObservableObject {
         guard let tab = activeTabModel() else {
             pendingAreaTransition = nil
             sweepUnseenDone(visible: [])
+            refreshWindowTitle()
             return
         }
         sweepUnseenDone(visible: Set(tab.rootSplit.leaves()))
@@ -1582,6 +1598,7 @@ final class AppCoordinator: ObservableObject {
         // 新建的 pane 入场淡入
         for (pane, motion) in pendingEntrances { paneContainers[pane]?.animateEntrance(motion) }
         pendingEntrances.removeAll()
+        refreshWindowTitle()   // 切工作区/标签、增删 tab 都经过 rebuild，标题在此跟上
         focusActivePane()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.refreshVisibleSurfaces() }
     }
