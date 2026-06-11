@@ -11,30 +11,48 @@ struct TabBarView: View {
     @State private var editingTab: TabID?
     @State private var draftTitle: String = ""
     @FocusState private var renameFocused: Bool
+    /// 胶囊串的内容宽度：tab 少时滚动区收身到正好包住内容，把剩余宽度让给拖拽区。
+    @State private var pillsWidth: CGFloat = 0
 
     var body: some View {
         let ws = coordinator.store.workspaces.first { $0.id == coordinator.store.activeWorkspace }
         let tabs = ws?.tabs ?? []
         let activeTab = ws?.activeTab
         HStack(spacing: 5) {
-            ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
-                let pill = TabPill(
-                    tab: tab,
-                    title: tab.customTitle ?? (coordinator.paneTitles[tab.activePane] ?? L("终端")),
-                    selected: tab.id == activeTab,
-                    index: index,
-                    tabCount: tabs.count,
-                    coordinator: coordinator,
-                    isEditing: editingTab == tab.id,
-                    draft: $draftTitle,
-                    focused: $renameFocused,
-                    onStartEdit: { beginRename(tab) },
-                    onCommitEdit: { commitRename() }
-                ) { coordinator.selectTab(tab.id) }
-                .transition(.asymmetric(
-                    insertion: .scale(scale: 0.8).combined(with: .opacity),
-                    removal: .scale(scale: 0.8).combined(with: .opacity)))
-                pill
+            // tab 多到放不下 → 胶囊串横向滚动（不出滚动条），切换时自动把活动标签滑入视野。
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 5) {
+                        ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
+                            TabPill(
+                                tab: tab,
+                                title: tab.customTitle ?? (coordinator.paneTitles[tab.activePane] ?? L("终端")),
+                                selected: tab.id == activeTab,
+                                index: index,
+                                tabCount: tabs.count,
+                                coordinator: coordinator,
+                                isEditing: editingTab == tab.id,
+                                draft: $draftTitle,
+                                focused: $renameFocused,
+                                onStartEdit: { beginRename(tab) },
+                                onCommitEdit: { commitRename() }
+                            ) { coordinator.selectTab(tab.id) }
+                            .transition(.asymmetric(
+                                insertion: .scale(scale: 0.8).combined(with: .opacity),
+                                removal: .scale(scale: 0.8).combined(with: .opacity)))
+                            .id(tab.id)
+                        }
+                    }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pillsWidth = $0 }
+                }
+                .scrollBounceBehavior(.basedOnSize, axes: [.horizontal])
+                .frame(maxWidth: pillsWidth > 0 ? pillsWidth : nil)
+                .layoutPriority(2)
+                .onChange(of: activeTab) { _, id in
+                    guard let id else { return }
+                    withAnimation(Motion.snappy) { proxy.scrollTo(id) }
+                }
+                .onAppear { if let activeTab { proxy.scrollTo(activeTab) } }
             }
             Button(action: { coordinator.newTab() }) {
                 Image(systemName: "plus").font(.system(size: 12, weight: .medium))
@@ -42,7 +60,7 @@ struct TabBarView: View {
             }
             .buttonStyle(IconButtonStyle(size: 24))
             WindowDragZoomArea()
-            .frame(maxWidth: .infinity)
+            .frame(minWidth: 56, maxWidth: .infinity)   // tab 再多也给窗口拖拽留一块
             .frame(height: WindowDragZoomRegion.preferredHeight)
             .layoutPriority(1)
             // 右侧快捷按钮组（软圆角容器，对标 Craft 的按钮组）
