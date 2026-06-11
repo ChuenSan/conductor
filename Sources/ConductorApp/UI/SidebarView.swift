@@ -97,6 +97,7 @@ struct SidebarView: View {
                     summary: summary,
                     selected: selected,
                     isThinking: coordinator.isWorkspaceThinking(ws),
+                    unseenDoneCount: coordinator.workspaceUnseenDoneCount(ws),
                     isEditing: editingWorkspace == ws.id,
                     isCollapsed: isCollapsed,
                     draft: $draftName,
@@ -495,6 +496,8 @@ private struct WorkspaceRow: View {
     let summary: SidebarWorkspaceSummary
     let selected: Bool
     let isThinking: Bool
+    /// 这个工作区里「后台跑完还没看」的 pane 数（绿点 + 数字角标）。
+    let unseenDoneCount: Int
     let isEditing: Bool
     let isCollapsed: Bool
     @Binding var draft: String
@@ -525,6 +528,10 @@ private struct WorkspaceRow: View {
                         }
                         if isThinking {
                             ThinkingIndicator(size: 8)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                        if unseenDoneCount > 0 {
+                            unseenDoneBadge
                                 .transition(.scale.combined(with: .opacity))
                         }
                         Spacer(minLength: 0)
@@ -564,8 +571,27 @@ private struct WorkspaceRow: View {
         .animation(.easeInOut(duration: 0.2), value: summary.activeDetailText)
         .onTapGesture { if !isEditing { onSelect() } }
         .onHover { hovering = $0 }
-        .help(summary.tooltipText)
+        .help(unseenDoneCount > 0
+            ? summary.tooltipText + "\n" + L("%ld 个 Agent 已完成，等你来看", unseenDoneCount)
+            : summary.tooltipText)
         .accessibilityLabel("\(name), \(summary.pathText), \(summary.metricsText)")
+        .animation(.easeOut(duration: 0.2), value: unseenDoneCount > 0)
+    }
+
+    /// 「完成未读」绿点：>1 时带数字。
+    private var unseenDoneBadge: some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(AppStyle.doneGreen)
+                .frame(width: 7, height: 7)
+                .shadow(color: AppStyle.doneGreen.opacity(0.55), radius: 2.5)
+            if unseenDoneCount > 1 {
+                Text("\(unseenDoneCount)")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(AppStyle.doneGreen)
+            }
+        }
     }
 
     private var workspaceGlyph: some View {
@@ -578,6 +604,15 @@ private struct WorkspaceRow: View {
             if isCollapsed, isThinking {
                 ThinkingIndicator(size: 7)
                     .offset(x: 5, y: 16)
+                    .transition(.scale.combined(with: .opacity))
+            }
+            // 收起态的完成未读绿点：挂图标左上角（右上角是 pane 数、右下角是思考动效）
+            if isCollapsed, unseenDoneCount > 0 {
+                Circle()
+                    .fill(AppStyle.doneGreen)
+                    .frame(width: 6.5, height: 6.5)
+                    .shadow(color: AppStyle.doneGreen.opacity(0.55), radius: 2.5)
+                    .offset(x: -14, y: -3)
                     .transition(.scale.combined(with: .opacity))
             }
             if isCollapsed, summary.paneCount > 1 {

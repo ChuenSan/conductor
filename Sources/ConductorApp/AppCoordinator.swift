@@ -66,6 +66,11 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var paneAgents: [PaneID: String] = [:]
     /// 正在「思考」的 agent pane 集合（hook 信号 ∪ 启发式），驱动 tab / 工作区 / 文件夹树的思考动效。
     @Published private(set) var thinkingPanes: Set<PaneID> = []
+    /// 「完成未读」：agent 跑完时不在屏上（其他标签/工作区）的 pane。
+    /// 对应 tab 胶囊与侧栏工作区行亮小绿点，切过去看一眼即消。
+    @Published private(set) var unseenDonePanes: Set<PaneID> = []
+    /// app 在后台期间完成的任务数 → Dock 图标角标；激活即清零。
+    private var dockBadgeCount = 0
     /// 终端里悬停的链接 URL（状态栏浏览器式显示）；nil = 没悬停在链接上。
     @Published var hoveredLink: String?
     /// 上次 CPU 采样：pane → (pid, 累计 CPU 秒, 采样时刻)，两次做差得占用率。
@@ -499,6 +504,12 @@ final class AppCoordinator: ObservableObject {
         startNotifications()
         prewarmUsageReport()
         SessionManagerStore.shared.refresh()
+        // 回到前台 → Dock 角标使命结束
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.clearDockBadge() }
+        }
     }
 
     /// 启动后低优先级预扫一次 30 天用量并写缓存，让用量面板首次打开即有数据。
@@ -550,6 +561,50 @@ final class AppCoordinator: ObservableObject {
             body = body.isEmpty ? took : body + "\n" + took
         }
         NotificationManager.shared.notify(paneID: event.paneID, title: title, body: body)
+        // 完成时不在屏上 → 记未读绿点；app 在后台 → Dock 角标 +1
+        if let pane { markUnseenDoneIfHidden(pane) }
+        bumpDockBadgeIfInactive()
+    }
+
+    // MARK: - 完成未读（绿点 / Dock 角标）
+
+    /// done 时 pane 不在当前可见 tab 里（别的标签/工作区）→ 记未读。
+    private func markUnseenDoneIfHidden(_ pane: PaneID) {
+        guard paneExists(pane),
+              activeTabModel().map({ !$0.rootSplit.contains(pane) }) ?? true else { return }
+        unseenDonePanes.insert(pane)
+    }
+
+    /// 该 tab 是否有「完成未读」的 pane（tab 胶囊绿点）。
+    func tabHasUnseenDone(_ tab: ConductorCore.Tab) -> Bool {
+        !unseenDonePanes.isEmpty && tab.rootSplit.leaves().contains { unseenDonePanes.contains($0) }
+    }
+
+    /// 该工作区的「完成未读」数（侧栏工作区行绿点）。
+    func workspaceUnseenDoneCount(_ ws: Workspace) -> Int {
+        guard !unseenDonePanes.isEmpty else { return 0 }
+        return ws.tabs.reduce(0) { sum, tab in
+            sum + tab.rootSplit.leaves().filter { unseenDonePanes.contains($0) }.count
+        }
+    }
+
+    /// 看到即消：当前 tab 上屏后清掉它名下的未读绿点；已关闭的 pane 一并清理。
+    private func sweepUnseenDone(visible: Set<PaneID>) {
+        guard !unseenDonePanes.isEmpty else { return }
+        let cleaned = unseenDonePanes.filter { !visible.contains($0) && registry.surface(for: $0) != nil }
+        if cleaned != unseenDonePanes { unseenDonePanes = cleaned }
+    }
+
+    private func bumpDockBadgeIfInactive() {
+        guard !NSApp.isActive else { return }
+        dockBadgeCount += 1
+        NSApp.dockTile.badgeLabel = "\(dockBadgeCount)"
+    }
+
+    private func clearDockBadge() {
+        guard dockBadgeCount != 0 else { return }
+        dockBadgeCount = 0
+        NSApp.dockTile.badgeLabel = nil
     }
 
     /// pane 是否还活着（关掉的终端在通知中心里置灰）。
@@ -1414,8 +1469,10 @@ final class AppCoordinator: ObservableObject {
         paneContainers = paneContainers.filter { registry.surface(for: $0.key) != nil }
         guard let tab = activeTabModel() else {
             pendingAreaTransition = nil
+            sweepUnseenDone(visible: [])
             return
         }
+        sweepUnseenDone(visible: Set(tab.rootSplit.leaves()))
         let active = self.activePane()
         // 放大态校验：被放大的 pane 不在当前 tab 了 → 取消放大。
         if let zp = zoomedPane, !tab.rootSplit.contains(zp) { zoomedPane = nil }

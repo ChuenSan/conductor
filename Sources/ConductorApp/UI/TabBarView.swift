@@ -195,6 +195,11 @@ private struct TabPill: View {
         tab.rootSplit.leaves().contains { coordinator.thinkingPanes.contains($0) }
     }
 
+    /// 后台跑完还没被看过的 pane → 胶囊亮绿点（切过去看一眼即消）。
+    private var hasUnseenDone: Bool {
+        coordinator.tabHasUnseenDone(tab)
+    }
+
     private var pillContent: some View {
         HStack(spacing: 6) {
             leadingIcon
@@ -204,9 +209,17 @@ private struct TabPill: View {
                         ThinkingIndicator(size: 7)
                             .offset(x: 4, y: -4)
                             .transition(.scale.combined(with: .opacity))
+                    } else if hasUnseenDone {
+                        Circle()
+                            .fill(AppStyle.doneGreen)
+                            .frame(width: 7, height: 7)
+                            .shadow(color: AppStyle.doneGreen.opacity(0.55), radius: 2.5)
+                            .offset(x: 4, y: -4)
+                            .transition(.scale.combined(with: .opacity))
                     }
                 }
                 .animation(.easeOut(duration: 0.2), value: isThinking)
+                .animation(.easeOut(duration: 0.2), value: hasUnseenDone)
             if isEditing {
                 TextField("", text: $draft)
                     .textFieldStyle(.plain)

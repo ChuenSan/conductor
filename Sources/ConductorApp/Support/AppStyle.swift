@@ -23,6 +23,8 @@ enum AppStyle {
 
     // 强调
     @MainActor static var accent: Color { theme.accent }
+    /// 「完成未读」信号绿（tab 胶囊 / 侧栏工作区行的小绿点，深浅主题下都够亮）。
+    static let doneGreen = Color(red: 0.28, green: 0.76, blue: 0.43)
 
     // 尺寸(与主题无关)
     static let sidebarWidth: CGFloat = 224
