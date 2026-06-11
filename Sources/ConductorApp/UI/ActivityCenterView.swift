@@ -36,11 +36,35 @@ struct ActivityBellView: View {
     }
 }
 
-/// 通知中心：最近完成的 agent 任务列表，点击条目跳到对应 pane。
+/// 通知中心：最近完成的 agent 任务，按天分组、相对时间显示。
+/// 点击条目跳到对应 pane 并闪边框定位；已关闭的终端置灰不可跳。
 struct ActivityCenterView: View {
     let coordinator: AppCoordinator
     @ObservedObject var log: AgentActivityLog
     let onClose: () -> Void
+
+    /// 按自然日分组（今天 / 昨天 / 具体日期），组内保持新→旧。
+    private var grouped: [(label: String, items: [AgentActivityEntry])] {
+        let cal = Calendar.current
+        var order: [Date] = []
+        var buckets: [Date: [AgentActivityEntry]] = [:]
+        for entry in log.entries {
+            let day = cal.startOfDay(for: entry.date)
+            if buckets[day] == nil { order.append(day) }
+            buckets[day, default: []].append(entry)
+        }
+        return order.map { (Self.dayLabel($0, calendar: cal), buckets[$0] ?? []) }
+    }
+
+    static func dayLabel(_ day: Date, calendar: Calendar) -> String {
+        if calendar.isDateInToday(day) { return L("今天") }
+        if calendar.isDateInYesterday(day) { return L("昨天") }
+        let formatter = DateFormatter()
+        formatter.locale = AppLanguage.activeLocale
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: day)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -74,21 +98,37 @@ struct ActivityCenterView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 28)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(log.entries) { entry in
-                            ActivityRow(entry: entry, coordinator: coordinator) {
-                                onClose()
-                                if let pane = entry.paneID {
-                                    coordinator.focusPane(byID: pane.value)
+                // 30 秒滴答一次，让「x 分钟前」在面板开着时也保持新鲜
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2, pinnedViews: []) {
+                            ForEach(grouped, id: \.label) { group in
+                                Text(group.label)
+                                    .font(.system(size: 9.5, weight: .semibold))
+                                    .foregroundStyle(AppStyle.textTertiary)
+                                    .textCase(.uppercase)
+                                    .padding(.horizontal, 8)
+                                    .padding(.top, 8)
+                                    .padding(.bottom, 2)
+                                ForEach(group.items) { entry in
+                                    ActivityRow(
+                                        entry: entry,
+                                        alive: entry.paneID.map { coordinator.paneExists($0) } ?? false,
+                                        now: context.date
+                                    ) {
+                                        onClose()
+                                        if let pane = entry.paneID {
+                                            coordinator.revealPane(pane)
+                                        }
+                                    }
                                 }
                             }
                         }
+                        .padding(6)
                     }
-                    .padding(6)
+                    .scrollIndicators(.never)
+                    .frame(maxHeight: 320)
                 }
-                .scrollIndicators(.never)
-                .frame(maxHeight: 320)
             }
         }
         .frame(width: 320)
@@ -98,22 +138,26 @@ struct ActivityCenterView: View {
 
 private struct ActivityRow: View {
     let entry: AgentActivityEntry
-    let coordinator: AppCoordinator
+    /// 目标 pane 还活着吗？关掉的置灰、不可点跳转。
+    let alive: Bool
+    let now: Date
     let onTap: () -> Void
     @State private var hovering = false
 
     var body: some View {
-        Button(action: onTap) {
+        Button(action: { if alive { onTap() } }) {
             HStack(alignment: .top, spacing: 9) {
                 logo
+                    .saturation(alive ? 1 : 0)
+                    .opacity(alive ? 1 : 0.55)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(entry.title)
                             .font(.system(size: 11.5, weight: .medium))
-                            .foregroundStyle(AppStyle.textPrimary)
+                            .foregroundStyle(alive ? AppStyle.textPrimary : AppStyle.textTertiary)
                             .lineLimit(1)
                         Spacer(minLength: 0)
-                        Text(entry.date.formatted(date: .omitted, time: .shortened))
+                        Text(Self.relativeText(entry.date, now: now))
                             .font(.system(size: 9.5))
                             .monospacedDigit()
                             .foregroundStyle(AppStyle.textTertiary)
@@ -121,7 +165,7 @@ private struct ActivityRow: View {
                     if !entry.message.isEmpty {
                         Text(entry.message)
                             .font(.system(size: 10.5))
-                            .foregroundStyle(AppStyle.textSecondary)
+                            .foregroundStyle(alive ? AppStyle.textSecondary : AppStyle.textTertiary.opacity(0.8))
                             .lineLimit(2)
                     }
                 }
@@ -130,12 +174,22 @@ private struct ActivityRow: View {
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(hovering ? AppStyle.hoverFill : Color.clear))
+                    .fill(hovering && alive ? AppStyle.hoverFill : Color.clear))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help(entry.paneID != nil ? L("点击跳到该终端") : "")
+        .help(alive ? L("点击跳到该终端") : L("该终端已关闭"))
+    }
+
+    /// 一分钟内显示「刚刚」，其余交给系统相对时间（跟随应用语言）。
+    static func relativeText(_ date: Date, now: Date) -> String {
+        let elapsed = now.timeIntervalSince(date)
+        if elapsed < 60 { return L("刚刚") }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = AppLanguage.activeLocale
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: now)
     }
 
     @ViewBuilder
@@ -147,7 +201,7 @@ private struct ActivityRow: View {
         } else {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 13))
-                .foregroundStyle(AppStyle.accent)
+                .foregroundStyle(alive ? AppStyle.accent : AppStyle.textTertiary)
                 .padding(.top, 1)
         }
     }

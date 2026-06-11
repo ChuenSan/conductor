@@ -463,7 +463,7 @@ final class AppCoordinator: ObservableObject {
     private func startNotifications() {
         NotificationManager.shared.configure()
         NotificationManager.shared.onActivatePane = { [weak self] paneID in
-            self?.focusPane(byID: paneID)
+            self?.revealPane(PaneID(paneID))
         }
         hooksInbox.onEvent = { [weak self] event in
             self?.handleHookEvent(event)
@@ -490,6 +490,20 @@ final class AppCoordinator: ObservableObject {
         activityLog.record(paneID: pane, agentID: pane.flatMap { paneAgents[$0] },
                            title: title, message: event.message)
         NotificationManager.shared.notify(paneID: event.paneID, title: title, body: event.message)
+    }
+
+    /// pane 是否还活着（关掉的终端在通知中心里置灰）。
+    func paneExists(_ pane: PaneID) -> Bool {
+        registry.surface(for: pane) != nil
+    }
+
+    /// 通知中心点击跳转：聚焦目标 pane 并闪边框定位（切工作区/标签后稍等布局落定）。
+    func revealPane(_ pane: PaneID) {
+        guard paneExists(pane) else { return }
+        focusPane(byID: pane.value)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.container(for: pane)?.flashHighlight()
+        }
     }
 
     /// 点击通知后跳到对应 pane：切到它所在的工作区/标签并聚焦。

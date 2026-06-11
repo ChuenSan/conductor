@@ -436,6 +436,9 @@
 "清空" = "Clear";
 "还没有完成记录。Agent 跑完任务会记在这里。" = "No completions yet. Finished agent tasks will show up here.";
 "点击跳到该终端" = "Click to jump to that terminal";
+"今天" = "Today";
+"昨天" = "Yesterday";
+"该终端已关闭" = "That terminal has been closed";
 
 /* ===== 打磨 ===== */
 "均分面板" = "Equalize Splits";
