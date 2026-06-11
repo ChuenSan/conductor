@@ -953,8 +953,13 @@ final class AppCoordinator: ObservableObject {
 
     // MARK: - 命令入口（键位调用）
 
+    /// ⌘T：新标签的 shell 在当前 pane 的目录启动（Terminal.app 惯例）；拿不到则回退工作区根。
     func newTab() {
-        run(.newTab(newTabID: TabID(nextID("t")), newPaneID: PaneID(nextID("p"))))
+        let paneID = PaneID(nextID("p"))
+        let cwd = inheritableCwd()
+        run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID, cwd: cwd))
+        // 预填运行时 cwd，shell 回报事件前状态栏/标签标题就正确
+        if let cwd { paneCwds[paneID] = cwd }
     }
 
     /// 一键启动 Agent：新开一个标签页，待 shell 就绪后自动执行 `command`（如 `codex`）。
@@ -998,7 +1003,7 @@ final class AppCoordinator: ObservableObject {
         run(.split(axis: axis, newPaneID: paneID, splitID: SplitID(nextID("s")), cwd: inheritableCwd()))
     }
 
-    /// 分屏新 pane 继承当前 pane 的目录（目录已不存在则回退工作区根/家目录）。
+    /// 分屏 / ⌘T 新 shell 继承当前 pane 的目录（目录已不存在则回退工作区根/家目录）。
     private func inheritableCwd() -> String? {
         guard let cwd = activeCwd else { return nil }
         return CwdResolver.resolve(cwd: cwd, workspacePath: activeWorkspace()?.path ?? cwd)
