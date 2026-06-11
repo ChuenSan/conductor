@@ -75,8 +75,10 @@ final class GhosttySurface: TerminalSurface {
         flushPendingCommandIfReady()
     }
 
-    /// surface 存在时把待执行命令（含回车）和预输入文本（不回车）发出。
+    /// surface 存在时把待执行命令（粘贴 + 真回车键）和预输入文本（不回车）发出。
     /// 延迟一下让 shell 起好、画好首个提示符（内容回放的 cat 也在这窗口内完成）。
+    /// 回车必须走按键通道：粘贴通道里的 "\r" 在 bracketed paste 下只是文本，
+    /// zsh 会把命令留在缓冲区不执行（「resume 不自动发送」的根因）。
     private func flushPendingCommandIfReady() {
         guard surface != nil, pendingCommand != nil || pendingTypedText != nil else { return }
         let command = pendingCommand
@@ -84,9 +86,36 @@ final class GhosttySurface: TerminalSurface {
         pendingCommand = nil
         pendingTypedText = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) { [weak self] in
-            if let command { self?.sendText(command + "\r") }
+            if let command {
+                self?.sendText(command)
+                // 粘贴和按键是两条通道，稍等粘贴消化完再回车，避免乱序
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+                    self?.sendEnterKey()
+                }
+            }
             if let typed { self?.sendText(typed) }
         }
+    }
+
+    /// 发送一次真实的回车按键（press + release）。
+    /// TUI（claude/codex）在 raw 模式下只认按键事件；shell 的 bracketed paste 同理。
+    func sendEnterKey() {
+        guard let surface else { return }
+        var keyEvent = ghostty_input_key_s()
+        keyEvent.action = GHOSTTY_ACTION_PRESS
+        keyEvent.mods = GHOSTTY_MODS_NONE
+        keyEvent.keycode = 36   // kVK_Return
+        keyEvent.composing = false
+        keyEvent.consumed_mods = GHOSTTY_MODS_NONE
+        keyEvent.unshifted_codepoint = 13
+        "\r".withCString {
+            keyEvent.text = $0
+            _ = ghostty_surface_key(surface, keyEvent)
+        }
+        keyEvent.action = GHOSTTY_ACTION_RELEASE
+        keyEvent.text = nil
+        keyEvent.unshifted_codepoint = 0
+        _ = ghostty_surface_key(surface, keyEvent)
     }
 
     func focus() {

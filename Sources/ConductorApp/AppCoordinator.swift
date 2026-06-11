@@ -237,9 +237,10 @@ final class AppCoordinator: ObservableObject {
             guard let surface = registry.surface(for: pane) as? GhosttySurface else { continue }
             surface.sendTextInput(text)
             if execute {
-                // 略延迟回车：等 TUI 消化完整段文本，避免文本和提交竞争乱序
+                // 略延迟回车：等 TUI 消化完整段文本，避免文本和提交竞争乱序。
+                // 必须发真实按键：raw 模式的 TUI 把文本通道的 "\r" 当输入框里的换行，不会提交。
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak surface] in
-                    surface?.sendText("\r")
+                    surface?.sendEnterKey()
                 }
             }
             delivered += 1
