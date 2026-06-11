@@ -477,3 +477,10 @@
 "上一标签" = "Previous Tab";
 "没有匹配「%@」的结果" = "No results for \"%@\"";
 "清空搜索" = "Clear Search";
+"耗时 %@" = "Took %@";
+"本轮思考用时" = "Time spent on this round";
+"%ld 秒" = "%lds";
+"%ld 分钟" = "%ld min";
+"%1$ld 分 %2$ld 秒" = "%1$ldm %2$lds";
+"%ld 小时" = "%ldh";
+"%1$ld 小时 %2$ld 分" = "%1$ldh %2$ldm";

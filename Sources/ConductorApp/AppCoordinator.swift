@@ -532,6 +532,10 @@ final class AppCoordinator: ObservableObject {
         }
 
         // done / 旧脚本无 type（Stop）：熄灭思考动效 + 发完成通知 + 记入活动账本
+        // 本轮思考用时（busy 点亮 → done 熄灭）；hook 没装或事件丢失时为 nil，1 秒内的不值一提。
+        let duration = pane.flatMap { hookThinkingSince[$0] }
+            .map { Date().timeIntervalSince($0) }
+            .flatMap { $0 >= 1 ? $0 : nil }
         if let pane { setHookThinking(pane, active: false) }
         // 通知标题尽量带上 pane 标题/工作区，方便辨认是哪个会话。
         var title = event.title
@@ -539,8 +543,13 @@ final class AppCoordinator: ObservableObject {
             title = "\(event.title) · \(paneTitle)"
         }
         activityLog.record(paneID: pane, agentID: pane.flatMap { paneAgents[$0] },
-                           title: title, message: event.message)
-        NotificationManager.shared.notify(paneID: event.paneID, title: title, body: event.message)
+                           title: title, message: event.message, duration: duration)
+        var body = event.message
+        if let duration {
+            let took = L("耗时 %@", AgentActivityEntry.durationText(duration))
+            body = body.isEmpty ? took : body + "\n" + took
+        }
+        NotificationManager.shared.notify(paneID: event.paneID, title: title, body: body)
     }
 
     /// pane 是否还活着（关掉的终端在通知中心里置灰）。

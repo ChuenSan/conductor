@@ -186,6 +186,21 @@ private struct ActivityRow: View {
                             .foregroundStyle(alive ? AppStyle.textSecondary : AppStyle.textTertiary.opacity(0.8))
                             .lineLimit(2)
                     }
+                    if let duration = entry.duration {
+                        HStack(spacing: 3) {
+                            Image(systemName: "timer")
+                                .font(.system(size: 8, weight: .semibold))
+                            Text(AgentActivityEntry.durationText(duration))
+                                .font(.system(size: 9.5, weight: .medium))
+                                .monospacedDigit()
+                        }
+                        .foregroundStyle(alive ? AppStyle.accent.opacity(0.9) : AppStyle.textTertiary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(AppStyle.hoverFill))
+                        .padding(.top, 1)
+                        .help(L("本轮思考用时"))
+                    }
                 }
             }
             .padding(.horizontal, 8)
