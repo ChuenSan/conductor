@@ -510,3 +510,4 @@
 "已切到工作区「%@」" = "Switched to workspace \"%@\"";
 "已新建工作区「%@」" = "Workspace \"%@\" created";
 "已新建 %ld 个工作区" = "%ld workspaces created";
+"续聊：%@" = "Resume: %@";

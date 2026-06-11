@@ -315,7 +315,7 @@ final class AppCoordinator: ObservableObject {
         deliver(snippet.command)
     }
 
-    /// 命令面板的条目：命令表 + 工作区 + 当前工作区的标签。
+    /// 命令面板的条目：命令表 + 工作区 + 当前工作区的标签 + 片段 + 最近会话。
     private func paletteItems() -> [PaletteItem] {
         var items: [PaletteItem] = []
         for c in commandRegistry.commands where c.id != "commandPalette" {
@@ -339,6 +339,16 @@ final class AppCoordinator: ObservableObject {
             items.append(PaletteItem(id: "snippet:\(snippet.id)", icon: snippet.autoRun ? "bolt" : "text.cursor",
                                      title: L("片段：%@", snippet.name),
                                      subtitle: snippet.command) { [weak self] in self?.sendSnippet(snippet) })
+        }
+        // 最近会话：回车在新标签续聊。副标题带 agent + 目录，可按路径搜。
+        let home = NSHomeDirectory()
+        for record in SessionManagerStore.shared.records.prefix(12) {
+            let dir = record.cwd.map { $0.hasPrefix(home) ? "~" + $0.dropFirst(home.count) : $0 }
+            items.append(PaletteItem(
+                id: "session:\(record.id)", icon: "bubble.left.and.text.bubble.right",
+                title: L("续聊：%@", record.title),
+                subtitle: dir.map { "\(record.agent) · \($0)" } ?? record.agent
+            ) { [weak self] in self?.resumeSession(record, inPane: nil) })
         }
         return items
     }
