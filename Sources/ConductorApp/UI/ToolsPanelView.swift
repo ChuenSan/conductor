@@ -17,7 +17,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .skills: return "Skills"
         case .hooks: return "Hooks"
         case .snippets: return L("片段")
-        case .coCreate: return L("共创")
+        case .coCreate: return L("共享")
         }
     }
     var icon: String {
@@ -27,7 +27,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .skills: return "wand.and.stars"
         case .hooks: return "link"
         case .snippets: return "text.badge.star"
-        case .coCreate: return "sparkles"
+        case .coCreate: return "text.bubble"
         }
     }
 }

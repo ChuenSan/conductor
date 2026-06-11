@@ -63,34 +63,45 @@ struct TabBarView: View {
             .frame(minWidth: 56, maxWidth: .infinity)   // tab 再多也给窗口拖拽留一块
             .frame(height: WindowDragZoomRegion.preferredHeight)
             .layoutPriority(1)
-            // 右侧快捷按钮组（软圆角容器，对标 Craft 的按钮组）
-            HStack(spacing: 2) {
-                Button(action: { coordinator.toggleTheme() }) {
-                    Image(systemName: AppStyle.theme.isDark ? "moon.stars.fill" : "sun.max.fill")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppStyle.textSecondary)
+            HStack(spacing: 6) {
+                Button(action: { coordinator.openTools(.coCreate) }) {
+                    Text(L("共享计划"))
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
-                .buttonStyle(IconButtonStyle(size: 26))
-                .help(L("切换深/浅主题"))
-                Button(action: { coordinator.toggleCLITools() }) {
-                    Image(systemName: "wand.and.stars")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(coordinator.cliToolsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary)
+                .buttonStyle(SharePlanButtonStyle(isSelected: coordinator.cliToolsPresentation.isPresented && coordinator.toolsTab == .coCreate))
+                .help(L("打开共享计划"))
+
+                // 右侧快捷按钮组（软圆角容器，对标 Craft 的按钮组）
+                HStack(spacing: 2) {
+                    Button(action: { coordinator.toggleTheme() }) {
+                        Image(systemName: AppStyle.theme.isDark ? "moon.stars.fill" : "sun.max.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppStyle.textSecondary)
+                    }
+                    .buttonStyle(IconButtonStyle(size: 26))
+                    .help(L("切换深/浅主题"))
+                    Button(action: { coordinator.toggleCLITools() }) {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(coordinator.cliToolsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary)
+                    }
+                    .buttonStyle(IconButtonStyle(size: 26))
+                    .help(L("检测命令行工具"))
+                    Button(action: { coordinator.openSettings() }) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(coordinator.settingsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary)
+                    }
+                    .buttonStyle(IconButtonStyle(size: 26))
+                    .help(L("设置"))
                 }
-                .buttonStyle(IconButtonStyle(size: 26))
-                .help(L("检测命令行工具"))
-                Button(action: { coordinator.openSettings() }) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(coordinator.settingsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary)
-                }
-                .buttonStyle(IconButtonStyle(size: 26))
-                .help(L("设置"))
+                .padding(3)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(AppStyle.hoverFill))
             }
-            .padding(3)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(AppStyle.hoverFill))
         }
         .animation(Motion.snappy, value: activeTab)   // 选中指示器滑动
         .animation(Motion.panel, value: tabs.count)   // 增删 tab 缩放淡入
@@ -114,6 +125,38 @@ struct TabBarView: View {
         if let id = editingTab { coordinator.renameTab(id, to: draftTitle) }
         editingTab = nil
         renameFocused = false
+    }
+}
+
+private struct SharePlanButtonStyle: ButtonStyle {
+    let isSelected: Bool
+    @State private var hovering = false
+
+    private let accent = Color(red: 0.12, green: 0.63, blue: 0.55)
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(AppStyle.theme.isDark ? Color.black.opacity(0.86) : Color.white)
+            .padding(.horizontal, 11)
+            .frame(height: 26)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(accent.opacity(isSelected || hovering ? 1 : 0.88))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.white.opacity(AppStyle.theme.isDark ? 0.18 : 0.28), lineWidth: 1)
+            )
+            .shadow(
+                color: accent.opacity((isSelected || hovering) ? 0.26 : 0),
+                radius: 7,
+                y: 1
+            )
+            .scaleEffect(configuration.isPressed ? 0.96 : (hovering ? 1.02 : 1))
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .animation(Motion.hover, value: hovering)
+            .animation(Motion.snappy, value: configuration.isPressed)
+            .onHover { hovering = $0 }
     }
 }
 
