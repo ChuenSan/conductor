@@ -672,7 +672,12 @@ final class PaneHeaderView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if !dragStarted { onClick?() }
+        guard !dragStarted else { return }
+        if event.clickCount == 2 {
+            onAction?(.zoom)   // iTerm 惯例：双击头条放大/还原（首击已聚焦该 pane）
+        } else {
+            onClick?()
+        }
     }
 
     override func layout() {
