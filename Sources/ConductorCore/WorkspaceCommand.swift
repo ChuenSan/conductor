@@ -3,7 +3,8 @@ import Foundation
 /// 用户/键位触发的工作区命令。`apply` 是纯函数：修改 store（in-out），返回应用层要执行的副作用。
 /// 所有"会发生什么"的逻辑集中在此并可单测；应用层只负责把 SessionEffect 翻译成真实终端操作。
 public enum WorkspaceCommand {
-    case newTab(newTabID: TabID, newPaneID: PaneID)
+    /// `cwd` 非空时新 tab 的 shell 在该目录启动，nil 回退工作区根目录。
+    case newTab(newTabID: TabID, newPaneID: PaneID, cwd: String? = nil)
     /// `cwd` 非空时新 pane 在该目录起 shell（继承当前 pane 的目录），nil 回退工作区根目录。
     case split(axis: SplitAxis, newPaneID: PaneID, splitID: SplitID, cwd: String?)
     case closeActivePane
@@ -22,11 +23,11 @@ public enum WorkspaceCommand {
         let cwd = store.workspaces[wsIndex].path
 
         switch self {
-        case let .newTab(newTabID, newPaneID):
+        case let .newTab(newTabID, newPaneID, tabCwd):
             store.workspaces[wsIndex].addTab(
                 Tab.single(id: newTabID, title: "zsh", pane: newPaneID)
             )
-            return [.createSurface(pane: newPaneID, cwd: cwd), .focusSurface(pane: newPaneID)]
+            return [.createSurface(pane: newPaneID, cwd: tabCwd ?? cwd), .focusSurface(pane: newPaneID)]
 
         case let .split(axis, newPaneID, splitID, paneCwd):
             guard let tabIndex = activeTabIndex(in: store, wsIndex: wsIndex) else { return [] }

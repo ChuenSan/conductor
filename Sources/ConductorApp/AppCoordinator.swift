@@ -728,6 +728,11 @@ final class AppCoordinator: ObservableObject {
         applyTerminalAppearance(effectiveConfig())
     }
 
+    /// 侧栏文件夹树「在此目录开终端」：新标签在指定目录起 shell。
+    func newTab(atDirectory path: String) {
+        run(.newTab(newTabID: TabID(nextID("t")), newPaneID: PaneID(nextID("p")), cwd: path))
+    }
+
     // MARK: - 命令入口（键位调用）
 
     func newTab() {

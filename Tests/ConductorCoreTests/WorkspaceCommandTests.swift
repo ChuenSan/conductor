@@ -23,6 +23,16 @@ final class WorkspaceCommandTests: XCTestCase {
         ])
     }
 
+    func testNewTabWithExplicitCwdSpawnsThere() {
+        var store = baseStore()
+        let effects = WorkspaceCommand.newTab(newTabID: TabID("t2"), newPaneID: PaneID("p2"), cwd: "/proj/sub")
+            .apply(to: &store)
+        XCTAssertEqual(effects, [
+            .createSurface(pane: PaneID("p2"), cwd: "/proj/sub"),
+            .focusSurface(pane: PaneID("p2")),
+        ])
+    }
+
     func testSplitActivePaneInsertsAndCreatesSurface() {
         var store = baseStore()
         let effects = WorkspaceCommand.split(axis: .vertical, newPaneID: PaneID("p2"), splitID: SplitID("s1"), cwd: nil)

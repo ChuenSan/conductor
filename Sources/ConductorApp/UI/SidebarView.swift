@@ -2,7 +2,14 @@ import AppKit
 import ConductorCore
 import SwiftUI
 
+/// 侧栏列表模式：固定的工作区列表，或从家目录开始的文件夹树。
+enum SidebarListMode: String {
+    case workspaces
+    case folders
+}
+
 /// 左侧工作区栏（自绘，深色 Craft 风）：列出工作区；点击切换，`+` 选目录新建，active 高亮。
+/// 分区头可切到「文件夹」模式：家目录文件夹树，点击展开下级、右键/悬停按钮在该目录开终端。
 /// 右键菜单可重命名（行内编辑）/ 删除工作区。
 struct SidebarView: View {
     @ObservedObject var coordinator: AppCoordinator
@@ -16,6 +23,16 @@ struct SidebarView: View {
     @State private var hoverTask: Task<Void, Never>?
     /// 一次性引导：用户首次触发悬停预览后永久隐藏提示。
     @AppStorage("sidebar.sessionHoverHintSeen") private var hoverHintSeen = false
+    /// 侧栏列表模式：工作区列表 / 文件夹树（跨启动记忆）。
+    @AppStorage("sidebar.listMode") private var listModeRaw = SidebarListMode.workspaces.rawValue
+    /// 文件夹树状态（展开集合 + 懒加载缓存），与侧栏同生命周期。
+    @StateObject private var folderTree = FolderTreeModel()
+    /// 分段控件选中底块的滑动动画命名空间。
+    @Namespace private var modeTabNamespace
+
+    private var listMode: SidebarListMode {
+        SidebarListMode(rawValue: listModeRaw) ?? .workspaces
+    }
 
     var body: some View {
         sidebarContent
@@ -25,58 +42,13 @@ struct SidebarView: View {
         VStack(alignment: isCollapsed ? .center : .leading, spacing: 0) {
             header
             ScrollView {
-                VStack(alignment: isCollapsed ? .center : .leading, spacing: 3) {
-                    let workspaces = coordinator.store.workspaces
-                    ForEach(Array(workspaces.enumerated()), id: \.element.id) { index, ws in
-                        let selected = ws.id == coordinator.store.activeWorkspace
-                        let summary = SidebarWorkspaceSummary(
-                            workspace: ws,
-                            isSelected: selected,
-                            paneTitles: coordinator.paneTitles,
-                            paneCwds: coordinator.paneCwds
-                        )
-                        let row = WorkspaceRow(
-                            name: ws.name,
-                            summary: summary,
-                            selected: selected,
-                            isEditing: editingWorkspace == ws.id,
-                            isCollapsed: isCollapsed,
-                            draft: $draftName,
-                            focused: $renameFocused,
-                            onSelect: { if editingWorkspace == nil { coordinator.selectWorkspace(ws.id) } },
-                            onCommit: { commitRename() }
-                        )
-                        .contextMenu {
-                            Button { beginRename(ws) } label: { Label(L("重命名"), systemImage: "pencil") }
-                            Button { coordinator.revealInFinder(ws.path) } label: {
-                                Label(L("在 Finder 中显示"), systemImage: "folder")
-                            }
-                            Button { coordinator.copyToClipboard(ws.path) } label: {
-                                Label(L("复制路径"), systemImage: "doc.on.doc")
-                            }
-                            Divider()
-                            Button(role: .destructive) { coordinator.removeWorkspace(ws.id) } label: {
-                                Label(L("删除工作区"), systemImage: "trash")
-                            }
-                            .disabled(workspaces.count <= 1)
-                        }
-
-                        // 仅多个工作区时才挂拖拽重排（单个无处可排，且避免与点击争手势）
-                        if workspaces.count > 1, editingWorkspace == nil {
-                            row
-                                .draggable(ws.id.value)
-                                .dropDestination(for: String.self) { dropped, _ in
-                                    guard let s = dropped.first else { return false }
-                                    coordinator.moveWorkspace(WorkspaceID(s), toIndex: index)
-                                    return true
-                                }
-                        } else {
-                            row
-                        }
-                    }
+                if !isCollapsed, listMode == .folders {
+                    SidebarFolderTree(coordinator: coordinator, model: folderTree)
+                        .padding(.horizontal, 10)
+                        .padding(.top, 2)
+                } else {
+                    workspaceList
                 }
-                .padding(.horizontal, isCollapsed ? 8 : 10)
-                .padding(.top, 2)
 
                 if !isCollapsed {
                     sessionsSection
@@ -97,6 +69,62 @@ struct SidebarView: View {
             if collapsed, editingWorkspace != nil { commitRename() }
         }
         .clipShape(Rectangle())
+    }
+
+    private var workspaceList: some View {
+        VStack(alignment: isCollapsed ? .center : .leading, spacing: 3) {
+            let workspaces = coordinator.store.workspaces
+            ForEach(Array(workspaces.enumerated()), id: \.element.id) { index, ws in
+                let selected = ws.id == coordinator.store.activeWorkspace
+                let summary = SidebarWorkspaceSummary(
+                    workspace: ws,
+                    isSelected: selected,
+                    paneTitles: coordinator.paneTitles,
+                    paneCwds: coordinator.paneCwds
+                )
+                let row = WorkspaceRow(
+                    name: ws.name,
+                    summary: summary,
+                    selected: selected,
+                    isThinking: coordinator.isWorkspaceThinking(ws),
+                    isEditing: editingWorkspace == ws.id,
+                    isCollapsed: isCollapsed,
+                    draft: $draftName,
+                    focused: $renameFocused,
+                    onSelect: { if editingWorkspace == nil { coordinator.selectWorkspace(ws.id) } },
+                    onCommit: { commitRename() }
+                )
+                .contextMenu {
+                    Button { beginRename(ws) } label: { Label(L("重命名"), systemImage: "pencil") }
+                    Button { coordinator.revealInFinder(ws.path) } label: {
+                        Label(L("在 Finder 中显示"), systemImage: "folder")
+                    }
+                    Button { coordinator.copyToClipboard(ws.path) } label: {
+                        Label(L("复制路径"), systemImage: "doc.on.doc")
+                    }
+                    Divider()
+                    Button(role: .destructive) { confirmRemoveWorkspace(ws) } label: {
+                        Label(L("删除工作区"), systemImage: "trash")
+                    }
+                    .disabled(workspaces.count <= 1)
+                }
+
+                // 仅多个工作区时才挂拖拽重排（单个无处可排，且避免与点击争手势）
+                if workspaces.count > 1, editingWorkspace == nil {
+                    row
+                        .draggable(ws.id.value)
+                        .dropDestination(for: String.self) { dropped, _ in
+                            guard let s = dropped.first else { return false }
+                            coordinator.moveWorkspace(WorkspaceID(s), toIndex: index)
+                            return true
+                        }
+                } else {
+                    row
+                }
+            }
+        }
+        .padding(.horizontal, isCollapsed ? 8 : 10)
+        .padding(.top, 2)
     }
 
     /// 悬停预览绑定：popover 是独立 NSWindow，能浮在终端区的 Metal 视图之上
@@ -148,7 +176,7 @@ struct SidebarView: View {
             // 品牌头：应用名（无 logo）
             HStack(spacing: 0) {
                 if !isCollapsed {
-                    Text("conductor")
+                    Text("Conductor")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(AppStyle.textPrimary)
                     Spacer()
@@ -190,26 +218,74 @@ struct SidebarView: View {
                 .accessibilityLabel(L("新增工作区"))
                 .padding(.bottom, 6)
             } else {
-                HStack {
-                    Text(L("工作区"))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(AppStyle.textTertiary)
-                        .textCase(.uppercase)
-                        .tracking(0.5)
-                    Spacer()
-                    Button(action: addWorkspace) {
-                        Image(systemName: "plus").font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppStyle.textSecondary)
+                HStack(spacing: 8) {
+                    listModeSwitcher
+                    Spacer(minLength: 4)
+                    if listMode == .workspaces {
+                        Button(action: addWorkspace) {
+                            Image(systemName: "plus").font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AppStyle.textSecondary)
+                        }
+                        .buttonStyle(IconButtonStyle(size: 24))
+                        .help(L("新增工作区"))
+                        .accessibilityLabel(L("新增工作区"))
+                        .transition(.scale.combined(with: .opacity))
                     }
-                    .buttonStyle(IconButtonStyle(size: 22))
-                    .help(L("新增工作区"))
-                    .accessibilityLabel(L("新增工作区"))
                 }
-                .padding(.leading, 14)
+                .padding(.leading, 12)
                 .padding(.trailing, 10)
-                .padding(.bottom, 6)
+                .padding(.bottom, 8)
+                .animation(.spring(response: 0.3, dampingFraction: 0.85), value: listModeRaw)
             }
         }
+    }
+
+    /// 分区头的「工作区 / 文件夹」胶囊分段控件：选中底块滑动跟随。
+    private var listModeSwitcher: some View {
+        HStack(spacing: 2) {
+            modeSegment(L("工作区"), icon: "square.grid.2x2", mode: .workspaces)
+            modeSegment(L("文件夹"), icon: "folder", mode: .folders)
+        }
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(AppStyle.activeFill.opacity(0.7))
+        )
+    }
+
+    private func modeSegment(_ title: String, icon: String, mode: SidebarListMode) -> some View {
+        let selected = listMode == mode
+        return Button {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                listModeRaw = mode.rawValue
+            }
+        } label: {
+            HStack(spacing: 4.5) {
+                Image(systemName: selected ? icon + ".fill" : icon)
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                Text(title)
+                    .font(.system(size: 11, weight: selected ? .semibold : .medium))
+            }
+            .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textTertiary)
+            .padding(.horizontal, 9)
+            .frame(height: 21)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                        .fill(AppStyle.elevated)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                                .strokeBorder(AppStyle.textPrimary.opacity(0.08), lineWidth: 1)
+                        )
+                        .shadow(color: .black.opacity(0.28), radius: 2.5, y: 1)
+                        .matchedGeometryEffect(id: "modeTabSelection", in: modeTabNamespace)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 6.5, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     private func beginRename(_ ws: Workspace) {
@@ -300,6 +376,23 @@ struct SidebarView: View {
         }
     }
 
+    /// 删除工作区是不可撤销的破坏性操作（会关掉其中所有终端），先确认再动手。
+    private func confirmRemoveWorkspace(_ ws: Workspace) {
+        let paneCount = ws.tabs.flatMap { $0.rootSplit.leaves() }.count
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L("删除工作区「%@」？", ws.name)
+        alert.informativeText = paneCount > 0
+            ? L("其中 %ld 个终端会被关闭，此操作无法撤销。", paneCount)
+            : L("此操作无法撤销。")
+        alert.addButton(withTitle: L("删除"))
+        alert.addButton(withTitle: L("取消"))
+        if let deleteButton = alert.buttons.first { deleteButton.hasDestructiveAction = true }
+        if alert.runModal() == .alertFirstButtonReturn {
+            coordinator.removeWorkspace(ws.id)
+        }
+    }
+
     private func addWorkspace() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -368,6 +461,7 @@ private struct WorkspaceRow: View {
     let name: String
     let summary: SidebarWorkspaceSummary
     let selected: Bool
+    let isThinking: Bool
     let isEditing: Bool
     let isCollapsed: Bool
     @Binding var draft: String
@@ -395,6 +489,10 @@ private struct WorkspaceRow: View {
                                 .font(.system(size: 13, weight: selected ? .semibold : .regular))
                                 .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
                                 .lineLimit(1)
+                        }
+                        if isThinking {
+                            ThinkingIndicator(size: 8)
+                                .transition(.scale.combined(with: .opacity))
                         }
                         Spacer(minLength: 0)
                         metricsBadge
@@ -443,6 +541,12 @@ private struct WorkspaceRow: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
                 .frame(width: isCollapsed ? 22 : 18, height: 20)
+            // 收起态没有名字行，思考动效挂在图标右下角（右上角留给 pane 数角标）
+            if isCollapsed, isThinking {
+                ThinkingIndicator(size: 7)
+                    .offset(x: 5, y: 16)
+                    .transition(.scale.combined(with: .opacity))
+            }
             if isCollapsed, summary.paneCount > 1 {
                 Text("\(min(summary.paneCount, 99))")
                     .font(.system(size: 8, weight: .bold))
