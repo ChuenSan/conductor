@@ -617,6 +617,27 @@ final class AppCoordinator: ObservableObject {
         NSApp.dockTile.badgeLabel = nil
     }
 
+    /// 状态栏中枢上次跳到的思考中 pane（轮转游标）。
+    private var lastAttentionPane: PaneID?
+
+    /// 状态栏中枢点击：跳到下一个需要关注的 pane——完成未读优先（看一眼即消），
+    /// 没有未读就在思考中的 pane 间轮转。
+    func revealNextAttentionPane() {
+        let done = unseenDonePanes.filter { paneExists($0) }.sorted { $0.value < $1.value }
+        if let target = done.first {
+            revealPane(target)
+            return
+        }
+        let thinking = thinkingPanes.filter { paneExists($0) }.sorted { $0.value < $1.value }
+        guard !thinking.isEmpty else { return }
+        var next = thinking[0]
+        if let last = lastAttentionPane, let idx = thinking.firstIndex(of: last) {
+            next = thinking[(idx + 1) % thinking.count]
+        }
+        lastAttentionPane = next
+        revealPane(next)
+    }
+
     /// pane 是否还活着（关掉的终端在通知中心里置灰）。
     func paneExists(_ pane: PaneID) -> Bool {
         registry.surface(for: pane) != nil

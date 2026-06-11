@@ -498,3 +498,6 @@
 "有 %ld 个 Agent 正在思考，会被打断。" = "%ld agent(s) are still thinking and will be interrupted.";
 "仍要关闭" = "Close Anyway";
 "仍要退出" = "Quit Anyway";
+"%ld 个 Agent 思考中" = "%ld agent(s) thinking";
+"%ld 个已完成未读" = "%ld finished, not seen yet";
+"点击跳到下一个需要关注的终端" = "Click to jump to the next pane that needs attention";
