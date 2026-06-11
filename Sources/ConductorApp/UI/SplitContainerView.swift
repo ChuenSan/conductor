@@ -62,6 +62,26 @@ final class RatioSplitView: NSSplitView, NSSplitViewDelegate {
         rect.fill()
     }
 
+    /// 双击分隔条 → 两侧均分（macOS 原生分屏惯例）。新比例经
+    /// `splitViewDidResizeSubviews` 回报模型，照常持久化。
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2,
+           arrangedSubviews.count == 2,
+           isOnDivider(convert(event.locationInWindow, from: nil)) {
+            setPosition(splitExtent / 2, ofDividerAt: 0)
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    /// 命中判定放宽到分隔条两侧各 3pt（thin 分隔条只有 1px，太难点）。
+    private func isOnDivider(_ point: NSPoint) -> Bool {
+        guard bounds.contains(point) else { return false }
+        let dividerStart = isVertical ? arrangedSubviews[0].frame.maxX : arrangedSubviews[0].frame.maxY
+        let coordinate = isVertical ? point.x : point.y
+        return coordinate >= dividerStart - 3 && coordinate <= dividerStart + dividerThickness + 3
+    }
+
     override func layout() {
         super.layout()
         applyInitialRatioIfNeeded()
