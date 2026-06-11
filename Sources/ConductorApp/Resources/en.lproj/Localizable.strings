@@ -455,6 +455,7 @@
 "今天" = "Today";
 "昨天" = "Yesterday";
 "该终端已关闭" = "That terminal has been closed";
+"删除这条记录" = "Delete this entry";
 
 /* ===== 终端搜索 / 链接 ===== */
 "终端内搜索" = "Find in Terminal";

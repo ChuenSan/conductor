@@ -114,13 +114,17 @@ struct ActivityCenterView: View {
                                     ActivityRow(
                                         entry: entry,
                                         alive: entry.paneID.map { coordinator.paneExists($0) } ?? false,
-                                        now: context.date
-                                    ) {
-                                        onClose()
-                                        if let pane = entry.paneID {
-                                            coordinator.revealPane(pane)
+                                        now: context.date,
+                                        onTap: {
+                                            onClose()
+                                            if let pane = entry.paneID {
+                                                coordinator.revealPane(pane)
+                                            }
+                                        },
+                                        onDelete: {
+                                            withAnimation(Motion.snappy) { log.remove(entry.id) }
                                         }
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -142,6 +146,7 @@ private struct ActivityRow: View {
     let alive: Bool
     let now: Date
     let onTap: () -> Void
+    let onDelete: () -> Void
     @State private var hovering = false
 
     var body: some View {
@@ -157,10 +162,23 @@ private struct ActivityRow: View {
                             .foregroundStyle(alive ? AppStyle.textPrimary : AppStyle.textTertiary)
                             .lineLimit(1)
                         Spacer(minLength: 0)
-                        Text(Self.relativeText(entry.date, now: now))
-                            .font(.system(size: 9.5))
-                            .monospacedDigit()
-                            .foregroundStyle(AppStyle.textTertiary)
+                        // hover 时相对时间换成单条删除 ✕（死条目也能删）
+                        ZStack(alignment: .trailing) {
+                            Text(Self.relativeText(entry.date, now: now))
+                                .font(.system(size: 9.5))
+                                .monospacedDigit()
+                                .foregroundStyle(AppStyle.textTertiary)
+                                .opacity(hovering ? 0 : 1)
+                            if hovering {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(AppStyle.textTertiary)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture(perform: onDelete)
+                                    .help(L("删除这条记录"))
+                                    .transition(.opacity)
+                            }
+                        }
                     }
                     if !entry.message.isEmpty {
                         Text(entry.message)

@@ -55,6 +55,12 @@ final class AgentActivityLog: ObservableObject {
         scheduleSave()
     }
 
+    /// 删掉单条记录（通知中心行内 ✕）。
+    func remove(_ id: UUID) {
+        entries.removeAll { $0.id == id }
+        scheduleSave()
+    }
+
     func clear() {
         entries.removeAll()
         unseenCount = 0
