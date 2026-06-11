@@ -41,6 +41,10 @@ struct BroadcastPanelView: View {
     @State private var enabled: Set<String>
     /// 回车后是否自动提交；关掉则只把文字摆进各 agent 的输入框（可再人工补充后回车）。
     @State private var executeAfterSend = true
+    /// 思考中的 agent 自动从目标里排除（默认开，跨启动记忆）：别打断正在干活的。
+    @AppStorage("broadcast.skipThinking") private var skipThinking = true
+    /// 用户点亮过的思考中 chip（强制加入）：后续自动排除不再碰它们。
+    @State private var manualInclude: Set<String> = []
     @State private var history = BroadcastHistory.load()
     /// ↑ 键在历史里回翻的位置（-1 = 没在翻）。
     @State private var historyCursor = -1
@@ -67,10 +71,8 @@ struct BroadcastPanelView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppStyle.textPrimary)
                 Spacer()
+                skipThinkingToggle
                 executeToggle
-                Text(executeAfterSend ? L("回车发送 · Esc 关闭") : L("回车仅填入 · Esc 关闭"))
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(AppStyle.textTertiary)
             }
             .padding(.horizontal, 16)
             .padding(.top, 14)
@@ -100,7 +102,13 @@ struct BroadcastPanelView: View {
             }
             .scrollIndicators(.never)
             .padding(.top, 10)
-            .padding(.bottom, history.isEmpty ? 14 : 10)
+
+            Text(executeAfterSend ? L("回车发送 · Esc 关闭") : L("回车仅填入 · Esc 关闭"))
+                .font(.system(size: 10))
+                .foregroundStyle(AppStyle.textTertiary)
+                .padding(.horizontal, 16)
+                .padding(.top, 7)
+                .padding(.bottom, history.isEmpty ? 12 : 9)
 
             if !history.isEmpty {
                 Rectangle().fill(AppStyle.separator).frame(height: 1)
@@ -124,7 +132,52 @@ struct BroadcastPanelView: View {
         .onKeyPress(.escape) { onClose(); return .handled }
         .onKeyPress(.upArrow) { recallHistory(1); return .handled }
         .onKeyPress(.downArrow) { recallHistory(-1); return .handled }
-        .onAppear { fieldFocused = true }
+        .onAppear {
+            fieldFocused = true
+            applySkipThinking()
+        }
+        .onChange(of: coordinator.thinkingPanes) { applySkipThinking() }
+        .onChange(of: skipThinking) { applySkipThinking() }
+    }
+
+    /// 把思考中的目标从勾选里拿掉（开关开着时）；用户强制加入过的不动。
+    private func applySkipThinking() {
+        guard skipThinking else { return }
+        for target in targets
+        where coordinator.thinkingPanes.contains(target.pane) && !manualInclude.contains(target.id) {
+            enabled.remove(target.id)
+        }
+    }
+
+    /// 「跳过思考中」开关：正在思考的 agent 自动不勾选，避免广播打断它手头的活。
+    private var skipThinkingToggle: some View {
+        Button {
+            skipThinking.toggle()
+            if !skipThinking {
+                // 关掉跳过 → 只把被自动排除的（思考中的）恢复勾选，手动排除的不动
+                for target in targets where coordinator.thinkingPanes.contains(target.pane) {
+                    enabled.insert(target.id)
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: skipThinking ? "moon.zzz.fill" : "moon.zzz")
+                    .font(.system(size: 9, weight: .semibold))
+                Text(L("跳过思考中"))
+                    .font(.system(size: 10.5, weight: .medium))
+            }
+            .foregroundStyle(skipThinking ? AppStyle.accent : AppStyle.textTertiary)
+            .padding(.horizontal, 8)
+            .frame(height: 21)
+            .background(
+                Capsule().fill(skipThinking ? AppStyle.accent.opacity(0.13) : AppStyle.hoverFill))
+            .overlay(
+                Capsule().strokeBorder(
+                    skipThinking ? AppStyle.accent.opacity(0.4) : AppStyle.textPrimary.opacity(0.1),
+                    lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help(L("正在思考的 Agent 自动从目标里排除；点它的标签可强制加入"))
     }
 
     /// 「发送后执行」开关：关掉后广播只把文字摆进输入框，各 agent 由人工确认提交。
@@ -197,7 +250,14 @@ struct BroadcastPanelView: View {
         let on = enabled.contains(target.id)
         let thinking = coordinator.thinkingPanes.contains(target.pane)
         return Button {
-            if on { enabled.remove(target.id) } else { enabled.insert(target.id) }
+            if on {
+                enabled.remove(target.id)
+                manualInclude.remove(target.id)
+            } else {
+                enabled.insert(target.id)
+                // 思考中还手动点亮 → 记成强制加入，自动排除不再碰它
+                if thinking, skipThinking { manualInclude.insert(target.id) }
+            }
         } label: {
             HStack(spacing: 5) {
                 if let logo = CLIToolLogo.image(named: target.agentID) {
@@ -226,7 +286,9 @@ struct BroadcastPanelView: View {
                 Capsule().strokeBorder(on ? AppStyle.accent.opacity(0.45) : Color.clear, lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .help(on ? L("点击排除该 Agent") : L("点击加入广播"))
+        .help(on
+            ? L("点击排除该 Agent")
+            : (thinking && skipThinking ? L("思考中，已自动跳过；点击强制加入") : L("点击加入广播")))
     }
 
     private func send() {

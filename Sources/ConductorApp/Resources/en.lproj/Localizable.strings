@@ -442,6 +442,9 @@
 "按当前勾选目标直接发送" = "Send now to the checked targets";
 "已广播到 %ld 个 Agent" = "Broadcast to %ld agent(s)";
 "已填入 %ld 个 Agent 的输入框" = "Placed into %ld agent input(s)";
+"跳过思考中" = "Skip thinking";
+"正在思考的 Agent 自动从目标里排除；点它的标签可强制加入" = "Agents that are thinking are excluded automatically; click their chip to force-include";
+"思考中，已自动跳过；点击强制加入" = "Thinking — skipped automatically; click to include anyway";
 
 /* ===== 广播历史 / 通知中心 ===== */
 "最近广播（↑ 回翻）" = "Recent Broadcasts (↑ to recall)";
