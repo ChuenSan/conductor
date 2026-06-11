@@ -159,7 +159,7 @@ struct SettingsView: View {
                 }
             }
             SettingsRow(label: L("回滚行数")) {
-                ThemedStepper(value: bind(\.terminal.scrollback), range: 0...1_000_000, step: 1000)
+                ThemedStepper(value: bind(\.terminal.scrollback), range: 60_000...1_000_000, step: 10_000)
             }
             SettingsRow(label: L("选中即复制")) {
                 ThemedToggle(isOn: bind(\.terminal.copyOnSelect))

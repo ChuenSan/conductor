@@ -158,7 +158,7 @@ public struct TerminalConfig: Codable, Equatable, Sendable {
     public var copyOnSelect: Bool
     public var confirmCloseRunning: Bool
 
-    public init(shell: String? = nil, scrollback: Int = 10000,
+    public init(shell: String? = nil, scrollback: Int = 60000,
                 copyOnSelect: Bool = false, confirmCloseRunning: Bool = true) {
         self.shell = shell
         self.scrollback = scrollback
@@ -177,7 +177,8 @@ public struct TerminalConfig: Codable, Equatable, Sendable {
 
     func validated() -> TerminalConfig {
         var copy = self
-        copy.scrollback = min(max(scrollback, 0), 1_000_000)
+        // 下限 6 万行：保证 agent 长输出可回看（旧配置里的小值也会被抬上来）
+        copy.scrollback = min(max(scrollback, 60_000), 1_000_000)
         return copy
     }
 }

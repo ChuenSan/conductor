@@ -115,6 +115,10 @@ final class GhosttyRuntime {
             if values[key] == nil { keys.append(key) }
             values[key] = value
         }
+        // libghostty 默认 TERM=xterm-ghostty，其 terminfo 只有装了 Ghostty.app 的机器才有；
+        // 缺失时 ls/TUI 都探测不到颜色能力，输出全灰。改用系统自带的 xterm-256color。
+        // （用户仍可在 ghosttyOverrides 里改回 xterm-ghostty。）
+        set("term", "xterm-256color")
         set("background", theme.background)
         set("foreground", theme.foreground)
         set("cursor-color", theme.cursor)
@@ -126,6 +130,9 @@ final class GhosttyRuntime {
         set("window-padding-y", "\(a.padding.y)")
         set("window-padding-balance", "true")
         set("cursor-style", a.cursorStyle)
+        // ghostty 的 scrollback-limit 单位是字节（按需分配，设大无固定开销）。
+        // 行数 → 字节按 512B/行 保守折算（约 160 列 × UTF-8 中文 3B），确保至少能存下配置的行数。
+        set("scrollback-limit", "\(config.terminal.scrollback * 512)")
         let family = a.font.family.trimmingCharacters(in: .whitespaces)
         if !family.isEmpty { set("font-family", family) }
         for (key, rawValue) in config.ghosttyOverrides.sorted(by: { $0.key < $1.key }) {

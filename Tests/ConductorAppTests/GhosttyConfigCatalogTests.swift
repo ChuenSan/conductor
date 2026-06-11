@@ -77,6 +77,14 @@ final class GhosttyConfigCatalogTests: XCTestCase {
         XCTAssertFalse(text.contains("cursor-style = bar"))
     }
 
+    /// 没装 Ghostty.app 的机器上 xterm-ghostty terminfo 缺失会导致全灰无色，
+    /// 必须默认 xterm-256color（用户可用 overrides 改回）。
+    @MainActor
+    func testGhosttyConfigTextDefaultsToPortableTerm() {
+        let text = GhosttyRuntime.ghosttyConfigText(from: .default)
+        XCTAssertTrue(text.contains("term = xterm-256color"))
+    }
+
     @MainActor
     func testGhosttyConfigTextAppliesBackgroundImageOverrides() {
         var config = AppConfig.default

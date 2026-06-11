@@ -74,7 +74,7 @@ struct ConfigLoader {
 
     terminal:
       shell: null               # null = 你的登录 shell；或绝对路径如 "/bin/zsh"
-      scrollback: 10000
+      scrollback: 60000
       copyOnSelect: false
       confirmCloseRunning: true
 

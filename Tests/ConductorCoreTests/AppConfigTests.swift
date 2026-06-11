@@ -12,7 +12,7 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.appearance.font.family, "SF Mono")
         XCTAssertEqual(c.appearance.font.size, 13)
         XCTAssertEqual(c.appearance.cursorStyle, "bar")
-        XCTAssertEqual(c.terminal.scrollback, 10000)
+        XCTAssertEqual(c.terminal.scrollback, 60000)
         XCTAssertTrue(c.terminal.confirmCloseRunning)
         XCTAssertEqual(c.behavior.newTabCwd, "workspace")
         XCTAssertTrue(c.keybindings.isEmpty)
@@ -54,7 +54,7 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.appearance.font.family, "SF Mono")   // 缺 → 默认
         XCTAssertEqual(c.appearance.theme, "dark")            // 缺 → 默认
         XCTAssertEqual(c.appearance.padding.x, 14)            // 缺 → 默认
-        XCTAssertEqual(c.terminal.scrollback, 10000)          // 整段缺 → 默认
+        XCTAssertEqual(c.terminal.scrollback, 60000)          // 整段缺 → 默认
         XCTAssertEqual(c.behavior.newTabCwd, "workspace")
     }
 
@@ -76,6 +76,14 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.validated().appearance.font.size, 72)
         c.appearance.font.size = 2
         XCTAssertEqual(c.validated().appearance.font.size, 6)
+    }
+
+    func testValidatedClampsScrollbackToMinimum() {
+        var c = AppConfig.default
+        c.terminal.scrollback = 5000          // 旧配置里的小值
+        XCTAssertEqual(c.validated().terminal.scrollback, 60_000)
+        c.terminal.scrollback = 99_000_000
+        XCTAssertEqual(c.validated().terminal.scrollback, 1_000_000)
     }
 
     func testValidatedFallsBackInvalidEnums() {
