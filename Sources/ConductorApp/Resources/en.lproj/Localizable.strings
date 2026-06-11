@@ -106,6 +106,16 @@
 "当前面板" = "Current Pane";
 "复制会话 ID" = "Copy Session ID";
 "复制续聊命令" = "Copy Resume Command";
+"删除会话…" = "Delete Session…";
+"删除会话「%@」？" = "Delete session \"%@\"?";
+"会删除磁盘上的会话日志文件，无法撤销。" = "This deletes the session log file on disk and cannot be undone.";
+"收藏置顶" = "Pin to Top";
+"取消置顶" = "Unpin";
+"输入 %@" = "Input %@";
+"输出 %@" = "Output %@";
+"缓存读 %@" = "Cache read %@";
+"缓存写 %@" = "Cache write %@";
+"成本为等价 API 价估算" = "Cost is an API-equivalent estimate";
 "读取完整对话…" = "Loading full conversation…";
 "%ld 条消息" = "%ld messages";
 "最近 %ld 条消息" = "Latest %ld messages";

@@ -1,3 +1,4 @@
+import AppKit
 import ConductorCore
 import SwiftUI
 
@@ -33,7 +34,10 @@ struct SessionManagerView: View {
                     || ($0.cwd?.lowercased().contains(q) ?? false)
             }
         }
-        return list
+        // 收藏的浮到最上面，组内保持原有的时间序
+        let pinned = store.pinnedIDs
+        guard !pinned.isEmpty else { return list }
+        return list.filter { pinned.contains($0.id) } + list.filter { !pinned.contains($0.id) }
     }
 
     var body: some View {
@@ -157,11 +161,14 @@ struct SessionManagerView: View {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(filtered) { record in
-                        SessionRow(record: record, coordinator: coordinator)
+                        SessionRow(record: record,
+                                   isPinned: store.pinnedIDs.contains(record.id),
+                                   coordinator: coordinator)
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
+                .animation(.easeOut(duration: 0.18), value: filtered.map(\.id))
             }
             .scrollIndicators(.hidden)
         }
@@ -187,11 +194,13 @@ struct SessionManagerView: View {
 
 private struct SessionRow: View {
     let record: AgentSessionRecord
+    let isPinned: Bool
     let coordinator: AppCoordinator
     @State private var hovering = false
     @State private var expanded = false
     @State private var preview: [AgentSessionMessage]?
     @State private var loadingPreview = false
+    @State private var usage: AgentSessionUsage?
 
     private var logoName: String {
         record.agent == "claude" ? "claude" : "codex"
@@ -227,15 +236,20 @@ private struct SessionRow: View {
                             Text(record.modifiedAt, style: .relative)
                                 .font(.system(size: 10))
                                 .foregroundStyle(AppStyle.textTertiary)
+                            if let usage {
+                                usageChip(usage)
+                            }
                         }
                     }
                     Spacer(minLength: 0)
-                    if record.filePath != nil {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(AppStyle.textTertiary)
-                            .rotationEffect(.degrees(expanded ? 180 : 0))
-                            .padding(.top, 3)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        pinButton
+                        if record.filePath != nil {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(AppStyle.textTertiary)
+                                .rotationEffect(.degrees(expanded ? 180 : 0))
+                        }
                     }
                 }
                 .contentShape(Rectangle())
@@ -255,6 +269,10 @@ private struct SessionRow: View {
                     if let cmd = record.resumeCommand {
                         Button(L("复制续聊命令")) { coordinator.copyToClipboard(cmd) }
                     }
+                    Divider()
+                    Button(role: .destructive) { confirmDelete() } label: {
+                        Text(L("删除会话…"))
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 11, weight: .semibold))
@@ -268,6 +286,96 @@ private struct SessionRow: View {
         .padding(12)
         .toolsCard()
         .onHover { hovering = $0 }
+        .task(id: "\(record.filePath ?? "")#\(record.modifiedAt.timeIntervalSince1970)") {
+            usage = await SessionUsageCache.shared.usage(for: record)
+        }
+    }
+
+    /// 收藏星标：收藏后常驻显示，未收藏只在 hover 时浮现。
+    @ViewBuilder
+    private var pinButton: some View {
+        if isPinned || hovering {
+            Button {
+                SessionManagerStore.shared.togglePin(record)
+            } label: {
+                Image(systemName: isPinned ? "star.fill" : "star")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(isPinned ? Color.yellow.opacity(0.85) : AppStyle.textTertiary)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(isPinned ? L("取消置顶") : L("收藏置顶"))
+            .transition(.opacity)
+        } else {
+            Color.clear.frame(width: 20, height: 20)
+        }
+    }
+
+    /// token / 成本 chip：tooltip 里给输入/输出/缓存的细分。
+    private func usageChip(_ usage: AgentSessionUsage) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "number")
+                .font(.system(size: 8, weight: .semibold))
+            Text(Self.tokenText(usage.totalTokens))
+                .font(.system(size: 9.5, weight: .medium))
+                .monospacedDigit()
+            if let cost = usage.estimatedCostUSD {
+                Text("≈" + Self.costText(cost))
+                    .font(.system(size: 9.5, weight: .medium))
+                    .monospacedDigit()
+            }
+        }
+        .foregroundStyle(AppStyle.textTertiary)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(AppStyle.hoverFill))
+        .help(usageTooltip(usage))
+    }
+
+    private func usageTooltip(_ usage: AgentSessionUsage) -> String {
+        var parts = [
+            L("输入 %@", Self.tokenText(usage.inputTokens)),
+            L("输出 %@", Self.tokenText(usage.outputTokens)),
+        ]
+        if usage.cacheReadTokens > 0 {
+            parts.append(L("缓存读 %@", Self.tokenText(usage.cacheReadTokens)))
+        }
+        if usage.cacheCreationTokens > 0 {
+            parts.append(L("缓存写 %@", Self.tokenText(usage.cacheCreationTokens)))
+        }
+        if let model = usage.model {
+            parts.append(model)
+        }
+        if usage.estimatedCostUSD != nil {
+            parts.append(L("成本为等价 API 价估算"))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    static func tokenText(_ count: Int) -> String {
+        switch count {
+        case ..<1000: return "\(count)"
+        case ..<1_000_000: return String(format: "%.1fK", Double(count) / 1000)
+        default: return String(format: "%.2fM", Double(count) / 1_000_000)
+        }
+    }
+
+    static func costText(_ usd: Double) -> String {
+        usd < 0.01 ? "<$0.01" : String(format: "$%.2f", usd)
+    }
+
+    private func confirmDelete() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L("删除会话「%@」？", String(record.title.prefix(40)))
+        alert.informativeText = L("会删除磁盘上的会话日志文件，无法撤销。")
+        alert.addButton(withTitle: L("删除"))
+        alert.addButton(withTitle: L("取消"))
+        alert.buttons.first?.hasDestructiveAction = true
+        if alert.runModal() == .alertFirstButtonReturn {
+            SessionManagerStore.shared.delete(record)
+        }
     }
 
     private func toggleExpanded() {

@@ -10,7 +10,10 @@ final class SessionManagerStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var lastScannedAt: Date?
     @Published private(set) var scanError: String?
+    /// 收藏置顶的会话 id（`agent:sessionID`），跨启动保留。
+    @Published private(set) var pinnedIDs: Set<String>
 
+    private static let pinnedKey = "sessions.pinned"
     private let cacheURL: URL
     private var scanTask: Task<Void, Never>?
 
@@ -24,7 +27,35 @@ final class SessionManagerStore: ObservableObject {
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("conductor", isDirectory: true)
             .appendingPathComponent("sessions-cache.json")
+        pinnedIDs = Set(UserDefaults.standard.stringArray(forKey: Self.pinnedKey) ?? [])
         loadCache()
+    }
+
+    func isPinned(_ record: AgentSessionRecord) -> Bool {
+        pinnedIDs.contains(record.id)
+    }
+
+    func togglePin(_ record: AgentSessionRecord) {
+        if !pinnedIDs.insert(record.id).inserted {
+            pinnedIDs.remove(record.id)
+        }
+        UserDefaults.standard.set(Array(pinnedIDs).sorted(), forKey: Self.pinnedKey)
+    }
+
+    /// 删除会话：磁盘上的 jsonl 一并删（无法撤销，调用方先确认）。
+    func delete(_ record: AgentSessionRecord) {
+        if let path = record.filePath {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+        records.removeAll { $0.id == record.id }
+        if pinnedIDs.remove(record.id) != nil {
+            UserDefaults.standard.set(Array(pinnedIDs).sorted(), forKey: Self.pinnedKey)
+        }
+        // 同步改写磁盘缓存，避免下次启动「亡灵会话」闪现
+        let cache = CacheFile(scannedAt: lastScannedAt ?? Date(), records: records)
+        if let data = try? JSONEncoder().encode(cache) {
+            try? data.write(to: cacheURL, options: .atomic)
+        }
     }
 
     func refresh(force: Bool = false) {

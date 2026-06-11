@@ -55,8 +55,40 @@ final class SessionPreviewCache: ObservableObject {
         Task { _ = await messages(for: record, limit: limit, tailBytes: tailBytes) }
     }
 
-    private static func modificationDate(_ path: String) -> Date {
+    fileprivate static func modificationDate(_ path: String) -> Date {
         (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate] as? Date)
             ?? .distantPast
+    }
+}
+
+/// 会话 token 用量缓存：同样按「路径 + 修改时间」失效。
+/// 解析整个 jsonl 有成本，行可见时才按需算，结果缓存复用。
+@MainActor
+final class SessionUsageCache {
+    static let shared = SessionUsageCache()
+
+    private struct Entry {
+        let mtime: Date
+        let usage: AgentSessionUsage?
+    }
+
+    private var entries: [String: Entry] = [:]
+    private var inflight: [String: Task<AgentSessionUsage?, Never>] = [:]
+
+    func usage(for record: AgentSessionRecord) async -> AgentSessionUsage? {
+        guard let path = record.filePath else { return nil }
+        let mtime = SessionPreviewCache.modificationDate(path)
+        if let cached = entries[path], cached.mtime == mtime { return cached.usage }
+        if let task = inflight[path] { return await task.value }
+
+        let agent = record.agent
+        let task = Task.detached(priority: .utility) {
+            AgentSessionUsageScanner.scan(agent: agent, filePath: path)
+        }
+        inflight[path] = task
+        let usage = await task.value
+        inflight[path] = nil
+        entries[path] = Entry(mtime: mtime, usage: usage)
+        return usage
     }
 }
