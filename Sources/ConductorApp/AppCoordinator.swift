@@ -55,10 +55,24 @@ final class AppCoordinator: ObservableObject {
     let usageMonitor = UsageMonitor()
     /// CLI hook 收件箱监听（agent 完成 → 系统通知）。
     private let hooksInbox = HooksInbox()
+    /// Agent 完成账本（状态栏铃铛 / 通知中心）。
+    let activityLog = AgentActivityLog()
     /// 已检测到、可一键启动的 CLI（供 pane 右键「新建终端运行」子菜单使用）。
     @Published private(set) var launchableAgents: [LaunchableAgent] = []
     /// 每个 pane 当前在跑的 Agent（agent id）。空表示只是普通 shell。用于 pane 头条 / tab 显示 logo。
     @Published private(set) var paneAgents: [PaneID: String] = [:]
+    /// 正在「思考」的 agent pane 集合（hook 信号 ∪ 启发式），驱动 tab / 工作区 / 文件夹树的思考动效。
+    @Published private(set) var thinkingPanes: Set<PaneID> = []
+    /// 上次 CPU 采样：pane → (pid, 累计 CPU 秒, 采样时刻)，两次做差得占用率。
+    private var agentCpuSamples: [PaneID: (pid: Int32, cpuTime: Double, at: Date)] = [:]
+    /// 上次视口文本指纹：spinner / 流式输出会让可见内容每轮都变，静止等输入则不变。
+    private var viewportHashes: [PaneID: Int] = [:]
+    /// 启发式（视口指纹 / CPU）判定的思考集合；与 hook 信号取并集后发布。
+    private var heuristicThinking: Set<PaneID> = []
+    /// hook 驱动的思考状态：UserPromptSubmit 点亮、Stop 熄灭（pane → 点亮时刻）。
+    /// 事件可能丢（agent 崩溃/被 kill），靠超时 + agent 存活检查兜底回收。
+    private var hookThinkingSince: [PaneID: Date] = [:]
+    private static let hookThinkingTimeout: TimeInterval = 600
     private var agentPollTimer: Timer?
     /// 命令面板（懒创建）。
     private lazy var commandPalette = CommandPaletteController(coordinator: self)
@@ -344,11 +358,23 @@ final class AppCoordinator: ObservableObject {
     }
 
     private func handleHookEvent(_ event: HookEvent) {
+        let pane = event.paneID.map { PaneID($0) }
+
+        // busy（UserPromptSubmit）：纯状态事件，点亮思考动效即返回，不发通知
+        if event.type == "busy" {
+            if let pane { setHookThinking(pane, active: true) }
+            return
+        }
+
+        // done / 旧脚本无 type（Stop）：熄灭思考动效 + 发完成通知 + 记入活动账本
+        if let pane { setHookThinking(pane, active: false) }
         // 通知标题尽量带上 pane 标题/工作区，方便辨认是哪个会话。
         var title = event.title
-        if let paneID = event.paneID.map({ PaneID($0) }), let paneTitle = paneTitles[paneID] {
+        if let pane, let paneTitle = paneTitles[pane] {
             title = "\(event.title) · \(paneTitle)"
         }
+        activityLog.record(paneID: pane, agentID: pane.flatMap { paneAgents[$0] },
+                           title: title, message: event.message)
         NotificationManager.shared.notify(paneID: event.paneID, title: title, body: event.message)
     }
 
@@ -394,14 +420,91 @@ final class AppCoordinator: ObservableObject {
         let tokens: [(id: String, token: String)] = AgentCatalog.all.map { ($0.id, $0.command.lowercased()) }
         Task.detached(priority: .utility) { [weak self] in
             var map: [PaneID: String] = [:]
+            var cpu: [PaneID: (pid: Int32, cpuTime: Double)] = [:]
             for (pane, pid) in pids {
                 guard let cmdline = ProcessInspector.commandLine(pid: pid) else { continue }
                 if let match = tokens.first(where: { cmdline.contains($0.token) }) {
                     map[pane] = match.id
+                    if let time = ProcessInspector.cpuTimeSeconds(pid: pid) {
+                        cpu[pane] = (pid, time)
+                    }
                 }
             }
-            await MainActor.run { self?.applyPaneAgents(map) }
+            await MainActor.run {
+                self?.applyPaneAgents(map)
+                self?.updateThinkingPanes(agents: map, cpu: cpu)
+            }
         }
+    }
+
+    /// 推断哪些 agent pane 正在「思考」。两路信号取并集：
+    /// 1. 视口文本变化（主信号）：spinner 每帧字符都不同、流式输出持续追加，
+    ///    两次轮询间可见内容必变；等输入时画面静止（光标闪烁在渲染层，不改文本）。
+    /// 2. CPU 占用 ≥ 6%（辅助）：兜底重计算但少输出的阶段。
+    private func updateThinkingPanes(agents: [PaneID: String], cpu: [PaneID: (pid: Int32, cpuTime: Double)]) {
+        let now = Date()
+        var thinking: Set<PaneID> = []
+
+        var newHashes: [PaneID: Int] = [:]
+        for pane in agents.keys {
+            guard let text = (registry.surface(for: pane) as? GhosttySurface)?.readViewportText()
+            else { continue }
+            let hash = text.hashValue
+            newHashes[pane] = hash
+            if let prev = viewportHashes[pane], prev != hash {
+                thinking.insert(pane)
+            }
+        }
+        viewportHashes = newHashes
+
+        var nextSamples: [PaneID: (pid: Int32, cpuTime: Double, at: Date)] = [:]
+        for (pane, sample) in cpu {
+            nextSamples[pane] = (sample.pid, sample.cpuTime, now)
+            guard let prev = agentCpuSamples[pane], prev.pid == sample.pid else { continue }
+            let wall = now.timeIntervalSince(prev.at)
+            guard wall > 0.5 else { continue }
+            let percent = (sample.cpuTime - prev.cpuTime) / wall * 100
+            if percent >= 6 { thinking.insert(pane) }
+        }
+        agentCpuSamples = nextSamples
+        heuristicThinking = thinking
+
+        // hook 状态兜底回收：agent 进程已不在的 pane、点亮超时的条目
+        let cutoff = now.addingTimeInterval(-Self.hookThinkingTimeout)
+        hookThinkingSince = hookThinkingSince.filter { pane, since in
+            agents[pane] != nil && since > cutoff
+        }
+        publishThinking()
+    }
+
+    /// 合并两路信号并发布（仅在变化时触发 UI 更新）。
+    private func publishThinking() {
+        let combined = heuristicThinking.union(hookThinkingSince.keys)
+        if combined != thinkingPanes { thinkingPanes = combined }
+    }
+
+    /// hook 信号：即时点亮/熄灭，不等下一个轮询点。
+    private func setHookThinking(_ pane: PaneID, active: Bool) {
+        if active {
+            hookThinkingSince[pane] = Date()
+        } else {
+            hookThinkingSince.removeValue(forKey: pane)
+            // Stop 已明确说结束了，启发式的残余判定一并清掉，转圈立刻熄灭
+            heuristicThinking.remove(pane)
+        }
+        publishThinking()
+    }
+
+    /// 该工作区是否有 pane 在「思考」（侧栏工作区行动效用）。
+    func isWorkspaceThinking(_ ws: Workspace) -> Bool {
+        ws.tabs.contains { tab in
+            tab.rootSplit.leaves().contains { thinkingPanes.contains($0) }
+        }
+    }
+
+    /// 思考中 pane 的 cwd 列表（侧栏文件夹树动效用）。
+    var thinkingCwds: [String] {
+        thinkingPanes.compactMap { paneCwds[$0] }
     }
 
     private func applyPaneAgents(_ map: [PaneID: String]) {

@@ -357,12 +357,21 @@ final class GhosttySurface: TerminalSurface {
 
     /// 读取整个屏幕 + 回滚缓冲的纯文本（内容快照用）。surface 未创建（pane 从未显示）返回 nil。
     func readAllText() -> String? {
+        readText(tag: GHOSTTY_POINT_SCREEN)
+    }
+
+    /// 只读当前可见视口的纯文本（「AI 思考中」活跃检测用，开销远小于整屏 + 回滚）。
+    func readViewportText() -> String? {
+        readText(tag: GHOSTTY_POINT_VIEWPORT)
+    }
+
+    private func readText(tag: ghostty_point_tag_e) -> String? {
         guard let surface else { return nil }
         let selection = ghostty_selection_s(
             top_left: ghostty_point_s(
-                tag: GHOSTTY_POINT_SCREEN, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
+                tag: tag, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
             bottom_right: ghostty_point_s(
-                tag: GHOSTTY_POINT_SCREEN, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0),
+                tag: tag, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0),
             rectangle: false)
         var text = ghostty_text_s()
         guard ghostty_surface_read_text(surface, selection, &text) else { return nil }

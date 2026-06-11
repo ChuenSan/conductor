@@ -26,23 +26,34 @@ enum HookInstaller {
     private static var home: URL { FileManager.default.homeDirectoryForCurrentUser }
     static var scriptURL: URL { home.appendingPathComponent(".conductor/bin/conductor-notify") }
 
-    /// 写入 Stop hook 的命令（网关 + 哨兵）。
+    /// 写入 Stop hook 的命令（网关 + 哨兵）：完成通知 + 熄灭思考动效。
     static var stopCommand: String {
         "[ -n \"$CONDUCTOR_PANE_ID\" ] && '\(scriptURL.path)' >/dev/null 2>&1 || true #conductor:\(recipeID)"
+    }
+
+    /// 写入 UserPromptSubmit hook 的命令：发出「开始思考」信号（即时点亮转圈，不发通知）。
+    static var busyCommand: String {
+        "[ -n \"$CONDUCTOR_PANE_ID\" ] && '\(scriptURL.path)' busy >/dev/null 2>&1 || true #conductor:\(recipeID)"
     }
 
     // MARK: - 状态
 
     static func status() -> Status {
-        Status(
-            scriptInstalled: FileManager.default.isExecutableFile(atPath: scriptURL.path),
+        // 脚本内容不匹配视为未安装（旧版脚本没有 busy 信号，重装即升级）
+        let scriptUpToDate = FileManager.default.isExecutableFile(atPath: scriptURL.path)
+            && (try? String(contentsOf: scriptURL, encoding: .utf8)) == scriptBody
+        return Status(
+            scriptInstalled: scriptUpToDate,
             codexConfigured: configHasNotify(.codex),
             claudeConfigured: configHasNotify(.claude))
     }
 
     private static func configHasNotify(_ source: HookSource) -> Bool {
-        HookConfigDocument(source: source).entries()
-            .contains { $0.command.contains("#conductor:\(recipeID)") }
+        let managed = HookConfigDocument(source: source).entries()
+            .filter { $0.command.contains("#conductor:\(recipeID)") }
+        // Stop（完成通知/熄灭）与 UserPromptSubmit（点亮思考）都在才算配置完整
+        return managed.contains { $0.event == HookEventName.stop }
+            && managed.contains { $0.event == HookEventName.userPromptSubmit }
     }
 
     // MARK: - 安装
@@ -51,8 +62,14 @@ enum HookInstaller {
     static func installAll() throws -> Status {
         try installScript()
         do {
-            try HookConfigDocument(source: .claude).addCommand(event: HookEventName.stop, command: stopCommand)
-            try HookConfigDocument(source: .codex).addCommand(event: HookEventName.stop, command: stopCommand)
+            for source in [HookSource.claude, .codex] {
+                let doc = HookConfigDocument(source: source)
+                // 改名迁移：清掉 cmux 时代的哨兵条目（指向已废弃的 ~/.cmux/bin/cmux-notify，
+                // 网关变量也改了名，留着只会让用户的 hook 列表越积越乱）。
+                try doc.removeCommands(containing: "#cmux:")
+                try doc.addCommand(event: HookEventName.stop, command: stopCommand)
+                try doc.addCommand(event: HookEventName.userPromptSubmit, command: busyCommand)
+            }
         } catch {
             throw InstallError.write(L("写 hook 配置失败：%@", error.localizedDescription))
         }
@@ -75,20 +92,23 @@ enum HookInstaller {
     static var scriptBody: String {
         """
         #!/bin/sh
-        # conductor-notify —— 由 conductor 自动生成。把一条通知请求写入 conductor 收件箱，
-        # conductor.app 监听该目录并发系统通知。点击通知可跳回对应 pane（需 CONDUCTOR_PANE_ID）。
-        #
-        #   Codex hooks.json Stop：事件 JSON 从 stdin 传入。
-        #   Claude Stop hook：事件 JSON 从 stdin 传入。
+        # conductor-notify —— 由 conductor 自动生成。把一条事件写入 conductor 收件箱（conductor.app 监听该目录）。
+        # 用法：
+        #   conductor-notify        Stop hook：完成通知 + 熄灭思考动效（点击通知跳回对应 pane）
+        #   conductor-notify busy   UserPromptSubmit hook：点亮思考动效，不发通知
         INBOX="$HOME/Library/Application Support/conductor/hooks-inbox"
         mkdir -p "$INBOX"
         PANE="${CONDUCTOR_PANE_ID:-}"
-        TITLE="AI 已完成"
-        MSG="可以查看结果了"
 
         esc() { printf '%s' "$1" | tr '\\n\\r\\t' '   ' | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g'; }
         F="$INBOX/$(date +%s)-$$.json"
-        printf '{"paneId":"%s","title":"%s","message":"%s"}\\n' "$(esc "$PANE")" "$(esc "$TITLE")" "$(esc "$MSG")" > "$F"
+        if [ "$1" = "busy" ]; then
+          printf '{"type":"busy","paneId":"%s"}\\n' "$(esc "$PANE")" > "$F"
+        else
+          TITLE="AI 已完成"
+          MSG="可以查看结果了"
+          printf '{"type":"done","paneId":"%s","title":"%s","message":"%s"}\\n' "$(esc "$PANE")" "$(esc "$TITLE")" "$(esc "$MSG")" > "$F"
+        fi
         exit 0
         """
     }

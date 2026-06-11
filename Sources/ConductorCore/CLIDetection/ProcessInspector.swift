@@ -6,6 +6,26 @@ import Foundation
 /// 读取某个进程的命令行（exec 路径 + argv），用于判断某个终端 pane 里在跑哪个 Agent。
 /// 走 `sysctl(KERN_PROCARGS2)`，只取 exec 路径与参数，忽略环境变量以降低误判。
 public enum ProcessInspector {
+    /// 返回 `pid` 的累计 CPU 时间（user + system，秒）；失败返回 nil。
+    /// 两次采样做差 ÷ 间隔即得占用率——用来判断 agent 是否在「思考」
+    /// （活跃生成时 spinner/流式输出持续耗 CPU，空闲等输入时趋近 0）。
+    public static func cpuTimeSeconds(pid: Int32) -> Double? {
+        #if canImport(Darwin)
+        guard pid > 0 else { return nil }
+        var info = proc_taskinfo()
+        let size = Int32(MemoryLayout<proc_taskinfo>.stride)
+        guard proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, size) == size else { return nil }
+        // pti_total_* 是 mach 时间单位，需 timebase 换算成纳秒
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        let ticks = info.pti_total_user &+ info.pti_total_system
+        let nanos = Double(ticks) * Double(timebase.numer) / Double(timebase.denom)
+        return nanos / 1_000_000_000
+        #else
+        return nil
+        #endif
+    }
+
     /// 返回 `pid` 的「exec 路径 + 各 argv」用空格连接的小写串；失败返回 nil。
     public static func commandLine(pid: Int32) -> String? {
         #if canImport(Darwin)

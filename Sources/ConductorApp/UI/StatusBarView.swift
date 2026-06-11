@@ -16,6 +16,7 @@ struct StatusBarView: View {
                 item("arrow.triangle.branch", branch, accent: true)
             }
             Spacer(minLength: 8)
+            ActivityBellView(coordinator: coordinator, log: coordinator.activityLog)
             CodexUsageChip(snapshot: usageMonitor.codex) { coordinator.openTools(.usage) }
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 Text(ctx.date.formatted(date: .omitted, time: .shortened))

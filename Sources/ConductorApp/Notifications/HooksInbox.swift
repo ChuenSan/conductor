@@ -1,8 +1,11 @@
 import Foundation
 
-/// 一条来自 CLI hook 的通知请求。
+/// 一条来自 CLI hook 的事件。`type`：
+/// - "busy"：agent 开始思考（UserPromptSubmit），只更新状态不发通知；
+/// - "done"/nil（旧脚本）：agent 完成（Stop），发系统通知并熄灭思考动效。
 struct HookEvent {
     let paneID: String?
+    let type: String?
     let title: String
     let message: String
 }
@@ -51,7 +54,8 @@ final class HooksInbox {
             let title = (obj["title"] as? String)?.isEmpty == false
                 ? (obj["title"] as! String) : L("AI 已完成")
             let message = (obj["message"] as? String) ?? ""
-            onEvent?(HookEvent(paneID: pane, title: title, message: message))
+            onEvent?(HookEvent(
+                paneID: pane, type: obj["type"] as? String, title: title, message: message))
         }
     }
 }
