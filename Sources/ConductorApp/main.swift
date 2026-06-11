@@ -3,10 +3,12 @@ import ConductorCore
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: NSWindow!
     var coordinator: AppCoordinator!
     private var keyMonitor: Any?
+    /// 关窗时已确认过中断思考，applicationShouldTerminate 不再问第二遍。
+    private var closeConfirmed = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         LegacyMigration.migrateIfNeeded()   // cmux → Conductor 改名后迁移旧用户数据
@@ -25,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Conductor"
         WindowChromePolicy.applyMainWindowChrome(to: window)
         window.contentView = NSHostingView(rootView: RootView(coordinator: coordinator))
+        window.delegate = self   // 误关保护：windowShouldClose 守门
         coordinator.attach(to: window)
         window.center()
         window.setFrameAutosaveName("ConductorMainWindow")   // 记住上次窗口大小/位置
@@ -45,6 +48,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    /// 误关保护：红绿灯关窗时有 agent 正在思考 → 先确认（窗口没了 app 也就退出了）。
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        closeConfirmed = coordinator.shouldTerminateApp()
+        return closeConfirmed
+    }
+
+    /// 误关保护：⌘Q / 菜单退出时同款确认；关窗路径已确认过则直接放行。
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        (closeConfirmed || coordinator.shouldTerminateApp()) ? .terminateNow : .terminateCancel
+    }
 
     func applicationWillTerminate(_ notification: Notification) {
         coordinator.captureAllScrollbackForRestart()   // 内容快照（下次启动回放）

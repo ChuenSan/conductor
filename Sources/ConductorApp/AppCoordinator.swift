@@ -974,14 +974,47 @@ final class AppCoordinator: ObservableObject {
     }
 
     func closeActivePane() {
+        let thinkingCount = activePane().map { thinkingPanes.contains($0) ? 1 : 0 } ?? 0
+        guard confirmInterruptThinking(count: thinkingCount,
+                                       message: L("关闭这个面板？"),
+                                       confirmTitle: L("仍要关闭")) else { return }
         pushClosedRecordForActivePane()
         run(.closeActivePane)
     }
 
     /// 关闭整个 tab（含其所有 pane）。可关非 active 的 tab。
     func closeTab(_ id: TabID) {
+        let panes = activeWorkspace()?.tabs.first(where: { $0.id == id })?.rootSplit.leaves() ?? []
+        let thinkingCount = panes.filter { thinkingPanes.contains($0) }.count
+        guard confirmInterruptThinking(count: thinkingCount,
+                                       message: L("关闭这个标签？"),
+                                       confirmTitle: L("仍要关闭")) else { return }
         pushClosedTabRecord(id)
         run(.closeTab(id))
+    }
+
+    // MARK: - 误关保护
+
+    /// 退出守门：有思考中的 agent 先确认（AppDelegate.applicationShouldTerminate 调用）。
+    func shouldTerminateApp() -> Bool {
+        confirmInterruptThinking(
+            count: thinkingPanes.filter { paneExists($0) }.count,
+            message: L("现在退出 Conductor？"),
+            confirmTitle: L("仍要退出"))
+    }
+
+    /// 要关的范围里有 agent 正在思考 → 先弹确认（Terminal.app 惯例：回车放行、Esc 取消）。
+    /// 返回 true = 放行；没有思考中的 agent 时不打扰。
+    private func confirmInterruptThinking(count: Int, message: String, confirmTitle: String) -> Bool {
+        guard count > 0 else { return true }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = message
+        alert.informativeText = L("有 %ld 个 Agent 正在思考，会被打断。", count)
+        alert.addButton(withTitle: confirmTitle)
+        alert.addButton(withTitle: L("取消"))
+        alert.buttons.first?.hasDestructiveAction = true
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     // MARK: - 误关恢复（⌘⇧T）
