@@ -141,7 +141,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     var onManageSessions: (() -> Void)?
     private weak var sessionSubmenu: NSMenu?
     private weak var agentSubmenu: NSMenu?
-    var isActive = false { didSet { updateRing() } }
+    var isActive = false { didSet { if isActive != oldValue { updateRing() } } }
     /// 是否允许拖拽重排：只有当所在 tab 含 ≥2 个 pane 时才有意义（单个终端无处可排）。
     var canDrag = false
 

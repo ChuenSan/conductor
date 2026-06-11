@@ -1411,11 +1411,8 @@ final class AppCoordinator: ObservableObject {
         let value = label.isEmpty ? L("终端") : label
         guard paneTitles[pane] != value else { return }
         paneTitles[pane] = value
-        func walk(_ view: NSView) {
-            if let container = view as? PaneContainerView, container.paneID == pane { container.setTitle(value) }
-            view.subviews.forEach(walk)
-        }
-        containerView.subviews.forEach(walk)
+        // 容器按 pane 常驻缓存，直接查表；不在屏上的也一并更新（切回来即正确）
+        paneContainers[pane]?.setTitle(value)
     }
 
     /// cwd 变化：更新标签 + 全路径 + git 分支（状态栏）。防抖 100ms，避免频繁 cd 时 SwiftUI 过载。
@@ -1460,11 +1457,10 @@ final class AppCoordinator: ObservableObject {
 
     private func refreshActiveRings() {
         let active = activePane()
-        func walk(_ view: NSView) {
-            if let container = view as? PaneContainerView { container.isActive = (container.paneID == active) }
-            view.subviews.forEach(walk)
+        // 每次切焦点都走：查字典即可，别递归整棵 AppKit 视图树
+        for container in paneContainers.values {
+            container.isActive = (container.paneID == active)
         }
-        containerView.subviews.forEach(walk)
     }
 
     private func handlePaneExited(_ pane: PaneID) {

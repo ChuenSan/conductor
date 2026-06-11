@@ -6,12 +6,18 @@ import Foundation
 final class SessionManagerStore: ObservableObject {
     static let shared = SessionManagerStore()
 
-    @Published private(set) var records: [AgentSessionRecord] = []
+    @Published private(set) var records: [AgentSessionRecord] = [] {
+        didSet { scopeCache.removeAll() }
+    }
     @Published private(set) var isLoading = false
     @Published private(set) var lastScannedAt: Date?
     @Published private(set) var scanError: String?
     /// 收藏置顶的会话 id（`agent:sessionID`），跨启动保留。
     @Published private(set) var pinnedIDs: Set<String>
+
+    /// 按目录范围过滤的结果缓存：侧栏每次 body 求值都要查，别反复过滤几百条。
+    /// records 一变整体失效。
+    private var scopeCache: [String: [AgentSessionRecord]] = [:]
 
     private static let pinnedKey = "sessions.pinned"
     private let cacheURL: URL
@@ -81,11 +87,19 @@ final class SessionManagerStore: ObservableObject {
     }
 
     func recordsForWorkspace(_ path: String, limit: Int = 8) -> [AgentSessionRecord] {
-        records.filter { $0.belongsToWorkspace(path) }.prefix(limit).map { $0 }
+        let key = "w|\(limit)|\(path)"
+        if let hit = scopeCache[key] { return hit }
+        let result = Array(records.filter { $0.belongsToWorkspace(path) }.prefix(limit))
+        scopeCache[key] = result
+        return result
     }
 
     func recordsForDirectory(_ directory: String, limit: Int = 12) -> [AgentSessionRecord] {
-        records.filter { $0.belongsToDirectory(directory) }.prefix(limit).map { $0 }
+        let key = "d|\(limit)|\(directory)"
+        if let hit = scopeCache[key] { return hit }
+        let result = Array(records.filter { $0.belongsToDirectory(directory) }.prefix(limit))
+        scopeCache[key] = result
+        return result
     }
 
     private func loadCache() {
