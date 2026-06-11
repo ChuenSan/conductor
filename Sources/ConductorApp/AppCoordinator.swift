@@ -76,6 +76,8 @@ final class AppCoordinator: ObservableObject {
     private var agentPollTimer: Timer?
     /// 命令面板（懒创建）。
     private lazy var commandPalette = CommandPaletteController(coordinator: self)
+    /// 广播输入面板（懒创建）。
+    private lazy var broadcastPanel = BroadcastPanelController()
     weak var window: NSWindow?
     private let stateStore: StateStore
     private var saveWorkItem: DispatchWorkItem?
@@ -130,6 +132,7 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "openSettings", title: L("打开设置"), defaultKeybinding: "cmd+,") { [weak self] in self?.openSettings() },
             AppCommand(id: "toggleZoom", title: L("放大/还原面板"), defaultKeybinding: "cmd+enter") { [weak self] in self?.toggleZoom() },
             AppCommand(id: "commandPalette", title: L("命令面板"), defaultKeybinding: "cmd+k") { [weak self] in self?.openCommandPalette() },
+            AppCommand(id: "broadcastToAgents", title: L("广播到所有 Agent"), defaultKeybinding: "cmd+shift+b") { [weak self] in self?.openBroadcast() },
         ])
     }
 
@@ -142,6 +145,51 @@ final class AppCoordinator: ObservableObject {
 
     func openCommandPalette() {
         commandPalette.toggle(items: paletteItems(), over: window)
+    }
+
+    // MARK: - 广播 / 片段
+
+    /// 当前工作区里正在跑 agent 的 pane（广播目标）。
+    private func broadcastTargets() -> [BroadcastTarget] {
+        guard let ws = activeWorkspace() else { return [] }
+        return ws.tabs.flatMap { tab in
+            tab.rootSplit.leaves().compactMap { pane -> BroadcastTarget? in
+                guard let agentID = paneAgents[pane] else { return nil }
+                return BroadcastTarget(
+                    pane: pane,
+                    agentID: agentID,
+                    title: paneTitles[pane] ?? agentID.capitalized)
+            }
+        }
+    }
+
+    /// 打开广播面板；当前工作区没有 agent 在跑时给提示而不是静默无反应。
+    func openBroadcast() {
+        let targets = broadcastTargets()
+        guard !targets.isEmpty else {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = L("没有可广播的 Agent")
+            alert.informativeText = L("当前工作区里没有正在运行的 Agent。先启动 claude / codex 再广播。")
+            alert.addButton(withTitle: L("好"))
+            alert.runModal()
+            return
+        }
+        broadcastPanel.toggle(targets: targets, over: window) { [weak self] panes, text in
+            self?.broadcast(text, to: panes)
+        }
+    }
+
+    /// 把同一段文字发给多个 agent pane（键入文本 + 回车提交）。
+    private func broadcast(_ text: String, to panes: [PaneID]) {
+        for pane in panes {
+            guard let surface = registry.surface(for: pane) as? GhosttySurface else { continue }
+            surface.sendTextInput(text)
+            // 略延迟回车：等 TUI 消化完整段文本，避免文本和提交竞争乱序
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak surface] in
+                surface?.sendText("\r")
+            }
+        }
     }
 
     /// 命令面板的条目：命令表 + 工作区 + 当前工作区的标签。
