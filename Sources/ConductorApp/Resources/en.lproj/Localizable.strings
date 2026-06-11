@@ -507,3 +507,6 @@
 "已是最小字号（%ld pt）" = "Already at minimum (%ld pt)";
 "已是最大字号（%ld pt）" = "Already at maximum (%ld pt)";
 "字号已复位（%ld pt）" = "Font size reset (%ld pt)";
+"已切到工作区「%@」" = "Switched to workspace \"%@\"";
+"已新建工作区「%@」" = "Workspace \"%@\" created";
+"已新建 %ld 个工作区" = "%ld workspaces created";

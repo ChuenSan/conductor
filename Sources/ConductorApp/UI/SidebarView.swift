@@ -23,6 +23,8 @@ struct SidebarView: View {
     @State private var hoverTask: Task<Void, Never>?
     /// 一次性引导：用户首次触发悬停预览后永久隐藏提示。
     @AppStorage("sidebar.sessionHoverHintSeen") private var hoverHintSeen = false
+    /// Finder 文件夹正悬在侧栏上方（释放即新建工作区）→ 整栏亮接收态。
+    @State private var folderDropTargeted = false
     /// 文件夹树状态（展开集合 + 懒加载缓存），与侧栏同生命周期。
     @StateObject private var folderTree = FolderTreeModel()
     /// 分段控件选中底块的滑动动画命名空间。
@@ -71,6 +73,21 @@ struct SidebarView: View {
         }
         .frame(maxHeight: .infinity)
         .background(AppStyle.sidebarBackground)
+        // 从 Finder 拖文件夹进来 → 新建工作区（同路径已存在则直接切过去）
+        .dropDestination(for: URL.self) { urls, _ in
+            handleFolderDrop(urls)
+        } isTargeted: { folderDropTargeted = $0 }
+        .overlay {
+            if folderDropTargeted {
+                ZStack {
+                    Rectangle().fill(AppStyle.accent.opacity(0.07))
+                    Rectangle().strokeBorder(AppStyle.accent.opacity(0.6), lineWidth: 2)
+                }
+                .allowsHitTesting(false)
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: folderDropTargeted)
         // 点走输入框即提交重命名
         .onChange(of: renameFocused) { _, focused in
             if !focused, editingWorkspace != nil { commitRename() }
@@ -425,6 +442,43 @@ struct SidebarView: View {
             ToastHUD.shared.show(L("该目录不在家目录下，树里看不到"),
                                  icon: "exclamationmark.circle.fill", over: coordinator.window)
         }
+    }
+
+    /// Finder 拖入的目录 → 逐个建工作区；同路径已有的不重复建，直接切过去。
+    /// 返回 false 表示拖进来的不含目录（如纯文件），让系统显示拒收。
+    private func handleFolderDrop(_ urls: [URL]) -> Bool {
+        let dirs = urls.map(\.standardizedFileURL).filter { url in
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+        }
+        guard !dirs.isEmpty else { return false }
+
+        var created = 0
+        var lastCreated: URL?
+        var lastExisting: Workspace?
+        for dir in dirs {
+            if let existing = coordinator.visibleWorkspaces.first(where: { $0.path == dir.path }) {
+                lastExisting = existing
+            } else {
+                coordinator.addWorkspace(path: dir.path)
+                created += 1
+                lastCreated = dir
+            }
+        }
+        switch (created, lastCreated, lastExisting) {
+        case (0, _, let existing?):
+            // 全是已有的 → 切到最后一个并提示
+            coordinator.selectWorkspace(existing.id)
+            ToastHUD.shared.show(L("已切到工作区「%@」", existing.name),
+                                 icon: "folder.fill", over: coordinator.window)
+        case (1, let dir?, _):
+            ToastHUD.shared.show(L("已新建工作区「%@」", dir.lastPathComponent),
+                                 icon: "folder.fill.badge.plus", over: coordinator.window)
+        default:
+            ToastHUD.shared.show(L("已新建 %ld 个工作区", created),
+                                 icon: "folder.fill.badge.plus", over: coordinator.window)
+        }
+        return true
     }
 
     private func addWorkspace() {
