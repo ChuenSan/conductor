@@ -307,7 +307,7 @@ private struct SessionRow: View {
                         .foregroundStyle(AppStyle.textTertiary)
                     Spacer()
                 }
-                SessionTranscriptView(messages: preview, maxHeight: 420)
+                SessionTranscriptView(messages: preview, agent: record.agent, maxHeight: 420)
             } else {
                 Text(L("没有可预览的对话内容"))
                     .font(.system(size: 10.5))

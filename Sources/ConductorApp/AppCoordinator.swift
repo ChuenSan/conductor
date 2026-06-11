@@ -134,6 +134,9 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "commandPalette", title: L("命令面板"), defaultKeybinding: "cmd+k") { [weak self] in self?.openCommandPalette() },
             AppCommand(id: "broadcastToAgents", title: L("广播到所有 Agent"), defaultKeybinding: "cmd+shift+b") { [weak self] in self?.openBroadcast() },
             AppCommand(id: "openSnippets", title: L("命令片段库"), defaultKeybinding: nil) { [weak self] in self?.openTools(.snippets) },
+            AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+e") { [weak self] in self?.equalizeSplits() },
+            AppCommand(id: "nextTab", title: L("下一标签"), defaultKeybinding: "cmd+shift+rightbrace") { [weak self] in self?.cycleTab(forward: true) },
+            AppCommand(id: "prevTab", title: L("上一标签"), defaultKeybinding: "cmd+shift+leftbrace") { [weak self] in self?.cycleTab(forward: false) },
         ])
     }
 
@@ -295,8 +298,12 @@ final class AppCoordinator: ObservableObject {
             return
         }
         let paneID = PaneID(nextID("p"))
-        run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID))
-        if let cwd = record.cwd { paneCwds[paneID] = cwd }
+        // shell 直接起在会话目录（目录没了回退工作区根/家目录），而不是先起在工作区根再假装
+        let sessionCwd = record.cwd.map {
+            CwdResolver.resolve(cwd: $0, workspacePath: activeWorkspace()?.path ?? $0)
+        }
+        run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID, cwd: sessionCwd))
+        if let cwd = sessionCwd { paneCwds[paneID] = cwd }
         (registry.surface(for: paneID) as? GhosttySurface)?
             .enqueueCommand(resumeCommand(command, pane: paneID))
         tagPaneAgentOptimistically(paneID, command: record.agent == "codex" ? "codex" : "claude")
@@ -1012,12 +1019,47 @@ final class AppCoordinator: ObservableObject {
 
     func focusNext() {
         guard let pane = activePane(), let tree = activeTree(), let next = tree.pane(after: pane) else { return }
-        run(.focusPane(next))
+        focusOnly(next)
     }
 
     func focusPrev() {
         guard let pane = activePane(), let tree = activeTree(), let prev = tree.pane(before: pane) else { return }
-        run(.focusPane(prev))
+        focusOnly(prev)
+    }
+
+    /// 仅切换焦点：只更新活动 pane，不重建视图树，避免每次切焦点都卡一下。
+    private func focusOnly(_ pane: PaneID) {
+        guard let wsIndex = activeWorkspaceIndex(),
+              let tabIndex = activeTabIndex(wsIndex: wsIndex),
+              store.workspaces[wsIndex].tabs[tabIndex].rootSplit.contains(pane) else { return }
+        store.workspaces[wsIndex].tabs[tabIndex].activePane = pane
+        (registry.surface(for: pane) as? GhosttySurface)?.focus()
+        refreshActiveRings()
+        scheduleSave()
+    }
+
+    /// 将当前 tab 内所有分屏均分（n-way 等比例）。
+    func equalizeSplits() {
+        guard let wsIndex = activeWorkspaceIndex(),
+              let tabIndex = activeTabIndex(wsIndex: wsIndex) else { return }
+        let tab = store.workspaces[wsIndex].tabs[tabIndex]
+        let normalized = tab.rootSplit.withAllRatiosEqualized()
+        guard normalized != tab.rootSplit else { return }
+        store.workspaces[wsIndex].tabs[tabIndex].rootSplit = normalized
+        rebuild()
+        scheduleSave()
+    }
+
+    /// 循环切 tab。
+    func cycleTab(forward: Bool) {
+        guard let wsIndex = activeWorkspaceIndex(),
+              let current = store.workspaces[wsIndex].activeTab else { return }
+        let tabs = store.workspaces[wsIndex].tabs
+        guard !tabs.isEmpty else { return }
+        let ids = tabs.map(\.id)
+        guard let idx = ids.firstIndex(of: current) else { return }
+        let next = forward ? (idx + 1) % ids.count : (idx - 1 + ids.count) % ids.count
+        run(.selectTab(ids[next]))
     }
 
     func selectTab(_ id: TabID) {
@@ -1109,12 +1151,21 @@ final class AppCoordinator: ObservableObject {
         containerView.subviews.forEach(walk)
     }
 
-    /// cwd 变化：更新标签 + 全路径 + git 分支（状态栏）。
+    /// cwd 变化：更新标签 + 全路径 + git 分支（状态栏）。防抖 100ms，避免频繁 cd 时 SwiftUI 过载。
+    private var cwdDebounceWorkItems: [PaneID: DispatchWorkItem] = [:]
     private func updatePaneCwd(_ pane: PaneID, _ path: String) {
-        paneCwds[pane] = path
-        let branch = AppCoordinator.gitBranch(for: path)
-        if paneBranches[pane] != branch { paneBranches[pane] = branch }
-        setPaneLabel(pane, AppCoordinator.shortName(path))
+        cwdDebounceWorkItems[pane]?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.paneCwds[pane] = path
+                let branch = AppCoordinator.gitBranch(for: path)
+                if self.paneBranches[pane] != branch { self.paneBranches[pane] = branch }
+                self.setPaneLabel(pane, AppCoordinator.shortName(path))
+            }
+        }
+        cwdDebounceWorkItems[pane] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
     }
 
     /// 读 .git/HEAD（向上找）取当前分支；游离 HEAD 返回短 sha；非仓库返回 nil。
@@ -1151,8 +1202,8 @@ final class AppCoordinator: ObservableObject {
 
     private func handlePaneExited(_ pane: PaneID) {
         NSLog("[conductor] pane exited (child process gone): \(pane.value)")
-        // v1：聚焦再关闭（在 active tab 内退出时正确；跨 tab 退出留待后续）。
-        run(.focusPane(pane))
+        // 聚焦再关闭：聚焦用轻量路径避免 rebuild。
+        focusOnly(pane)
         run(.closeActivePane)
     }
 

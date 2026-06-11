@@ -91,4 +91,16 @@ public indirect enum SplitNode: Codable, Equatable {
         guard let index = order.firstIndex(of: pane) else { return nil }
         return order[(index - 1 + order.count) % order.count]
     }
+
+    /// 返回把该树内所有分屏比例都设为 0.5 的副本（均分面板）。
+    public func withAllRatiosEqualized() -> SplitNode {
+        switch self {
+        case .leaf:
+            return self
+        case .split(let id, let axis, _, let first, let second):
+            return .split(id: id, axis: axis, ratio: 0.5,
+                          first: first.withAllRatiosEqualized(),
+                          second: second.withAllRatiosEqualized())
+        }
+    }
 }

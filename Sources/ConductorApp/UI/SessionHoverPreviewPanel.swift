@@ -70,7 +70,8 @@ struct SessionHoverPreviewPanel: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let messages, !messages.isEmpty {
-            SessionTranscriptView(messages: messages, maxHeight: panelMaxHeight - 108, fontSize: 10.5)
+            SessionTranscriptView(messages: messages, agent: record.agent,
+                                  maxHeight: panelMaxHeight - 108, fontSize: 10.5)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
         } else {

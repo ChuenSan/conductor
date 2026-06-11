@@ -1,3 +1,4 @@
+import AppKit
 import ConductorCore
 import SwiftUI
 
@@ -7,6 +8,8 @@ import SwiftUI
 ///   并定位到最新消息（LazyVStack 只惰性创建、不回收，长会话滚一遍后内存与布局成本线性涨）。
 struct SessionTranscriptView: View {
     let messages: [AgentSessionMessage]
+    /// 会话所属 agent（"claude"/"codex"），AI 消息头像用对应 logo。
+    var agent: String? = nil
     var maxHeight: CGFloat? = nil
     var fontSize: CGFloat = 11
 
@@ -28,7 +31,7 @@ struct SessionTranscriptView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(messages) { message in
-                    SessionMessageBubble(message: message, fontSize: fontSize)
+                    SessionMessageBubble(message: message, agent: agent, fontSize: fontSize)
                 }
             }
             .padding(.vertical, 2)
@@ -42,7 +45,7 @@ struct SessionTranscriptView: View {
         ScrollViewReader { proxy in
             List {
                 ForEach(messages) { message in
-                    SessionMessageBubble(message: message, fontSize: fontSize)
+                    SessionMessageBubble(message: message, agent: agent, fontSize: fontSize)
                         .id(message.id)
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                         .listRowSeparator(.hidden)
@@ -68,6 +71,8 @@ struct SessionTranscriptView: View {
 
 struct SessionMessageBubble: View {
     let message: AgentSessionMessage
+    /// 会话所属 agent（"claude"/"codex"），AI 头像显示对应 logo；nil 或找不到 logo 回退文字。
+    var agent: String? = nil
     var fontSize: CGFloat = 11
 
     /// 渲染上限：预览场景不需要完整展开一条几万字的消息，超出部分截断提示。
@@ -75,9 +80,7 @@ struct SessionMessageBubble: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
-            Text(message.role == .user ? L("我") : L("AI"))
-                .font(.system(size: fontSize - 2, weight: .bold))
-                .foregroundStyle(message.role == .user ? AppStyle.accent : AppStyle.textSecondary)
+            avatar
                 .frame(width: 20, height: 18)
                 .background(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -92,6 +95,29 @@ struct SessionMessageBubble: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// 用户消息显示「我」徽标；AI 消息优先用 agent 的品牌 logo（claude/codex png），缺图回退「AI」。
+    @ViewBuilder
+    private var avatar: some View {
+        if message.role == .user {
+            Text(L("我"))
+                .font(.system(size: fontSize - 2, weight: .bold))
+                .foregroundStyle(AppStyle.accent)
+        } else if let logo = agentLogo {
+            Image(nsImage: logo)
+                .resizable().interpolation(.high).scaledToFit()
+                .frame(width: 13, height: 13)
+        } else {
+            Text(L("AI"))
+                .font(.system(size: fontSize - 2, weight: .bold))
+                .foregroundStyle(AppStyle.textSecondary)
+        }
+    }
+
+    private var agentLogo: NSImage? {
+        guard let agent else { return nil }
+        return CLIToolLogo.image(named: agent == "claude" ? "claude" : "codex")
     }
 
     private var renderText: String {

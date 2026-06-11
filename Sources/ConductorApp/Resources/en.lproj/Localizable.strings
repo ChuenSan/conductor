@@ -40,7 +40,22 @@
 "扫描中…" = "Scanning…";
 "暂无 Agent 会话" = "No agent sessions yet";
 "鼠标悬停可预览对话" = "Hover to preview the conversation";
+"AI 正在思考" = "AI is thinking";
 "%1$ld 标签 · %2$ld 面板" = "%1$ld tabs · %2$ld panes";
+
+/* ===== 侧栏文件夹树 ===== */
+"文件夹" = "Folders";
+"在此目录开终端" = "Open Terminal Here";
+"在此目录打开终端" = "Open Terminal in This Folder";
+"刷新" = "Refresh";
+"显示隐藏文件夹" = "Show Hidden Folders";
+
+/* ===== 删除工作区确认 ===== */
+"删除工作区「%@」？" = "Delete workspace \"%@\"?";
+"其中 %ld 个终端会被关闭，此操作无法撤销。" = "%ld terminal(s) inside will be closed. This cannot be undone.";
+"此操作无法撤销。" = "This cannot be undone.";
+"删除" = "Delete";
+"取消" = "Cancel";
 "当前：%@" = "Current: %@";
 "当前：%1$@ · %2$@" = "Current: %1$@ · %2$@";
 "空工作区" = "Empty workspace";
@@ -79,7 +94,6 @@
 "此目录暂无会话" = "No sessions in this directory";
 "更多操作" = "More Actions";
 "全部目录" = "All Directories";
-"更新于 %@前" = "Updated %@ ago";
 "搜索标题、目录或 ID" = "Search title, directory, or ID";
 "正在扫描会话…" = "Scanning sessions…";
 "扫描失败" = "Scan Failed";
@@ -229,7 +243,6 @@
 /* ===== 设置：外观 / 终端 ===== */
 "语言" = "Language";
 "跟随系统" = "System Default";
-"重启 conductor 后生效" = "Takes effect after restarting conductor";
 "主题" = "Theme";
 "深色" = "Dark";
 "浅色" = "Light";
@@ -371,3 +384,50 @@
 "添加自定义值" = "Add Custom Value";
 "选择图片" = "Choose Image";
 "选择目录" = "Choose Directory";
+
+/* ===== 命令片段库 ===== */
+"片段" = "Snippets";
+"命令片段" = "Command Snippets";
+"命令片段库" = "Snippet Library";
+"新增片段" = "New Snippet";
+"编辑片段" = "Edit Snippet";
+"片段：%@" = "Snippet: %@";
+"点击片段发送到当前终端；也可在命令面板（⌘K）里直接搜索片段名。" = "Click a snippet to send it to the current terminal. You can also search snippets by name in the command palette (⌘K).";
+"还没有片段，点右上角「新增片段」创建一个。" = "No snippets yet. Click \"New Snippet\" in the top right to create one.";
+"发送后直接执行" = "Runs immediately after sending";
+"发送后摆在提示符上，可编辑" = "Placed at the prompt after sending, editable";
+"发送到当前终端" = "Send to Current Terminal";
+"编辑" = "Edit";
+"名称（如：提交全部改动）" = "Name (e.g. Commit all changes)";
+"命令（如：git add -A && git commit）" = "Command (e.g. git add -A && git commit)";
+"发送后直接执行（关掉则摆在提示符上，可编辑后再回车）" = "Run immediately after sending (off: placed at the prompt, press Enter to run)";
+"保存" = "Save";
+"Git 状态" = "Git Status";
+"Git 最近提交" = "Recent Git Commits";
+"提交全部改动" = "Commit All Changes";
+
+/* ===== 广播到 Agent ===== */
+"广播到所有 Agent" = "Broadcast to All Agents";
+"广播到 Agent" = "Broadcast to Agents";
+"回车发送 · Esc 关闭" = "Enter to send · Esc to close";
+"输入要发给所有 Agent 的指令…" = "Type an instruction for all agents…";
+"点击排除该 Agent" = "Click to exclude this agent";
+"点击加入广播" = "Click to include in broadcast";
+"没有可广播的 Agent" = "No Agents to Broadcast To";
+"当前工作区里没有正在运行的 Agent。先启动 claude / codex 再广播。" = "No agents are running in the current workspace. Launch claude / codex first, then broadcast.";
+"好" = "OK";
+"广播到所有 Agent（⌘⇧B）" = "Broadcast to All Agents (⌘⇧B)";
+
+/* ===== 广播历史 / 通知中心 ===== */
+"最近广播（↑ 回翻）" = "Recent Broadcasts (↑ to recall)";
+"Agent 完成记录" = "Agent Completions";
+"清空" = "Clear";
+"还没有完成记录。Agent 跑完任务会记在这里。" = "No completions yet. Finished agent tasks will show up here.";
+"点击跳到该终端" = "Click to jump to that terminal";
+
+/* ===== 打磨 ===== */
+"均分面板" = "Equalize Splits";
+"下一标签" = "Next Tab";
+"上一标签" = "Previous Tab";
+"没有匹配「%@」的结果" = "No results for \"%@\"";
+"清空搜索" = "Clear Search";

@@ -40,6 +40,18 @@ struct CommandPaletteView: View {
                     .foregroundStyle(AppStyle.textPrimary)
                     .focused($fieldFocused)
                     .onSubmit { runSelected() }
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                        fieldFocused = true
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(AppStyle.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("清空搜索"))
+                }
             }
             .padding(.horizontal, 16)
             .frame(height: 52)
@@ -49,11 +61,15 @@ struct CommandPaletteView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 2) {
-                        ForEach(Array(filtered.enumerated()), id: \.element.id) { index, item in
-                            row(item, selected: index == selection)
-                                .id(index)
-                                .contentShape(Rectangle())
-                                .onTapGesture { selection = index; runSelected() }
+                        if filtered.isEmpty {
+                            emptyState
+                        } else {
+                            ForEach(Array(filtered.enumerated()), id: \.element.id) { index, item in
+                                row(item, selected: index == selection)
+                                    .id(index)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { selection = index; runSelected() }
+                            }
                         }
                     }
                     .padding(8)
@@ -101,6 +117,19 @@ struct CommandPaletteView: View {
                 .fill(selected ? AppStyle.activeFill : Color.clear))
     }
 
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 24))
+                .foregroundStyle(AppStyle.textTertiary)
+            Text(L("没有匹配「%@」的结果", query))
+                .font(.system(size: 13))
+                .foregroundStyle(AppStyle.textTertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+    }
+
     private func move(_ d: Int) {
         let n = filtered.count
         guard n > 0 else { return }
@@ -122,7 +151,7 @@ struct CommandPaletteView: View {
         var qi = 0, score = 0, last = -2
         for (ti, ch) in t.enumerated() where qi < q.count && ch == q[qi] {
             score += (ti == last + 1) ? 4 : 1
-            if ti == 0 { score += 3 }   // 开头命中加分
+            if ti == 0 { score += 3 }
             last = ti
             qi += 1
         }
