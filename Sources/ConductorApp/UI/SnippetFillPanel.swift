@@ -12,6 +12,9 @@ struct SnippetFillPanelView: View {
     @State private var values: [String: String] = [:]
     @FocusState private var focusedName: String?
 
+    /// 占位符记忆：按变量名全局记住上次填的值（`{{branch}}` 这类常量型变量重复用最频繁）。
+    private static let memoryKey = "snippets.placeholderMemory"
+
     /// 实时预览：当前已填的值代入后的完整命令。
     private var preview: String {
         Snippet.fill(snippet.command, values: values.filter { !$0.value.isEmpty })
@@ -74,7 +77,15 @@ struct SnippetFillPanelView: View {
         .conductorFloatingPanel(cornerRadius: Radius.xl)
         .padding(Space.xl)
         .onKeyPress(.escape) { onClose(); return .handled }
-        .onAppear { focusedName = names.first }
+        .onAppear {
+            // 预填上次的值：直接回车即可重发；想改的字段已聚焦可改
+            let memory = Self.loadMemory()
+            for name in names where values[name] == nil {
+                if let remembered = memory[name] { values[name] = remembered }
+            }
+            // 聚焦第一个还空着的字段；全有记忆值就停在第一个（回车直发）
+            focusedName = names.first(where: { (values[$0] ?? "").isEmpty }) ?? names.first
+        }
     }
 
     private func binding(for name: String) -> Binding<String> {
@@ -87,8 +98,21 @@ struct SnippetFillPanelView: View {
             focusedName = next
             return
         }
+        saveMemory()
         onClose()
         onConfirm(Snippet.fill(snippet.command, values: values))
+    }
+
+    private static func loadMemory() -> [String: String] {
+        (UserDefaults.standard.dictionary(forKey: memoryKey) ?? [:])
+            .compactMapValues { $0 as? String }
+    }
+
+    /// 发送成功才记：半途 Esc 掉的不污染记忆。
+    private func saveMemory() {
+        var memory = Self.loadMemory()
+        for (name, value) in values where !value.isEmpty { memory[name] = value }
+        UserDefaults.standard.set(memory, forKey: Self.memoryKey)
     }
 }
 
