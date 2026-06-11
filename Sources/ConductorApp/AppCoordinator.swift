@@ -133,6 +133,7 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "toggleZoom", title: L("放大/还原面板"), defaultKeybinding: "cmd+enter") { [weak self] in self?.toggleZoom() },
             AppCommand(id: "commandPalette", title: L("命令面板"), defaultKeybinding: "cmd+k") { [weak self] in self?.openCommandPalette() },
             AppCommand(id: "broadcastToAgents", title: L("广播到所有 Agent"), defaultKeybinding: "cmd+shift+b") { [weak self] in self?.openBroadcast() },
+            AppCommand(id: "openSnippets", title: L("命令片段库"), defaultKeybinding: nil) { [weak self] in self?.openTools(.snippets) },
         ])
     }
 
@@ -192,6 +193,18 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    /// 把片段发到当前活动 pane：autoRun 直接执行，否则摆在提示符上可编辑。
+    func sendSnippet(_ snippet: Snippet) {
+        guard let tab = activeTabModel(),
+              let surface = registry.surface(for: tab.activePane) as? GhosttySurface else { return }
+        if snippet.autoRun {
+            surface.enqueueCommand(snippet.command)
+        } else {
+            surface.enqueueTypedText(snippet.command)
+        }
+        surface.focus()
+    }
+
     /// 命令面板的条目：命令表 + 工作区 + 当前工作区的标签。
     private func paletteItems() -> [PaletteItem] {
         var items: [PaletteItem] = []
@@ -211,6 +224,11 @@ final class AppCoordinator: ObservableObject {
                 items.append(PaletteItem(id: "tab:\(tid.value)", icon: "macwindow", title: L("标签：%@", t),
                                          subtitle: "") { [weak self] in self?.selectTab(tid) })
             }
+        }
+        for snippet in SnippetStore.shared.snippets {
+            items.append(PaletteItem(id: "snippet:\(snippet.id)", icon: snippet.autoRun ? "bolt" : "text.cursor",
+                                     title: L("片段：%@", snippet.name),
+                                     subtitle: snippet.command) { [weak self] in self?.sendSnippet(snippet) })
         }
         return items
     }
