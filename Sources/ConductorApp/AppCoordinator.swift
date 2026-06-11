@@ -139,8 +139,10 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "splitDown", title: L("向下分屏"), defaultKeybinding: "cmd+shift+d") { [weak self] in self?.split(.horizontal) },
             AppCommand(id: "closePane", title: L("关闭面板"), defaultKeybinding: "cmd+w") { [weak self] in self?.closeActivePane() },
             AppCommand(id: "reopenClosedTab", title: L("恢复最近关闭"), defaultKeybinding: "cmd+shift+t") { [weak self] in self?.reopenClosed() },
-            AppCommand(id: "focusNextPane", title: L("聚焦下一面板"), defaultKeybinding: "cmd+alt+right") { [weak self] in self?.focusNext() },
-            AppCommand(id: "focusPrevPane", title: L("聚焦上一面板"), defaultKeybinding: "cmd+alt+left") { [weak self] in self?.focusPrev() },
+            AppCommand(id: "focusPaneLeft", title: L("聚焦左侧面板"), defaultKeybinding: "cmd+alt+left") { [weak self] in self?.focusDirectional(.left) },
+            AppCommand(id: "focusPaneRight", title: L("聚焦右侧面板"), defaultKeybinding: "cmd+alt+right") { [weak self] in self?.focusDirectional(.right) },
+            AppCommand(id: "focusPaneUp", title: L("聚焦上方面板"), defaultKeybinding: "cmd+alt+up") { [weak self] in self?.focusDirectional(.up) },
+            AppCommand(id: "focusPaneDown", title: L("聚焦下方面板"), defaultKeybinding: "cmd+alt+down") { [weak self] in self?.focusDirectional(.down) },
             AppCommand(id: "increaseFontSize", title: L("放大字号"), defaultKeybinding: "cmd+=") { [weak self] in self?.adjustFontSize(1) },
             AppCommand(id: "decreaseFontSize", title: L("缩小字号"), defaultKeybinding: "cmd+-") { [weak self] in self?.adjustFontSize(-1) },
             AppCommand(id: "resetFontSize", title: L("复位字号"), defaultKeybinding: "cmd+0") { [weak self] in self?.resetFontSize() },
@@ -1373,14 +1375,38 @@ final class AppCoordinator: ObservableObject {
         scheduleSave()
     }
 
-    func focusNext() {
-        guard let pane = activePane(), let tree = activeTree(), let next = tree.pane(after: pane) else { return }
-        focusOnly(next)
-    }
+    enum FocusDirection { case left, right, up, down }
 
-    func focusPrev() {
-        guard let pane = activePane(), let tree = activeTree(), let prev = tree.pane(before: pane) else { return }
-        focusOnly(prev)
+    /// ⌘⌥方向键：按几何位置聚焦该方向最近的 pane（tmux 风）。
+    /// 打分 = 主轴距离 + 3×横向偏移，偏好正对的邻居；该方向没有 pane 则原地不动。
+    func focusDirectional(_ direction: FocusDirection) {
+        guard let tab = activeTabModel(), let active = activePane(),
+              let fromView = paneContainers[active], fromView.window != nil else { return }
+        let leaves = Set(tab.rootSplit.leaves())
+        let from = fromView.convert(fromView.bounds, to: nil)   // 窗口坐标系（y 向上）
+        var best: PaneID?
+        var bestScore = CGFloat.greatestFiniteMagnitude
+        for (pane, container) in paneContainers {
+            guard pane != active, leaves.contains(pane), container.window != nil else { continue }
+            let frame = container.convert(container.bounds, to: nil)
+            let dx = frame.midX - from.midX
+            let dy = frame.midY - from.midY
+            let primary: CGFloat
+            let ortho: CGFloat
+            switch direction {
+            case .left: (primary, ortho) = (-dx, abs(dy))
+            case .right: (primary, ortho) = (dx, abs(dy))
+            case .up: (primary, ortho) = (dy, abs(dx))
+            case .down: (primary, ortho) = (-dy, abs(dx))
+            }
+            guard primary > 1 else { continue }   // 必须确实位于那个方向
+            let score = primary + ortho * 3
+            if score < bestScore {
+                bestScore = score
+                best = pane
+            }
+        }
+        if let best { focusOnly(best) }
     }
 
     /// 仅切换焦点：只更新活动 pane，不重建视图树，避免每次切焦点都卡一下。
@@ -1773,6 +1799,5 @@ final class AppCoordinator: ObservableObject {
         return ws.tabs.first { $0.id == tid }
     }
 
-    private func activeTree() -> SplitNode? { activeTabModel()?.rootSplit }
     private func activePane() -> PaneID? { activeTabModel()?.activePane }
 }

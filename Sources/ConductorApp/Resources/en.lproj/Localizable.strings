@@ -511,3 +511,7 @@
 "已新建工作区「%@」" = "Workspace \"%@\" created";
 "已新建 %ld 个工作区" = "%ld workspaces created";
 "续聊：%@" = "Resume: %@";
+"聚焦左侧面板" = "Focus Pane Left";
+"聚焦右侧面板" = "Focus Pane Right";
+"聚焦上方面板" = "Focus Pane Above";
+"聚焦下方面板" = "Focus Pane Below";
