@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import ConductorCore
+import UniformTypeIdentifiers
 
 private enum TerminalAreaTransition: Equatable {
     case zoom(expanding: Bool)
@@ -1077,6 +1078,39 @@ final class AppCoordinator: ObservableObject {
             paneCwds: capturedCwds(tab), paneSessions: capturedSessions(tab)))
     }
 
+    /// 右键「导出输出为文本」：把 pane 的屏幕+回滚文本另存为 .txt（agent 长输出存档）。
+    func exportScrollback(_ pane: PaneID) {
+        guard let surface = registry.surface(for: pane) as? GhosttySurface,
+              let text = surface.readAllText(),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            ToastHUD.shared.show(L("没有可导出的内容"), icon: "exclamationmark.circle.fill", over: window)
+            return
+        }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = exportFileName(for: pane)
+        // 默认落在 pane 的当前目录，顺手
+        if let cwd = paneCwds[pane] { panel.directoryURL = URL(fileURLWithPath: cwd) }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            ToastHUD.shared.show(L("已导出 %@", url.lastPathComponent),
+                                 icon: "square.and.arrow.down.fill", over: window)
+        } catch {
+            ToastHUD.shared.show(L("导出失败：%@", error.localizedDescription),
+                                 icon: "exclamationmark.circle.fill", over: window)
+        }
+    }
+
+    /// 导出默认文件名：pane 标题（去掉路径分隔符）+ 时间戳。
+    private func exportFileName(for pane: PaneID) -> String {
+        let raw = paneTitles[pane] ?? "terminal"
+        let safe = raw.map { "/:".contains($0) ? "-" : $0 }.map(String.init).joined()
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return "\(safe)-\(formatter.string(from: Date())).txt"
+    }
+
     /// 趁 surface 还活着，把 pane 的屏幕+回滚文本快照到盘（恢复时回放）。
     private func captureScrollback(_ pane: PaneID) {
         guard let surface = registry.surface(for: pane) as? GhosttySurface,
@@ -1709,6 +1743,7 @@ final class AppCoordinator: ObservableObject {
             case .zoom: toggleZoom()
             case .copyCwd: copyToClipboard(paneCwds[pane] ?? activeWorkspace()?.path ?? "")
             case .openInFinder: revealInFinder(paneCwds[pane] ?? activeWorkspace()?.path ?? "")
+            case .exportText: exportScrollback(pane)
             case .close: closeActivePane()
             }
         }

@@ -22,12 +22,13 @@ enum PaneContextAction: Equatable {
     case copy, paste, selectAll, clear   // 终端文本操作（经 ghostty）
     case splitRight, splitDown, zoom     // 布局
     case copyCwd, openInFinder           // 当前目录
+    case exportText                      // 屏幕+回滚文本存盘
     case close
 }
 
 enum PaneHeaderActionPresentation {
     static let primaryActions: [PaneContextAction] = [.splitRight, .splitDown, .zoom, .close]
-    static let moreActions: [PaneContextAction] = [.copy, .paste, .selectAll, .clear, .copyCwd, .openInFinder]
+    static let moreActions: [PaneContextAction] = [.copy, .paste, .selectAll, .clear, .copyCwd, .openInFinder, .exportText]
 
     static func title(for action: PaneContextAction) -> String {
         switch action {
@@ -40,6 +41,7 @@ enum PaneHeaderActionPresentation {
         case .zoom: return L("放大 / 还原")
         case .copyCwd: return L("复制路径")
         case .openInFinder: return L("在 Finder 中显示")
+        case .exportText: return L("导出输出为文本…")
         case .close: return L("关闭面板")
         }
     }
@@ -55,6 +57,7 @@ enum PaneHeaderActionPresentation {
         case .zoom: return "arrow.up.left.and.arrow.down.right"
         case .copyCwd: return "doc.text"
         case .openInFinder: return "folder"
+        case .exportText: return "square.and.arrow.down"
         case .close: return "xmark"
         }
     }
@@ -293,6 +296,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         menu.addItem(.separator())
         add(PaneHeaderActionPresentation.title(for: .copyCwd), PaneHeaderActionPresentation.systemImage(for: .copyCwd), .copyCwd)
         add(PaneHeaderActionPresentation.title(for: .openInFinder), PaneHeaderActionPresentation.systemImage(for: .openInFinder), .openInFinder)
+        add(PaneHeaderActionPresentation.title(for: .exportText), PaneHeaderActionPresentation.systemImage(for: .exportText), .exportText)
         menu.addItem(.separator())
         let sessionItem = NSMenuItem(title: L("续聊会话"), action: nil, keyEquivalent: "")
         sessionItem.image = NSImage(systemSymbolName: "bubble.left.and.text.bubble.right", accessibilityDescription: nil)
