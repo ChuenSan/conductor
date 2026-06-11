@@ -214,7 +214,7 @@ final class AppCoordinator: ObservableObject {
         }
         guard delivered > 0 else { return }
         ToastHUD.shared.show(
-            execute ? L("已广播到 %d 个 Agent", delivered) : L("已填入 %d 个 Agent 的输入框", delivered),
+            execute ? L("已广播到 %ld 个 Agent", delivered) : L("已填入 %ld 个 Agent 的输入框", delivered),
             icon: "dot.radiowaves.left.and.right",
             over: window)
     }
