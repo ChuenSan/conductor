@@ -141,6 +141,14 @@ private struct TabPill: View {
     private var isGroup: Bool { tab.isGroup }
     private var showClose: Bool { (hovering || selected) && !isEditing }
 
+    /// 悬停提示：⌘N 直达键位 + 完成未读说明（有则附）。
+    private var pillHelp: String {
+        var parts: [String] = []
+        if index < 9 { parts.append("⌘\(index + 1)") }
+        if hasUnseenDone { parts.append(L("有 Agent 已完成，点击查看")) }
+        return parts.joined(separator: " · ")
+    }
+
     var body: some View {
         Group {
             if isEditing {
@@ -160,6 +168,7 @@ private struct TabPill: View {
                 .animation(Motion.snappy, value: showClose)
         }
         .animation(Motion.hover, value: hovering)
+        .help(pillHelp)
         .contextMenu {
             Button { onStartEdit() } label: { Label(L("重命名"), systemImage: "pencil") }
             Divider()

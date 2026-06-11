@@ -156,7 +156,17 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "searchSelection", title: L("以选中内容搜索"), defaultKeybinding: "cmd+e") { [weak self] in self?.searchSelectionInTerminal() },
             AppCommand(id: "findNext", title: L("查找下一个"), defaultKeybinding: "cmd+g") { [weak self] in self?.navigateTerminalSearch(forward: true) },
             AppCommand(id: "findPrev", title: L("查找上一个"), defaultKeybinding: "cmd+shift+g") { [weak self] in self?.navigateTerminalSearch(forward: false) },
-        ])
+        ] + (1...9).map { n in
+            AppCommand(id: "selectTab\(n)", title: L("切到标签 %ld", n), defaultKeybinding: "cmd+\(n)") { [weak self] in
+                self?.selectTab(atIndex: n - 1)
+            }
+        })
+    }
+
+    /// ⌘1–⌘9：按序号直达当前工作区的标签；序号越界则忽略。
+    func selectTab(atIndex index: Int) {
+        guard let ws = activeWorkspace(), ws.tabs.indices.contains(index) else { return }
+        selectTab(ws.tabs[index].id)
     }
 
     /// ⌘F：在活动 pane 上打开搜索条。
