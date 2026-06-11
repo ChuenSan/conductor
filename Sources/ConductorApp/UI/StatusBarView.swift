@@ -15,10 +15,20 @@ struct StatusBarView: View {
                     .transition(.opacity)
             } else {
                 if let cwd = coordinator.activeCwd {
-                    item("folder", prettyPath(cwd))
+                    StatusCopyItem(icon: "folder", text: prettyPath(cwd),
+                                   help: L("点击复制路径")) {
+                        coordinator.copyToClipboard(cwd)
+                        ToastHUD.shared.show(L("已复制路径"), icon: "doc.on.doc.fill",
+                                             over: coordinator.window)
+                    }
                 }
                 if let branch = coordinator.activeBranch {
-                    item("arrow.triangle.branch", branch, accent: true)
+                    StatusCopyItem(icon: "arrow.triangle.branch", text: branch, accent: true,
+                                   help: L("点击复制分支名")) {
+                        coordinator.copyToClipboard(branch)
+                        ToastHUD.shared.show(L("已复制分支名"), icon: "doc.on.doc.fill",
+                                             over: coordinator.window)
+                    }
                 }
             }
             Spacer(minLength: 8)
@@ -58,6 +68,44 @@ struct StatusBarView: View {
     private func prettyPath(_ path: String) -> String {
         let home = NSHomeDirectory()
         return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
+    }
+}
+
+/// 可点击复制的状态栏条目（cwd / git 分支）：hover 提亮 + 浮现复制小图标，点击进剪贴板。
+private struct StatusCopyItem: View {
+    let icon: String
+    let text: String
+    var accent = false
+    let help: String
+    let onCopy: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: onCopy) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(accent ? AppStyle.accent : AppStyle.textTertiary)
+                Text(text)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(hovering ? AppStyle.textPrimary : AppStyle.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if hovering {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                }
+            }
+            .animation(.easeOut(duration: 0.12), value: text)
+            .animation(.easeOut(duration: 0.12), value: hovering)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(help)
     }
 }
 
