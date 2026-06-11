@@ -459,6 +459,9 @@
 "上一个（⇧回车）" = "Previous (⇧Return)";
 "下一个（回车）" = "Next (Return)";
 "关闭（Esc）" = "Close (Esc)";
+"以选中内容搜索" = "Use Selection for Find";
+"查找下一个" = "Find Next";
+"查找上一个" = "Find Previous";
 
 /* ===== 打磨 ===== */
 "均分面板" = "Equalize Splits";

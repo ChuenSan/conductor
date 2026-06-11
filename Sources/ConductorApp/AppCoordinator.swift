@@ -138,10 +138,13 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "commandPalette", title: L("命令面板"), defaultKeybinding: "cmd+k") { [weak self] in self?.openCommandPalette() },
             AppCommand(id: "broadcastToAgents", title: L("广播到所有 Agent"), defaultKeybinding: "cmd+shift+b") { [weak self] in self?.openBroadcast() },
             AppCommand(id: "openSnippets", title: L("命令片段库"), defaultKeybinding: nil) { [weak self] in self?.openTools(.snippets) },
-            AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+e") { [weak self] in self?.equalizeSplits() },
+            AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+ctrl+e") { [weak self] in self?.equalizeSplits() },
             AppCommand(id: "nextTab", title: L("下一标签"), defaultKeybinding: "cmd+shift+rightbrace") { [weak self] in self?.cycleTab(forward: true) },
             AppCommand(id: "prevTab", title: L("上一标签"), defaultKeybinding: "cmd+shift+leftbrace") { [weak self] in self?.cycleTab(forward: false) },
             AppCommand(id: "findInTerminal", title: L("终端内搜索"), defaultKeybinding: "cmd+f") { [weak self] in self?.openTerminalSearch() },
+            AppCommand(id: "searchSelection", title: L("以选中内容搜索"), defaultKeybinding: "cmd+e") { [weak self] in self?.searchSelectionInTerminal() },
+            AppCommand(id: "findNext", title: L("查找下一个"), defaultKeybinding: "cmd+g") { [weak self] in self?.navigateTerminalSearch(forward: true) },
+            AppCommand(id: "findPrev", title: L("查找上一个"), defaultKeybinding: "cmd+shift+g") { [weak self] in self?.navigateTerminalSearch(forward: false) },
         ])
     }
 
@@ -149,6 +152,30 @@ final class AppCoordinator: ObservableObject {
     func openTerminalSearch() {
         guard let tab = activeTabModel() else { return }
         container(for: tab.activePane)?.showSearch()
+    }
+
+    /// ⌘E：把终端里选中的文字作为搜索词（macOS「使用所选内容查找」惯例）。
+    /// 没有选区时退化为打开空搜索条。
+    func searchSelectionInTerminal() {
+        guard let tab = activeTabModel(),
+              let surface = registry.surface(for: tab.activePane) as? GhosttySurface else { return }
+        if surface.hasSelection {
+            // core 自己起搜索并回发 START_SEARCH（带选区文字）→ 搜索条自动带词浮现
+            surface.performAction("search_selection")
+        } else {
+            container(for: tab.activePane)?.showSearch()
+        }
+    }
+
+    /// ⌘G / ⇧⌘G：跳上/下一个匹配，焦点在终端时也能用；搜索条还没开就先打开。
+    func navigateTerminalSearch(forward: Bool) {
+        guard let tab = activeTabModel() else { return }
+        guard let container = container(for: tab.activePane), container.isSearchVisible else {
+            openTerminalSearch()
+            return
+        }
+        (registry.surface(for: tab.activePane) as? GhosttySurface)?
+            .performAction(forward ? "navigate_search:next" : "navigate_search:previous")
     }
 
     /// 一键切换 深/浅 主题（custom → 深色）。
