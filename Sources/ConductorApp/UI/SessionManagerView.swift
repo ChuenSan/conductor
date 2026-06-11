@@ -63,7 +63,9 @@ struct SessionManagerView: View {
                     .foregroundStyle(AppStyle.textTertiary)
                     .lineLimit(1)
                 if let scanned = store.lastScannedAt {
-                    Text("更新于 \(scanned, style: .relative)前", bundle: .module)
+                    // .relative(.named) 自带“前/ago”，locale 跟随语言热切换
+                    Text(L("更新于 %@", scanned.formatted(
+                        .relative(presentation: .named).locale(AppLanguage.activeLocale))))
                         .font(.system(size: 10))
                         .foregroundStyle(AppStyle.textTertiary)
                 }

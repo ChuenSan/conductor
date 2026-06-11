@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         LegacyMigration.migrateIfNeeded()   // cmux → Conductor 改名后迁移旧用户数据
+        AppLanguage.bootstrap()   // 把持久化的语言选择应用到运行时查表（App + ConductorCore）
         // 原生控件外观跟随 app 主题（coordinator.attach 起持续同步；这里设初值避免启动闪深色）。
         NSApp.appearance = NSAppearance(named: AppStyle.theme.isDark ? .darkAqua : .aqua)
         let home = FileManager.default.homeDirectoryForCurrentUser.path

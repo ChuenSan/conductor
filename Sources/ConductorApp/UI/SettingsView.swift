@@ -13,7 +13,6 @@ struct SettingsView: View {
     /// 键位编辑用本地草稿：避免每个按键都落盘，提交（回车）时才生效。
     @State private var keybindingDrafts: [String: String] = [:]
     @State private var languageChoice: String = AppLanguage.current
-    @State private var showLanguageRestartHint = false
 
     private var config: AppConfig { configStore.config }
 
@@ -23,8 +22,7 @@ struct SettingsView: View {
             set: { choice in
                 guard choice != languageChoice else { return }
                 languageChoice = choice
-                AppLanguage.apply(choice)
-                withAnimation(.easeOut(duration: 0.15)) { showLanguageRestartHint = true }
+                AppLanguage.apply(choice)   // 持久化 + 热生效（整棵 UI 即时重建）
             }
         )
     }
@@ -123,20 +121,12 @@ struct SettingsView: View {
                                 selection: bind(\.appearance.theme))
             }
             SettingsRow(label: L("语言")) {
-                VStack(alignment: .trailing, spacing: 5) {
-                    // 语言名按惯例保持各自语言原文，不随界面语言翻译
-                    ThemedSegmented(
-                        options: [(L("跟随系统"), AppLanguage.system),
-                                  ("简体中文", AppLanguage.simplifiedChinese),
-                                  ("English", AppLanguage.english)],
-                        selection: languageBinding)
-                    if showLanguageRestartHint {
-                        Text(L("重启 conductor 后生效"))
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(AppStyle.accent)
-                            .transition(.opacity)
-                    }
-                }
+                // 语言名按惯例保持各自语言原文，不随界面语言翻译
+                ThemedSegmented(
+                    options: [(L("跟随系统"), AppLanguage.system),
+                              ("简体中文", AppLanguage.simplifiedChinese),
+                              ("English", AppLanguage.english)],
+                    selection: languageBinding)
             }
             SettingsRow(label: L("字体")) {
                 Picker("", selection: bind(\.appearance.font.family)) {

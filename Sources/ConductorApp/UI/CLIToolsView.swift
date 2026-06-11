@@ -27,7 +27,7 @@ enum CLIToolLogo {
 
     static func image(named name: String) -> NSImage? {
         if let cached = cache[name] { return cached }
-        let image = Bundle.module.url(forResource: name, withExtension: "png", subdirectory: "Logos")
+        let image = appModuleResources.url(forResource: name, withExtension: "png", subdirectory: "Logos")
             .flatMap { NSImage(contentsOf: $0) }
         cache[name] = image
         return image

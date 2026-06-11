@@ -6,6 +6,8 @@ struct RootView: View {
     @ObservedObject var coordinator: AppCoordinator
     /// 观察配置：主题变化时整棵外壳重渲染(AppStyle 跟随)。
     @ObservedObject private var configStore = ConfigStore.shared
+    /// 语言热切换：revision 变 → `.id()` 强制整棵树重建，所有 L() 文案按新语言重新求值。
+    @ObservedObject private var localization = AppLanguage.revision
 
     var body: some View {
         HStack(spacing: 0) {
@@ -50,6 +52,7 @@ struct RootView: View {
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
+        .id(localization.value)   // 语言切换 → 重建子树（TerminalAreaView 复用同一 NSView，终端不受影响）
         .background(AppStyle.windowBackground)
         .ignoresSafeArea()
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: coordinator.sidebarPresentation.isCollapsed)
