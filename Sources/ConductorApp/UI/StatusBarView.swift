@@ -9,11 +9,17 @@ struct StatusBarView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if let cwd = coordinator.activeCwd {
-                item("folder", prettyPath(cwd))
-            }
-            if let branch = coordinator.activeBranch {
-                item("arrow.triangle.branch", branch, accent: true)
+            // 悬停链接时左侧切换成 URL 显示（浏览器式），移开还原 cwd/分支
+            if let link = coordinator.hoveredLink {
+                item("link", link, accent: true)
+                    .transition(.opacity)
+            } else {
+                if let cwd = coordinator.activeCwd {
+                    item("folder", prettyPath(cwd))
+                }
+                if let branch = coordinator.activeBranch {
+                    item("arrow.triangle.branch", branch, accent: true)
+                }
             }
             Spacer(minLength: 8)
             ActivityBellView(coordinator: coordinator, log: coordinator.activityLog)
@@ -44,7 +50,9 @@ struct StatusBarView: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(AppStyle.textSecondary)
                 .lineLimit(1)
+                .truncationMode(.middle)
         }
+        .animation(.easeOut(duration: 0.12), value: text)
     }
 
     private func prettyPath(_ path: String) -> String {

@@ -453,6 +453,13 @@
 "昨天" = "Yesterday";
 "该终端已关闭" = "That terminal has been closed";
 
+/* ===== 终端搜索 / 链接 ===== */
+"终端内搜索" = "Find in Terminal";
+"搜索…" = "Search…";
+"上一个（⇧回车）" = "Previous (⇧Return)";
+"下一个（回车）" = "Next (Return)";
+"关闭（Esc）" = "Close (Esc)";
+
 /* ===== 打磨 ===== */
 "均分面板" = "Equalize Splits";
 "下一标签" = "Next Tab";

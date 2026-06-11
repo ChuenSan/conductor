@@ -208,6 +208,26 @@ final class GhosttyRuntime {
                 if let url = URL(string: urlString) { NSWorkspace.shared.open(url) }
             }
             return true
+        case GHOSTTY_ACTION_MOUSE_OVER_LINK:
+            // url 非 nul 结尾，按 len 取；len == 0 表示移出链接
+            let link = action.action.mouse_over_link
+            let url: String?
+            if let base = link.url, link.len > 0 {
+                url = String(bytes: UnsafeRawBufferPointer(start: base, count: Int(link.len)),
+                             encoding: .utf8)
+            } else {
+                url = nil
+            }
+            Task { @MainActor in
+                GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleMouseOverLink(url)
+            }
+            return true
+        case GHOSTTY_ACTION_MOUSE_SHAPE:
+            let shape = action.action.mouse_shape
+            Task { @MainActor in
+                GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleMouseShape(shape)
+            }
+            return true
         case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
             Task { @MainActor in
                 GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleChildExited()

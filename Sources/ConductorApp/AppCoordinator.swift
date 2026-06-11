@@ -63,6 +63,8 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var paneAgents: [PaneID: String] = [:]
     /// 正在「思考」的 agent pane 集合（hook 信号 ∪ 启发式），驱动 tab / 工作区 / 文件夹树的思考动效。
     @Published private(set) var thinkingPanes: Set<PaneID> = []
+    /// 终端里悬停的链接 URL（状态栏浏览器式显示）；nil = 没悬停在链接上。
+    @Published var hoveredLink: String?
     /// 上次 CPU 采样：pane → (pid, 累计 CPU 秒, 采样时刻)，两次做差得占用率。
     private var agentCpuSamples: [PaneID: (pid: Int32, cpuTime: Double, at: Date)] = [:]
     /// 上次视口文本指纹：spinner / 流式输出会让可见内容每轮都变，静止等输入则不变。
@@ -139,7 +141,14 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+e") { [weak self] in self?.equalizeSplits() },
             AppCommand(id: "nextTab", title: L("下一标签"), defaultKeybinding: "cmd+shift+rightbrace") { [weak self] in self?.cycleTab(forward: true) },
             AppCommand(id: "prevTab", title: L("上一标签"), defaultKeybinding: "cmd+shift+leftbrace") { [weak self] in self?.cycleTab(forward: false) },
+            AppCommand(id: "findInTerminal", title: L("终端内搜索"), defaultKeybinding: "cmd+f") { [weak self] in self?.openTerminalSearch() },
         ])
+    }
+
+    /// ⌘F：在活动 pane 上打开搜索条。
+    func openTerminalSearch() {
+        guard let tab = activeTabModel() else { return }
+        container(for: tab.activePane)?.showSearch()
     }
 
     /// 一键切换 深/浅 主题（custom → 深色）。
@@ -1407,6 +1416,25 @@ final class AppCoordinator: ObservableObject {
             container?.updateScrollbar(total: total, offset: offset, len: len)
         }
         container.onScroll = { [weak surface] dy in surface?.scrollByPixels(dy) }
+        // ⌘F 搜索条 ↔ libghostty 搜索动作
+        container.onSearchQuery = { [weak surface] text in
+            _ = surface?.performAction("search:" + text)
+        }
+        container.onSearchNavigate = { [weak surface] forward in
+            _ = surface?.performAction(forward ? "navigate_search:next" : "navigate_search:previous")
+        }
+        container.onSearchEnded = { [weak surface] in
+            _ = surface?.performAction("end_search")
+            surface?.focus()
+        }
+        surface.onSearchStart = { [weak container] needle in
+            container?.showSearch(initialNeedle: needle.isEmpty ? nil : needle)
+        }
+        surface.onSearchEnd = { [weak container] in container?.searchEndedExternally() }
+        surface.onSearchTotal = { [weak container] total in container?.setSearchTotal(total) }
+        surface.onSearchSelected = { [weak container] sel in container?.setSearchSelected(sel) }
+        // 链接悬停：状态栏显示目标 URL（浏览器式）
+        surface.onLinkHover = { [weak self] url in self?.hoveredLink = url }
         container.setAgentLogo(agentLogoImage(for: paneAgents[pane]))
         paneContainers[pane] = container
         pendingEntrances[pane] = plannedEntrances.removeValue(forKey: pane) ?? .fade

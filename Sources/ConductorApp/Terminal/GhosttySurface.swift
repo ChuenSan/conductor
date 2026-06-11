@@ -36,6 +36,8 @@ final class GhosttySurface: TerminalSurface {
     var onSearchTotal: ((Int) -> Void)?
     var onSearchSelected: ((Int) -> Void)?
     var onSearchEnd: (() -> Void)?
+    /// 鼠标悬停在链接上（nil = 移开）。⌘点击打开由 OPEN_URL 动作兜底处理。
+    var onLinkHover: ((String?) -> Void)?
 
     func requestFocus() { onRequestFocus?() }
     func beginPaneDrag(_ event: NSEvent) { onBeginPaneDrag?(event) }
@@ -302,6 +304,24 @@ final class GhosttySurface: TerminalSurface {
     func handleSearchTotal(_ total: Int) { onSearchTotal?(total) }
     func handleSearchSelected(_ selected: Int) { onSearchSelected?(selected) }
     func handleSearchEnd() { onSearchEnd?() }
+    func handleMouseOverLink(_ url: String?) { onLinkHover?(url) }
+
+    /// core 请求换鼠标指针（链接上 pointer、正文 text…）。只在鼠标确实悬在本终端时生效。
+    func handleMouseShape(_ shape: ghostty_action_mouse_shape_e) {
+        guard hostView.window != nil else { return }
+        let mouseInside = hostView.window.map {
+            hostView.isMousePoint(hostView.convert($0.mouseLocationOutsideOfEventStream, from: nil),
+                                  in: hostView.bounds)
+        } ?? false
+        guard mouseInside else { return }
+        switch shape {
+        case GHOSTTY_MOUSE_SHAPE_POINTER: NSCursor.pointingHand.set()
+        case GHOSTTY_MOUSE_SHAPE_TEXT, GHOSTTY_MOUSE_SHAPE_CELL: NSCursor.iBeam.set()
+        case GHOSTTY_MOUSE_SHAPE_CROSSHAIR: NSCursor.crosshair.set()
+        case GHOSTTY_MOUSE_SHAPE_VERTICAL_TEXT: NSCursor.iBeamCursorForVerticalLayout.set()
+        default: NSCursor.arrow.set()
+        }
+    }
 
     /// 拖动滚动条时按像素滚动终端（drag thumb → 滚内容）。
     /// 必须带 precise 标志：否则 ghostty 把数值当滚轮「格数」（一格多行），

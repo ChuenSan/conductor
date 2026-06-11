@@ -161,6 +161,15 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     private let dropOverlay = NSView()
     /// 自绘滚动条（card 的兄弟，贴右缘；非 Metal 兄弟，安全）。
     private let scrollbar = PaneScrollbar()
+    /// ⌘F 搜索条（懒创建；card 的兄弟，浮在右上角，非 Metal 兄弟，安全）。
+    private var searchBar: PaneSearchBar?
+
+    /// 搜索条文本变化 → `search:<needle>`（空串取消高亮）。
+    var onSearchQuery: ((String) -> Void)?
+    /// 搜索条导航 → `navigate_search:next/previous`。
+    var onSearchNavigate: ((_ forward: Bool) -> Void)?
+    /// 用户关掉搜索条 → `end_search` + 焦点还给终端。
+    var onSearchEnded: (() -> Void)?
 
     init(paneID: PaneID, hostView: NSView, title: String) {
         self.paneID = paneID
@@ -377,6 +386,67 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         card.frame = NSRect(x: 0, y: 0, width: fb.width, height: max(0, fb.height - headerH))
         hostView.frame = card.bounds
         scrollbar.frame = NSRect(x: fb.width - 14, y: 0, width: 14, height: max(0, fb.height - headerH))
+        if let searchBar, !searchBar.isHidden {
+            let width = min(320, fb.width - 24)
+            searchBar.frame = NSRect(x: fb.width - width - 12,
+                                     y: fb.height - headerH - 32 - 8,
+                                     width: width, height: 32)
+        }
+    }
+
+    // MARK: - ⌘F 搜索条
+
+    var isSearchVisible: Bool { searchBar?.isHidden == false }
+
+    /// 显示搜索条；`initialNeedle` 来自 core 的 START_SEARCH（如 search_selection 绑定）。
+    func showSearch(initialNeedle: String? = nil) {
+        let bar = searchBar ?? makeSearchBar()
+        if let initialNeedle, !initialNeedle.isEmpty {
+            bar.setNeedle(initialNeedle)
+        }
+        bar.refreshColors()
+        if bar.isHidden {
+            bar.isHidden = false
+            bar.layer?.opacity = 0
+            needsLayout = true
+            layoutSubtreeIfNeeded()
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0
+            fade.toValue = 1
+            fade.duration = 0.14
+            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            bar.layer?.add(fade, forKey: "searchIn")
+            bar.layer?.opacity = 1
+        }
+        bar.focusField()
+    }
+
+    /// 用户主动关闭（Esc / ✕）：藏条 + 通知外面 end_search。
+    private func closeSearch() {
+        guard let searchBar, !searchBar.isHidden else { return }
+        searchBar.isHidden = true
+        searchBar.resetCount()
+        onSearchEnded?()
+    }
+
+    /// core 发来 END_SEARCH（如终端侧绑定触发）：只藏条，不再回发 end_search。
+    func searchEndedExternally() {
+        searchBar?.isHidden = true
+        searchBar?.resetCount()
+    }
+
+    func setSearchTotal(_ total: Int) { searchBar?.setTotal(total) }
+    func setSearchSelected(_ selected: Int) { searchBar?.setSelected(selected) }
+
+    private func makeSearchBar() -> PaneSearchBar {
+        let bar = PaneSearchBar(frame: NSRect(x: 0, y: 0, width: 320, height: 32))
+        bar.isHidden = true
+        bar.onQueryChange = { [weak self] text in self?.onSearchQuery?(text) }
+        bar.onNavigate = { [weak self] forward in self?.onSearchNavigate?(forward) }
+        bar.onClose = { [weak self] in self?.closeSearch() }
+        frameView.addSubview(bar)   // card 的兄弟（非 Metal 兄弟，安全）
+        searchBar = bar
+        return bar
     }
 
     func updateScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
