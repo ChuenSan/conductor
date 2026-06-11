@@ -235,7 +235,7 @@ struct SidebarView: View {
                 .padding(.leading, 12)
                 .padding(.trailing, 10)
                 .padding(.bottom, 8)
-                .animation(.spring(response: 0.3, dampingFraction: 0.85), value: listModeRaw)
+                .animation(Motion.panel, value: listModeRaw)
             }
         }
     }
@@ -256,7 +256,7 @@ struct SidebarView: View {
     private func modeSegment(_ title: String, icon: String, mode: SidebarListMode) -> some View {
         let selected = listMode == mode
         return Button {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+            withAnimation(Motion.panel) {
                 listModeRaw = mode.rawValue
             }
         } label: {
@@ -525,10 +525,10 @@ private struct WorkspaceRow: View {
                 .fill(selected ? AppStyle.activeFill : (hovering ? AppStyle.hoverFill : Color.clear))
         )
         .contentShape(Rectangle())
-        .animation(.easeOut(duration: 0.15), value: hovering)
-        .animation(.easeInOut(duration: 0.22), value: selected)
-        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: isCollapsed)
-        .animation(.easeInOut(duration: 0.20), value: summary.activeDetailText)
+        .animation(Motion.hover, value: hovering)
+        .animation(.easeInOut(duration: 0.2), value: selected)
+        .animation(Motion.panel, value: isCollapsed)
+        .animation(.easeInOut(duration: 0.2), value: summary.activeDetailText)
         .onTapGesture { if !isEditing { onSelect() } }
         .onHover { hovering = $0 }
         .help(summary.tooltipText)

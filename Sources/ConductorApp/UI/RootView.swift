@@ -55,11 +55,11 @@ struct RootView: View {
         .id(localization.value)   // 语言切换 → 重建子树（TerminalAreaView 复用同一 NSView，终端不受影响）
         .background(AppStyle.windowBackground)
         .ignoresSafeArea()
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: coordinator.sidebarPresentation.isCollapsed)
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: coordinator.settingsPresentation.isPresented)
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: coordinator.cliToolsPresentation.isPresented)
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: coordinator.sessionPresentation.isPresented)
-        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: activeWorkspaceMetrics?.totalPaneCount)
+        .animation(Motion.panel, value: coordinator.sidebarPresentation.isCollapsed)
+        .animation(Motion.panel, value: coordinator.settingsPresentation.isPresented)
+        .animation(Motion.panel, value: coordinator.cliToolsPresentation.isPresented)
+        .animation(Motion.panel, value: coordinator.sessionPresentation.isPresented)
+        .animation(Motion.panel, value: activeWorkspaceMetrics?.totalPaneCount)
     }
 
     private var activeWorkspaceMetrics: (tabCount: Int, totalPaneCount: Int)? {

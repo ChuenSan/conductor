@@ -83,7 +83,7 @@ struct SettingsView: View {
                     section: section,
                     selected: selectedSection == section
                 ) {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    withAnimation(Motion.snappy) {
                         selectedSection = section
                     }
                 }

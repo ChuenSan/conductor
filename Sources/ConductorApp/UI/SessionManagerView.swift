@@ -380,7 +380,7 @@ private struct SessionRow: View {
 
     private func toggleExpanded() {
         guard record.filePath != nil else { return }
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) { expanded.toggle() }
+        withAnimation(Motion.expand) { expanded.toggle() }
         if expanded, preview == nil, !loadingPreview { loadPreview() }
     }
 

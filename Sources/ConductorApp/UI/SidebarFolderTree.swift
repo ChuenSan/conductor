@@ -142,7 +142,7 @@ struct SidebarFolderTree: View {
                     },
                     onToggle: {
                         guard row.isDirectory else { return }
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                        withAnimation(Motion.expand) {
                             model.toggle(row.path)
                         }
                     },

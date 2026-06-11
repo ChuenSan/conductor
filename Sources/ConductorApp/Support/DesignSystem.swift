@@ -23,6 +23,30 @@ enum Radius {
     static let xl: CGFloat = 20
 }
 
+/// 动效节奏 token：散落的 spring/duration 收敛到几个语义档位。
+/// 参数取向：快起步、克制回弹——120Hz 下高频微动效以「跟手」优先。
+enum Motion {
+    /// 面板/抽屉开合（侧栏、设置、会话面板滑入滑出）。
+    static let panel = Animation.spring(response: 0.28, dampingFraction: 0.88)
+    /// 列表/树的展开折叠与重排（文件夹树、transcript 展开、置顶移位）。
+    static let expand = Animation.spring(response: 0.24, dampingFraction: 0.9)
+    /// 小元素强调：选中指示器滑动、chip 出现、关闭钮浮现。
+    static let snappy = Animation.spring(response: 0.22, dampingFraction: 0.85)
+    /// hover/按压微反馈。
+    static let hover = Animation.easeOut(duration: 0.12)
+    /// CA 显式动画在 ProMotion 屏上的帧率区间（默认调度可能停在 60Hz）。
+    static let frameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+}
+
+extension CAAnimation {
+    /// 嘱咐 CoreAnimation 这段动画值得跑满 120Hz（ProMotion）。
+    @discardableResult
+    func allowHighFrameRate() -> Self {
+        preferredFrameRateRange = Motion.frameRateRange
+        return self
+    }
+}
+
 /// 把 AppKit 的 `NSVisualEffectView` 包成 SwiftUI 背景：真·毛玻璃（blur + 半透明）。
 /// 关键：材质默认跟随**系统外观**；这里强制 `appearance` 跟随 app 自己的主题，否则
 /// 系统深色 + app 浅色主题会渲染成深灰一片。

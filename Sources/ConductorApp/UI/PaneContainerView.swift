@@ -239,7 +239,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
 
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         let initialTransform = reduceMotion ? CATransform3DIdentity : entranceTransform(for: motion)
-        let duration = (motion == .fade || reduceMotion) ? 0.22 : 0.34
+        let duration = (motion == .fade || reduceMotion) ? 0.2 : 0.3
 
         layer.opacity = 1
         layer.transform = CATransform3DIdentity
@@ -257,6 +257,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         group.duration = duration
         group.timingFunction = CAMediaTimingFunction(name: .easeOut)
         group.isRemovedOnCompletion = true
+        group.allowHighFrameRate()
         layer.add(group, forKey: "paneEntrance")
     }
 
@@ -415,6 +416,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
             fade.toValue = 1
             fade.duration = 0.14
             fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            fade.allowHighFrameRate()
             bar.layer?.add(fade, forKey: "searchIn")
             bar.layer?.opacity = 1
         }
@@ -502,6 +504,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         group.animations = [color, width]
         group.duration = 0.9
         group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        group.allowHighFrameRate()
         layer.add(group, forKey: "paneFlash")
     }
 

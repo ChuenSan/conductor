@@ -41,7 +41,7 @@ struct SkillsManagerView: View {
                                 expanded: expandedID == skill.id,
                                 onToggle: { on in toggle(skill, on) },
                                 onExpand: {
-                                    withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+                                    withAnimation(Motion.expand) {
                                         expandedID = expandedID == skill.id ? nil : skill.id
                                     }
                                 })

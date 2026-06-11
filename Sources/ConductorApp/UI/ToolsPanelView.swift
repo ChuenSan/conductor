@@ -75,7 +75,7 @@ struct ToolsPanelView: View {
             ForEach(ToolsTab.allCases) { tab in
                 let selected = coordinator.toolsTab == tab
                 Button {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                    withAnimation(Motion.snappy) {
                         coordinator.toolsTab = tab
                     }
                 } label: {

@@ -1347,7 +1347,7 @@ final class AppCoordinator: ObservableObject {
                 let scale: CGFloat = expanding ? 0.93 : 1.035
                 transformFrom = CATransform3DMakeAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
                 opacityFrom = expanding ? 0.78 : 0.88
-                duration = expanding ? 0.28 : 0.22
+                duration = expanding ? 0.26 : 0.2
             }
         }
 
@@ -1367,6 +1367,7 @@ final class AppCoordinator: ObservableObject {
         group.duration = duration
         group.timingFunction = CAMediaTimingFunction(name: .easeOut)
         group.isRemovedOnCompletion = true
+        group.allowHighFrameRate()
         layer.add(group, forKey: "terminalAreaTransition")
     }
 

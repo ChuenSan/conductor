@@ -83,8 +83,8 @@ struct TabBarView: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(AppStyle.hoverFill))
         }
-        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: activeTab)   // 选中指示器滑动
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: tabs.count)     // 增删 tab 缩放淡入
+        .animation(Motion.snappy, value: activeTab)   // 选中指示器滑动
+        .animation(Motion.panel, value: tabs.count)   // 增删 tab 缩放淡入
         .padding(.horizontal, 10)
         .padding(.top, 4)
         .padding(.bottom, 4)
@@ -157,9 +157,9 @@ private struct TabPill: View {
                 .scaleEffect(showClose ? 1 : 0.6)
                 .allowsHitTesting(showClose)
                 .padding(.trailing, 7)
-                .animation(.spring(response: 0.28, dampingFraction: 0.7), value: showClose)
+                .animation(Motion.snappy, value: showClose)
         }
-        .animation(.easeOut(duration: 0.16), value: hovering)
+        .animation(Motion.hover, value: hovering)
         .contextMenu {
             Button { onStartEdit() } label: { Label(L("重命名"), systemImage: "pencil") }
             Divider()
