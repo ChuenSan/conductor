@@ -1,10 +1,10 @@
-# CmuxCore（模型 + 持久化层）Implementation Plan
+# ConductorCore（模型 + 持久化层）Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 用纯 Swift（无 UI、无 libghostty）实现类 cmux 多终端管理器的核心数据模型（工作区 / Tab / 自由分屏树）与布局持久化层，全程 TDD，`swift test` 即可验证。
+**Goal:** 用纯 Swift（无 UI、无 libghostty）实现类 conductor 多终端管理器的核心数据模型（工作区 / Tab / 自由分屏树）与布局持久化层，全程 TDD，`swift test` 即可验证。
 
-**Architecture:** 一个 SwiftPM 库 target `CmuxCore`。核心是 `SplitNode` 二叉树（叶子=终端 pane，分支=一次分屏），其上是 `Tab` / `Workspace` / `WorkspaceStore`。持久化把整棵模型树编码为带版本号的 JSON，原子写盘，读回时对损坏/缺失/版本不符做兜底。`TerminalSurface` 协议 + `FakeSurface` 测试替身在此建立终端抽象接缝（本计划不实现真终端）。
+**Architecture:** 一个 SwiftPM 库 target `ConductorCore`。核心是 `SplitNode` 二叉树（叶子=终端 pane，分支=一次分屏），其上是 `Tab` / `Workspace` / `WorkspaceStore`。持久化把整棵模型树编码为带版本号的 JSON，原子写盘，读回时对损坏/缺失/版本不符做兜底。`TerminalSurface` 协议 + `FakeSurface` 测试替身在此建立终端抽象接缝（本计划不实现真终端）。
 
 **Tech Stack:** Swift 6（SwiftPM，swift-tools-version 6.0），XCTest，Foundation（JSONEncoder/Decoder、FileManager）。平台 macOS 14+。
 
@@ -19,7 +19,7 @@
 
 ```
 Package.swift
-Sources/CmuxCore/
+Sources/ConductorCore/
   SplitAxis.swift          # 分屏方向枚举
   Identifiers.swift        # PaneID / TabID / WorkspaceID / SplitID 值类型
   SplitNode.swift          # 分屏二叉树 + 所有树操作
@@ -28,7 +28,7 @@ Sources/CmuxCore/
   PersistedState.swift     # 带版本号的可序列化状态
   StateStore.swift         # 原子读写 + 损坏/缺失兜底
   CwdResolver.swift        # cwd 失效兜底链（纯函数）
-Tests/CmuxCoreTests/
+Tests/ConductorCoreTests/
   SplitAxisTests.swift
   IdentifiersTests.swift
   SplitNodeTests.swift
@@ -48,8 +48,8 @@ Tests/CmuxCoreTests/
 
 **Files:**
 - Create: `Package.swift`
-- Create: `Sources/CmuxCore/SplitAxis.swift`
-- Test: `Tests/CmuxCoreTests/SplitAxisTests.swift`
+- Create: `Sources/ConductorCore/SplitAxis.swift`
+- Test: `Tests/ConductorCoreTests/SplitAxisTests.swift`
 
 - [ ] **Step 1: 写 Package.swift**
 
@@ -58,25 +58,25 @@ Tests/CmuxCoreTests/
 import PackageDescription
 
 let package = Package(
-    name: "CmuxCore",
+    name: "ConductorCore",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "CmuxCore", targets: ["CmuxCore"]),
+        .library(name: "ConductorCore", targets: ["ConductorCore"]),
     ],
     targets: [
-        .target(name: "CmuxCore"),
-        .testTarget(name: "CmuxCoreTests", dependencies: ["CmuxCore"]),
+        .target(name: "ConductorCore"),
+        .testTarget(name: "ConductorCoreTests", dependencies: ["ConductorCore"]),
     ]
 )
 ```
 
 - [ ] **Step 2: 写第一个失败测试**
 
-`Tests/CmuxCoreTests/SplitAxisTests.swift`:
+`Tests/ConductorCoreTests/SplitAxisTests.swift`:
 
 ```swift
 import XCTest
-@testable import CmuxCore
+@testable import ConductorCore
 
 final class SplitAxisTests: XCTestCase {
     func testRawValues() {
@@ -99,7 +99,7 @@ Expected: 编译失败，`cannot find 'SplitAxis' in scope`
 
 - [ ] **Step 4: 实现 SplitAxis**
 
-`Sources/CmuxCore/SplitAxis.swift`:
+`Sources/ConductorCore/SplitAxis.swift`:
 
 ```swift
 /// 分屏方向。horizontal = 上下分（分隔条水平），vertical = 左右分（分隔条竖直）。
@@ -117,7 +117,7 @@ Expected: PASS（2 个测试）
 - [ ] **Step 6: 提交**
 
 ```bash
-git add Package.swift Sources/CmuxCore/SplitAxis.swift Tests/CmuxCoreTests/SplitAxisTests.swift
+git add Package.swift Sources/ConductorCore/SplitAxis.swift Tests/ConductorCoreTests/SplitAxisTests.swift
 git commit -m "feat(core): scaffold SwiftPM package + SplitAxis"
 ```
 
@@ -126,16 +126,16 @@ git commit -m "feat(core): scaffold SwiftPM package + SplitAxis"
 ## Task 2: 标识符值类型
 
 **Files:**
-- Create: `Sources/CmuxCore/Identifiers.swift`
-- Test: `Tests/CmuxCoreTests/IdentifiersTests.swift`
+- Create: `Sources/ConductorCore/Identifiers.swift`
+- Test: `Tests/ConductorCoreTests/IdentifiersTests.swift`
 
 - [ ] **Step 1: 写失败测试**
 
-`Tests/CmuxCoreTests/IdentifiersTests.swift`:
+`Tests/ConductorCoreTests/IdentifiersTests.swift`:
 
 ```swift
 import XCTest
-@testable import CmuxCore
+@testable import ConductorCore
 
 final class IdentifiersTests: XCTestCase {
     func testEquality() {
@@ -165,7 +165,7 @@ Expected: 编译失败，`cannot find 'PaneID' in scope`
 
 - [ ] **Step 3: 实现标识符**
 
-`Sources/CmuxCore/Identifiers.swift`:
+`Sources/ConductorCore/Identifiers.swift`:
 
 ```swift
 /// 一个终端 pane（分屏叶子）的稳定标识。
@@ -201,7 +201,7 @@ Expected: PASS（3 个测试）
 - [ ] **Step 5: 提交**
 
 ```bash
-git add Sources/CmuxCore/Identifiers.swift Tests/CmuxCoreTests/IdentifiersTests.swift
+git add Sources/ConductorCore/Identifiers.swift Tests/ConductorCoreTests/IdentifiersTests.swift
 git commit -m "feat(core): add PaneID/TabID/WorkspaceID/SplitID value types"
 ```
 
@@ -210,16 +210,16 @@ git commit -m "feat(core): add PaneID/TabID/WorkspaceID/SplitID value types"
 ## Task 3: SplitNode 树 + leaves()/contains()
 
 **Files:**
-- Create: `Sources/CmuxCore/SplitNode.swift`
-- Test: `Tests/CmuxCoreTests/SplitNodeTests.swift`
+- Create: `Sources/ConductorCore/SplitNode.swift`
+- Test: `Tests/ConductorCoreTests/SplitNodeTests.swift`
 
 - [ ] **Step 1: 写失败测试**
 
-`Tests/CmuxCoreTests/SplitNodeTests.swift`:
+`Tests/ConductorCoreTests/SplitNodeTests.swift`:
 
 ```swift
 import XCTest
-@testable import CmuxCore
+@testable import ConductorCore
 
 final class SplitNodeTests: XCTestCase {
     func testLeafLeaves() {
@@ -261,7 +261,7 @@ Expected: 编译失败，`cannot find 'SplitNode' in scope`
 
 - [ ] **Step 3: 实现 SplitNode + leaves()/contains()**
 
-`Sources/CmuxCore/SplitNode.swift`:
+`Sources/ConductorCore/SplitNode.swift`:
 
 ```swift
 /// 一个 Tab 内的分屏布局，建模为二叉树。
@@ -297,7 +297,7 @@ Expected: PASS（4 个测试）
 - [ ] **Step 5: 提交**
 
 ```bash
-git add Sources/CmuxCore/SplitNode.swift Tests/CmuxCoreTests/SplitNodeTests.swift
+git add Sources/ConductorCore/SplitNode.swift Tests/ConductorCoreTests/SplitNodeTests.swift
 git commit -m "feat(core): add SplitNode tree with leaves()/contains()"
 ```
 
@@ -306,8 +306,8 @@ git commit -m "feat(core): add SplitNode tree with leaves()/contains()"
 ## Task 4: SplitNode.splitting（插入分屏）
 
 **Files:**
-- Modify: `Sources/CmuxCore/SplitNode.swift`
-- Test: `Tests/CmuxCoreTests/SplitNodeTests.swift`
+- Modify: `Sources/ConductorCore/SplitNode.swift`
+- Test: `Tests/ConductorCoreTests/SplitNodeTests.swift`
 
 - [ ] **Step 1: 追加失败测试**
 
@@ -399,7 +399,7 @@ Expected: PASS（含新增 4 个）
 - [ ] **Step 5: 提交**
 
 ```bash
-git add Sources/CmuxCore/SplitNode.swift Tests/CmuxCoreTests/SplitNodeTests.swift
+git add Sources/ConductorCore/SplitNode.swift Tests/ConductorCoreTests/SplitNodeTests.swift
 git commit -m "feat(core): SplitNode.splitting inserts a split at a target leaf"
 ```
 
@@ -408,8 +408,8 @@ git commit -m "feat(core): SplitNode.splitting inserts a split at a target leaf"
 ## Task 5: SplitNode.removing（删除并塌缩）
 
 **Files:**
-- Modify: `Sources/CmuxCore/SplitNode.swift`
-- Test: `Tests/CmuxCoreTests/SplitNodeTests.swift`
+- Modify: `Sources/ConductorCore/SplitNode.swift`
+- Test: `Tests/ConductorCoreTests/SplitNodeTests.swift`
 
 - [ ] **Step 1: 追加失败测试**
 
@@ -491,7 +491,7 @@ Expected: PASS（含新增 4 个）
 - [ ] **Step 5: 提交**
 
 ```bash
-git add Sources/CmuxCore/SplitNode.swift Tests/CmuxCoreTests/SplitNodeTests.swift
+git add Sources/ConductorCore/SplitNode.swift Tests/ConductorCoreTests/SplitNodeTests.swift
 git commit -m "feat(core): SplitNode.removing deletes a pane and collapses splits"
 ```
 
@@ -500,8 +500,8 @@ git commit -m "feat(core): SplitNode.removing deletes a pane and collapses split
 ## Task 6: SplitNode.updatingRatio（调整分隔条比例）
 
 **Files:**
-- Modify: `Sources/CmuxCore/SplitNode.swift`
-- Test: `Tests/CmuxCoreTests/SplitNodeTests.swift`
+- Modify: `Sources/ConductorCore/SplitNode.swift`
+- Test: `Tests/ConductorCoreTests/SplitNodeTests.swift`
 
 - [ ] **Step 1: 追加失败测试**
 
@@ -590,7 +590,7 @@ Expected: PASS（含新增 3 个）
 - [ ] **Step 5: 提交**
 
 ```bash
-git add Sources/CmuxCore/SplitNode.swift Tests/CmuxCoreTests/SplitNodeTests.swift
+git add Sources/ConductorCore/SplitNode.swift Tests/ConductorCoreTests/SplitNodeTests.swift
 git commit -m "feat(core): SplitNode.updatingRatio adjusts a divider ratio by id"
 ```
 
@@ -599,8 +599,8 @@ git commit -m "feat(core): SplitNode.updatingRatio adjusts a divider ratio by id
 ## Task 7: SplitNode 有序遍历（pane after/before）
 
 **Files:**
-- Modify: `Sources/CmuxCore/SplitNode.swift`
-- Test: `Tests/CmuxCoreTests/SplitNodeTests.swift`
+- Modify: `Sources/ConductorCore/SplitNode.swift`
+- Test: `Tests/ConductorCoreTests/SplitNodeTests.swift`
 
 > 说明：这是**有序**焦点切换（按 leaves 顺序循环）。方向性（空间）焦点需要布局 frame，属于 UI 层，不在本计划。
 
@@ -673,7 +673,7 @@ Expected: PASS（含新增 4 个）
 - [ ] **Step 5: 提交**
 
 ```bash
-git add Sources/CmuxCore/SplitNode.swift Tests/CmuxCoreTests/SplitNodeTests.swift
+git add Sources/ConductorCore/SplitNode.swift Tests/ConductorCoreTests/SplitNodeTests.swift
 git commit -m "feat(core): SplitNode ordered pane traversal (after/before, wrapping)"
 ```
 
@@ -682,16 +682,16 @@ git commit -m "feat(core): SplitNode ordered pane traversal (after/before, wrapp
 ## Task 8: Tab / Workspace / WorkspaceStore + 变更方法
 
 **Files:**
-- Create: `Sources/CmuxCore/Models.swift`
-- Test: `Tests/CmuxCoreTests/ModelsTests.swift`
+- Create: `Sources/ConductorCore/Models.swift`
+- Test: `Tests/ConductorCoreTests/ModelsTests.swift`
 
 - [ ] **Step 1: 写失败测试**
 
-`Tests/CmuxCoreTests/ModelsTests.swift`:
+`Tests/ConductorCoreTests/ModelsTests.swift`:
 
 ```swift
 import XCTest
-@testable import CmuxCore
+@testable import ConductorCore
 
 final class ModelsTests: XCTestCase {
     func testSingleTabHasOneLeaf() {
@@ -761,7 +761,7 @@ Expected: 编译失败，`cannot find 'Tab' in scope`
 
 - [ ] **Step 3: 实现模型**
 
-`Sources/CmuxCore/Models.swift`:
+`Sources/ConductorCore/Models.swift`:
 
 ```swift
 /// 工作区内的一个 Tab：持有一棵分屏树和当前焦点 pane。
@@ -859,7 +859,7 @@ Expected: PASS（6 个测试）
 - [ ] **Step 5: 提交**
 
 ```bash
-git add Sources/CmuxCore/Models.swift Tests/CmuxCoreTests/ModelsTests.swift
+git add Sources/ConductorCore/Models.swift Tests/ConductorCoreTests/ModelsTests.swift
 git commit -m "feat(core): add Tab/Workspace/WorkspaceStore with mutations"
 ```
 
@@ -868,13 +868,13 @@ git commit -m "feat(core): add Tab/Workspace/WorkspaceStore with mutations"
 ## Task 9: TerminalSurface 协议 + FakeSurface 替身
 
 **Files:**
-- Create: `Sources/CmuxCore/TerminalSurface.swift`
-- Create: `Tests/CmuxCoreTests/FakeSurface.swift`
-- Test: `Tests/CmuxCoreTests/TerminalSurfaceTests.swift`
+- Create: `Sources/ConductorCore/TerminalSurface.swift`
+- Create: `Tests/ConductorCoreTests/FakeSurface.swift`
+- Test: `Tests/ConductorCoreTests/TerminalSurfaceTests.swift`
 
 - [ ] **Step 1: 写协议**
 
-`Sources/CmuxCore/TerminalSurface.swift`:
+`Sources/ConductorCore/TerminalSurface.swift`:
 
 ```swift
 import Foundation
@@ -904,11 +904,11 @@ public protocol TerminalSurface: AnyObject {
 
 - [ ] **Step 2: 写 FakeSurface 替身（测试辅助）**
 
-`Tests/CmuxCoreTests/FakeSurface.swift`:
+`Tests/ConductorCoreTests/FakeSurface.swift`:
 
 ```swift
 import Foundation
-@testable import CmuxCore
+@testable import ConductorCore
 
 /// TerminalSurface 的测试替身：记录调用，并允许测试手动触发回调。
 final class FakeSurface: TerminalSurface {
@@ -937,12 +937,12 @@ final class FakeSurface: TerminalSurface {
 
 - [ ] **Step 3: 写测试，确认失败**
 
-`Tests/CmuxCoreTests/TerminalSurfaceTests.swift`:
+`Tests/ConductorCoreTests/TerminalSurfaceTests.swift`:
 
 ```swift
 import XCTest
 import Foundation
-@testable import CmuxCore
+@testable import ConductorCore
 
 final class TerminalSurfaceTests: XCTestCase {
     func testFakeRecordsLifecycle() {
@@ -988,7 +988,7 @@ Expected: PASS（2 个测试）
 - [ ] **Step 5: 提交**
 
 ```bash
-git add Sources/CmuxCore/TerminalSurface.swift Tests/CmuxCoreTests/FakeSurface.swift Tests/CmuxCoreTests/TerminalSurfaceTests.swift
+git add Sources/ConductorCore/TerminalSurface.swift Tests/ConductorCoreTests/FakeSurface.swift Tests/ConductorCoreTests/TerminalSurfaceTests.swift
 git commit -m "feat(core): add TerminalSurface protocol + FakeSurface test double"
 ```
 
@@ -997,16 +997,16 @@ git commit -m "feat(core): add TerminalSurface protocol + FakeSurface test doubl
 ## Task 10: PersistedState + Codable 往返
 
 **Files:**
-- Create: `Sources/CmuxCore/PersistedState.swift`
-- Test: `Tests/CmuxCoreTests/PersistedStateTests.swift`
+- Create: `Sources/ConductorCore/PersistedState.swift`
+- Test: `Tests/ConductorCoreTests/PersistedStateTests.swift`
 
 - [ ] **Step 1: 写失败测试**
 
-`Tests/CmuxCoreTests/PersistedStateTests.swift`:
+`Tests/ConductorCoreTests/PersistedStateTests.swift`:
 
 ```swift
 import XCTest
-@testable import CmuxCore
+@testable import ConductorCore
 
 final class PersistedStateTests: XCTestCase {
     private func sampleStore() -> WorkspaceStore {
@@ -1045,7 +1045,7 @@ Expected: 编译失败，`cannot find 'PersistedState' in scope`
 
 - [ ] **Step 3: 实现 PersistedState**
 
-`Sources/CmuxCore/PersistedState.swift`:
+`Sources/ConductorCore/PersistedState.swift`:
 
 ```swift
 /// 落盘的顶层状态：带 schema 版本号，便于将来迁移。
@@ -1071,7 +1071,7 @@ Expected: PASS（2 个测试）
 - [ ] **Step 5: 提交**
 
 ```bash
-git add Sources/CmuxCore/PersistedState.swift Tests/CmuxCoreTests/PersistedStateTests.swift
+git add Sources/ConductorCore/PersistedState.swift Tests/ConductorCoreTests/PersistedStateTests.swift
 git commit -m "feat(core): add versioned PersistedState with Codable round-trip"
 ```
 
@@ -1080,23 +1080,23 @@ git commit -m "feat(core): add versioned PersistedState with Codable round-trip"
 ## Task 11: StateStore（原子写 + 读取兜底）
 
 **Files:**
-- Create: `Sources/CmuxCore/StateStore.swift`
-- Test: `Tests/CmuxCoreTests/StateStoreTests.swift`
+- Create: `Sources/ConductorCore/StateStore.swift`
+- Test: `Tests/ConductorCoreTests/StateStoreTests.swift`
 
 - [ ] **Step 1: 写失败测试**
 
-`Tests/CmuxCoreTests/StateStoreTests.swift`:
+`Tests/ConductorCoreTests/StateStoreTests.swift`:
 
 ```swift
 import XCTest
-@testable import CmuxCore
+@testable import ConductorCore
 
 final class StateStoreTests: XCTestCase {
     private var dir: URL!
 
     override func setUpWithError() throws {
         dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-test-\(UUID().uuidString)")
+            .appendingPathComponent("conductor-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     }
 
@@ -1167,7 +1167,7 @@ Expected: 编译失败，`cannot find 'StateStore' in scope`
 
 - [ ] **Step 3: 实现 StateStore**
 
-`Sources/CmuxCore/StateStore.swift`:
+`Sources/ConductorCore/StateStore.swift`:
 
 ```swift
 import Foundation
@@ -1226,7 +1226,7 @@ Expected: PASS（4 个测试）
 - [ ] **Step 5: 提交**
 
 ```bash
-git add Sources/CmuxCore/StateStore.swift Tests/CmuxCoreTests/StateStoreTests.swift
+git add Sources/ConductorCore/StateStore.swift Tests/ConductorCoreTests/StateStoreTests.swift
 git commit -m "feat(core): add StateStore with atomic save and corrupt/missing recovery"
 ```
 
@@ -1235,16 +1235,16 @@ git commit -m "feat(core): add StateStore with atomic save and corrupt/missing r
 ## Task 12: CwdResolver（cwd 失效兜底链）
 
 **Files:**
-- Create: `Sources/CmuxCore/CwdResolver.swift`
-- Test: `Tests/CmuxCoreTests/CwdResolverTests.swift`
+- Create: `Sources/ConductorCore/CwdResolver.swift`
+- Test: `Tests/ConductorCoreTests/CwdResolverTests.swift`
 
 - [ ] **Step 1: 写失败测试**
 
-`Tests/CmuxCoreTests/CwdResolverTests.swift`:
+`Tests/ConductorCoreTests/CwdResolverTests.swift`:
 
 ```swift
 import XCTest
-@testable import CmuxCore
+@testable import ConductorCore
 
 final class CwdResolverTests: XCTestCase {
     func testUsesCwdWhenItExists() {
@@ -1280,7 +1280,7 @@ Expected: 编译失败，`cannot find 'CwdResolver' in scope`
 
 - [ ] **Step 3: 实现 CwdResolver**
 
-`Sources/CmuxCore/CwdResolver.swift`:
+`Sources/ConductorCore/CwdResolver.swift`:
 
 ```swift
 import Foundation
@@ -1315,7 +1315,7 @@ Run: `swift test`
 Expected: 全部 PASS（约 35+ 个测试）
 
 ```bash
-git add Sources/CmuxCore/CwdResolver.swift Tests/CmuxCoreTests/CwdResolverTests.swift
+git add Sources/ConductorCore/CwdResolver.swift Tests/ConductorCoreTests/CwdResolverTests.swift
 git commit -m "feat(core): add CwdResolver fallback chain (cwd -> workspace -> home)"
 ```
 

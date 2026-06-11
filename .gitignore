@@ -21,7 +21,7 @@ xcuserdata/
 .build/
 .swiftpm/
 Package.resolved
-cmux.app/
+Conductor.app/
 
 # Zig (libghostty build artifacts)
 zig-cache/
@@ -33,3 +33,4 @@ Vendor/GhosttyKit.xcframework/
 
 # Misc
 *.log
+dist/

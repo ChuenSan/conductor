@@ -1,4 +1,4 @@
-# cmux 克隆 · 功能路线图与设计
+# conductor 克隆 · 功能路线图与设计
 
 > 本文是**规划文档**:盘点剩余功能、分阶段排布、每个特性给出设计草图(目标 / 交互 / 实现思路 / 风险 / 粗略工作量)。
 > 真正动工某个特性时，再为它单独写一份详细 spec(`docs/superpowers/specs/`)。
@@ -13,7 +13,7 @@
 **所有设计决策都按这三条评判**——每写一份特性 spec 都要显式回应:
 
 1. **高性能**:不阻塞主线程、不做无谓全量重建/反复重渲染;后台活(截图/索引)轻量异步;pane/tab/工作区数量增长时线性可扩。终端已走 GPU(libghostty/Metal)是基线。
-2. **高扩展**:能力**可注册 / 数据驱动**，不硬编码——命令走中央命令表、配置走 schema 化 `AppConfig`、主题数据驱动、pane 内容做成可插拔"内容提供者"协议(给 v2 Agent pane 留口)。`CmuxCore` 保持引擎无关。
+2. **高扩展**:能力**可注册 / 数据驱动**，不硬编码——命令走中央命令表、配置走 schema 化 `AppConfig`、主题数据驱动、pane 内容做成可插拔"内容提供者"协议(给 v2 Agent pane 留口)。`ConductorCore` 保持引擎无关。
 3. **高商用**:商业级品质——零崩溃、有错误处理与空状态、统一精致视觉、设置/主题/键位可定制，可演进到自动更新/授权/无障碍/i18n。
 
 > 这正是为什么**基建(配置系统 + 命令表)排在最前**:它们是"高扩展"的地基，后面一半特性都挂在上面。
@@ -34,7 +34,7 @@
 
 **现有键位**:⌘T 新 Tab · ⌘D 左右分 · ⌘⇧D 上下分 · ⌘W 关闭活动 pane · ⌘⌥←/→ 切换 pane
 
-**核心架构**:`CmuxCore`(纯逻辑 + reducer `WorkspaceCommand` → `SessionEffect`，可单测) · `AppCoordinator`(协调命令/副作用/重建) · `GhosttySurface`/`TerminalHostView`(libghostty 桥) · SwiftUI 外壳。
+**核心架构**:`ConductorCore`(纯逻辑 + reducer `WorkspaceCommand` → `SessionEffect`，可单测) · `AppCoordinator`(协调命令/副作用/重建) · `GhosttySurface`/`TerminalHostView`(libghostty 桥) · SwiftUI 外壳。
 
 ---
 
@@ -43,8 +43,8 @@
 这几块是后面多个特性的地基，优先级靠前:
 
 ### B1. 配置系统 `AppConfig` + 持久化
-- **目标**:把散落在 `GhosttyRuntime` 里的硬编码(字号、配色、padding、shell)收敛成一个可读写的 `AppConfig`，存到 `~/Library/Application Support/cmux/config.json`(或 `~/.config/cmux/`)。
-- **实现**:`CmuxCore` 加 `AppConfig: Codable`(字段:font、fontSize、theme、shell、keybindings、behavior)。`GhosttyRuntime.ensureStarted` 从 config 生成 ghostty 配置串。改字号/主题时重建 ghostty config 并刷新所有 surface。
+- **目标**:把散落在 `GhosttyRuntime` 里的硬编码(字号、配色、padding、shell)收敛成一个可读写的 `AppConfig`，存到 `~/Library/Application Support/conductor/config.json`(或 `~/.config/conductor/`)。
+- **实现**:`ConductorCore` 加 `AppConfig: Codable`(字段:font、fontSize、theme、shell、keybindings、behavior)。`GhosttyRuntime.ensureStarted` 从 config 生成 ghostty 配置串。改字号/主题时重建 ghostty config 并刷新所有 surface。
 - **依赖方**:字号缩放、设置面板、主题切换、工作区默认 shell。
 - **风险**:ghostty 配置改了要不要重启 surface？多数项可 `ghostty_surface_set_*` 或重载，少数需重建。先做"重开生效"，再优化热更新。
 - **工作量**:中。
@@ -100,7 +100,7 @@
 ## Phase 2 — 导航与管理
 
 ### 2.1 命令面板 / 快速切换 ⌘K(或 ⌘P)
-- **目标**:cmux/VSCode 式的模糊面板:切 Tab、切工作区、聚焦 pane、跑命令(新建/分屏/关闭/重命名…)。
+- **目标**:conductor/VSCode 式的模糊面板:切 Tab、切工作区、聚焦 pane、跑命令(新建/分屏/关闭/重命名…)。
 - **交互**:⌘K 弹居中浮层 + 搜索框 + 模糊匹配结果(工作区/Tab/命令)，↑↓ 选、回车执行、Esc 关。
 - **实现**:依赖 B2(命令表) + 一个 fuzzy 匹配。SwiftUI 自绘浮层(可复用预览面板的浮窗思路;注意点击/键盘焦点要进面板，与预览的"穿透"相反)。
 - **工作量**:中~大。
@@ -179,7 +179,7 @@
 
 ## Phase 5 — v2:AI Agent 集成(核心差异化，需单独深度 brainstorm)
 
-> 这是 cmux 的灵魂(把终端管理器变成"AI 工作台")。本节只列**架构骨架与待决问题**，正式做之前要专门开一轮 brainstorm + 独立 spec。
+> 这是 conductor 的灵魂(把终端管理器变成"AI 工作台")。本节只列**架构骨架与待决问题**，正式做之前要专门开一轮 brainstorm + 独立 spec。
 
 ### 5.1 形态:Agent 作为一种特殊 pane
 - 一个 pane 可以是"终端"或"Agent 会话"。Agent pane = 对话视图(prompt/流式输出/工具调用/审批) + 绑定一个工作目录(常配 git worktree)。

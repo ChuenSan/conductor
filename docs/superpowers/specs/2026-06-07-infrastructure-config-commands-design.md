@@ -2,7 +2,7 @@
 
 日期:2026-06-07 · 状态:待评审
 
-> 这是后面一半特性的地基。对照三条主题([[cmux-design-principles]])设计:
+> 这是后面一半特性的地基。对照三条主题([[conductor-design-principles]])设计:
 > **高性能**(分发 O(1)、配置增量热更新)、**高扩展**(命令可注册、配置数据驱动、pane 内容可插拔)、
 > **高商用**(YAML 人可手编、损坏优雅回退、向后兼容、首启生成带注释模板)。
 
@@ -20,10 +20,10 @@
 
 ### YAML schema(自拟，分层)
 
-`~/.config/cmux/config.yaml`(首启自动写入带注释的默认模板):
+`~/.config/conductor/config.yaml`(首启自动写入带注释的默认模板):
 
 ```yaml
-# cmux 配置 — 改完保存即时生效
+# conductor 配置 — 改完保存即时生效
 
 appearance:
   theme: dark               # 内置主题名(dark/light/...) 或 custom
@@ -64,7 +64,7 @@ workspaceDefaults:          # 可被单个工作区覆盖(P3)
   startupCommand: null      # 新 pane 起来自动跑的命令
 ```
 
-### 模型(CmuxCore，纯 Codable，无第三方依赖)
+### 模型(ConductorCore，纯 Codable，无第三方依赖)
 
 - `AppConfig: Codable, Equatable`，嵌套 `Appearance / Terminal / Behavior / WorkspaceDefaults` 与 `keybindings: [String:String]`。
 - `AppConfig.default` 提供全套默认值。
@@ -72,11 +72,11 @@ workspaceDefaults:          # 可被单个工作区覆盖(P3)
 - **校验**:`validated()` 夹紧非法值(字号范围、枚举回退、颜色格式)，越界写日志不崩。
 - 为什么放 Core:保持纯逻辑、可单测;YAML 解析不在这层。
 
-### 加载器(CmuxApp，依赖 Yams)
+### 加载器(ConductorApp，依赖 Yams)
 
-- 新增 SwiftPM 依赖 **Yams**(Swift 事实标准 YAML，支持 Codable);**只加到 CmuxApp target**，CmuxCore 保持零依赖。
+- 新增 SwiftPM 依赖 **Yams**(Swift 事实标准 YAML，支持 Codable);**只加到 ConductorApp target**，ConductorCore 保持零依赖。
 - `ConfigLoader`:
-  - 定位 `~/.config/cmux/config.yaml`;不存在 → 写入带注释的默认模板(模板是手写字符串，不是 Yams 编码，以保留注释)。
+  - 定位 `~/.config/conductor/config.yaml`;不存在 → 写入带注释的默认模板(模板是手写字符串，不是 Yams 编码，以保留注释)。
   - 读 → `YAMLDecoder().decode(AppConfig.self)` → `.validated()`。
   - **损坏**(YAML 语法错/类型错)→ 记日志 + 用 `AppConfig.default` + 非致命提示(不崩)。
 - `ConfigStore: ObservableObject`，`@Published var config: AppConfig`，供 SwiftUI/coordinator 观察。
@@ -98,13 +98,13 @@ workspaceDefaults:          # 可被单个工作区覆盖(P3)
 
 ## B2. 命令注册表
 
-### KeyChord(CmuxCore，纯、可单测)
+### KeyChord(ConductorCore，纯、可单测)
 
 - `KeyChord: Hashable`:`modifiers`(cmd/shift/alt/ctrl 位集) + 归一化 `key`(字符或特殊键如 left/right/enter)。
 - `KeyChord(parsing: "cmd+shift+d")` 解析键位串;非法串返回 nil(写日志)。
 - App 层把 `NSEvent` 归一成 `KeyChord` 做匹配 —— 匹配逻辑在 Core，可单测。
 
-### Command(CmuxApp)
+### Command(ConductorApp)
 
 ```
 struct Command {
@@ -116,7 +116,7 @@ struct Command {
 }
 ```
 
-### CommandRegistry(CmuxApp)
+### CommandRegistry(ConductorApp)
 
 - 持有 `[Command]`(在 AppCoordinator 注册 newTab/split/close/focus/commandPalette/… 全部动作)。
 - **有效键位** = `config.keybindings[id]` ?? `command.defaultKeybinding`。
@@ -140,13 +140,13 @@ struct Command {
 
 ## 依赖与结构改动
 
-- `Package.swift`:CmuxApp target 加 `Yams`(`.package(url: "https://github.com/jpsim/Yams", from: "5.x")`)。CmuxCore 不动(零依赖)。
+- `Package.swift`:ConductorApp target 加 `Yams`(`.package(url: "https://github.com/jpsim/Yams", from: "5.x")`)。ConductorCore 不动(零依赖)。
 - 新增:Core `AppConfig.swift`、`KeyChord.swift`、`PaneKind.swift`;App `ConfigLoader.swift`、`ConfigStore.swift`、`Command.swift`、`CommandRegistry.swift`。
 - 改:`GhosttyRuntime`(读 config)、`AppStyle`(主题派生)、`main.swift`(命令分发)、`AppCoordinator`(注册命令、按 kind 造 surface)。
 
 ## 测试(TDD，先写失败用例)
 
-CmuxCore(纯，可单测):
+ConductorCore(纯，可单测):
 - `AppConfig`:完整 YAML→解码正确;**缺字段→默认**;未知字段→忽略;非法值→`validated()` 夹紧。
 - `KeyChord`:各种键位串解析(含特殊键、大小写、非法串)。
 - 命令键位解析、`PaneKind` 默认。

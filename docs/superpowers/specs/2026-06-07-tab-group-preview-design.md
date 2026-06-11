@@ -12,16 +12,16 @@
 - 所有 tab 的终端 surface 常驻存活(PTY 一直跑),但 `AppCoordinator.rebuild()` 只把**当前 active tab** 的分屏树挂进窗口;
   后台 tab 的 Metal 层不在屏上 → **不渲染**。
 - 因此后台分组的预览**必然是"上次可见时"缓存的画面**,无法实时;可见 tab 的预览是新鲜的。
-- 截图可行性已验证:CmuxApp 自己调 `CGWindowListCreateImage(.optionIncludingWindow, 自身 windowID)`
+- 截图可行性已验证:ConductorApp 自己调 `CGWindowListCreateImage(.optionIncludingWindow, 自身 windowID)`
   能正确抓到 libghostty 的 Metal 渲染像素,无需额外权限(已在真机确认,见 spike)。
 
 ## 设计
 
-### 1. 分组判定(CmuxCore,纯逻辑)
+### 1. 分组判定(ConductorCore,纯逻辑)
 - `Tab` 增加派生属性 `var isGroup: Bool { rootSplit.leaves().count > 1 }`。不新增存储状态。
 - 分屏后自动成组,关到只剩 1 个 pane 自动退回普通 tab。
 
-### 2. 缩略图采集(CmuxApp 层,不污染 Core)
+### 2. 缩略图采集(ConductorApp 层,不污染 Core)
 - 新增 `PaneSnapshotStore`(`@MainActor`):`[PaneID: Snapshot]`,`Snapshot = (image: NSImage, capturedAt)`。
 - 采集:一次 `CGWindowListCreateImage` 截整窗 → 按每个可见 `PaneContainerView` 的窗口坐标裁剪 →
   降采样(长边 ≤ 320pt)→ 存入 store。坐标换算需处理 AppKit(左下原点)↔ CGImage(左上原点)翻转与 backing scale。

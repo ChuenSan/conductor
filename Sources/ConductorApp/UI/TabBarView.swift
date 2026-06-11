@@ -1,0 +1,266 @@
+import AppKit
+import ConductorCore
+import SwiftUI
+
+/// 顶部 Tab 栏（自绘，深色 Craft 风）：当前工作区的 tab，胶囊样式；点击切换，`+` 新建，active 高亮。
+/// 分屏后的 tab 自动呈现为"分组"胶囊（分屏图标 + 数量角标），悬停可看真实预览。
+/// Tab 重排通过右键菜单完成，顶部保留干净的点击/重命名/窗口拖拽交互。
+struct TabBarView: View {
+    @ObservedObject var coordinator: AppCoordinator
+    @ObservedObject private var configStore = ConfigStore.shared   // 主题变 → 重渲染（AppStyle 跟随）
+    @State private var editingTab: TabID?
+    @State private var draftTitle: String = ""
+    @FocusState private var renameFocused: Bool
+
+    var body: some View {
+        let ws = coordinator.store.workspaces.first { $0.id == coordinator.store.activeWorkspace }
+        let tabs = ws?.tabs ?? []
+        let activeTab = ws?.activeTab
+        HStack(spacing: 5) {
+            ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
+                let pill = TabPill(
+                    tab: tab,
+                    title: tab.customTitle ?? (coordinator.paneTitles[tab.activePane] ?? L("终端")),
+                    selected: tab.id == activeTab,
+                    index: index,
+                    tabCount: tabs.count,
+                    coordinator: coordinator,
+                    isEditing: editingTab == tab.id,
+                    draft: $draftTitle,
+                    focused: $renameFocused,
+                    onStartEdit: { beginRename(tab) },
+                    onCommitEdit: { commitRename() }
+                ) { coordinator.selectTab(tab.id) }
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.8).combined(with: .opacity),
+                    removal: .scale(scale: 0.8).combined(with: .opacity)))
+                pill
+            }
+            Button(action: { coordinator.newTab() }) {
+                Image(systemName: "plus").font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppStyle.textTertiary)
+            }
+            .buttonStyle(IconButtonStyle(size: 24))
+            WindowDragZoomArea()
+            .frame(maxWidth: .infinity)
+            .frame(height: WindowDragZoomRegion.preferredHeight)
+            .layoutPriority(1)
+            // 右侧快捷按钮组（软圆角容器，对标 Craft 的按钮组）
+            HStack(spacing: 2) {
+                Button(action: { coordinator.toggleTheme() }) {
+                    Image(systemName: AppStyle.theme.isDark ? "moon.stars.fill" : "sun.max.fill")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppStyle.textSecondary)
+                }
+                .buttonStyle(IconButtonStyle(size: 26))
+                .help(L("切换深/浅主题"))
+                Button(action: { coordinator.toggleCLITools() }) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(coordinator.cliToolsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary)
+                }
+                .buttonStyle(IconButtonStyle(size: 26))
+                .help(L("检测命令行工具"))
+                Button(action: { coordinator.openSettings() }) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(coordinator.settingsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary)
+                }
+                .buttonStyle(IconButtonStyle(size: 26))
+                .help(L("设置"))
+            }
+            .padding(3)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(AppStyle.hoverFill))
+        }
+        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: activeTab)   // 选中指示器滑动
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: tabs.count)     // 增删 tab 缩放淡入
+        .padding(.horizontal, 10)
+        .padding(.top, 4)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity)
+        .background(AppStyle.windowBackground)   // 与终端区同底，无分隔条
+        .onChange(of: renameFocused) { _, focused in
+            if !focused, editingTab != nil { commitRename() }
+        }
+    }
+
+    private func beginRename(_ tab: ConductorCore.Tab) {
+        draftTitle = tab.customTitle ?? (coordinator.paneTitles[tab.activePane] ?? "")
+        editingTab = tab.id
+        DispatchQueue.main.async { renameFocused = true }
+    }
+
+    private func commitRename() {
+        if let id = editingTab { coordinator.renameTab(id, to: draftTitle) }
+        editingTab = nil
+        renameFocused = false
+    }
+}
+
+enum TabPillLayout {
+    static let maxTitleWidth: CGFloat = 128
+    static let minTitleWidth: CGFloat = 64
+    static let minGroupTitleWidth: CGFloat = 72
+}
+
+private struct TabPill: View {
+    let tab: ConductorCore.Tab
+    let title: String
+    let selected: Bool
+    let index: Int
+    let tabCount: Int
+    @ObservedObject var coordinator: AppCoordinator
+    let isEditing: Bool
+    @Binding var draft: String
+    var focused: FocusState<Bool>.Binding
+    let onStartEdit: () -> Void
+    let onCommitEdit: () -> Void
+    let onSelect: () -> Void
+
+    @State private var hovering = false
+    @State private var closeHovering = false
+
+    private var isGroup: Bool { tab.isGroup }
+    private var showClose: Bool { (hovering || selected) && !isEditing }
+
+    var body: some View {
+        Group {
+            if isEditing {
+                pillContent   // 编辑态不是 Button，让 TextField 可交互
+            } else {
+                Button(action: onSelect) { pillContent }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(TapGesture(count: 2).onEnded { onStartEdit() })   // 双击重命名
+            }
+        }
+        .overlay(alignment: .trailing) {
+            closeButton
+                .opacity(showClose ? 1 : 0)
+                .scaleEffect(showClose ? 1 : 0.6)
+                .allowsHitTesting(showClose)
+                .padding(.trailing, 7)
+                .animation(.spring(response: 0.28, dampingFraction: 0.7), value: showClose)
+        }
+        .animation(.easeOut(duration: 0.16), value: hovering)
+        .contextMenu {
+            Button { onStartEdit() } label: { Label(L("重命名"), systemImage: "pencil") }
+            Divider()
+            Button { coordinator.moveTab(tab.id, toIndex: index - 1) } label: {
+                Label(L("向左移动"), systemImage: "arrow.left")
+            }
+            .disabled(index <= 0)
+            Button { coordinator.moveTab(tab.id, toIndex: index + 1) } label: {
+                Label(L("向右移动"), systemImage: "arrow.right")
+            }
+            .disabled(index >= tabCount - 1)
+            Divider()
+            Button { coordinator.newTab() } label: { Label(L("新建标签"), systemImage: "plus") }
+            Button { coordinator.reopenClosed() } label: {
+                Label(L("恢复最近关闭"), systemImage: "arrow.uturn.backward")
+            }
+            .disabled(!coordinator.hasRecentlyClosed)
+            Button(role: .destructive) { coordinator.closeTab(tab.id) } label: {
+                Label(L("关闭标签"), systemImage: "xmark")
+            }
+        }
+        .onHover { hovering = $0 }
+    }
+
+    /// 该 tab 里在跑的 Agent（优先看活动 pane，否则取任一 pane）。
+    private var tabAgentID: String? {
+        if let active = coordinator.paneAgents[tab.activePane] { return active }
+        return tab.rootSplit.leaves().compactMap { coordinator.paneAgents[$0] }.first
+    }
+
+    private var pillContent: some View {
+        HStack(spacing: 6) {
+            leadingIcon
+                .frame(width: 13, height: 13)
+            if isEditing {
+                TextField("", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(AppStyle.textPrimary)
+                    .focused(focused)
+                    .onSubmit { onCommitEdit() }
+                    .frame(minWidth: 44, maxWidth: TabPillLayout.maxTitleWidth, alignment: .leading)
+            } else {
+                Text(title)
+                    .font(.system(size: 12.5, weight: selected ? .semibold : .regular))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(
+                        minWidth: isGroup ? TabPillLayout.minGroupTitleWidth : TabPillLayout.minTitleWidth,
+                        maxWidth: TabPillLayout.maxTitleWidth,
+                        alignment: .leading
+                    )
+                    .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+            }
+            if isGroup, !isEditing {
+                Text("\(tab.paneCount)")
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .contentTransition(.numericText())
+                    .frame(minWidth: 16, minHeight: 16)
+                    .background(Circle().fill(Color(AppStyle.accent).opacity(selected ? 1 : 0.7)))
+                    .transition(.scale(scale: 0.3).combined(with: .opacity))
+            }
+            Color.clear.frame(width: 15, height: 15)   // 预留 X 位
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.62), value: tab.paneCount)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(selected ? AnyShapeStyle(AppStyle.elevated)
+                               : (hovering ? AnyShapeStyle(AppStyle.hoverFill) : AnyShapeStyle(Color.clear)))
+                .shadow(color: (selected && !AppStyle.theme.isDark) ? Color.black.opacity(0.05) : .clear,
+                        radius: 1.5, y: 0.5)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(selected ? AppStyle.separator : Color.clear, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var leadingIcon: some View {
+        if let agentID = tabAgentID,
+           let agent = AgentCatalog.all.first(where: { $0.id == agentID }) {
+            if let logo = CLIToolLogo.image(named: agent.logo) {
+                if CLIToolLogo.isMonochrome(agent.logo) {
+                    Image(nsImage: logo)
+                        .resizable().renderingMode(.template).interpolation(.high).scaledToFit()
+                        .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+                } else {
+                    Image(nsImage: logo).resizable().interpolation(.high).scaledToFit()
+                }
+            } else {
+                Image(systemName: agent.fallbackSystemImage)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+            }
+        } else {
+            Image(systemName: isGroup ? "rectangle.split.2x1" : "terminal")
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+        }
+    }
+
+    private var closeButton: some View {
+        Button(action: { coordinator.closeTab(tab.id) }) {
+            Image(systemName: "xmark")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(closeHovering ? Color.white : AppStyle.textSecondary)
+                .frame(width: 16, height: 16)
+                .background(Circle().fill(closeHovering ? AppStyle.accent.opacity(0.9) : AppStyle.hoverFill))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { inside in withAnimation(.easeOut(duration: 0.14)) { closeHovering = inside } }
+        .help(L("关闭标签"))
+    }
+}

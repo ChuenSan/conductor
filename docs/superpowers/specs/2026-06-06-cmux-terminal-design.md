@@ -1,8 +1,8 @@
-# 设计文档:类 cmux 的 macOS 原生多终端管理器(v1)
+# 设计文档:类 conductor 的 macOS 原生多终端管理器(v1)
 
 - 日期:2026-06-06
 - 状态:设计待评审
-- 对标:[manaflow-ai/cmux](https://github.com/manaflow-ai/cmux)(同款架构:原生 macOS + libghostty)
+- 对标:[manaflow-ai/conductor](https://github.com/manaflow-ai/conductor)(同款架构:原生 macOS + libghostty)
 
 ---
 
@@ -180,7 +180,7 @@ protocol TerminalSurface: AnyObject {
 
 ## 14. 参考链接
 
-- 对标项目:[manaflow-ai/cmux](https://github.com/manaflow-ai/cmux) · [cmux.com](https://cmux.com/)
+- 对标项目:[manaflow-ai/conductor](https://github.com/manaflow-ai/conductor) · [conductor.com](https://conductor.com/)
 - libghostty 现状:[Mitchell《Libghostty Is Coming》](https://mitchellh.com/writing/libghostty-is-coming) · [libghostty C API 概览](https://mintlify.wiki/ghostty-org/ghostty/api/overview)
 - 嵌入范例:[ghostty-org/ghostling](https://github.com/ghostty-org/ghostling)
 - Ghostty 本体:[ghostty-org/ghostty](https://github.com/ghostty-org/ghostty)
