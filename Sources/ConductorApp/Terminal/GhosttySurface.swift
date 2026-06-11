@@ -329,6 +329,32 @@ final class GhosttySurface: TerminalSurface {
         text.withCString { ghostty_surface_text(surface, $0, UInt(text.utf8.count)) }
     }
 
+    // MARK: - IME（输入法）
+
+    /// IME 提交的整段文本（走「键入文本」通道，区别于粘贴语义的 sendText）。
+    func sendTextInput(_ text: String) {
+        guard let surface, !text.isEmpty else { return }
+        text.withCString { ghostty_surface_text_input(surface, $0, UInt(text.utf8.count)) }
+    }
+
+    /// 设置/清除预编辑串（组合中的拼音内联显示在光标处）；传 nil 清除。
+    func setPreedit(_ text: String?) {
+        guard let surface else { return }
+        if let text, !text.isEmpty {
+            text.withCString { ghostty_surface_preedit(surface, $0, UInt(text.utf8.count)) }
+        } else {
+            ghostty_surface_preedit(surface, nil, 0)
+        }
+    }
+
+    /// 光标格子在 surface 内的位置与大小（点单位，原点左上）。IME 候选窗定位用。
+    func imeCursorRect() -> CGRect? {
+        guard let surface else { return nil }
+        var x = 0.0, y = 0.0, width = 0.0, height = 0.0
+        ghostty_surface_ime_point(surface, &x, &y, &width, &height)
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
     /// 读取整个屏幕 + 回滚缓冲的纯文本（内容快照用）。surface 未创建（pane 从未显示）返回 nil。
     func readAllText() -> String? {
         guard let surface else { return nil }
