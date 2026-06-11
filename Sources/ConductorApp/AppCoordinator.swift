@@ -39,6 +39,9 @@ final class AppCoordinator: ObservableObject {
     let commandRegistry = CommandRegistry()
     /// 左侧工作区栏展示状态。
     @Published private(set) var sidebarPresentation = SidebarPresentationState()
+    /// 侧栏列表模式（工作区 / 文件夹）。两种模式右侧各是一套独立的标签/分屏数据：
+    /// 文件夹模式用一个隐藏的「浏览上下文」工作区承载，与常规工作区互不污染。
+    @Published private(set) var sidebarListMode: SidebarListMode = .workspaces
     /// 主窗口内设置面板展示状态。
     @Published private(set) var settingsPresentation = SettingsPresentationState()
     /// 主窗口内工具面板展示状态（CLI / 用量 / Skills / Hooks，与设置面板互斥）。
@@ -116,6 +119,9 @@ final class AppCoordinator: ObservableObject {
             onPaneExited: { [weak self] pane in self?.handlePaneExited(pane) }
         )
         restoreOrSeed(rootCwd: rootCwd)
+        // 模式跟着持久化的活动工作区走（两者总是一起保存，活动工作区是事实源）：
+        // 上次退出时停在文件夹模式 → 这次启动右侧直接还原浏览上下文。
+        sidebarListMode = (store.activeWorkspace == Self.folderContextID) ? .folders : .workspaces
         registerCommands()
     }
 
@@ -300,7 +306,7 @@ final class AppCoordinator: ObservableObject {
             let kb = commandRegistry.effectiveKeybinding(for: c.id) ?? ""
             items.append(PaletteItem(id: "cmd:\(c.id)", icon: "command", title: c.title, subtitle: kb, run: c.run))
         }
-        for ws in store.workspaces {
+        for ws in visibleWorkspaces {
             let id = ws.id
             items.append(PaletteItem(id: "ws:\(id.value)", icon: "folder", title: L("工作区：%@", ws.name),
                                      subtitle: ws.path) { [weak self] in self?.selectWorkspace(id) })
@@ -1085,6 +1091,79 @@ final class AppCoordinator: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
+    // MARK: - 侧栏模式 ↔ 右侧上下文（工作区 / 文件夹各一套分屏数据）
+
+    /// 文件夹模式的隐藏工作区 id：固定值，跨启动稳定（随 state.json 一起持久化）。
+    static let folderContextID = WorkspaceID("w-folder-context")
+
+    /// 常规工作区列表（不含文件夹模式的隐藏浏览上下文）。侧栏 / 命令面板用它。
+    var visibleWorkspaces: [Workspace] {
+        store.workspaces.filter { $0.id != Self.folderContextID }
+    }
+
+    private static let lastRegularWorkspaceKey = "sidebar.lastRegularWorkspace"
+
+    /// 切换侧栏模式：左边换列表，右边整套标签/分屏跟着换上下文。
+    /// 工作区 ↔ 文件夹来回切，各自的布局原样保留。
+    func setSidebarListMode(_ mode: SidebarListMode) {
+        guard mode != sidebarListMode else { return }
+        sidebarListMode = mode
+        switch mode {
+        case .folders:
+            if let current = store.activeWorkspace, current != Self.folderContextID {
+                UserDefaults.standard.set(current.value, forKey: Self.lastRegularWorkspaceKey)
+            }
+            switchContext(to: ensureFolderContext())
+        case .workspaces:
+            switchContext(to: resolvedRegularWorkspace())
+        }
+    }
+
+    /// 文件夹模式的浏览上下文（懒创建：首次切到文件夹模式才建，从家目录起一个标签）。
+    private func ensureFolderContext() -> WorkspaceID {
+        if store.workspaces.contains(where: { $0.id == Self.folderContextID }) {
+            return Self.folderContextID
+        }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let pane = PaneID(nextID("p"))
+        let tab = Tab.single(id: TabID(nextID("t")), title: "zsh", pane: pane)
+        let ws = Workspace(id: Self.folderContextID, name: L("文件夹"), path: home,
+                           tabs: [tab], activeTab: tab.id)
+        store.workspaces.append(ws)   // 不走 upsert：置 active 统一交给 switchContext
+        registry.apply([.createSurface(pane: pane, cwd: home)])
+        return Self.folderContextID
+    }
+
+    /// 切回工作区模式时的落点：上次离开的那个；没了就第一个常规工作区。
+    private func resolvedRegularWorkspace() -> WorkspaceID? {
+        if let saved = UserDefaults.standard.string(forKey: Self.lastRegularWorkspaceKey) {
+            let id = WorkspaceID(saved)
+            if id != Self.folderContextID, store.workspaces.contains(where: { $0.id == id }) {
+                return id
+            }
+        }
+        return visibleWorkspaces.first?.id
+    }
+
+    /// 真正执行右侧整套数据的切换（带轻微缩放转场，强调「换了一套」）。
+    private func switchContext(to id: WorkspaceID?) {
+        guard let id, store.activeWorkspace != id else { return }
+        store.activeWorkspace = id
+        pendingAreaTransition = .zoom(expanding: true)
+        rebuild()
+        scheduleSave()
+    }
+
+    /// 工作区变更后让侧栏模式跟上（通知/命令面板可能直接跳进另一套上下文）。
+    private func syncListModeWithActiveWorkspace() {
+        let mode: SidebarListMode = (store.activeWorkspace == Self.folderContextID) ? .folders : .workspaces
+        if sidebarListMode != mode { sidebarListMode = mode }
+        if mode == .workspaces, let id = store.activeWorkspace,
+           UserDefaults.standard.string(forKey: Self.lastRegularWorkspaceKey) != id.value {
+            UserDefaults.standard.set(id.value, forKey: Self.lastRegularWorkspaceKey)
+        }
+    }
+
     // MARK: - 工作区管理（直接改 store，与 add/selectWorkspace 一致）
 
     func renameWorkspace(_ id: WorkspaceID, to name: String) {
@@ -1095,24 +1174,34 @@ final class AppCoordinator: ObservableObject {
         scheduleSave()
     }
 
-    /// 删除工作区：释放它所有 pane 的 surface 再移除。保留至少一个工作区。
+    /// 删除工作区：释放它所有 pane 的 surface 再移除。保留至少一个常规工作区；
+    /// 文件夹模式的隐藏上下文不可删。
     func removeWorkspace(_ id: WorkspaceID) {
-        guard store.workspaces.count > 1,
+        guard id != Self.folderContextID,
+              visibleWorkspaces.count > 1,
               let ws = store.workspaces.first(where: { $0.id == id }) else { return }
         let panes = ws.tabs.flatMap { $0.rootSplit.leaves() }
         registry.apply(panes.map { .closeSurface(pane: $0) })
         store.remove(id)   // 若删的是 active，会切到第一个剩余工作区
+        // 兜底：别让删除把人「切」进隐藏的文件夹上下文
+        if store.activeWorkspace == Self.folderContextID, sidebarListMode == .workspaces {
+            store.activeWorkspace = visibleWorkspaces.first?.id
+        }
         rebuild()
         scheduleSave()
     }
 
-    /// 拖动重排工作区。
+    /// 拖动重排工作区（索引按可见列表算，隐藏的文件夹上下文固定排在末尾）。
     func moveWorkspace(_ id: WorkspaceID, toIndex: Int) {
-        guard let from = store.workspaces.firstIndex(where: { $0.id == id }) else { return }
-        let clamped = max(0, min(toIndex, store.workspaces.count - 1))
+        guard id != Self.folderContextID else { return }
+        var visible = visibleWorkspaces
+        let hidden = store.workspaces.filter { $0.id == Self.folderContextID }
+        guard let from = visible.firstIndex(where: { $0.id == id }) else { return }
+        let clamped = max(0, min(toIndex, visible.count - 1))
         guard clamped != from else { return }
-        let moved = store.workspaces.remove(at: from)
-        store.workspaces.insert(moved, at: clamped)
+        let moved = visible.remove(at: from)
+        visible.insert(moved, at: clamped)
+        store.workspaces = visible + hidden
         scheduleSave()
     }
 
@@ -1176,6 +1265,7 @@ final class AppCoordinator: ObservableObject {
               store.workspaces.contains(where: { $0.id == id })
         else { return }
         store.activeWorkspace = id
+        syncListModeWithActiveWorkspace()
         rebuild()
         scheduleSave()
     }
@@ -1186,6 +1276,7 @@ final class AppCoordinator: ObservableObject {
         let tab = Tab.single(id: TabID(nextID("t")), title: "zsh", pane: pane)
         let ws = Workspace(id: WorkspaceID(nextID("w")), name: name, path: path, tabs: [tab], activeTab: tab.id)
         store.upsert(ws)   // 设为 active
+        syncListModeWithActiveWorkspace()
         registry.apply([.createSurface(pane: pane, cwd: path), .focusSurface(pane: pane)])
         rebuild()
         scheduleSave()
@@ -1196,6 +1287,8 @@ final class AppCoordinator: ObservableObject {
     func run(_ command: WorkspaceCommand) {
         let effects = command.apply(to: &store)
         registry.apply(effects)
+        // ⌘⇧T 恢复可能把 active 切到另一套上下文（工作区 ↔ 文件夹），侧栏模式跟上
+        syncListModeWithActiveWorkspace()
         rebuild()
         scheduleSave()
     }

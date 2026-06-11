@@ -23,15 +23,14 @@ struct SidebarView: View {
     @State private var hoverTask: Task<Void, Never>?
     /// 一次性引导：用户首次触发悬停预览后永久隐藏提示。
     @AppStorage("sidebar.sessionHoverHintSeen") private var hoverHintSeen = false
-    /// 侧栏列表模式：工作区列表 / 文件夹树（跨启动记忆）。
-    @AppStorage("sidebar.listMode") private var listModeRaw = SidebarListMode.workspaces.rawValue
     /// 文件夹树状态（展开集合 + 懒加载缓存），与侧栏同生命周期。
     @StateObject private var folderTree = FolderTreeModel()
     /// 分段控件选中底块的滑动动画命名空间。
     @Namespace private var modeTabNamespace
 
+    /// 列表模式由 coordinator 持有：切模式时右侧整套标签/分屏跟着换上下文。
     private var listMode: SidebarListMode {
-        SidebarListMode(rawValue: listModeRaw) ?? .workspaces
+        coordinator.sidebarListMode
     }
 
     var body: some View {
@@ -41,7 +40,6 @@ struct SidebarView: View {
     private var sidebarContent: some View {
         VStack(alignment: isCollapsed ? .center : .leading, spacing: 0) {
             header
-            ScrollView {
             ScrollViewReader { proxy in
                 ScrollView {
                     if !isCollapsed, listMode == .folders {
@@ -52,6 +50,7 @@ struct SidebarView: View {
                         workspaceList
                     }
 
+                    if !isCollapsed {
                         sessionsSection
                             .padding(.horizontal, 10)
                             .padding(.top, 14)
@@ -84,7 +83,7 @@ struct SidebarView: View {
 
     private var workspaceList: some View {
         VStack(alignment: isCollapsed ? .center : .leading, spacing: 3) {
-            let workspaces = coordinator.store.workspaces
+            let workspaces = coordinator.visibleWorkspaces
             ForEach(Array(workspaces.enumerated()), id: \.element.id) { index, ws in
                 let selected = ws.id == coordinator.store.activeWorkspace
                 let summary = SidebarWorkspaceSummary(
@@ -255,7 +254,7 @@ struct SidebarView: View {
                 .padding(.leading, 12)
                 .padding(.trailing, 10)
                 .padding(.bottom, 8)
-                .animation(Motion.panel, value: listModeRaw)
+                .animation(Motion.panel, value: listMode)
             }
         }
     }
@@ -271,13 +270,15 @@ struct SidebarView: View {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(AppStyle.activeFill.opacity(0.7))
         )
+        // 模式也可能被外部切换（命令面板跳工作区、通知跳进文件夹上下文），同样要有滑动
+        .animation(Motion.panel, value: listMode)
     }
 
     private func modeSegment(_ title: String, icon: String, mode: SidebarListMode) -> some View {
         let selected = listMode == mode
         return Button {
             withAnimation(Motion.panel) {
-                listModeRaw = mode.rawValue
+                coordinator.setSidebarListMode(mode)
             }
         } label: {
             HStack(spacing: 4.5) {
@@ -422,6 +423,7 @@ struct SidebarView: View {
         if !found {
             ToastHUD.shared.show(L("该目录不在家目录下，树里看不到"),
                                  icon: "exclamationmark.circle.fill", over: coordinator.window)
+        }
     }
 
     private func addWorkspace() {
