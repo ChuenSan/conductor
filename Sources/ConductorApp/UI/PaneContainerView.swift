@@ -415,6 +415,26 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         header.isActive = isActive
     }
 
+    /// 边框脉冲两下（广播送达 / 通知跳转定位用），结束后回到当前焦点环样式。
+    func flashHighlight() {
+        guard let layer = frameView.layer else { return }
+        layer.removeAnimation(forKey: "paneFlash")
+        let resting = layer.borderColor ?? AppStyle.theme.cardBorder.cgColor
+        let accent = NSColor(AppStyle.accent).cgColor
+        let faint = NSColor(AppStyle.accent).withAlphaComponent(0.25).cgColor
+
+        let color = CAKeyframeAnimation(keyPath: "borderColor")
+        color.values = [resting, accent, faint, accent, resting]
+        let width = CAKeyframeAnimation(keyPath: "borderWidth")
+        width.values = [layer.borderWidth, 2.5, 1.5, 2.5, layer.borderWidth]
+
+        let group = CAAnimationGroup()
+        group.animations = [color, width]
+        group.duration = 0.9
+        group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(group, forKey: "paneFlash")
+    }
+
     // MARK: - 拖动源（由终端 ⌘+拖 调用）
 
     func beginPaneDrag(_ event: NSEvent) {

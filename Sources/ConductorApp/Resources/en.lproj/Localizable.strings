@@ -417,6 +417,13 @@
 "当前工作区里没有正在运行的 Agent。先启动 claude / codex 再广播。" = "No agents are running in the current workspace. Launch claude / codex first, then broadcast.";
 "好" = "OK";
 "广播到所有 Agent（⌘⇧B）" = "Broadcast to All Agents (⌘⇧B)";
+"回车仅填入 · Esc 关闭" = "Enter to fill · Esc to close";
+"发送后执行" = "Run after send";
+"关闭后只把文字填入各 Agent 输入框，不自动回车" = "When off, the text is placed into each agent's input without pressing Enter";
+"点击填入输入框" = "Click to fill the input field";
+"按当前勾选目标直接发送" = "Send now to the checked targets";
+"已广播到 %d 个 Agent" = "Broadcast to %d agent(s)";
+"已填入 %d 个 Agent 的输入框" = "Placed into %d agent input(s)";
 
 /* ===== 广播历史 / 通知中心 ===== */
 "最近广播（↑ 回翻）" = "Recent Broadcasts (↑ to recall)";

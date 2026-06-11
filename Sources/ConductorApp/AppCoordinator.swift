@@ -179,21 +179,33 @@ final class AppCoordinator: ObservableObject {
             alert.runModal()
             return
         }
-        broadcastPanel.toggle(targets: targets, over: window) { [weak self] panes, text in
-            self?.broadcast(text, to: panes)
+        broadcastPanel.toggle(targets: targets, coordinator: self, over: window) { [weak self] panes, text, execute in
+            self?.broadcast(text, to: panes, execute: execute)
         }
     }
 
-    /// 把同一段文字发给多个 agent pane（键入文本 + 回车提交）。
-    private func broadcast(_ text: String, to panes: [PaneID]) {
+    /// 把同一段文字发给多个 agent pane。
+    /// `execute` 关闭时只填入输入框不回车——适合让人逐个确认再提交。
+    /// 送达后目标 pane 边框闪两下 + 顶部 toast，给「发出去了吗」一个明确答案。
+    private func broadcast(_ text: String, to panes: [PaneID], execute: Bool) {
+        var delivered = 0
         for pane in panes {
             guard let surface = registry.surface(for: pane) as? GhosttySurface else { continue }
             surface.sendTextInput(text)
-            // 略延迟回车：等 TUI 消化完整段文本，避免文本和提交竞争乱序
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak surface] in
-                surface?.sendText("\r")
+            if execute {
+                // 略延迟回车：等 TUI 消化完整段文本，避免文本和提交竞争乱序
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak surface] in
+                    surface?.sendText("\r")
+                }
             }
+            delivered += 1
+            container(for: pane)?.flashHighlight()
         }
+        guard delivered > 0 else { return }
+        ToastHUD.shared.show(
+            execute ? L("已广播到 %d 个 Agent", delivered) : L("已填入 %d 个 Agent 的输入框", delivered),
+            icon: "dot.radiowaves.left.and.right",
+            over: window)
     }
 
     /// 把片段发到当前活动 pane：autoRun 直接执行，否则摆在提示符上可编辑。
