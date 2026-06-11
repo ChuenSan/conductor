@@ -503,3 +503,7 @@
 "点击跳到下一个需要关注的终端" = "Click to jump to the next pane that needs attention";
 "已放大" = "Zoomed";
 "点击还原（⌘⏎）" = "Click to restore (⌘⏎)";
+"字号 %ld pt" = "Font size %ld pt";
+"已是最小字号（%ld pt）" = "Already at minimum (%ld pt)";
+"已是最大字号（%ld pt）" = "Already at maximum (%ld pt)";
+"字号已复位（%ld pt）" = "Font size reset (%ld pt)";

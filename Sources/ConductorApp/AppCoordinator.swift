@@ -926,14 +926,24 @@ final class AppCoordinator: ObservableObject {
 
     func adjustFontSize(_ delta: Int) {
         let base = fontSizeOverride ?? ConfigStore.shared.config.appearance.font.size
-        fontSizeOverride = min(max(base + delta, 6), 72)
+        let clamped = min(max(base + delta, 6), 72)
+        fontSizeOverride = clamped
         applyTerminalAppearance(effectiveConfig())
+        // toast 反馈当前字号；连按时文字原地刷新，碰到上下限直说
+        var text = L("字号 %ld pt", clamped)
+        if clamped == base, delta < 0 { text = L("已是最小字号（%ld pt）", clamped) }
+        if clamped == base, delta > 0 { text = L("已是最大字号（%ld pt）", clamped) }
+        ToastHUD.shared.show(text,
+                             icon: delta > 0 ? "textformat.size.larger" : "textformat.size.smaller",
+                             over: window)
     }
 
     func resetFontSize() {
         guard fontSizeOverride != nil else { return }
         fontSizeOverride = nil
         applyTerminalAppearance(effectiveConfig())
+        ToastHUD.shared.show(L("字号已复位（%ld pt）", effectiveConfig().appearance.font.size),
+                             icon: "textformat.size", over: window)
     }
 
     /// 侧栏文件夹树「在此目录开终端」：新标签在指定目录起 shell。
