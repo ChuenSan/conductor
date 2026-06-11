@@ -144,6 +144,8 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     var isActive = false { didSet { if isActive != oldValue { updateRing() } } }
     /// 是否允许拖拽重排：只有当所在 tab 含 ≥2 个 pane 时才有意义（单个终端无处可排）。
     var canDrag = false
+    /// 放大态：头条亮「已放大」徽标，点击还原（⌘⏎ 同效）。
+    var isZoomed = false { didSet { if isZoomed != oldValue { header.isZoomed = isZoomed } } }
 
     /// 卡片四周留的间隙（露出画布 + 给柔阴影留空间）。紧凑一些。
     private let gap: CGFloat = 3
@@ -622,12 +624,21 @@ final class PaneHeaderView: NSView {
     var isActive = false { didSet { restyleButtons(); needsDisplay = true } }
     /// 头条左侧的 Agent logo（如该 pane 在跑 codex/claude…）。
     var agentLogo: NSImage? { didSet { needsDisplay = true } }
+    /// 放大态徽标：亮起表示该 pane 正占满整个 tab，点徽标还原。
+    var isZoomed = false {
+        didSet {
+            zoomBadge.isHidden = !isZoomed
+            needsLayout = true
+            needsDisplay = true
+        }
+    }
     var onDragStart: ((NSEvent) -> Void)?
     var onClick: (() -> Void)?
     var onAction: ((PaneContextAction) -> Void)?
     private var dragStarted = false
     private let controls = NSView()
     private var controlButtons: [PaneHeaderButton] = []
+    private let zoomBadge = PaneZoomBadge()
     private let moreButton = PaneHeaderButton(
         symbolName: "ellipsis",
         label: L("更多操作"),
@@ -638,6 +649,9 @@ final class PaneHeaderView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         setupControls()
+        zoomBadge.isHidden = true
+        zoomBadge.onPress = { [weak self] in self?.onAction?(.zoom) }
+        addSubview(zoomBadge)
     }
 
     convenience init() { self.init(frame: .zero) }
@@ -673,6 +687,16 @@ final class PaneHeaderView: NSView {
             button.frame = frame.offsetBy(dx: -controls.frame.minX, dy: 0)
             button.symbolPointSize = max(8, frame.width - 6)
         }
+        // 「已放大」徽标贴在控制按钮组左侧
+        if !zoomBadge.isHidden {
+            let badgeWidth = zoomBadge.fittingWidth
+            zoomBadge.frame = NSRect(
+                x: max(0, controls.frame.minX - badgeWidth - 7),
+                y: (bounds.height - PaneZoomBadge.height) / 2,
+                width: badgeWidth,
+                height: PaneZoomBadge.height
+            )
+        }
         needsDisplay = true
     }
 
@@ -693,7 +717,9 @@ final class PaneHeaderView: NSView {
             .font: NSFont.systemFont(ofSize: 11, weight: isActive ? .medium : .regular),
             .foregroundColor: NSColor(isActive ? AppStyle.textSecondary : AppStyle.textTertiary),
         ])
-        let clip = NSRect(x: titleX, y: 0, width: max(0, controls.frame.minX - titleX - 7), height: bounds.height)
+        // 标题在放大徽标（若亮）或控制按钮组前截断
+        let titleLimit = zoomBadge.isHidden ? controls.frame.minX : zoomBadge.frame.minX
+        let clip = NSRect(x: titleX, y: 0, width: max(0, titleLimit - titleX - 7), height: bounds.height)
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: clip).addClip()
         label.draw(at: NSPoint(x: titleX, y: (bounds.height - label.size().height) / 2))
@@ -852,5 +878,91 @@ private final class PaneHeaderButton: NSView {
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             layer.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
         }
+    }
+}
+
+/// 头条「已放大」胶囊徽标：放大态的显性提示，点击还原（与 ⌘⏎ 同效）。
+/// accent 染色胶囊 + 收缩图标 + 文字；hover 提亮。
+@MainActor
+final class PaneZoomBadge: NSView {
+    var onPress: (() -> Void)?
+    static let height: CGFloat = 16
+
+    private static var text: String { L("已放大") }
+    private static let font = NSFont.systemFont(ofSize: 9.5, weight: .semibold)
+    private static let iconSide: CGFloat = 8
+
+    private var hovering = false { didSet { updateAppearance() } }
+    private var trackingArea: NSTrackingArea?
+    private let iconView = NSImageView()
+    private let labelField = NSTextField(labelWithString: PaneZoomBadge.text)
+
+    /// 自适应宽度：图标 + 间隙 + 文字 + 两侧内边距。
+    var fittingWidth: CGFloat {
+        let textWidth = ceil((Self.text as NSString).size(withAttributes: [.font: Self.font]).width)
+        return Self.iconSide + 4 + textWidth + 8 * 2
+    }
+
+    init() {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = Self.height / 2
+        layer?.cornerCurve = .continuous
+        toolTip = L("点击还原（⌘⏎）")
+        setAccessibilityLabel(Self.text)
+
+        let config = NSImage.SymbolConfiguration(pointSize: Self.iconSide, weight: .bold)
+        iconView.image = NSImage(systemSymbolName: "arrow.down.right.and.arrow.up.left",
+                                 accessibilityDescription: nil)?.withSymbolConfiguration(config)
+        iconView.imageScaling = .scaleProportionallyDown
+        addSubview(iconView)
+
+        labelField.font = Self.font
+        labelField.lineBreakMode = .byClipping
+        addSubview(labelField)
+        updateAppearance()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        iconView.frame = NSRect(x: 8, y: (bounds.height - Self.iconSide) / 2 - 0.5,
+                                width: Self.iconSide, height: Self.iconSide)
+        let textX = iconView.frame.maxX + 4
+        labelField.frame = NSRect(x: textX, y: 0, width: max(0, bounds.width - textX - 8),
+                                  height: bounds.height)
+        // labelWithString 自带基线对齐偏差，手动垂直居中
+        let textHeight = labelField.cell?.cellSize(forBounds: bounds).height ?? bounds.height
+        labelField.frame.origin.y = (bounds.height - textHeight) / 2
+        labelField.frame.size.height = textHeight
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if bounds.contains(point) { onPress?() }
+    }
+
+    private func updateAppearance() {
+        let accent = NSColor(AppStyle.accent)
+        layer?.backgroundColor = accent.withAlphaComponent(hovering ? 0.30 : 0.16).cgColor
+        iconView.contentTintColor = accent
+        labelField.textColor = accent
     }
 }

@@ -1536,6 +1536,8 @@ final class AppCoordinator: ObservableObject {
         let active = self.activePane()
         // 放大态校验：被放大的 pane 不在当前 tab 了 → 取消放大。
         if let zp = zoomedPane, !tab.rootSplit.contains(zp) { zoomedPane = nil }
+        // 头条「已放大」徽标跟随真实放大态（点击徽标可还原）。
+        for (pane, container) in paneContainers { container.isZoomed = (pane == zoomedPane) }
         let multiPane = tab.rootSplit.leaves().count > 1
 
         let tree: NSView
