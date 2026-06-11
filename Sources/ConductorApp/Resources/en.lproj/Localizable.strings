@@ -519,3 +519,4 @@
 "没有可导出的内容" = "Nothing to export";
 "已导出 %@" = "Exported %@";
 "导出失败：%@" = "Export failed: %@";
+"最近标签往返" = "Toggle Recent Tab";

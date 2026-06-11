@@ -155,6 +155,7 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+ctrl+e") { [weak self] in self?.equalizeSplits() },
             AppCommand(id: "nextTab", title: L("下一标签"), defaultKeybinding: "cmd+shift+rightbrace") { [weak self] in self?.cycleTab(forward: true) },
             AppCommand(id: "prevTab", title: L("上一标签"), defaultKeybinding: "cmd+shift+leftbrace") { [weak self] in self?.cycleTab(forward: false) },
+            AppCommand(id: "toggleRecentTab", title: L("最近标签往返"), defaultKeybinding: "ctrl+tab") { [weak self] in self?.toggleRecentTab() },
             AppCommand(id: "findInTerminal", title: L("终端内搜索"), defaultKeybinding: "cmd+f") { [weak self] in self?.openTerminalSearch() },
             AppCommand(id: "searchSelection", title: L("以选中内容搜索"), defaultKeybinding: "cmd+e") { [weak self] in self?.searchSelectionInTerminal() },
             AppCommand(id: "findNext", title: L("查找下一个"), defaultKeybinding: "cmd+g") { [weak self] in self?.navigateTerminalSearch(forward: true) },
@@ -1466,6 +1467,36 @@ final class AppCoordinator: ObservableObject {
         scheduleSave()
     }
 
+    // MARK: - 最近标签往返（⌃Tab）
+
+    /// 当前/上一个看过的标签（可跨工作区）。rebuild 时更新，不持久化。
+    private var tabVisitCurrent: (ws: WorkspaceID, tab: TabID)?
+    private var tabVisitPrevious: (ws: WorkspaceID, tab: TabID)?
+
+    /// rebuild 时记账：活动标签变了 → 旧的退为「上一个」。
+    private func trackTabVisit(_ tab: TabID) {
+        guard let wsID = store.activeWorkspace else { return }
+        guard tabVisitCurrent?.ws != wsID || tabVisitCurrent?.tab != tab else { return }
+        if let current = tabVisitCurrent { tabVisitPrevious = current }
+        tabVisitCurrent = (ws: wsID, tab: tab)
+    }
+
+    /// ⌃Tab：跳回上一个看过的标签（跨工作区也行），再按一次跳回来。
+    func toggleRecentTab() {
+        guard let prev = tabVisitPrevious,
+              let wsIndex = store.workspaces.firstIndex(where: { $0.id == prev.ws }),
+              let tab = store.workspaces[wsIndex].tabs.first(where: { $0.id == prev.tab })
+        else { return }
+        if store.activeWorkspace != prev.ws {
+            store.activeWorkspace = prev.ws
+            syncListModeWithActiveWorkspace()
+        }
+        store.workspaces[wsIndex].activeTab = prev.tab
+        registry.apply([.focusSurface(pane: tab.activePane)])
+        rebuild()
+        scheduleSave()
+    }
+
     /// 循环切 tab。
     func cycleTab(forward: Bool) {
         guard let wsIndex = activeWorkspaceIndex(),
@@ -1634,6 +1665,7 @@ final class AppCoordinator: ObservableObject {
             return
         }
         sweepUnseenDone(visible: Set(tab.rootSplit.leaves()))
+        trackTabVisit(tab.id)
         let active = self.activePane()
         // 放大态校验：被放大的 pane 不在当前 tab 了 → 取消放大。
         if let zp = zoomedPane, !tab.rootSplit.contains(zp) { zoomedPane = nil }
