@@ -52,6 +52,10 @@
 "显示文件" = "Show Files";
 "当前终端 cd 到这里" = "cd Here in Current Terminal";
 "Git 仓库" = "Git repository";
+"打开文件" = "Open File";
+"双击打开文件" = "Double-click to open";
+"在树中定位当前终端目录" = "Reveal Current Directory in Tree";
+"该目录不在家目录下，树里看不到" = "Directory is outside your home folder, so it can't be shown in the tree";
 
 /* ===== 删除工作区确认 ===== */
 "删除工作区「%@」？" = "Delete workspace \"%@\"?";

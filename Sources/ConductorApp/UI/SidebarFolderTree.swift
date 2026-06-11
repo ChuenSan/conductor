@@ -48,11 +48,22 @@ final class FolderTreeModel: ObservableObject {
     private static let showHiddenKey = "sidebar.folderTree.showHidden"
     private static let showFilesKey = "sidebar.folderTree.showFiles"
 
+    /// 一次「定位」请求：目标路径 + 单调递增 tick（同一路径连点两次也要再滚一次）。
+    struct RevealRequest: Equatable {
+        let path: String
+        let tick: Int
+    }
+
     let root = FileManager.default.homeDirectoryForCurrentUser.path
     @Published private(set) var expanded: Set<String>
     @Published private(set) var children: [String: [FileBrowserEntry]] = [:]
     @Published private(set) var showHidden: Bool
     @Published private(set) var showFiles: Bool
+    /// 待滚动到的目标（视图侧 onChange 消费）。
+    @Published private(set) var revealRequest: RevealRequest?
+    /// 定位后短暂高亮的行路径。
+    @Published private(set) var highlighted: String?
+    private var highlightClearWork: DispatchWorkItem?
 
     /// 根目录的 git 标记算一次缓存住（rows 每次 body 求值都会跑，别反复 stat）。
     private let rootIsGitRepo: Bool
@@ -103,6 +114,41 @@ final class FolderTreeModel: ObservableObject {
         for path in children.keys { loadChildren(of: path) }
     }
 
+    /// 在树里定位一个目录：展开整条祖先链、滚动到该行并短暂高亮。
+    /// 目录不在家目录下（树根之外）返回 false，调用方给提示。
+    @discardableResult
+    func reveal(_ rawPath: String) -> Bool {
+        let path = (rawPath as NSString).standardizingPath
+        guard path == root || path.hasPrefix(root + "/") else { return false }
+        let components = path == root
+            ? []
+            : String(path.dropFirst(root.count + 1)).split(separator: "/").map(String.init)
+        // 链上有隐藏目录而当前没显示 → 先打开「显示隐藏」，否则目标行根本不存在
+        if !showHidden, components.contains(where: { $0.hasPrefix(".") }) {
+            setShowHidden(true)
+        }
+        // 展开除目标自身外的所有祖先（定位不该顺手把目标也展开）
+        var ancestor = root
+        var chain: [String] = [root]
+        for component in components {
+            ancestor += "/" + component
+            chain.append(ancestor)
+        }
+        for dir in chain.dropLast() {
+            expanded.insert(dir)
+            loadChildren(of: dir)
+        }
+        persistExpanded()
+
+        highlighted = path
+        revealRequest = RevealRequest(path: path, tick: (revealRequest?.tick ?? 0) + 1)
+        highlightClearWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.highlighted = nil }
+        highlightClearWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
+        return true
+    }
+
     func setShowFiles(_ show: Bool) {
         guard show != showFiles else { return }
         showFiles = show
@@ -140,6 +186,7 @@ struct SidebarFolderTree: View {
                     isThinking: row.isDirectory && thinkingCwds.contains {
                         $0 == row.path || $0.hasPrefix(row.path + "/")
                     },
+                    isHighlighted: model.highlighted == row.path,
                     onToggle: {
                         guard row.isDirectory else { return }
                         withAnimation(Motion.expand) {
@@ -147,7 +194,8 @@ struct SidebarFolderTree: View {
                         }
                     },
                     onOpenTerminal: { coordinator.newTab(atDirectory: row.path) },
-                    onCdHere: { coordinator.cdActivePane(to: row.path) }
+                    onCdHere: { coordinator.cdActivePane(to: row.path) },
+                    onOpenFile: { NSWorkspace.shared.open(URL(fileURLWithPath: row.path)) }
                 )
                 // 拖出去：文件 URL（终端 drop 收到后粘贴转义路径；Finder/编辑器也认）
                 .onDrag { NSItemProvider(object: URL(fileURLWithPath: row.path) as NSURL) }
@@ -160,6 +208,11 @@ struct SidebarFolderTree: View {
                             Label(L("当前终端 cd 到这里"), systemImage: "arrow.right.to.line")
                         }
                         Divider()
+                    }
+                    if !row.isDirectory {
+                        Button { NSWorkspace.shared.open(URL(fileURLWithPath: row.path)) } label: {
+                            Label(L("打开文件"), systemImage: "arrow.up.forward.app")
+                        }
                     }
                     Button { coordinator.revealInFinder(row.path) } label: {
                         Label(L("在 Finder 中显示"), systemImage: "folder")
@@ -192,9 +245,11 @@ private struct FolderTreeRowView: View {
     let row: FolderTreeRow
     let isKnownLeaf: Bool
     let isThinking: Bool
+    let isHighlighted: Bool
     let onToggle: () -> Void
     let onOpenTerminal: () -> Void
     let onCdHere: () -> Void
+    let onOpenFile: () -> Void
     @State private var hovering = false
 
     /// 每级缩进宽度（层级参考线画在每格中央）。
@@ -202,7 +257,14 @@ private struct FolderTreeRowView: View {
     private var isRoot: Bool { row.depth == 0 }
 
     var body: some View {
-        Button(action: onToggle) {
+        Button {
+            if row.isDirectory {
+                onToggle()
+            } else if NSApp.currentEvent?.clickCount == 2 {
+                // 文件双击系统打开（双击会触发两次 action：第一次 clickCount=1 是 no-op）
+                onOpenFile()
+            }
+        } label: {
             HStack(spacing: 6) {
                 indentGuides
                 disclosure
@@ -246,11 +308,18 @@ private struct FolderTreeRowView: View {
             .frame(height: 27)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(hovering ? AppStyle.hoverFill : Color.clear))
+                    .fill(isHighlighted
+                        ? AppStyle.accent.opacity(0.18)
+                        : (hovering ? AppStyle.hoverFill : Color.clear)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isHighlighted ? AppStyle.accent.opacity(0.5) : Color.clear, lineWidth: 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .animation(.easeInOut(duration: 0.3), value: isHighlighted)
+        .help(row.isDirectory ? row.path : L("双击打开文件"))
     }
 
     /// git 仓库小徽标：分叉图形，一眼认出「这是个仓库」。

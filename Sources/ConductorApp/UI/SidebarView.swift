@@ -42,21 +42,32 @@ struct SidebarView: View {
         VStack(alignment: isCollapsed ? .center : .leading, spacing: 0) {
             header
             ScrollView {
-                if !isCollapsed, listMode == .folders {
-                    SidebarFolderTree(coordinator: coordinator, model: folderTree)
-                        .padding(.horizontal, 10)
-                        .padding(.top, 2)
-                } else {
-                    workspaceList
-                }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    if !isCollapsed, listMode == .folders {
+                        SidebarFolderTree(coordinator: coordinator, model: folderTree)
+                            .padding(.horizontal, 10)
+                            .padding(.top, 2)
+                    } else {
+                        workspaceList
+                    }
 
-                if !isCollapsed {
-                    sessionsSection
-                        .padding(.horizontal, 10)
-                        .padding(.top, 14)
+                        sessionsSection
+                            .padding(.horizontal, 10)
+                            .padding(.top, 14)
+                    }
+                }
+                .scrollIndicators(.never)   // `.hidden` 在系统“始终显示滚动条”下仍会画 legacy 滚动条
+                // 「定位当前目录」：等展开后的行上树再滚（Lazy 容器需要一拍布局）
+                .onChange(of: folderTree.revealRequest) { _, request in
+                    guard let request else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                        withAnimation(Motion.panel) {
+                            proxy.scrollTo(request.path, anchor: .center)
+                        }
+                    }
                 }
             }
-            .scrollIndicators(.never)   // `.hidden` 在系统“始终显示滚动条”下仍会画 legacy 滚动条
             Spacer(minLength: 0)
         }
         .frame(maxHeight: .infinity)
@@ -230,6 +241,15 @@ struct SidebarView: View {
                         .help(L("新增工作区"))
                         .accessibilityLabel(L("新增工作区"))
                         .transition(.scale.combined(with: .opacity))
+                    } else {
+                        Button(action: locateActiveDirectory) {
+                            Image(systemName: "scope").font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AppStyle.textSecondary)
+                        }
+                        .buttonStyle(IconButtonStyle(size: 24))
+                        .help(L("在树中定位当前终端目录"))
+                        .accessibilityLabel(L("在树中定位当前终端目录"))
+                        .transition(.scale.combined(with: .opacity))
                     }
                 }
                 .padding(.leading, 12)
@@ -391,6 +411,17 @@ struct SidebarView: View {
         if alert.runModal() == .alertFirstButtonReturn {
             coordinator.removeWorkspace(ws.id)
         }
+    }
+
+    /// 「定位当前终端目录」：在文件夹树里展开、滚动并高亮活动 pane 的 cwd。
+    private func locateActiveDirectory() {
+        let active = coordinator.store.workspaces
+            .first(where: { $0.id == coordinator.store.activeWorkspace })?.path
+        guard let cwd = coordinator.activeCwd ?? active else { return }
+        let found = withAnimation(Motion.expand) { folderTree.reveal(cwd) }
+        if !found {
+            ToastHUD.shared.show(L("该目录不在家目录下，树里看不到"),
+                                 icon: "exclamationmark.circle.fill", over: coordinator.window)
     }
 
     private func addWorkspace() {
