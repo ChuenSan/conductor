@@ -57,6 +57,10 @@ public struct KeyChord: Hashable, Sendable {
         case "right", "arrowright": return "right"
         case "up", "arrowup": return "up"
         case "down", "arrowdown": return "down"
+        // 花括号归一成字面字符：NSEvent 侧 ⇧[ / ⇧] 产生 "{" / "}"；
+        // 否则 "rightbrace" 走默认分支被取首字符成 "r"，⌘⇧} 永远无法命中。
+        case "leftbrace", "lbrace": return "{"
+        case "rightbrace", "rbrace": return "}"
         default:
             // 普通键取第一个字符（小写）
             return String(raw.prefix(1))
