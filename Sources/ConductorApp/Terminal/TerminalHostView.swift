@@ -15,6 +15,8 @@ final class TerminalHostView: NSView {
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         configureLayer(layer)
         // 右键菜单由 PaneContainerView 统一构建（复制/粘贴/分屏/路径/清屏…），这里不再各自维护。
+        // 接收文件/文件夹拖放（侧栏树或 Finder 拖进来）→ 粘贴转义后的路径
+        registerForDraggedTypes([.fileURL, .string])
     }
 
     @available(*, unavailable)
@@ -119,6 +121,34 @@ final class TerminalHostView: NSView {
     override func keyUp(with event: NSEvent) {
         guard !hasMarkedText() else { return }   // 组合中的按键没发 press，release 也不发
         owner?.forwardKey(event, action: GHOSTTY_ACTION_RELEASE)
+    }
+
+    // MARK: - Drag & Drop（文件/文件夹路径粘贴进终端）
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        droppedText(from: sender) != nil ? .copy : []
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let text = droppedText(from: sender) else { return false }
+        window?.makeFirstResponder(self)
+        owner?.requestFocus()
+        owner?.sendTextInput(text)
+        return true
+    }
+
+    /// 文件 URL → shell 转义路径（多个空格相连）；纯文本原样。
+    private func droppedText(from sender: NSDraggingInfo) -> String? {
+        let pasteboard = sender.draggingPasteboard
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self],
+                                             options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !urls.isEmpty {
+            return urls.map { ShellQuoting.quote($0.path) }.joined(separator: " ")
+        }
+        if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            return text
+        }
+        return nil
     }
 
     // MARK: - Mouse

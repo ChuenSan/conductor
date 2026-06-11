@@ -240,6 +240,14 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    /// 当前活动终端 cd 到目录（侧栏文件夹树的「cd 到这里」）。
+    func cdActivePane(to path: String) {
+        guard let tab = activeTabModel(),
+              let surface = registry.surface(for: tab.activePane) as? GhosttySurface else { return }
+        surface.enqueueCommand("cd " + ShellQuoting.quote(path))
+        surface.focus()
+    }
+
     /// 有占位符 → 弹填值面板，确认后回调；没有 → 直接回调。
     private func resolvePlaceholders(of snippet: Snippet, then deliver: @escaping (String) -> Void) {
         guard snippet.placeholders.isEmpty else {

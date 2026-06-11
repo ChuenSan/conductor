@@ -8,8 +8,17 @@ struct FileBrowserEntry: Identifiable, Equatable {
     let isHidden: Bool
     let size: Int?            // 文件字节数；目录为 nil
     let modifiedAt: Date?
+    /// 目录下有 .git → 树里标记 git 仓库。
+    var isGitRepo: Bool = false
 
     var id: String { path }
+}
+
+/// 把路径包进单引号给 shell（内部单引号按 POSIX 规则转义）。
+enum ShellQuoting {
+    static func quote(_ path: String) -> String {
+        "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
 }
 
 /// 目录列举与排序：纯逻辑，便于单测。
@@ -24,13 +33,16 @@ enum FileBrowserLister {
 
         let entries = children.compactMap { child -> FileBrowserEntry? in
             let values = try? child.resourceValues(forKeys: Set(keys))
+            let isDirectory = values?.isDirectory ?? false
             let entry = FileBrowserEntry(
                 name: child.lastPathComponent,
                 path: child.path,
-                isDirectory: values?.isDirectory ?? false,
+                isDirectory: isDirectory,
                 isHidden: values?.isHidden ?? child.lastPathComponent.hasPrefix("."),
                 size: values?.fileSize,
-                modifiedAt: values?.contentModificationDate)
+                modifiedAt: values?.contentModificationDate,
+                isGitRepo: isDirectory && fileManager.fileExists(
+                    atPath: child.appendingPathComponent(".git").path))
             if !showHidden, entry.isHidden { return nil }
             return entry
         }

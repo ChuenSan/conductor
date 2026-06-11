@@ -49,6 +49,9 @@
 "在此目录打开终端" = "Open Terminal in This Folder";
 "刷新" = "Refresh";
 "显示隐藏文件夹" = "Show Hidden Folders";
+"显示文件" = "Show Files";
+"当前终端 cd 到这里" = "cd Here in Current Terminal";
+"Git 仓库" = "Git repository";
 
 /* ===== 删除工作区确认 ===== */
 "删除工作区「%@」？" = "Delete workspace \"%@\"?";
