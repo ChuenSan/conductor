@@ -9,6 +9,41 @@ struct Snippet: Identifiable, Codable, Equatable {
     var autoRun: Bool = false
 }
 
+extension Snippet {
+    /// 命令里的 `{{占位符}}`，按出现顺序去重。发送时弹小面板逐个填值。
+    var placeholders: [String] {
+        Self.placeholders(in: command)
+    }
+
+    static func placeholders(in command: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: #"\{\{([^{}\n]+)\}\}"#) else { return [] }
+        let range = NSRange(command.startIndex..., in: command)
+        var seen = Set<String>()
+        var names: [String] = []
+        regex.enumerateMatches(in: command, range: range) { match, _, _ in
+            guard let match, let r = Range(match.range(at: 1), in: command) else { return }
+            let name = String(command[r]).trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty, seen.insert(name).inserted else { return }
+            names.append(name)
+        }
+        return names
+    }
+
+    /// 用填好的值替换全部同名占位符；没提供值的占位符原样保留。
+    static func fill(_ command: String, values: [String: String]) -> String {
+        var result = command
+        for (name, value) in values {
+            // 占位符两侧花括号内允许留空格：{{ name }} 与 {{name}} 等价
+            guard let regex = try? NSRegularExpression(
+                pattern: #"\{\{\s*"# + NSRegularExpression.escapedPattern(for: name) + #"\s*\}\}"#) else { continue }
+            result = regex.stringByReplacingMatches(
+                in: result, range: NSRange(result.startIndex..., in: result),
+                withTemplate: NSRegularExpression.escapedTemplate(for: value))
+        }
+        return result
+    }
+}
+
 /// 片段库：JSON 持久化在 Application Support/conductor/snippets.json。
 @MainActor
 final class SnippetStore: ObservableObject {

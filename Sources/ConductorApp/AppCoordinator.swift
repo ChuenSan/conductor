@@ -78,6 +78,8 @@ final class AppCoordinator: ObservableObject {
     private lazy var commandPalette = CommandPaletteController(coordinator: self)
     /// 广播输入面板（懒创建）。
     private lazy var broadcastPanel = BroadcastPanelController()
+    /// 片段占位符填值面板（懒创建）。
+    private lazy var snippetFillPanel = SnippetFillPanelController()
     weak var window: NSWindow?
     private let stateStore: StateStore
     private var saveWorkItem: DispatchWorkItem?
@@ -209,15 +211,42 @@ final class AppCoordinator: ObservableObject {
     }
 
     /// 把片段发到当前活动 pane：autoRun 直接执行，否则摆在提示符上可编辑。
+    /// 命令带 `{{占位符}}` 时先弹填值面板。
     func sendSnippet(_ snippet: Snippet) {
-        guard let tab = activeTabModel(),
-              let surface = registry.surface(for: tab.activePane) as? GhosttySurface else { return }
-        if snippet.autoRun {
-            surface.enqueueCommand(snippet.command)
-        } else {
-            surface.enqueueTypedText(snippet.command)
+        resolvePlaceholders(of: snippet) { [weak self] command in
+            guard let self,
+                  let tab = self.activeTabModel(),
+                  let surface = self.registry.surface(for: tab.activePane) as? GhosttySurface else { return }
+            if snippet.autoRun {
+                surface.enqueueCommand(command)
+            } else {
+                surface.enqueueTypedText(command)
+            }
+            surface.focus()
         }
-        surface.focus()
+    }
+
+    /// 把片段广播给当前工作区所有 agent pane（占位符同样先填值）。
+    /// autoRun 对应广播的「发送后执行」语义。
+    func broadcastSnippet(_ snippet: Snippet) {
+        let targets = broadcastTargets()
+        guard !targets.isEmpty else {
+            ToastHUD.shared.show(L("当前工作区没有正在运行的 Agent"),
+                                 icon: "exclamationmark.circle.fill", over: window)
+            return
+        }
+        resolvePlaceholders(of: snippet) { [weak self] command in
+            self?.broadcast(command, to: targets.map(\.pane), execute: snippet.autoRun)
+        }
+    }
+
+    /// 有占位符 → 弹填值面板，确认后回调；没有 → 直接回调。
+    private func resolvePlaceholders(of snippet: Snippet, then deliver: @escaping (String) -> Void) {
+        guard snippet.placeholders.isEmpty else {
+            snippetFillPanel.show(snippet: snippet, over: window) { deliver($0) }
+            return
+        }
+        deliver(snippet.command)
     }
 
     /// 命令面板的条目：命令表 + 工作区 + 当前工作区的标签。

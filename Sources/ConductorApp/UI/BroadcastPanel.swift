@@ -158,7 +158,16 @@ struct BroadcastPanelView: View {
             fieldFocused = true
         } onSend: {
             sendDirect(item)
+        } onSaveSnippet: {
+            // 常用的广播语收藏成片段，下次去片段库或 ⌘K 里直接发
+            SnippetStore.shared.add(Snippet(name: snippetName(for: item), command: item))
         }
+    }
+
+    /// 从命令文本生成片段名：取首行，过长截断。
+    private func snippetName(for command: String) -> String {
+        let firstLine = command.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? command
+        return firstLine.count > 32 ? String(firstLine.prefix(32)) + "…" : firstLine
     }
 
     /// 历史条目上的「直接发送」：不经输入框，按当前勾选目标立刻广播。
@@ -230,13 +239,16 @@ struct BroadcastPanelView: View {
     }
 }
 
-/// 历史行：点击填回输入框；hover 浮现「直接发送」按钮跳过编辑一步到位。
+/// 历史行：点击填回输入框；hover 浮现「直接发送」「收藏为片段」按钮。
 private struct HistoryRow: View {
     let item: String
     let onFill: () -> Void
     let onSend: () -> Void
+    let onSaveSnippet: () -> Void
 
     @State private var hovered = false
+    /// 已点过收藏：星标变实心并停手，避免重复收藏同一条。
+    @State private var saved = false
 
     var body: some View {
         HStack(spacing: 7) {
@@ -256,6 +268,22 @@ private struct HistoryRow: View {
             .buttonStyle(.plain)
             .help(L("点击填入输入框"))
 
+            if hovered || saved {
+                Button {
+                    guard !saved else { return }
+                    saved = true
+                    onSaveSnippet()
+                } label: {
+                    Image(systemName: saved ? "star.fill" : "star")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(saved ? Color.yellow.opacity(0.85) : AppStyle.textSecondary)
+                        .frame(width: 22, height: 20)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(AppStyle.hoverFill))
+                }
+                .buttonStyle(.plain)
+                .help(saved ? L("已收藏为片段") : L("收藏为命令片段"))
+                .transition(.opacity)
+            }
             if hovered {
                 Button(action: onSend) {
                     Image(systemName: "paperplane.fill")
