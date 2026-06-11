@@ -80,6 +80,8 @@ enum ConductorGhosttyConfigCatalog {
         "font-family": ConductorGhosttyConfigCopy(title: L("字体"), summary: L("选择终端文字使用的等宽字体")),
         "font-size": ConductorGhosttyConfigCopy(title: L("字号"), summary: L("调整终端文字大小")),
         "font-feature": ConductorGhosttyConfigCopy(title: L("字体特性"), summary: L("开启或关闭字体连字等 OpenType 特性")),
+        "font-thicken": ConductorGhosttyConfigCopy(title: L("文字加粗渲染"), summary: L("macOS 原生风格的笔画平滑，文字更扎实清晰")),
+        "font-thicken-strength": ConductorGhosttyConfigCopy(title: L("加粗强度"), summary: L("0 最轻、255 最重；仅在加粗渲染开启时生效")),
         "adjust-cell-width": ConductorGhosttyConfigCopy(title: L("字格宽度微调"), summary: L("细调每个字符占用的水平空间")),
         "adjust-cell-height": ConductorGhosttyConfigCopy(title: L("字格高度微调"), summary: L("细调每行文字占用的垂直空间")),
         "adjust-font-baseline": ConductorGhosttyConfigCopy(title: L("文字基线微调"), summary: L("上下移动文字，让字体看起来更居中")),
@@ -95,6 +97,7 @@ enum ConductorGhosttyConfigCatalog {
         "cursor-text": ConductorGhosttyConfigCopy(title: L("光标内文字颜色"), summary: L("光标覆盖文字时使用的文字颜色")),
         "cursor-click-to-move": ConductorGhosttyConfigCopy(title: L("点击移动光标"), summary: L("允许鼠标点击把光标移动到目标位置")),
 
+        "alpha-blending": ConductorGhosttyConfigCopy(title: L("文字混合色彩空间"), summary: L("线性校正可消除彩色文字边缘的暗边毛刺")),
         "background-opacity": ConductorGhosttyConfigCopy(title: L("背景不透明度"), summary: L("降低后可以透出窗口材质，100% 最清晰")),
         "background-blur": ConductorGhosttyConfigCopy(title: L("背景模糊"), summary: L("透明背景下柔化后方内容")),
         "background-image": ConductorGhosttyConfigCopy(title: L("背景图片"), summary: L("选择一张图片作为终端背景")),
@@ -138,13 +141,14 @@ enum ConductorGhosttyConfigCatalog {
         "selection-clear-on-copy", "copy-on-select", "mouse-hide-while-typing",
         "mouse-reporting", "link-url", "link-previews", "clipboard-read",
         "clipboard-write", "clipboard-trim-trailing-spaces", "clipboard-paste-protection",
-        "clipboard-paste-bracketed-safe", "shell-integration"
+        "clipboard-paste-bracketed-safe", "shell-integration", "font-thicken"
     ]
 
     static let choiceOptions: [String: [(label: String, value: String)]] = [
         "cursor-style": [(L("块"), "block"), (L("空心块"), "block_hollow"), (L("竖线"), "bar"), (L("下划线"), "underline")],
         "background-image-fit": [(L("包含"), "contain"), (L("覆盖"), "cover"), (L("拉伸"), "stretch"), (L("不缩放"), "none")],
-        "macos-option-as-alt": [(L("左"), "left"), (L("右"), "right"), (L("两侧"), "true"), (L("关闭"), "false")]
+        "macos-option-as-alt": [(L("左"), "left"), (L("右"), "right"), (L("两侧"), "true"), (L("关闭"), "false")],
+        "alpha-blending": [(L("线性校正"), "linear-corrected"), (L("原生"), "native"), (L("线性"), "linear")]
     ]
 
     static func copy(for key: String) -> ConductorGhosttyConfigCopy {
@@ -163,6 +167,7 @@ enum ConductorGhosttyConfigCatalog {
             return .color
         }
         if key == "font-size" { return .integer(range: 8...36, step: 1) }
+        if key == "font-thicken-strength" { return .integer(range: 0...255, step: 16) }
         if key == "scrollback-limit" { return .integer(range: 0...1_000_000, step: 1000) }
         if key == "minimum-contrast" { return .integer(range: 1...21, step: 1) }
         if key.hasPrefix("adjust-") {
@@ -187,6 +192,7 @@ enum ConductorGhosttyConfigCatalog {
             systemImage: "textformat.size",
             keys: [
                 "font-family", "font-size", "font-feature",
+                "font-thicken", "font-thicken-strength",
                 "adjust-cell-width", "adjust-cell-height",
                 "adjust-font-baseline", "adjust-underline-position",
                 "adjust-underline-thickness", "adjust-cursor-thickness",
@@ -209,7 +215,7 @@ enum ConductorGhosttyConfigCatalog {
             subtitle: L("背景、透明度、选区、搜索高亮和对比度"),
             systemImage: "paintpalette",
             keys: [
-                "background-opacity", "background-blur", "background-image",
+                "alpha-blending", "background-opacity", "background-blur", "background-image",
                 "background-image-opacity", "background-image-fit",
                 "minimum-contrast", "selection-foreground", "selection-background",
                 "search-foreground", "search-background", "search-selected-foreground",

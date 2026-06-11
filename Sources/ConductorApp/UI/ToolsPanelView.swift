@@ -7,6 +7,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     case skills
     case hooks
     case snippets
+    case coCreate
 
     var id: String { rawValue }
     var title: String {
@@ -16,6 +17,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .skills: return "Skills"
         case .hooks: return "Hooks"
         case .snippets: return L("片段")
+        case .coCreate: return L("共创")
         }
     }
     var icon: String {
@@ -25,6 +27,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .skills: return "wand.and.stars"
         case .hooks: return "link"
         case .snippets: return "text.badge.star"
+        case .coCreate: return "sparkles"
         }
     }
 }
@@ -120,6 +123,8 @@ struct ToolsPanelView: View {
             HooksManagerView()
         case .snippets:
             SnippetsManagerView(coordinator: coordinator)
+        case .coCreate:
+            CoCreateView()
         }
     }
 }

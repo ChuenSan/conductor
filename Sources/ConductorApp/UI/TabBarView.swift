@@ -65,15 +65,6 @@ struct TabBarView: View {
             .layoutPriority(1)
             // 右侧快捷按钮组（软圆角容器，对标 Craft 的按钮组）
             HStack(spacing: 2) {
-                if hasAgentPanes(tabs) {
-                    Button(action: { coordinator.openBroadcast() }) {
-                        Image(systemName: "dot.radiowaves.left.and.right")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppStyle.textSecondary)
-                    }
-                    .buttonStyle(IconButtonStyle(size: 26))
-                    .help(L("广播到所有 Agent（⌘⇧B）"))
-                }
                 Button(action: { coordinator.toggleTheme() }) {
                     Image(systemName: AppStyle.theme.isDark ? "moon.stars.fill" : "sun.max.fill")
                         .font(.system(size: 12, weight: .medium))
@@ -110,13 +101,6 @@ struct TabBarView: View {
         .background(AppStyle.windowBackground)   // 与终端区同底，无分隔条
         .onChange(of: renameFocused) { _, focused in
             if !focused, editingTab != nil { commitRename() }
-        }
-    }
-
-    /// 当前工作区是否有 pane 在跑 agent（决定是否露出广播按钮）。
-    private func hasAgentPanes(_ tabs: [ConductorCore.Tab]) -> Bool {
-        tabs.contains { tab in
-            tab.rootSplit.leaves().contains { coordinator.paneAgents[$0] != nil }
         }
     }
 

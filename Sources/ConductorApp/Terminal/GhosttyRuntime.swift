@@ -125,6 +125,11 @@ final class GhosttyRuntime {
         set("selection-background", theme.selection)
         set("selection-foreground", theme.selectionForeground)
         set("font-size", "\(a.font.size)")
+        // 渲染质量（macOS）：ghostty 默认笔画偏细、且在 sRGB/P3 里混合会在彩色文字边缘
+        // 产生暗边毛刺（似锯齿）。加粗贴近 Terminal.app 的系统级平滑；linear-corrected
+        // 在线性空间混合并做文字校正，观感同 native 但没有暗边。两者都可被下方 overrides 覆盖。
+        set("font-thicken", "true")
+        set("alpha-blending", "linear-corrected")
         set("adjust-cell-height", "12%")
         set("window-padding-x", "\(a.padding.x)")
         set("window-padding-y", "\(a.padding.y)")

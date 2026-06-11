@@ -68,10 +68,23 @@ final class RatioSplitView: NSSplitView, NSSplitViewDelegate {
         if event.clickCount == 2,
            arrangedSubviews.count == 2,
            isOnDivider(convert(event.locationInWindow, from: nil)) {
-            setPosition(splitExtent / 2, ofDividerAt: 0)
+            setPosition(pixelAligned(splitExtent / 2), ofDividerAt: 0)
             return
         }
         super.mouseDown(with: event)
+    }
+
+    /// 拖动分隔条时把位置吸附到物理像素边界：小数坐标会让两侧的 Metal 终端
+    /// 被半像素重采样（文字发虚/锯齿）。
+    func splitView(_ splitView: NSSplitView,
+                   constrainSplitPosition proposedPosition: CGFloat,
+                   ofSubviewAt dividerIndex: Int) -> CGFloat {
+        pixelAligned(proposedPosition)
+    }
+
+    private func pixelAligned(_ position: CGFloat) -> CGFloat {
+        let scale = window?.backingScaleFactor ?? 2
+        return (position * scale).rounded() / scale
     }
 
     /// 命中判定放宽到分隔条两侧各 3pt（thin 分隔条只有 1px，太难点）。
@@ -131,7 +144,7 @@ final class RatioSplitView: NSSplitView, NSSplitViewDelegate {
 
         let minExtent = minimumPaneExtent(for: total)
         let proposed = initialRatio * total
-        let position = min(max(proposed, minExtent), total - minExtent)
+        let position = pixelAligned(min(max(proposed, minExtent), total - minExtent))
 
         applyingInitialRatio = true
         setPosition(position, ofDividerAt: 0)

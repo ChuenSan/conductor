@@ -270,6 +270,10 @@
 "调整终端文字大小" = "Adjust terminal text size";
 "字体特性" = "Font Features";
 "开启或关闭字体连字等 OpenType 特性" = "Enable or disable OpenType features such as ligatures";
+"文字加粗渲染" = "Thicken Text";
+"macOS 原生风格的笔画平滑，文字更扎实清晰" = "macOS-style stroke smoothing for fuller, crisper text";
+"加粗强度" = "Thicken Strength";
+"0 最轻、255 最重；仅在加粗渲染开启时生效" = "0 is lightest, 255 is heaviest; only applies when Thicken Text is on";
 "字格宽度微调" = "Cell Width Adjustment";
 "细调每个字符占用的水平空间" = "Fine-tune the horizontal space each character occupies";
 "字格高度微调" = "Cell Height Adjustment";
@@ -296,6 +300,11 @@
 "光标覆盖文字时使用的文字颜色" = "Text color used when the cursor covers text";
 "点击移动光标" = "Click to Move Cursor";
 "允许鼠标点击把光标移动到目标位置" = "Allow mouse clicks to move the cursor to the target position";
+"文字混合色彩空间" = "Text Blending Color Space";
+"线性校正可消除彩色文字边缘的暗边毛刺" = "Linear (corrected) removes dark fringing around colored text edges";
+"线性校正" = "Linear (corrected)";
+"原生" = "Native";
+"线性" = "Linear";
 "背景不透明度" = "Background Opacity";
 "降低后可以透出窗口材质，100% 最清晰" = "Lower values reveal the window material; 100% is fully opaque";
 "背景模糊" = "Background Blur";
@@ -419,39 +428,22 @@
 "命令（如：git commit -m \"{{message}}\"）" = "Command (e.g. git commit -m \"{{message}}\")";
 "搜索片段…" = "Search snippets…";
 "含 {{占位符}}，发送前会先弹窗填值" = "Contains {{placeholders}} — you'll fill them before it sends";
-"当前工作区没有正在运行的 Agent" = "No agents are running in this workspace";
-"收藏为命令片段" = "Save as a command snippet";
-"已收藏为片段" = "Saved as a snippet";
+"回车发送 · Esc 关闭" = "Enter to send · Esc to close";
 "发送后直接执行（关掉则摆在提示符上，可编辑后再回车）" = "Run immediately after sending (off: placed at the prompt, press Enter to run)";
 "保存" = "Save";
 "Git 状态" = "Git Status";
 "Git 最近提交" = "Recent Git Commits";
 "提交全部改动" = "Commit All Changes";
 
-/* ===== 广播到 Agent ===== */
-"广播到所有 Agent" = "Broadcast to All Agents";
-"广播到 Agent" = "Broadcast to Agents";
-"回车发送 · Esc 关闭" = "Enter to send · Esc to close";
-"输入要发给所有 Agent 的指令…" = "Type an instruction for all agents…";
-"点击排除该 Agent" = "Click to exclude this agent";
-"点击加入广播" = "Click to include in broadcast";
-"没有可广播的 Agent" = "No Agents to Broadcast To";
-"当前工作区里没有正在运行的 Agent。先启动 claude / codex 再广播。" = "No agents are running in the current workspace. Launch claude / codex first, then broadcast.";
-"好" = "OK";
-"广播到所有 Agent（⌘⇧B）" = "Broadcast to All Agents (⌘⇧B)";
-"回车仅填入 · Esc 关闭" = "Enter to fill · Esc to close";
-"发送后执行" = "Run after send";
-"关闭后只把文字填入各 Agent 输入框，不自动回车" = "When off, the text is placed into each agent's input without pressing Enter";
-"点击填入输入框" = "Click to fill the input field";
-"按当前勾选目标直接发送" = "Send now to the checked targets";
-"已广播到 %ld 个 Agent" = "Broadcast to %ld agent(s)";
-"已填入 %ld 个 Agent 的输入框" = "Placed into %ld agent input(s)";
-"跳过思考中" = "Skip thinking";
-"正在思考的 Agent 自动从目标里排除；点它的标签可强制加入" = "Agents that are thinking are excluded automatically; click their chip to force-include";
-"思考中，已自动跳过；点击强制加入" = "Thinking — skipped automatically; click to include anyway";
+/* ===== 键位速查 ===== */
+"键位速查" = "Keyboard Shortcuts";
+"Esc 关闭" = "Esc to close";
+"切到标签 1–9" = "Go to Tab 1–9";
+"未绑定" = "Not bound";
+"已在 config.yaml 自定义" = "Customized in config.yaml";
+"键位可在设置（⌘,）或 config.yaml 里自定义" = "Customize shortcuts in Settings (⌘,) or config.yaml";
 
-/* ===== 广播历史 / 通知中心 ===== */
-"最近广播（↑ 回翻）" = "Recent Broadcasts (↑ to recall)";
+/* ===== 通知中心 ===== */
 "Agent 完成记录" = "Agent Completions";
 "清空" = "Clear";
 "还没有完成记录。Agent 跑完任务会记在这里。" = "No completions yet. Finished agent tasks will show up here.";
@@ -520,3 +512,82 @@
 "已导出 %@" = "Exported %@";
 "导出失败：%@" = "Export failed: %@";
 "最近标签往返" = "Toggle Recent Tab";
+
+/* ===== 等你回复（blocked 收件箱） ===== */
+"Agent 在等待你的确认或输入" = "The agent is waiting for your confirmation or input";
+"等你回复 · %@" = "Waiting for you · %@";
+"Agent 等你回复" = "Agent is waiting for you";
+"等你回复" = "Waiting for you";
+"%ld 个 Agent 在等你回复，点击处理" = "%ld agent(s) waiting for your reply — click to handle";
+"回复后自动出列" = "Replies clear automatically";
+"跳过去" = "Jump";
+"切到该终端处理" = "Switch to that terminal to handle it";
+"发送回车（默认确认）" = "Send Return (default confirm)";
+"选第 1 项" = "Choose option 1";
+"选第 2 项" = "Choose option 2";
+"选第 3 项" = "Choose option 3";
+"发送 Esc（取消）" = "Send Esc (cancel)";
+"回复并回车…" = "Reply and press Return…";
+
+/* ===== 任务队列 ===== */
+"任务队列（当前面板）" = "Task Queue (Current Pane)";
+"任务队列…" = "Task Queue…";
+"任务队列 · %@" = "Task Queue · %@";
+"排给这个终端的下一条指令…" = "Queue the next instruction for this terminal…";
+"回车加入队列；当前任务完成（Stop）后自动逐条发出" = "Press Return to enqueue; items are sent one by one after each task stops";
+"队列为空。先排几条，让 Agent 一条接一条干。" = "Queue is empty. Add a few items and the agent will work through them.";
+"%ld 条排队中" = "%ld queued";
+"立即发队首" = "Send First Now";
+"不等 Stop，现在就发出第一条" = "Send the first item now without waiting for Stop";
+"移出队列" = "Remove from queue";
+"队列 %ld" = "Queue %ld";
+
+/* ===== 二次意见 ===== */
+"二次意见" = "Second Opinion";
+"没有其他可用的 Agent" = "No other agents available";
+"让 %@ 审一遍" = "Have %@ review it";
+"没有可审查的内容" = "Nothing to review";
+"写临时文件失败：%@" = "Failed to write temp file: %@";
+"文件 %@ 是另一个 AI 助手刚在这个项目里的终端工作记录。请通读后给出严格的第二意见：1) 结论或方案有无错漏；2) 有无更好的做法或被忽略的风险。直接给结论。" = "The file %@ is a terminal transcript of work another AI assistant just did in this project. Read it fully and give a strict second opinion: 1) any mistakes or gaps in the conclusions or approach; 2) any better alternatives or overlooked risks. Get straight to the point.";
+
+/* ===== 任务总览（Mission Control） ===== */
+"任务总览" = "Mission Control";
+"点卡片直达 · Esc 关闭" = "Click a card to jump · Esc to close";
+"思考中" = "thinking";
+"等回复" = "waiting";
+"完成未读" = "done unseen";
+"%ld 个终端" = "%ld terminal(s)";
+"（空闲）" = "(idle)";
+"已完成" = "Done";
+
+/* ===== 共创计划 ===== */
+"共创" = "Co-create";
+"共创计划" = "Co-create Program";
+"共创计划 · 开放中" = "CO-CREATE · NOW OPEN";
+"一起把终端\n调教成 Agent 指挥台" = "Let's turn the terminal\ninto an agent command center";
+"下一个让人尖叫的功能由你来点菜：点子、设计稿、键位吐槽、性能抓包、一段让你心动的动效参考——都算贡献，不要求会 Swift。" = "You pick the next jaw-dropping feature: ideas, mockups, keybinding rants, perf traces, or a motion reference you love — all count. No Swift required.";
+"发 Issue 入伙" = "Join via Issue";
+"先去仓库看看" = "Browse the Repo";
+"打开 GitHub，标题已带 [共创]，正文骨架已填好" = "Opens GitHub with the [Co-create] title and body template pre-filled";
+"入伙只要三步" = "Three steps to join";
+"抛点子" = "Pitch an idea";
+"点上面的按钮，标题带 [共创]，模板已帮你搭好骨架：方向、一句话点子、为什么值得做。" = "Hit the button above. The title carries [Co-create] and the template scaffolds it: direction, one-liner, why it matters.";
+"认领或共谋" = "Claim or conspire";
+"在 Issue 里讨论方案：自己动手，或挂出来等人捡。会定期从中挑选直接排进开发。" = "Discuss in the issue: build it yourself or leave it up for grabs. Picks get scheduled into development regularly.";
+"上贡献者墙" = "Join the wall of contributors";
+"被采纳的点子随版本发布并在发布说明里鸣谢；提 PR 合并的，名字永久进 Contributors。" = "Adopted ideas ship with releases and get credited in the notes; merged PRs put your name in Contributors forever.";
+"不知道做什么？现成的坑" = "Not sure what to build? Open slots";
+"任务赛马" = "Task Tournament";
+"一个需求 → N 个 worktree，Claude / Codex 同题并跑，diff 选优一键合并" = "One task → N worktrees; Claude / Codex race in parallel, review diffs, merge the winner";
+"高级动效" = "Premium motion";
+"pane 入场、完成闪绿都有动效基建，来一段更讲究的 spring 或粒子彩蛋" = "Pane entrances and done-flash have motion infra ready — bring a finer spring curve or a particle easter egg";
+"主题配色" = "Themes";
+"设计一套让人想截图的终端 + 外壳主题，进 config.yaml 即热切换" = "Design a screenshot-worthy terminal + shell theme; drop it in config.yaml for hot switching";
+"成本仪表盘" = "Cost dashboard";
+"每个任务花了多少 token / 多少钱，按 pane 归因" = "Tokens and dollars per task, attributed per pane";
+"手机批准" = "Approve from phone";
+"下班路上收到「等你回复」推送，手机上直接 ⏎ 放行 agent 继续干" = "Get the waiting-for-you push on your commute and hit ⏎ from your phone to unblock the agent";
+"文档与演示" = "Docs & demos";
+"把 hook、键位、工作区讲明白，或录一段 30 秒的演示 GIF" = "Explain hooks, keybindings, and workspaces clearly — or record a 30-second demo GIF";
+"越野越好——「跨越时代」的功能，往往一开始听起来像玩笑。" = "The wilder the better — era-defining features usually sound like jokes at first.";
+"点击去 GitHub 认领这个坑（标题已带上坑位名）" = "Click to claim this slot on GitHub (title pre-filled with the slot name)";

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 轻量提示浮层（toast）：广播已发送、已 cd 等一闪而过的操作反馈。
+/// 轻量提示浮层（toast）：字号调节、已复制路径等一闪而过的操作反馈。
 /// 用独立 NSPanel 而不是 SwiftUI overlay——终端区是 AppKit/Metal 视图，
 /// 窗口内 overlay 会被盖住；浮窗永远在最上且不抢键盘/鼠标。
 @MainActor

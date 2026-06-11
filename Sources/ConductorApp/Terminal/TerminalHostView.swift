@@ -46,7 +46,12 @@ final class TerminalHostView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard window != nil else { return }
+        guard window != nil else {
+            // 离屏（切到别的标签/工作区）：渲染线程休眠省 GPU/CPU；PTY 照常跑，回屏即新。
+            owner?.setOcclusion(false)
+            return
+        }
+        owner?.setOcclusion(true)
         owner?.attachIfPossible()
         owner?.syncGeometry(force: true)
     }

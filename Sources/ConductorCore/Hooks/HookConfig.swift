@@ -45,6 +45,8 @@ public enum HookEventName {
     public static let sessionStart = "SessionStart"
     public static let userPromptSubmit = "UserPromptSubmit"
     public static let subagentStop = "SubagentStop"
+    /// agent 需要用户确认/输入时触发（Claude Code：权限请求、空闲等输入）。
+    public static let notification = "Notification"
 }
 
 /// 对 `hooks.<Event>[].hooks[]{type,command,timeout}` 这种 schema 的读写器。

@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 /// 片段管理面板：增删改命令片段，一键发送到当前终端。
 /// 「执行」开关决定发送后是否直接回车（关掉则摆在提示符上可先编辑）。
-/// 支持搜索过滤、拖拽排序、广播到所有 agent；`{{占位符}}` 发送前先填值。
+/// 支持搜索过滤、拖拽排序；`{{占位符}}` 发送前先填值。
 struct SnippetsManagerView: View {
     let coordinator: AppCoordinator
     @ObservedObject private var store = SnippetStore.shared
@@ -79,7 +79,6 @@ struct SnippetsManagerView: View {
                                 snippet: snippet,
                                 isDragging: draggingID == snippet.id,
                                 onSend: { coordinator.sendSnippet(snippet) },
-                                onBroadcast: { coordinator.broadcastSnippet(snippet) },
                                 onEdit: {
                                     isCreating = false
                                     editing = snippet
@@ -162,7 +161,6 @@ private struct SnippetRow: View {
     let snippet: Snippet
     let isDragging: Bool
     let onSend: () -> Void
-    let onBroadcast: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     @State private var hovering = false
@@ -197,7 +195,6 @@ private struct SnippetRow: View {
                 if hovering {
                     HStack(spacing: 2) {
                         iconButton("paperplane", help: L("发送到当前终端"), action: onSend)
-                        iconButton("dot.radiowaves.left.and.right", help: L("广播到所有 Agent"), action: onBroadcast)
                         iconButton("pencil", help: L("编辑"), action: onEdit)
                         iconButton("trash", help: L("删除"), destructive: true, action: onDelete)
                     }

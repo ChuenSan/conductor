@@ -100,15 +100,24 @@ final class GhosttySurface: TerminalSurface {
     /// 发送一次真实的回车按键（press + release）。
     /// TUI（claude/codex）在 raw 模式下只认按键事件；shell 的 bracketed paste 同理。
     func sendEnterKey() {
+        sendBareKey(keycode: 36, codepoint: 13, text: "\r")   // kVK_Return
+    }
+
+    /// 发送一次真实的 Esc 按键（快捷回复里的「拒绝/取消」）。
+    func sendEscapeKey() {
+        sendBareKey(keycode: 53, codepoint: 27, text: "\u{1B}")   // kVK_Escape
+    }
+
+    private func sendBareKey(keycode: UInt32, codepoint: UInt32, text: String) {
         guard let surface else { return }
         var keyEvent = ghostty_input_key_s()
         keyEvent.action = GHOSTTY_ACTION_PRESS
         keyEvent.mods = GHOSTTY_MODS_NONE
-        keyEvent.keycode = 36   // kVK_Return
+        keyEvent.keycode = keycode
         keyEvent.composing = false
         keyEvent.consumed_mods = GHOSTTY_MODS_NONE
-        keyEvent.unshifted_codepoint = 13
-        "\r".withCString {
+        keyEvent.unshifted_codepoint = codepoint
+        text.withCString {
             keyEvent.text = $0
             _ = ghostty_surface_key(surface, keyEvent)
         }
@@ -236,6 +245,13 @@ final class GhosttySurface: TerminalSurface {
         ghostty_surface_set_occlusion(surface, true)   // true = 可见
         syncGeometry(force: true)
         ghostty_surface_refresh(surface)
+    }
+
+    /// 可见性同步：false 让 core 的渲染线程休眠（光标/动画停画），省 GPU/CPU。
+    /// 离屏（切走的标签/工作区）与窗口被遮挡/最小化时调用；PTY 输出照常处理，回屏即新。
+    func setOcclusion(_ visible: Bool) {
+        guard let surface else { return }
+        ghostty_surface_set_occlusion(surface, visible)
     }
 
     // MARK: - Input (host view 调用)
@@ -409,7 +425,7 @@ final class GhosttySurface: TerminalSurface {
         readText(tag: GHOSTTY_POINT_SCREEN)
     }
 
-    /// 只读当前可见视口的纯文本（「AI 思考中」活跃检测用，开销远小于整屏 + 回滚）。
+    /// 只读当前可见视口的纯文本（Mission Control 卡片预览用，按需调用、开销小）。
     func readViewportText() -> String? {
         readText(tag: GHOSTTY_POINT_VIEWPORT)
     }

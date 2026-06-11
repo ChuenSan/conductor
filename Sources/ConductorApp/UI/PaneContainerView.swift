@@ -142,8 +142,15 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     var onResumeSession: ((AgentSessionRecord) -> Void)?
     /// 打开完整会话管理面板。
     var onManageSessions: (() -> Void)?
+    /// 右键「二次意见」子菜单：可来审查的其他 Agent。
+    var secondOpinionItemsProvider: (() -> [PaneAgentMenuItem])?
+    /// 选中审查者 → 分屏起 agent 审查本 pane 输出。
+    var onSecondOpinion: ((String) -> Void)?
+    /// 打开本 pane 的任务队列面板。
+    var onManageQueue: (() -> Void)?
     private weak var sessionSubmenu: NSMenu?
     private weak var agentSubmenu: NSMenu?
+    private weak var secondOpinionSubmenu: NSMenu?
     var isActive = false { didSet { if isActive != oldValue { updateRing() } } }
     /// 是否允许拖拽重排：只有当所在 tab 含 ≥2 个 pane 时才有意义（单个终端无处可排）。
     var canDrag = false
@@ -237,6 +244,15 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     /// 设置头条左侧的 Agent logo（nil 表示无 agent 在跑）。
     func setAgentLogo(_ image: NSImage?) { header.agentLogo = image }
 
+    /// Agent 思考起点（nil = 没在思考）：头条右侧亮活计时，每秒走、停止即收。
+    func setThinkingSince(_ date: Date?) { header.thinkingSince = date }
+
+    /// 「等你回复」态：头条亮琥珀徽标（agent 卡在确认/提问）。
+    func setAwaitingReply(_ awaiting: Bool) { header.awaitingReply = awaiting }
+
+    /// 任务队列长度：>0 时头条显示排队数。
+    func setQueuedCount(_ count: Int) { header.queuedCount = count }
+
     /// 新 pane 入场：新 tab 保持轻淡入；分屏从分割缝方向打开。
     func animateEntrance(_ motion: PaneEntranceMotion) {
         guard let layer else { return }
@@ -316,18 +332,33 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         launchItem.submenu = submenu
         agentSubmenu = submenu
         menu.addItem(launchItem)
+        // 二次意见：把本 pane 的输出交给另一个 agent 审一遍
+        let reviewItem = NSMenuItem(title: L("二次意见"), action: nil, keyEquivalent: "")
+        reviewItem.image = NSImage(systemSymbolName: "person.2.badge.gearshape", accessibilityDescription: nil)
+        let reviewMenu = NSMenu()
+        reviewMenu.delegate = self
+        reviewItem.submenu = reviewMenu
+        secondOpinionSubmenu = reviewMenu
+        menu.addItem(reviewItem)
+        menu.addItem(ClosureMenuItem(L("任务队列…"), systemImage: "text.badge.plus") { [weak self] in
+            self?.onManageQueue?()
+        })
         menu.addItem(.separator())
         add(PaneHeaderActionPresentation.title(for: .clear), PaneHeaderActionPresentation.systemImage(for: .clear), .clear)
         add(PaneHeaderActionPresentation.title(for: .close), PaneHeaderActionPresentation.systemImage(for: .close), .close)
         return menu
     }
 
-    /// 动态子菜单打开前重建：续聊会话 / 新建终端运行。
+    /// 动态子菜单打开前重建：续聊会话 / 新建终端运行 / 二次意见。
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard menu.delegate === self else { return }
         menu.removeAllItems()
         if menu === sessionSubmenu {
             populateSessionSubmenu(menu)
+            return
+        }
+        if menu === secondOpinionSubmenu {
+            populateSecondOpinionSubmenu(menu)
             return
         }
         guard menu === agentSubmenu else { return }
@@ -341,6 +372,23 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         for agent in agents {
             let item = ClosureMenuItem(agent.title) { [weak self] in self?.onLaunchAgent?(agent.command) }
             item.image = agent.image
+            menu.addItem(item)
+        }
+    }
+
+    private func populateSecondOpinionSubmenu(_ menu: NSMenu) {
+        let reviewers = secondOpinionItemsProvider?() ?? []
+        guard !reviewers.isEmpty else {
+            let empty = NSMenuItem(title: L("没有其他可用的 Agent"), action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+            return
+        }
+        for reviewer in reviewers {
+            let item = ClosureMenuItem(L("让 %@ 审一遍", reviewer.title)) { [weak self] in
+                self?.onSecondOpinion?(reviewer.command)
+            }
+            item.image = reviewer.image
             menu.addItem(item)
         }
     }
@@ -382,7 +430,12 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     }
 
     private func layoutCard() {
-        let inset = bounds.insetBy(dx: gap, dy: gap)
+        // 卡片矩形吸附到物理像素边界：分屏比例/SwiftUI 布局可能给出小数坐标，
+        // Metal 终端层落在半像素上会被 GPU 重采样，文字发虚、边缘起锯齿。
+        var inset = bounds.insetBy(dx: gap, dy: gap)
+        if window != nil {
+            inset = backingAlignedRect(inset, options: .alignAllEdgesNearest)
+        }
         frameView.frame = inset
         shadowView.frame = inset
         shadowView.layer?.shadowPath = CGPath(roundedRect: shadowView.bounds,
@@ -493,7 +546,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         header.isActive = isActive
     }
 
-    /// 边框脉冲两下（广播送达 / 通知跳转定位用），结束后回到当前焦点环样式。
+    /// 边框脉冲两下（通知跳转定位 / 完成提示用），结束后回到当前焦点环样式。
     /// `tint` 可换信号色（如完成绿），默认 accent。
     func flashHighlight(tint: NSColor? = nil) {
         guard let layer = frameView.layer else { return }
@@ -630,6 +683,29 @@ final class PaneHeaderView: NSView {
     var isActive = false { didSet { restyleButtons(); needsDisplay = true } }
     /// 头条左侧的 Agent logo（如该 pane 在跑 codex/claude…）。
     var agentLogo: NSImage? { didSet { needsDisplay = true } }
+    /// Agent 思考起点：非 nil 时头条右侧画活计时「2:31」，每秒重绘；置 nil 即收。
+    var thinkingSince: Date? {
+        didSet {
+            guard thinkingSince != oldValue else { return }
+            syncThinkingTimer()
+            needsDisplay = true
+        }
+    }
+    private var thinkingTimer: Timer?
+    /// 「等你回复」：agent 卡在确认/提问，亮琥珀徽标（优先级高于思考计时）。
+    var awaitingReply = false {
+        didSet {
+            guard awaitingReply != oldValue else { return }
+            needsDisplay = true
+        }
+    }
+    /// 任务队列长度：>0 时头条显示「队列 n」。
+    var queuedCount = 0 {
+        didSet {
+            guard queuedCount != oldValue else { return }
+            needsDisplay = true
+        }
+    }
     /// 放大态徽标：亮起表示该 pane 正占满整个 tab，点徽标还原。
     var isZoomed = false {
         didSet {
@@ -671,6 +747,57 @@ final class PaneHeaderView: NSView {
         guard !dragStarted else { return }
         dragStarted = true
         onDragStart?(event)
+    }
+
+    /// 计时只在「正在思考且在屏上」时走表；离屏停表省电，回屏续走（起点不变，读数仍准）。
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        syncThinkingTimer()
+    }
+
+    private func syncThinkingTimer() {
+        if thinkingSince != nil, window != nil {
+            guard thinkingTimer == nil else { return }
+            let timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.needsDisplay = true }
+            }
+            timer.tolerance = 0.1
+            thinkingTimer = timer
+        } else {
+            thinkingTimer?.invalidate()
+            thinkingTimer = nil
+        }
+    }
+
+    /// 思考用时读数：61s →「1:01」；过小时进位「1:02:31」。
+    static func thinkingText(since: Date) -> String {
+        let total = max(0, Int(Date().timeIntervalSince(since).rounded()))
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
+    }
+
+    /// 在头条右侧画一枚状态徽标（可选小圆点 + 等宽小字），返回新的标题截断边界。
+    private func drawStatusChip(_ text: String, color: NSColor, rightEdge: CGFloat,
+                                withDot: Bool = true) -> CGFloat {
+        let label = NSAttributedString(string: text, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .semibold),
+            .foregroundColor: color,
+        ])
+        let size = label.size()
+        let textX = rightEdge - 8 - size.width
+        var leftEdge = textX
+        if withDot {
+            let dotSide: CGFloat = 4
+            let dotX = textX - dotSide - 4
+            color.setFill()
+            NSBezierPath(ovalIn: NSRect(x: dotX, y: (bounds.height - dotSide) / 2,
+                                        width: dotSide, height: dotSide)).fill()
+            leftEdge = dotX
+        }
+        label.draw(at: NSPoint(x: textX, y: (bounds.height - size.height) / 2))
+        return leftEdge
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -728,8 +855,20 @@ final class PaneHeaderView: NSView {
             .font: NSFont.systemFont(ofSize: 11, weight: isActive ? .medium : .regular),
             .foregroundColor: NSColor(isActive ? AppStyle.textSecondary : AppStyle.textTertiary),
         ])
-        // 标题在放大徽标（若亮）或控制按钮组前截断
-        let titleLimit = zoomBadge.isHidden ? controls.frame.minX : zoomBadge.frame.minX
+        // 标题在状态徽标（等回复/思考计时/队列）、放大徽标（若亮）或控制按钮组前截断
+        var titleLimit = zoomBadge.isHidden ? controls.frame.minX : zoomBadge.frame.minX
+        // 「等你回复」徽标优先于思考计时（更需要行动）；计时每秒重绘走表
+        if awaitingReply {
+            titleLimit = drawStatusChip(L("等你回复"), color: NSColor(AppStyle.waitAmber), rightEdge: titleLimit)
+        } else if let since = thinkingSince {
+            titleLimit = drawStatusChip(Self.thinkingText(since: since),
+                                        color: NSColor(AppStyle.accent), rightEdge: titleLimit)
+        }
+        if queuedCount > 0 {
+            titleLimit = drawStatusChip(L("队列 %ld", queuedCount),
+                                        color: NSColor(AppStyle.textTertiary), rightEdge: titleLimit,
+                                        withDot: false)
+        }
         let clip = NSRect(x: titleX, y: 0, width: max(0, titleLimit - titleX - 7), height: bounds.height)
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: clip).addClip()

@@ -32,6 +32,7 @@ struct StatusBarView: View {
                 }
             }
             Spacer(minLength: 8)
+            BlockedInboxChip(coordinator: coordinator)
             AgentHubChip(
                 thinking: coordinator.thinkingPanes.count,
                 unseenDone: coordinator.unseenDonePanes.count
