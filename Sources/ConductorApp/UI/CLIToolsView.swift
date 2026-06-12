@@ -88,6 +88,19 @@ enum AgentCatalog {
             resolveBinary: { BinaryLocator.resolveGrokBinary() },
             readVersion: { ProviderVersionDetector.grokVersion() }),
     ]
+
+    static func detectStatuses() -> [CLIToolStatus] {
+        LoginShellPathCache.shared.captureOnce()
+        _ = LoginShellPathCache.shared.currentOrCapture()
+        return all.map { agent in
+            let path = agent.resolveBinary()
+            return CLIToolStatus(
+                id: agent.id, name: agent.name,
+                logo: agent.logo, fallbackSystemImage: agent.fallbackSystemImage,
+                path: path,
+                version: path != nil ? agent.readVersion() : nil)
+        }
+    }
 }
 
 /// 某个工具的用量展示状态。
@@ -376,16 +389,7 @@ struct CLIToolsView: View {
         detecting = true
         Task {
             let detected = await Task.detached(priority: .userInitiated) { () -> [CLIToolStatus] in
-                LoginShellPathCache.shared.captureOnce()
-                _ = LoginShellPathCache.shared.currentOrCapture()
-                return AgentCatalog.all.map { agent in
-                    let path = agent.resolveBinary()
-                    return CLIToolStatus(
-                        id: agent.id, name: agent.name,
-                        logo: agent.logo, fallbackSystemImage: agent.fallbackSystemImage,
-                        path: path,
-                        version: path != nil ? agent.readVersion() : nil)
-                }
+                AgentCatalog.detectStatuses()
             }.value
             let cache = CLIDetectionStore.save(detected)
             await MainActor.run {

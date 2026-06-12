@@ -77,6 +77,12 @@ struct ConfigLoader {
       scrollback: 60000
       copyOnSelect: false
       confirmCloseRunning: true
+      # AI Agent 会话入口。留空 = 使用自动检测结果；也可以在设置里扫描/手动添加。
+      aiAgents: []
+      # - id: codex
+      #   title: Codex CLI
+      #   command: codex
+      #   enabled: true
 
     behavior:
       restoreLayoutOnLaunch: true
