@@ -265,13 +265,17 @@ private struct SessionRow: View {
                 Button(L("新标签")) { coordinator.resumeSession(record, inPane: nil) }
                     .buttonStyle(PrimaryButtonStyle())
                 Menu {
-                    Button(L("复制会话 ID")) { coordinator.copyToClipboard(record.sessionID) }
+                    Button { coordinator.copyToClipboard(record.sessionID) } label: {
+                        Label(L("复制会话 ID"), systemImage: "number")
+                    }
                     if let cmd = record.resumeCommand {
-                        Button(L("复制续聊命令")) { coordinator.copyToClipboard(cmd) }
+                        Button { coordinator.copyToClipboard(cmd) } label: {
+                            Label(L("复制续聊命令"), systemImage: "terminal")
+                        }
                     }
                     Divider()
                     Button(role: .destructive) { confirmDelete() } label: {
-                        Text(L("删除会话…"))
+                        Label(L("删除会话…"), systemImage: "trash")
                     }
                 } label: {
                     Image(systemName: "ellipsis")
