@@ -4,6 +4,10 @@ enum AIAgentMenuPresentation {
     static func sessionTitle(for agent: LaunchableAgent) -> String {
         L("新建%@会话", agent.title)
     }
+
+    static func menuSystemImage(for agent: LaunchableAgent) -> String {
+        agent.fallbackSystemImage
+    }
 }
 
 struct LaunchableAgentIcon: View {

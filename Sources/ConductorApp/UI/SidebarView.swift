@@ -127,11 +127,9 @@ struct SidebarView: View {
                         Button {
                             coordinator.launchAIAgentSession(agent, workspaceID: ws.id, cwd: ws.path)
                         } label: {
-                            Label {
-                                Text(AIAgentMenuPresentation.sessionTitle(for: agent))
-                            } icon: {
-                                LaunchableAgentIcon(agent: agent, size: 13)
-                            }
+                            Label(
+                                AIAgentMenuPresentation.sessionTitle(for: agent),
+                                systemImage: AIAgentMenuPresentation.menuSystemImage(for: agent))
                         }
                     }
                     if !coordinator.launchableAgents.isEmpty {
