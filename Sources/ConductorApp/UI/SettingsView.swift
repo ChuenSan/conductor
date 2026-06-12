@@ -128,20 +128,6 @@ struct SettingsView: View {
                               ("English", AppLanguage.english)],
                     selection: languageBinding)
             }
-            SettingsRow(label: L("字体")) {
-                Picker("", selection: bind(\.appearance.font.family)) {
-                    ForEach(SystemFonts.monospaced, id: \.self) { Text($0).tag($0) }
-                }
-                .labelsHidden()
-                .frame(maxWidth: 190)
-            }
-            SettingsRow(label: L("字号")) {
-                ThemedStepper(value: bind(\.appearance.font.size), range: 6...72)
-            }
-            SettingsRow(label: L("光标")) {
-                ThemedSegmented(options: [(L("竖线"), "bar"), (L("方块"), "block"), (L("下划线"), "underline")],
-                                selection: bind(\.appearance.cursorStyle))
-            }
             SettingsRow(label: L("水平内边距")) {
                 ThemedStepper(value: bind(\.appearance.padding.x), range: 0...60)
             }

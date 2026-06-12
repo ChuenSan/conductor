@@ -253,6 +253,9 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     /// 任务队列长度：>0 时头条显示排队数。
     func setQueuedCount(_ count: Int) { header.queuedCount = count }
 
+    /// OSC 9;4 进度徽标：nil 清除。
+    func setProgress(_ info: PaneProgressInfo?) { header.progress = info }
+
     /// 新 pane 入场：新 tab 保持轻淡入；分屏从分割缝方向打开。
     func animateEntrance(_ motion: PaneEntranceMotion) {
         guard let layer else { return }
@@ -706,6 +709,13 @@ final class PaneHeaderView: NSView {
             needsDisplay = true
         }
     }
+    /// OSC 9;4 进度（构建/下载等长任务）：set 画百分比、indeterminate 画「进行中」、error/pause 变色。
+    var progress: PaneProgressInfo? {
+        didSet {
+            guard progress != oldValue else { return }
+            needsDisplay = true
+        }
+    }
     /// 放大态徽标：亮起表示该 pane 正占满整个 tab，点徽标还原。
     var isZoomed = false {
         didSet {
@@ -868,6 +878,18 @@ final class PaneHeaderView: NSView {
             titleLimit = drawStatusChip(L("队列 %ld", queuedCount),
                                         color: NSColor(AppStyle.textTertiary), rightEdge: titleLimit,
                                         withDot: false)
+        }
+        // OSC 9;4 进度徽标：与状态徽标共存（进度在更右侧先画会更挤，放最后画在剩余空间）
+        if let progress {
+            let (text, color): (String, NSColor) = {
+                switch progress.state {
+                case .error: return (progress.percent.map { "\($0)%" } ?? L("出错"), NSColor(AppStyle.errorRed))
+                case .pause: return (progress.percent.map { "\($0)%" } ?? L("已暂停"), NSColor(AppStyle.textTertiary))
+                case .indeterminate: return (L("进行中"), NSColor(AppStyle.accent))
+                default: return (progress.percent.map { "\($0)%" } ?? "…", NSColor(AppStyle.accent))
+                }
+            }()
+            titleLimit = drawStatusChip(text, color: color, rightEdge: titleLimit)
         }
         let clip = NSRect(x: titleX, y: 0, width: max(0, titleLimit - titleX - 7), height: bounds.height)
         NSGraphicsContext.saveGraphicsState()

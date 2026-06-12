@@ -234,7 +234,7 @@
 "高级" = "Advanced";
 "行为" = "Behavior";
 "快捷键" = "Keybindings";
-"主题、字体、配色" = "Theme, fonts, colors";
+"主题、语言、配色" = "Theme, language, colors";
 "Shell 与会话" = "Shell & sessions";
 "底层终端选项" = "Low-level terminal options";
 "工作区默认行为" = "Workspace defaults";
@@ -599,3 +599,55 @@
 "用真实项目写一段教程、录屏或故障排查记录。" = "Write a short guide, recording, or troubleshooting note from a real project.";
 "不用写完整方案；真实场景和取舍比口号更有用。" = "No full proposal needed; real scenarios and tradeoffs are more useful than slogans.";
 "点击提交这个方向，标题已带上方向名" = "Submit this thread with the title pre-filled";
+
+/* OSC 通知与进度（终端序列直达） */
+"终端通知" = "Terminal notification";
+"出错" = "Failed";
+"已暂停" = "Paused";
+"进行中" = "Working";
+
+/* ===== 版本更新 ===== */
+"有新版本可用" = "Update available";
+"检查更新" = "Check for Updates";
+"版本更新" = "Software Update";
+"当前 v%@" = "Current v%@";
+"正在检查更新…" = "Checking for updates…";
+"已是最新版（%@ 检查）" = "Up to date (checked %@)";
+"重试" = "Retry";
+"发现新版 v%@" = "New version v%@ available";
+"下载更新（%@）" = "Download Update (%@)";
+"正在下载 v%@" = "Downloading v%@";
+"取消下载" = "Cancel Download";
+"v%@ 已下载完成" = "v%@ downloaded";
+"打开 DMG 后把 Conductor 拖进 Applications 即完成更新。" = "Open the DMG and drag Conductor into Applications to finish updating.";
+"打开安装包" = "Open Installer";
+"在访达中显示" = "Reveal in Finder";
+"自动检查更新" = "Check for updates automatically";
+"Releases 页面" = "Releases Page";
+
+/* ===== 共创计划（新文案） ===== */
+"共创" = "Co-create";
+"共创计划" = "Co-create Plan";
+"打开共创计划" = "Open co-create plan";
+"[共创]" = "[Co-create]";
+"这个工具是一边用一边改出来的，大部分功能都始于「今天又被什么卡住了」。如果你也在用，把卡住你的那件事写下来，比任何建议都有用。" = "This tool gets built by using it. Most features started as \"what blocked me today\". If you use it too, writing down the thing that blocked you helps more than any suggestion.";
+"去提一条" = "Open an Issue";
+"看看仓库" = "View Repo";
+"写什么都行" = "Anything counts";
+"在做什么、哪一步不顺、现在怎么绕过去的。" = "What you were doing, where it went sideways, and how you work around it now.";
+"一句话就够，有截图、日志或配置片段更好。" = "One sentence is enough; screenshots, logs, or config snippets are a bonus.";
+"想自己动手改的，先在 Issue 里说一声，把范围聊小一点更容易合并。" = "Want to build it yourself? Say so in the issue first — a smaller scope merges easier.";
+"提了之后" = "What happens next";
+"会在 Issue 里直接回复和同步进展。做进去的东西出现在下一版的更新说明里，会写上是谁提的。" = "You get replies and progress directly in the issue. Anything that lands shows up in the next release notes, credited to whoever raised it.";
+"最近在琢磨的方向" = "Currently on my mind";
+"对哪个有想法，点开就是带标题的新 Issue。" = "Click any of these to open a pre-titled issue.";
+
+/* ===== 侧栏内嵌会话 ===== */
+"全部会话" = "All sessions";
+"显示 AI 会话" = "Show AI sessions";
+"隐藏 AI 会话" = "Hide AI sessions";
+"展开会话" = "Expand sessions";
+"收起会话" = "Collapse sessions";
+"展开显示" = "Show more";
+"收起显示" = "Show less";
+"%ld 天" = "%ldd";

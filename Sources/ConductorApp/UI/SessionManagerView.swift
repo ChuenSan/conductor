@@ -159,7 +159,7 @@ struct SessionManagerView: View {
                 : L("当前筛选条件下没有匹配的会话"))
         } else {
             ScrollView {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: 5) {
                     ForEach(filtered) { record in
                         SessionRow(record: record,
                                    isPinned: store.pinnedIDs.contains(record.id),
@@ -207,15 +207,15 @@ private struct SessionRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Button(action: toggleExpanded) {
                 HStack(alignment: .top, spacing: 8) {
                     logo
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(record.title)
-                            .font(.system(size: 12.5, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(AppStyle.textPrimary)
-                            .lineLimit(2)
+                            .lineLimit(1)
                             .multilineTextAlignment(.leading)
                         if let cwd = record.cwd {
                             Text((cwd as NSString).abbreviatingWithTildeInPath)
@@ -258,32 +258,36 @@ private struct SessionRow: View {
 
             if expanded { previewSection }
 
-            HStack(spacing: 8) {
-                Button(L("当前面板")) { coordinator.resumeSession(record, inPane: coordinator.sessionTargetPane) }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(coordinator.sessionTargetPane == nil)
-                Button(L("新标签")) { coordinator.resumeSession(record, inPane: nil) }
-                    .buttonStyle(PrimaryButtonStyle())
-                Menu {
-                    Button(L("复制会话 ID")) { coordinator.copyToClipboard(record.sessionID) }
-                    if let cmd = record.resumeCommand {
-                        Button(L("复制续聊命令")) { coordinator.copyToClipboard(cmd) }
+            // 操作行只在展开时出现，收着的行保持紧凑（点行即展开）。
+            if expanded {
+                HStack(spacing: 8) {
+                    Button(L("当前面板")) { coordinator.resumeSession(record, inPane: coordinator.sessionTargetPane) }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(coordinator.sessionTargetPane == nil)
+                    Button(L("新标签")) { coordinator.resumeSession(record, inPane: nil) }
+                        .buttonStyle(PrimaryButtonStyle())
+                    Menu {
+                        Button(L("复制会话 ID")) { coordinator.copyToClipboard(record.sessionID) }
+                        if let cmd = record.resumeCommand {
+                            Button(L("复制续聊命令")) { coordinator.copyToClipboard(cmd) }
+                        }
+                        Divider()
+                        Button(role: .destructive) { confirmDelete() } label: {
+                            Text(L("删除会话…"))
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(AppStyle.textSecondary)
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(AppStyle.hoverFill))
                     }
-                    Divider()
-                    Button(role: .destructive) { confirmDelete() } label: {
-                        Text(L("删除会话…"))
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(AppStyle.textSecondary)
-                        .frame(width: 28, height: 28)
-                        .background(Circle().fill(AppStyle.hoverFill))
+                    .menuStyle(.borderlessButton)
                 }
-                .menuStyle(.borderlessButton)
             }
         }
-        .padding(12)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .toolsCard()
         .onHover { hovering = $0 }
         .task(id: "\(record.filePath ?? "")#\(record.modifiedAt.timeIntervalSince1970)") {

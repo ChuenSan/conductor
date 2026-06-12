@@ -1,0 +1,179 @@
+import SwiftUI
+
+/// tab 栏的版本更新入口：有新版亮小圆点，点开弹窗里检查/下载/安装一条龙。
+struct UpdateButton: View {
+    @ObservedObject private var updater = UpdateManager.shared
+    @State private var showPopover = false
+
+    var body: some View {
+        Button(action: { showPopover.toggle() }) {
+            Image(systemName: "arrow.down.circle")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(updater.updateAvailable ? AppStyle.accent : AppStyle.textSecondary)
+        }
+        .buttonStyle(IconButtonStyle(size: 26))
+        .overlay(alignment: .topTrailing) {
+            if updater.updateAvailable {
+                Circle()
+                    .fill(AppStyle.accent)
+                    .frame(width: 7, height: 7)
+                    .offset(x: -1, y: 1)
+            }
+        }
+        .help(updater.updateAvailable ? L("有新版本可用") : L("检查更新"))
+        .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+            UpdatePopover(updater: updater)
+        }
+    }
+}
+
+private struct UpdatePopover: View {
+    @ObservedObject var updater: UpdateManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(L("版本更新"))
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Text(L("当前 v%@", updater.currentVersion))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            statusSection
+
+            Divider()
+
+            HStack {
+                Toggle(L("自动检查更新"), isOn: $updater.autoCheckEnabled)
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 11.5))
+                Spacer()
+                Link(L("Releases 页面"), destination: UpdateManager.releasesPageURL)
+                    .font(.system(size: 11.5))
+            }
+        }
+        .padding(14)
+        .frame(width: 320)
+    }
+
+    @ViewBuilder
+    private var statusSection: some View {
+        switch updater.phase {
+        case .idle:
+            checkRow(statusText: nil)
+        case .checking:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(L("正在检查更新…"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+        case .upToDate(let date):
+            checkRow(statusText: L(
+                "已是最新版（%@ 检查）",
+                date.formatted(date: .omitted, time: .shortened)))
+        case .available(let release):
+            availableSection(release)
+        case .downloading(let release):
+            downloadingSection(release)
+        case .downloaded(let release, _):
+            downloadedSection(release)
+        case .failed(let message):
+            VStack(alignment: .leading, spacing: 8) {
+                Label {
+                    Text(message).font(.system(size: 11.5)).lineLimit(3)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+                Button(L("重试")) { Task { await updater.check(manual: true) } }
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    private func checkRow(statusText: String?) -> some View {
+        HStack(spacing: 8) {
+            Button(L("检查更新")) { Task { await updater.check(manual: true) } }
+                .controlSize(.small)
+            if let statusText {
+                Text(statusText)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func availableSection(_ release: UpdateManager.Release) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                Text(L("发现新版 v%@", release.version))
+                    .font(.system(size: 12, weight: .semibold))
+            } icon: {
+                Image(systemName: "sparkles").foregroundStyle(AppStyle.accent)
+            }
+            if !release.notes.isEmpty {
+                ScrollView {
+                    Text(release.notes)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 120)
+            }
+            Button {
+                updater.download(release)
+            } label: {
+                Label(
+                    L("下载更新（%@）", Self.sizeText(release.assetSize)),
+                    systemImage: "arrow.down.circle.fill")
+            }
+            .controlSize(.regular)
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private func downloadingSection(_ release: UpdateManager.Release) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L("正在下载 v%@", release.version))
+                .font(.system(size: 12, weight: .semibold))
+            HStack(spacing: 8) {
+                ProgressView(value: updater.downloadProgress)
+                    .frame(maxWidth: .infinity)
+                Text("\(Int(updater.downloadProgress * 100))%")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, alignment: .trailing)
+            }
+            Button(L("取消下载")) { updater.cancelDownload() }
+                .controlSize(.small)
+        }
+    }
+
+    private func downloadedSection(_ release: UpdateManager.Release) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                Text(L("v%@ 已下载完成", release.version))
+                    .font(.system(size: 12, weight: .semibold))
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            }
+            Text(L("打开 DMG 后把 Conductor 拖进 Applications 即完成更新。"))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button(L("打开安装包")) { updater.openDownloaded() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                Button(L("在访达中显示")) { updater.revealDownloaded() }
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    private static func sizeText(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+}

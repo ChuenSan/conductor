@@ -27,6 +27,8 @@ enum AppStyle {
     static let doneGreen = Color(red: 0.28, green: 0.76, blue: 0.43)
     /// 「等你回复」信号琥珀（agent 卡在确认/提问，需要人来一下）。
     static let waitAmber = Color(red: 0.95, green: 0.62, blue: 0.20)
+    /// 出错信号红（OSC 进度 error / PR 检查失败等，深浅主题下都够亮）。
+    static let errorRed = Color(red: 0.92, green: 0.34, blue: 0.34)
 
     // 尺寸(与主题无关)
     static let sidebarWidth: CGFloat = 224

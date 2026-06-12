@@ -8,11 +8,20 @@ struct RootView: View {
     @ObservedObject private var configStore = ConfigStore.shared
     /// 语言热切换：revision 变 → `.id()` 强制整棵树重建，所有 L() 文案按新语言重新求值。
     @ObservedObject private var localization = AppLanguage.revision
+    /// 侧栏与右侧面板宽度（分隔条可拖拽，持久化）。
+    @ObservedObject private var panelWidths = PanelWidthStore.shared
 
     var body: some View {
         HStack(spacing: 0) {
             SidebarView(coordinator: coordinator)
-                .frame(width: coordinator.sidebarPresentation.isCollapsed ? AppStyle.sidebarCollapsedWidth : AppStyle.sidebarWidth)
+                .frame(width: coordinator.sidebarPresentation.isCollapsed ? AppStyle.sidebarCollapsedWidth : panelWidths.sidebar)
+                .overlay(alignment: .trailing) {
+                    if !coordinator.sidebarPresentation.isCollapsed {
+                        PanelResizeHandle(
+                            edge: .trailing, width: $panelWidths.sidebar,
+                            range: PanelWidthStore.sidebarRange, defaultWidth: AppStyle.sidebarWidth)
+                    }
+                }
             VStack(spacing: 0) {
                 TabBarView(coordinator: coordinator)
                 ZStack(alignment: .center) {
@@ -38,17 +47,32 @@ struct RootView: View {
             }
             if coordinator.settingsPresentation.isPresented {
                 SettingsView(coordinator: coordinator, onClose: { coordinator.closeSettings() })
-                    .frame(width: 560)
+                    .frame(width: panelWidths.settings)
+                    .overlay(alignment: .leading) {
+                        PanelResizeHandle(
+                            edge: .leading, width: $panelWidths.settings,
+                            range: PanelWidthStore.settingsRange, defaultWidth: PanelWidthStore.settingsDefault)
+                    }
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
             if coordinator.cliToolsPresentation.isPresented {
                 ToolsPanelView(coordinator: coordinator, onClose: { coordinator.closeCLITools() })
-                    .frame(width: 440)
+                    .frame(width: panelWidths.tools)
+                    .overlay(alignment: .leading) {
+                        PanelResizeHandle(
+                            edge: .leading, width: $panelWidths.tools,
+                            range: PanelWidthStore.toolsRange, defaultWidth: PanelWidthStore.toolsDefault)
+                    }
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
             if coordinator.sessionPresentation.isPresented {
                 SessionManagerView(coordinator: coordinator, onClose: { coordinator.closeSessionManager() })
-                    .frame(width: 400)
+                    .frame(width: panelWidths.session)
+                    .overlay(alignment: .leading) {
+                        PanelResizeHandle(
+                            edge: .leading, width: $panelWidths.session,
+                            range: PanelWidthStore.sessionRange, defaultWidth: PanelWidthStore.sessionDefault)
+                    }
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }

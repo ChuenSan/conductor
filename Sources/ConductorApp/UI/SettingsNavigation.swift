@@ -23,7 +23,7 @@ enum SettingsSectionID: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
-        case .appearance: L("主题、字体、配色")
+        case .appearance: L("主题、语言、配色")
         case .terminal: L("Shell 与会话")
         case .ghostty: L("底层终端选项")
         case .behavior: L("工作区默认行为")

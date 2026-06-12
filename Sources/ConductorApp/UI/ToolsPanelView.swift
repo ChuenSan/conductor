@@ -10,6 +10,8 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     case coCreate
 
     var id: String { rawValue }
+    /// 面板分段里展示的 tab。共创计划由 tab 栏右上角按钮进入，不占面板分段。
+    static var panelTabs: [ToolsTab] { allCases.filter { $0 != .coCreate } }
     var title: String {
         switch self {
         case .cli: return "CLI"
@@ -17,7 +19,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .skills: return "Skills"
         case .hooks: return "Hooks"
         case .snippets: return L("片段")
-        case .coCreate: return L("共享")
+        case .coCreate: return L("共创")
         }
     }
     var icon: String {
@@ -75,7 +77,7 @@ struct ToolsPanelView: View {
     private var segmented: some View {
         let theme = AppStyle.theme
         return HStack(spacing: 2) {
-            ForEach(ToolsTab.allCases) { tab in
+            ForEach(ToolsTab.panelTabs) { tab in
                 let selected = coordinator.toolsTab == tab
                 Button {
                     withAnimation(Motion.snappy) {

@@ -64,14 +64,15 @@ struct TabBarView: View {
             .frame(height: WindowDragZoomRegion.preferredHeight)
             .layoutPriority(1)
             HStack(spacing: 6) {
+                UpdateButton()
                 Button(action: { coordinator.openTools(.coCreate) }) {
-                    Text(L("共享计划"))
+                    Text(L("共创计划"))
                         .font(.system(size: 11.5, weight: .semibold))
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 .buttonStyle(SharePlanButtonStyle(isSelected: coordinator.cliToolsPresentation.isPresented && coordinator.toolsTab == .coCreate))
-                .help(L("打开共享计划"))
+                .help(L("打开共创计划"))
 
                 // 右侧快捷按钮组（软圆角容器，对标 Craft 的按钮组）
                 HStack(spacing: 2) {

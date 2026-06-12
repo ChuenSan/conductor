@@ -65,6 +65,11 @@ final class AppCoordinator: ObservableObject {
     let usageMonitor = UsageMonitor()
     /// CLI hook 收件箱监听（agent 完成 → 系统通知）。
     private let hooksInbox = HooksInbox()
+    /// 工作区侧栏元数据（自动化状态/进度/日志 + 端口 + PR）。
+    let workspaceMetadata = WorkspaceMetadataCenter()
+    /// 自动化 socket 服务（conductor CLI 的对端）。
+    private var automationServer: AutomationSocketServer?
+    private var automationService: AutomationService?
     /// Agent 完成账本（状态栏铃铛 / 通知中心）。
     let activityLog = AgentActivityLog()
     /// 已检测到、可一键启动的 CLI（供 pane 右键「新建终端运行」子菜单使用）。
@@ -81,6 +86,8 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var blockedPanes: [PaneID: BlockedPaneInfo] = [:]
     /// 每个 pane 的任务队列：当前一条 Stop 后自动发下一条（夜间挂机/流水线）。
     @Published private(set) var paneQueues: [PaneID: [String]] = [:]
+    /// OSC 9;4 进度上报（pane 头条进度徽标）；remove 即删。
+    @Published private(set) var paneProgress: [PaneID: PaneProgressInfo] = [:]
     /// app 在后台期间完成的任务数 → Dock 图标角标；激活即清零。
     private var dockBadgeCount = 0
     /// 终端里悬停的链接 URL（状态栏浏览器式显示）；nil = 没悬停在链接上。
@@ -127,6 +134,11 @@ final class AppCoordinator: ObservableObject {
         registry = SessionRegistry(
             factory: { [weak self] pane in
                 let surface = GhosttySurface()
+                // 每个 pane 注入自动化身份：hook 与 conductor CLI 都靠它们定位 pane / 连 socket。
+                surface.extraEnvironment = [
+                    ("CONDUCTOR_PANE_ID", pane.value),
+                    ("CONDUCTOR_SOCKET", AutomationSocketServer.defaultSocketURL.path),
+                ]
                 // 内容恢复：这个 pane 有待回放快照 → 带上，attach 时回放。
                 if let file = self?.pendingRestoreFiles.removeValue(forKey: pane) {
                     surface.restoreContentFile = file
@@ -165,7 +177,7 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "missionControl", title: L("任务总览"), defaultKeybinding: "cmd+shift+m") { [weak self] in self?.openMissionControl() },
             AppCommand(id: "queuePrompt", title: L("任务队列（当前面板）"), defaultKeybinding: "cmd+shift+enter") { [weak self] in self?.openQueuePanel() },
             AppCommand(id: "openSnippets", title: L("命令片段库"), defaultKeybinding: nil) { [weak self] in self?.openTools(.snippets) },
-            AppCommand(id: "coCreate", title: L("共享计划"), defaultKeybinding: nil) { [weak self] in self?.openTools(.coCreate) },
+            AppCommand(id: "coCreate", title: L("共创计划"), defaultKeybinding: nil) { [weak self] in self?.openTools(.coCreate) },
             AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+ctrl+e") { [weak self] in self?.equalizeSplits() },
             AppCommand(id: "nextTab", title: L("下一标签"), defaultKeybinding: "cmd+shift+rightbrace") { [weak self] in self?.cycleTab(forward: true) },
             AppCommand(id: "prevTab", title: L("上一标签"), defaultKeybinding: "cmd+shift+leftbrace") { [weak self] in self?.cycleTab(forward: false) },
@@ -366,6 +378,8 @@ final class AppCoordinator: ObservableObject {
     }
 
     func openCLITools() {
+        // 共创计划不在面板分段里，普通入口重新打开时回到 CLI，避免落在无分段对应的页面。
+        if toolsTab == .coCreate { toolsTab = .cli }
         settingsPresentation.close()
         sessionPresentation.close()
         cliToolsPresentation.open()
@@ -519,6 +533,7 @@ final class AppCoordinator: ObservableObject {
         detectLaunchableAgents()
         startAgentPolling()
         startNotifications()
+        startAutomation()
         prewarmUsageReport()
         SessionManagerStore.shared.refresh()
         // 回到前台 → Dock 角标使命结束
@@ -549,6 +564,41 @@ final class AppCoordinator: ObservableObject {
                 }
             }
         }
+    }
+
+    /// 自动化启动：socket 服务（conductor CLI 入口）+ 工作区元数据扫描（端口 / PR）。
+    private func startAutomation() {
+        let service = AutomationService(coordinator: self)
+        automationService = service
+        let server = AutomationSocketServer { [weak service] line in
+            await service?.handleLine(line)
+                ?? AutomationCodec.encode(AutomationResponse(id: nil, error: .internalError("服务已停止")))
+        }
+        if server.start() { automationServer = server }
+
+        workspaceMetadata.workspacesProvider = { [weak self] in
+            guard let self else { return [] }
+            // 文件夹浏览上下文是隐藏工作区，不参与元数据扫描
+            return store.workspaces
+                .filter { $0.id != Self.folderContextID }
+                .map { ($0.id, $0.path) }
+        }
+        workspaceMetadata.branchProvider = { path in
+            Self.gitBranch(at: path)
+        }
+        workspaceMetadata.start()
+    }
+
+    /// 免 spawn 读当前分支：解析 `.git/HEAD` 的 `ref: refs/heads/<branch>`。
+    nonisolated static func gitBranch(at path: String) -> String? {
+        guard let head = try? String(contentsOfFile: path + "/.git/HEAD", encoding: .utf8) else {
+            return nil
+        }
+        let trimmed = head.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("ref: refs/heads/") else {
+            return trimmed.isEmpty ? nil : String(trimmed.prefix(8))   // detached HEAD → 短 SHA
+        }
+        return String(trimmed.dropFirst("ref: refs/heads/".count))
     }
 
     /// 启动后低优先级预扫一次 30 天用量并写缓存，让用量面板首次打开即有数据。
@@ -631,6 +681,40 @@ final class AppCoordinator: ObservableObject {
         bumpDockBadgeIfInactive()
         // 任务队列接力：这条干完了，队首的下一条自动发出
         if let pane { dispatchNextQueued(pane) }
+    }
+
+    // MARK: - OSC 通知 / 进度（终端序列直达，无需 hook）
+
+    /// OSC 9/99/777 桌面通知：任何 CLI `printf '\e]9;...\a'` 即可触达。
+    /// 与 hook 的 done 事件走同一套出口（账本/系统通知/绿点/闪边/角标），但不动思考状态。
+    /// 自动化 `notify` 方法也走这里（同一视觉语言）。
+    func handleDesktopNotification(_ pane: PaneID, title: String, body: String) {
+        var resolvedTitle = title.isEmpty ? L("终端通知") : title
+        if let paneTitle = paneTitles[pane] {
+            resolvedTitle = "\(resolvedTitle) · \(paneTitle)"
+        }
+        activityLog.record(paneID: pane, agentID: paneAgents[pane],
+                           title: resolvedTitle, message: body, duration: nil)
+        let visible = activeTabModel()?.rootSplit.contains(pane) == true
+        // 正盯着这个 pane 时只闪边提示；离屏或 app 在后台才推系统通知
+        if !NSApp.isActive || !visible {
+            NotificationManager.shared.notify(paneID: pane.value, title: resolvedTitle, body: body)
+        }
+        markUnseenDoneIfHidden(pane)
+        if visible {
+            paneContainers[pane]?.flashHighlight(tint: NSColor(AppStyle.accent))
+        }
+        bumpDockBadgeIfInactive()
+    }
+
+    /// OSC 9;4 进度上报 → pane 头条进度徽标。remove 清除。
+    private func applyProgressReport(_ pane: PaneID, state: PaneProgressState, percent: Int?) {
+        if state == .remove {
+            paneProgress.removeValue(forKey: pane)
+        } else {
+            paneProgress[pane] = PaneProgressInfo(state: state, percent: percent)
+        }
+        paneContainers[pane]?.setProgress(paneProgress[pane])
     }
 
     // MARK: - 等你回复（blocked 收件箱）
@@ -794,6 +878,10 @@ final class AppCoordinator: ObservableObject {
         if !paneQueues.isEmpty {
             let alive = paneQueues.filter { registry.surface(for: $0.key) != nil }
             if alive.count != paneQueues.count { paneQueues = alive }
+        }
+        if !paneProgress.isEmpty {
+            let alive = paneProgress.filter { registry.surface(for: $0.key) != nil }
+            if alive.count != paneProgress.count { paneProgress = alive }
         }
     }
 
@@ -1096,12 +1184,25 @@ final class AppCoordinator: ObservableObject {
 
     private func effectiveConfig() -> AppConfig {
         var c = ConfigStore.shared.config
-        if let override = fontSizeOverride { c.appearance.font.size = override }
+        if let override = fontSizeOverride {
+            c.appearance.font.size = override
+            // 高级里的 font-size 覆盖在 ghostty 配置里排在 appearance 之后；
+            // 会话级缩放要同时压过它，否则设过高级字号后 ⌘+/- 失效。
+            if c.ghosttyOverrides["font-size"] != nil {
+                c.ghosttyOverrides["font-size"] = "\(override)"
+            }
+        }
         return c.validated()
     }
 
+    /// 配置层面的当前字号：高级覆盖优先，其次外观基础值。
+    private var configuredFontSize: Int {
+        let cfg = ConfigStore.shared.config
+        return Int(cfg.ghosttyOverrides["font-size"] ?? "") ?? cfg.appearance.font.size
+    }
+
     func adjustFontSize(_ delta: Int) {
-        let base = fontSizeOverride ?? ConfigStore.shared.config.appearance.font.size
+        let base = fontSizeOverride ?? configuredFontSize
         let clamped = min(max(base + delta, 6), 72)
         fontSizeOverride = clamped
         applyTerminalAppearance(effectiveConfig())
@@ -1118,7 +1219,7 @@ final class AppCoordinator: ObservableObject {
         guard fontSizeOverride != nil else { return }
         fontSizeOverride = nil
         applyTerminalAppearance(effectiveConfig())
-        ToastHUD.shared.show(L("字号已复位（%ld pt）", effectiveConfig().appearance.font.size),
+        ToastHUD.shared.show(L("字号已复位（%ld pt）", configuredFontSize),
                              icon: "textformat.size", over: window)
     }
 
@@ -1232,7 +1333,7 @@ final class AppCoordinator: ObservableObject {
     // MARK: - 误关恢复（⌘⇧T）
 
     /// 关 tab 前快照：完整分屏树 + 每个 pane 的 cwd + 终端内容 + agent 会话。
-    private func pushClosedTabRecord(_ id: TabID) {
+    func pushClosedTabRecord(_ id: TabID) {
         guard let wsIndex = activeWorkspaceIndex(),
               let tab = store.workspaces[wsIndex].tabs.first(where: { $0.id == id }) else { return }
         for pane in tab.rootSplit.leaves() { captureScrollback(pane) }
@@ -1282,7 +1383,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     /// 关 pane 前快照：tab 内最后一个 pane 时整 tab 入栈，否则记单 pane（含原分屏方向）。
-    private func pushClosedRecordForActivePane() {
+    func pushClosedRecordForActivePane() {
         guard let wsIndex = activeWorkspaceIndex(),
               let tabIndex = activeTabIndex(wsIndex: wsIndex) else { return }
         let tab = store.workspaces[wsIndex].tabs[tabIndex]
@@ -1550,6 +1651,7 @@ final class AppCoordinator: ObservableObject {
         let panes = ws.tabs.flatMap { $0.rootSplit.leaves() }
         registry.apply(panes.map { .closeSurface(pane: $0) })
         store.remove(id)   // 若删的是 active，会切到第一个剩余工作区
+        workspaceMetadata.forget(workspace: id)
         // 兜底：别让删除把人「切」进隐藏的文件夹上下文
         if store.activeWorkspace == Self.folderContextID, sidebarListMode == .workspaces {
             store.activeWorkspace = visibleWorkspaces.first?.id
@@ -1997,10 +2099,18 @@ final class AppCoordinator: ObservableObject {
         surface.onSearchSelected = { [weak container] sel in container?.setSearchSelected(sel) }
         // 链接悬停：状态栏显示目标 URL（浏览器式）
         surface.onLinkHover = { [weak self] url in self?.hoveredLink = url }
+        // OSC 9/99/777 通知 + OSC 9;4 进度：终端序列直达通知中枢/头条
+        surface.onDesktopNotification = { [weak self] title, body in
+            self?.handleDesktopNotification(pane, title: title, body: body)
+        }
+        surface.onProgressReport = { [weak self] state, percent in
+            self?.applyProgressReport(pane, state: state, percent: percent)
+        }
         container.setAgentLogo(agentLogoImage(for: paneAgents[pane]))
         container.setThinkingSince(thinkingStartTimes[pane])   // 已在思考的 pane，新容器直接亮表
         container.setAwaitingReply(blockedPanes[pane] != nil)
         container.setQueuedCount(paneQueues[pane]?.count ?? 0)
+        container.setProgress(paneProgress[pane])
         paneContainers[pane] = container
         pendingEntrances[pane] = plannedEntrances.removeValue(forKey: pane) ?? .fade
         return container
@@ -2022,7 +2132,7 @@ final class AppCoordinator: ObservableObject {
 
     // MARK: - helpers
 
-    private func nextID(_ prefix: String) -> String {
+    func nextID(_ prefix: String) -> String {
         "\(prefix)-\(UUID().uuidString)"
     }
 

@@ -238,8 +238,54 @@ final class GhosttyRuntime {
                 GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleChildExited()
             }
             return true
+        case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
+            // OSC 9 / 99 / 777：任何 CLI printf 一条转义序列即可触达通知中枢，无需安装 hook。
+            let notification = action.action.desktop_notification
+            let title = notification.title.map { String(cString: $0) } ?? ""
+            let body = notification.body.map { String(cString: $0) } ?? ""
+            guard !(title.isEmpty && body.isEmpty) else { return true }
+            Task { @MainActor in
+                GhosttySurface.fromGhosttySurface(surfaceHandle)?
+                    .handleDesktopNotification(title: title, body: body)
+            }
+            return true
+        case GHOSTTY_ACTION_PROGRESS_REPORT:
+            // ConEmu OSC 9;4 进度（npm/cargo/自定义脚本都在用）：pane 头条亮进度徽标。
+            let report = action.action.progress_report
+            let percent = report.progress >= 0 ? Int(report.progress) : nil
+            let state = PaneProgressState(report.state)
+            Task { @MainActor in
+                GhosttySurface.fromGhosttySurface(surfaceHandle)?
+                    .handleProgressReport(state: state, percent: percent)
+            }
+            return true
         default:
             return false
         }
     }
+}
+
+/// OSC 9;4 进度状态（engine 无关的 Swift 侧表示）。
+enum PaneProgressState: Equatable {
+    case remove          // 清除进度
+    case set             // 正常进度（0–100）
+    case error           // 出错（红）
+    case indeterminate   // 忙碌但无百分比
+    case pause           // 暂停（黄）
+
+    init(_ raw: ghostty_action_progress_report_state_e) {
+        switch raw {
+        case GHOSTTY_PROGRESS_STATE_SET: self = .set
+        case GHOSTTY_PROGRESS_STATE_ERROR: self = .error
+        case GHOSTTY_PROGRESS_STATE_INDETERMINATE: self = .indeterminate
+        case GHOSTTY_PROGRESS_STATE_PAUSE: self = .pause
+        default: self = .remove
+        }
+    }
+}
+
+/// 一个 pane 的当前进度（OSC 9;4），头条徽标用。
+struct PaneProgressInfo: Equatable {
+    var state: PaneProgressState
+    var percent: Int?
 }

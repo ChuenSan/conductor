@@ -18,6 +18,8 @@ final class GhosttySurface: TerminalSurface {
     private var pendingTypedText: String?
     /// 待回放的内容快照路径：attach 时换用 wrapper 脚本启动（cat 快照 → exec shell）。
     var restoreContentFile: String?
+    /// 启动 shell 时注入的环境变量（pane 身份 / 自动化 socket 路径等），attach 前设置。
+    var extraEnvironment: [(key: String, value: String)] = []
     private var lastScale: CGFloat = 0
     private var lastSize: CGSize = .zero
 
@@ -38,6 +40,10 @@ final class GhosttySurface: TerminalSurface {
     var onSearchEnd: (() -> Void)?
     /// 鼠标悬停在链接上（nil = 移开）。⌘点击打开由 OPEN_URL 动作兜底处理。
     var onLinkHover: ((String?) -> Void)?
+    /// OSC 9/99/777 桌面通知（终端程序主动上报，无需 hook）。
+    var onDesktopNotification: ((_ title: String, _ body: String) -> Void)?
+    /// OSC 9;4 进度上报（percent 为 nil 表示未给百分比）。
+    var onProgressReport: ((_ state: PaneProgressState, _ percent: Int?) -> Void)?
 
     func requestFocus() { onRequestFocus?() }
     func beginPaneDrag(_ event: NSEvent) { onBeginPaneDrag?(event) }
@@ -174,12 +180,12 @@ final class GhosttySurface: TerminalSurface {
         // 内容恢复：有待回放快照时换 wrapper 启动（cat 快照 → rm → exec 真 shell），
         // 路径与 shell 走 env 传参，避开引号/转义问题。
         var command = shell
-        var envPairs: [(key: String, value: String)] = []
+        var envPairs: [(key: String, value: String)] = extraEnvironment
         if let restoreFile = restoreContentFile,
            FileManager.default.fileExists(atPath: restoreFile),
            let wrapper = ScrollbackStore.ensureWrapperScript() {
             command = wrapper
-            envPairs = [("CONDUCTOR_RESTORE_FILE", restoreFile), ("CONDUCTOR_RESTORE_SHELL", shell)]
+            envPairs += [("CONDUCTOR_RESTORE_FILE", restoreFile), ("CONDUCTOR_RESTORE_SHELL", shell)]
         }
         restoreContentFile = nil
 
@@ -236,6 +242,11 @@ final class GhosttySurface: TerminalSurface {
     func reloadConfig() {
         guard let surface, let config = GhosttyRuntime.shared.config else { return }
         ghostty_surface_update_config(surface, config)
+        // app 级 set_color_scheme 只影响新 surface 的初值；运行中的 TUI（codex/claude 的输入框等）
+        // 要靠 surface 级通知（DEC 2031）才会按新深浅色重画。
+        let dark = ThemePalette.resolve(ConfigStore.shared.config.appearance).isDark
+        ghostty_surface_set_color_scheme(
+            surface, dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
         ghostty_surface_refresh(surface)
     }
 
@@ -350,6 +361,8 @@ final class GhosttySurface: TerminalSurface {
     func handleSearchSelected(_ selected: Int) { onSearchSelected?(selected) }
     func handleSearchEnd() { onSearchEnd?() }
     func handleMouseOverLink(_ url: String?) { onLinkHover?(url) }
+    func handleDesktopNotification(title: String, body: String) { onDesktopNotification?(title, body) }
+    func handleProgressReport(state: PaneProgressState, percent: Int?) { onProgressReport?(state, percent) }
 
     /// core 请求换鼠标指针（链接上 pointer、正文 text…）。只在鼠标确实悬在本终端时生效。
     func handleMouseShape(_ shape: ghostty_action_mouse_shape_e) {
