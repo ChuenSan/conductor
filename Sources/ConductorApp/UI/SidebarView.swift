@@ -123,6 +123,16 @@ struct SidebarView: View {
                     onCommit: { commitRename() }
                 )
                 .contextMenu {
+                    ForEach(coordinator.launchableAgents) { agent in
+                        Button {
+                            coordinator.launchAIAgentSession(agent, workspaceID: ws.id, cwd: ws.path)
+                        } label: {
+                            Label(L("新建%@会话", agent.title), systemImage: agent.fallbackSystemImage)
+                        }
+                    }
+                    if !coordinator.launchableAgents.isEmpty {
+                        Divider()
+                    }
                     Button { beginRename(ws) } label: { Label(L("重命名"), systemImage: "pencil") }
                     Button { coordinator.revealInFinder(ws.path) } label: {
                         Label(L("在 Finder 中显示"), systemImage: "folder")

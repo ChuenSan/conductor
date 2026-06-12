@@ -1184,10 +1184,37 @@ final class AppCoordinator: ObservableObject {
 
     /// 一键启动 Agent：新开一个标签页，待 shell 就绪后自动执行 `command`（如 `codex`）。
     func launchAgent(command: String) {
+        if let agent = launchableAgents.first(where: { $0.command == command || $0.id == command })
+            ?? detectedLaunchableAgents.first(where: { $0.command == command || $0.id == command })
+            ?? AgentCatalog.all.first(where: { $0.command == command || $0.id == command }).map({
+                LaunchableAgent(
+                    id: $0.id,
+                    title: $0.name,
+                    command: $0.command,
+                    logo: $0.logo,
+                    fallbackSystemImage: $0.fallbackSystemImage)
+            })
+        {
+            launchAIAgentSession(agent)
+            return
+        }
         let paneID = PaneID(nextID("p"))
         run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID))
         (registry.surface(for: paneID) as? GhosttySurface)?.enqueueCommand(launchCommand(command, pane: paneID))
         tagPaneAgentOptimistically(paneID, command: command)
+    }
+
+    /// 新建一个 AI Agent 会话 tab。可指定工作区和 cwd，供工作区右键与 tab 加号菜单复用。
+    func launchAIAgentSession(_ agent: LaunchableAgent, workspaceID: WorkspaceID? = nil, cwd: String? = nil) {
+        if let workspaceID, store.activeWorkspace != workspaceID {
+            selectWorkspace(workspaceID)
+        }
+        let paneID = PaneID(nextID("p"))
+        let launchCwd = cwd
+        run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID, cwd: launchCwd))
+        if let launchCwd { paneCwds[paneID] = launchCwd }
+        (registry.surface(for: paneID) as? GhosttySurface)?.enqueueCommand(launchCommand(agent.command, pane: paneID))
+        tagPaneAgent(paneID, agentID: agent.id)
     }
 
     /// 在当前 tab 内分屏启动 Agent。`agentTag` 用于带参数命令（如二次意见）的 logo 即时识别。
@@ -1206,7 +1233,13 @@ final class AppCoordinator: ObservableObject {
 
     /// 启动后立即按命令乐观标记 pane 的 agent，让 logo 即时出现（轮询随后会校正/清除）。
     private func tagPaneAgentOptimistically(_ pane: PaneID, command: String) {
-        guard let agentID = AgentCatalog.all.first(where: { $0.command == command })?.id else { return }
+        guard let agentID = launchableAgents.first(where: { $0.command == command || $0.id == command })?.id
+            ?? AgentCatalog.all.first(where: { $0.command == command || $0.id == command })?.id
+        else { return }
+        tagPaneAgent(pane, agentID: agentID)
+    }
+
+    private func tagPaneAgent(_ pane: PaneID, agentID: String) {
         var map = paneAgents
         map[pane] = agentID
         applyPaneAgents(map)
