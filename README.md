@@ -99,6 +99,10 @@ libghostty 终端视图基于 `CAMetalLayer`。终端容器里不能放非 Metal
 
 因此 pane 容器只承载终端视图本身，焦点环和 chrome 另行处理。
 
+## 贡献者
+
+- [tobemonkey](https://github.com/tobemonkey)（demoy）—— 提供可配置 AI 会话类型、工作区右键创建 AI 会话和 tab 加号悬浮菜单。
+
 ## 友情链接
 
 - [LINUX DO](https://linux.do/) —— 新的理想型社区，技术爱好者的聚集地。

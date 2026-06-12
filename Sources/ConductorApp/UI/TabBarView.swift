@@ -13,6 +13,9 @@ struct TabBarView: View {
     @FocusState private var renameFocused: Bool
     /// 胶囊串的内容宽度：tab 少时滚动区收身到正好包住内容，把剩余宽度让给拖拽区。
     @State private var pillsWidth: CGFloat = 0
+    @State private var showingAgentMenu = false
+    @State private var isHoveringPlus = false
+    @State private var isHoveringAgentMenu = false
 
     var body: some View {
         let ws = coordinator.store.workspaces.first { $0.id == coordinator.store.activeWorkspace }
@@ -59,6 +62,23 @@ struct TabBarView: View {
                     .foregroundStyle(AppStyle.textTertiary)
             }
             .buttonStyle(IconButtonStyle(size: 24))
+            .onHover { inside in
+                isHoveringPlus = inside
+                updateAgentMenuVisibility()
+            }
+            .popover(isPresented: $showingAgentMenu, arrowEdge: .top) {
+                AIAgentSessionHoverMenu(
+                    agents: coordinator.launchableAgents,
+                    onLaunch: { agent in
+                        showingAgentMenu = false
+                        coordinator.launchAIAgentSession(agent)
+                    },
+                    onHover: { inside in
+                        isHoveringAgentMenu = inside
+                        updateAgentMenuVisibility()
+                    }
+                )
+            }
             WindowDragZoomArea()
             .frame(minWidth: 56, maxWidth: .infinity)   // tab 再多也给窗口拖拽留一块
             .frame(height: WindowDragZoomRegion.preferredHeight)
@@ -126,6 +146,51 @@ struct TabBarView: View {
         if let id = editingTab { coordinator.renameTab(id, to: draftTitle) }
         editingTab = nil
         renameFocused = false
+    }
+
+    private func updateAgentMenuVisibility() {
+        guard !coordinator.launchableAgents.isEmpty else {
+            showingAgentMenu = false
+            return
+        }
+        if isHoveringPlus || isHoveringAgentMenu {
+            showingAgentMenu = true
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                if !isHoveringPlus && !isHoveringAgentMenu {
+                    showingAgentMenu = false
+                }
+            }
+        }
+    }
+}
+
+private struct AIAgentSessionHoverMenu: View {
+    let agents: [LaunchableAgent]
+    let onLaunch: (LaunchableAgent) -> Void
+    let onHover: (Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(agents) { agent in
+                Button { onLaunch(agent) } label: {
+                    HStack(spacing: 8) {
+                        LaunchableAgentIcon(agent: agent, size: 15)
+                        Text(AIAgentMenuPresentation.sessionTitle(for: agent))
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(AppStyle.textPrimary)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 9)
+                    .frame(width: 190, height: 30, alignment: .leading)
+                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(6)
+        .background(AppStyle.windowBackground)
+        .onHover(perform: onHover)
     }
 }
 

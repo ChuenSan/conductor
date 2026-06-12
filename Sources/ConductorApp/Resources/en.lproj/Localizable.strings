@@ -188,6 +188,7 @@
 "重新检测" = "Re-detect";
 "启动" = "Launch";
 "在新标签页启动 %@" = "Launch %@ in a new tab";
+"新建%@会话" = "New %@ Session";
 
 /* ===== 通知 / Hooks ===== */
 "完成通知" = "Completion Notifications";
@@ -410,6 +411,14 @@
 "添加自定义值" = "Add Custom Value";
 "选择图片" = "Choose Image";
 "选择目录" = "Choose Directory";
+"AI Agent" = "AI Agent";
+"会话入口" = "Session Entrypoints";
+"自动检测" = "Auto-detect";
+"自动扫描" = "Auto Scan";
+"名称" = "Name";
+"命令" = "Command";
+"%ld 个" = "%ld";
+"留空配置时使用自动检测结果；手动配置后，新建 AI 会话入口按这里的启用项显示。" = "When this list is empty, auto-detected agents are used. After manual configuration, new AI session entries follow the enabled items here.";
 
 /* ===== 命令片段库 ===== */
 "片段" = "Snippets";

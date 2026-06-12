@@ -145,6 +145,18 @@ struct SidebarView: View {
                     }
                 )
                 .contextMenu {
+                    ForEach(coordinator.launchableAgents) { agent in
+                        Button {
+                            coordinator.launchAIAgentSession(agent, workspaceID: ws.id, cwd: ws.path)
+                        } label: {
+                            Label(
+                                AIAgentMenuPresentation.sessionTitle(for: agent),
+                                systemImage: AIAgentMenuPresentation.menuSystemImage(for: agent))
+                        }
+                    }
+                    if !coordinator.launchableAgents.isEmpty {
+                        Divider()
+                    }
                     Button { beginRename(ws) } label: { Label(L("重命名"), systemImage: "pencil") }
                     Button { coordinator.revealInFinder(ws.path) } label: {
                         Label(L("在 Finder 中显示"), systemImage: "folder")

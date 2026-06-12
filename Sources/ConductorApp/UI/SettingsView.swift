@@ -13,6 +13,8 @@ struct SettingsView: View {
     /// 键位编辑用本地草稿：避免每个按键都落盘，提交（回车）时才生效。
     @State private var keybindingDrafts: [String: String] = [:]
     @State private var languageChoice: String = AppLanguage.current
+    @State private var draftAgentTitle = ""
+    @State private var draftAgentCommand = ""
 
     private var config: AppConfig { configStore.config }
 
@@ -138,21 +140,73 @@ struct SettingsView: View {
     }
 
     private var terminalSection: some View {
-        SettingsSection(title: L("终端")) {
-            SettingsRow(label: "Shell", first: true) {
-                ThemedTextField(placeholder: L("登录 shell"), text: $shell) {
-                    update { $0.terminal.shell = shell.isEmpty ? nil : shell }
+        VStack(spacing: 18) {
+            SettingsSection(title: L("终端")) {
+                SettingsRow(label: "Shell", first: true) {
+                    ThemedTextField(placeholder: L("登录 shell"), text: $shell) {
+                        update { $0.terminal.shell = shell.isEmpty ? nil : shell }
+                    }
+                }
+                SettingsRow(label: L("回滚行数")) {
+                    ThemedStepper(value: bind(\.terminal.scrollback), range: 60_000...1_000_000, step: 10_000)
+                }
+                SettingsRow(label: L("选中即复制")) {
+                    ThemedToggle(isOn: bind(\.terminal.copyOnSelect))
+                }
+                SettingsRow(label: L("有运行进程时关闭需确认")) {
+                    ThemedToggle(isOn: bind(\.terminal.confirmCloseRunning))
                 }
             }
-            SettingsRow(label: L("回滚行数")) {
-                ThemedStepper(value: bind(\.terminal.scrollback), range: 60_000...1_000_000, step: 10_000)
+            aiAgentsSection
+        }
+    }
+
+    private var aiAgentsSection: some View {
+        SettingsSection(title: L("AI Agent")) {
+            SettingsRow(label: L("会话入口"), first: true) {
+                HStack(spacing: 8) {
+                    Text(config.terminal.aiAgents.isEmpty ? L("自动检测") : L("%ld 个", config.terminal.aiAgents.count))
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppStyle.textSecondary)
+                    Button { coordinator.scanAIAgentsIntoConfig() } label: {
+                        Label(L("自动扫描"), systemImage: "wand.and.stars")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .buttonStyle(.borderless)
+                }
             }
-            SettingsRow(label: L("选中即复制")) {
-                ThemedToggle(isOn: bind(\.terminal.copyOnSelect))
+            ForEach(config.terminal.aiAgents, id: \.id) { agent in
+                ConfiguredAgentRow(
+                    agent: agent,
+                    isEnabled: agentEnabledBinding(agent.id),
+                    onDelete: { removeAgent(agent.id) }
+                )
             }
-            SettingsRow(label: L("有运行进程时关闭需确认")) {
-                ThemedToggle(isOn: bind(\.terminal.confirmCloseRunning))
+            VStack(alignment: .trailing, spacing: 8) {
+                HStack(spacing: 8) {
+                    ThemedTextField(placeholder: L("名称"), text: $draftAgentTitle)
+                    ThemedTextField(placeholder: L("命令"), text: $draftAgentCommand) {
+                        addDraftAgent()
+                    }
+                    Button(action: addDraftAgent) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(AppStyle.textSecondary)
+                            .frame(width: 28, height: 28)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(AppStyle.hoverFill))
+                    }
+                    .buttonStyle(PressScaleStyle())
+                    .disabled(draftAgentCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                Text(L("留空配置时使用自动检测结果；手动配置后，新建 AI 会话入口按这里的启用项显示。"))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .multilineTextAlignment(.trailing)
             }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 6)
         }
     }
 
@@ -266,6 +320,49 @@ struct SettingsView: View {
         keybindingDrafts[id] = nil   // 回落到“有效键位”展示
     }
 
+    private func agentEnabledBinding(_ id: String) -> Binding<Bool> {
+        Binding(
+            get: { configStore.config.terminal.aiAgents.first(where: { $0.id == id })?.enabled ?? false },
+            set: { enabled in
+                update { cfg in
+                    guard let index = cfg.terminal.aiAgents.firstIndex(where: { $0.id == id }) else { return }
+                    cfg.terminal.aiAgents[index].enabled = enabled
+                }
+            })
+    }
+
+    private func addDraftAgent() {
+        let title = draftAgentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let command = draftAgentCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !command.isEmpty else { return }
+        let id = Self.agentID(from: title.isEmpty ? command : title)
+        update { cfg in
+            cfg.terminal.aiAgents.removeAll { $0.id == id }
+            cfg.terminal.aiAgents.append(AIAgentConfig(
+                id: id,
+                title: title.isEmpty ? command : title,
+                command: command,
+                enabled: true))
+        }
+        draftAgentTitle = ""
+        draftAgentCommand = ""
+    }
+
+    private func removeAgent(_ id: String) {
+        update { $0.terminal.aiAgents.removeAll { $0.id == id } }
+    }
+
+    private static func agentID(from raw: String) -> String {
+        let lower = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let scalars = lower.unicodeScalars.map { scalar in
+            CharacterSet.alphanumerics.contains(scalar) ? Character(scalar) : "-"
+        }
+        let collapsed = String(scalars)
+            .split(separator: "-", omittingEmptySubsequences: true)
+            .joined(separator: "-")
+        return collapsed.isEmpty ? UUID().uuidString : collapsed
+    }
+
     private func bind<T>(_ keyPath: WritableKeyPath<AppConfig, T>) -> Binding<T> {
         Binding(
             get: { configStore.config[keyPath: keyPath] },
@@ -287,6 +384,39 @@ struct SettingsView: View {
             }
             config.ghosttyOverrides[key] = trimmed
         }
+    }
+}
+
+private struct ConfiguredAgentRow: View {
+    let agent: AIAgentConfig
+    @Binding var isEnabled: Bool
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(agent.title)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(AppStyle.textPrimary)
+                Text(agent.command)
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 12)
+            ThemedToggle(isOn: $isEnabled)
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressScaleStyle())
+            .help(L("删除"))
+        }
+        .padding(.horizontal, 2)
+        .frame(height: 46)
     }
 }
 

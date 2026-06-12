@@ -72,8 +72,10 @@ final class AppCoordinator: ObservableObject {
     private var automationService: AutomationService?
     /// Agent 完成账本（状态栏铃铛 / 通知中心）。
     let activityLog = AgentActivityLog()
-    /// 已检测到、可一键启动的 CLI（供 pane 右键「新建终端运行」子菜单使用）。
+    /// 当前配置生效后可一键启动的 CLI（供 pane 右键「新建终端运行」子菜单使用）。
     @Published private(set) var launchableAgents: [LaunchableAgent] = []
+    /// 本机自动检测到的 CLI。配置为空时用它作为默认入口；配置非空时只作为“重新扫描”来源。
+    private var detectedLaunchableAgents: [LaunchableAgent] = []
     /// 每个 pane 当前在跑的 Agent（agent id）。空表示只是普通 shell。用于 pane 头条 / tab 显示 logo。
     @Published private(set) var paneAgents: [PaneID: String] = [:]
     /// 正在「思考」的 agent pane 集合（纯 hook 信号），驱动 tab / 工作区 / 文件夹树的思考动效。
@@ -1085,34 +1087,75 @@ final class AppCoordinator: ObservableObject {
     /// 缓存缺失时才后台检测一次并落盘（面板打开时会复用同一份缓存）。
     private func detectLaunchableAgents() {
         if let cache = CLIDetectionStore.load() {
-            setLaunchableAgents(cache.tools.filter(\.isInstalled).map {
-                LaunchableAgent(
-                    id: $0.id, title: $0.name, command: $0.id,
-                    logo: $0.logo, fallbackSystemImage: $0.fallbackSystemImage)
-            })
+            detectedLaunchableAgents = launchableAgents(from: cache.tools)
+            refreshLaunchableAgentsFromConfig()
             return
         }
         Task { [weak self] in
             let tools = await Task.detached(priority: .utility) { () -> [CLIToolStatus] in
-                LoginShellPathCache.shared.captureOnce()
-                _ = LoginShellPathCache.shared.currentOrCapture()
-                return AgentCatalog.all.map { agent in
-                    let path = agent.resolveBinary()
-                    return CLIToolStatus(
-                        id: agent.id, name: agent.name,
-                        logo: agent.logo, fallbackSystemImage: agent.fallbackSystemImage,
-                        path: path, version: path != nil ? agent.readVersion() : nil)
-                }
+                AgentCatalog.detectStatuses()
             }.value
             CLIDetectionStore.save(tools)
             await MainActor.run {
-                self?.setLaunchableAgents(tools.filter(\.isInstalled).map {
-                    LaunchableAgent(
-                        id: $0.id, title: $0.name, command: $0.id,
-                        logo: $0.logo, fallbackSystemImage: $0.fallbackSystemImage)
-                })
+                self?.detectedLaunchableAgents = self?.launchableAgents(from: tools) ?? []
+                self?.refreshLaunchableAgentsFromConfig()
             }
         }
+    }
+
+    func scanAIAgentsIntoConfig() {
+        Task { [weak self] in
+            let tools = await Task.detached(priority: .userInitiated) { AgentCatalog.detectStatuses() }.value
+            let cache = CLIDetectionStore.save(tools)
+            let detected = tools.filter(\.isInstalled).map {
+                AIAgentConfig(id: $0.id, title: $0.name, command: $0.id, enabled: true)
+            }
+            await MainActor.run {
+                guard let self else { return }
+                self.detectedLaunchableAgents = self.launchableAgents(from: cache.tools)
+                var config = ConfigStore.shared.config
+                config.terminal.aiAgents = self.mergeConfiguredAgents(
+                    existing: config.terminal.aiAgents,
+                    detected: detected)
+                self.applyConfig(config)
+            }
+        }
+    }
+
+    private func mergeConfiguredAgents(
+        existing: [AIAgentConfig],
+        detected: [AIAgentConfig]
+    ) -> [AIAgentConfig] {
+        var out = AIAgentConfig.validatedList(existing)
+        let existingIDs = Set(out.map(\.id))
+        out.append(contentsOf: detected.filter { !existingIDs.contains($0.id) })
+        return AIAgentConfig.validatedList(out)
+    }
+
+    private func launchableAgents(from tools: [CLIToolStatus]) -> [LaunchableAgent] {
+        tools.filter(\.isInstalled).map {
+            LaunchableAgent(
+                id: $0.id, title: $0.name, command: $0.id,
+                logo: $0.logo, fallbackSystemImage: $0.fallbackSystemImage)
+        }
+    }
+
+    private func refreshLaunchableAgentsFromConfig() {
+        let configured = AIAgentConfig.validatedList(ConfigStore.shared.config.terminal.aiAgents)
+            .filter(\.enabled)
+        guard !configured.isEmpty else {
+            applyLaunchableAgents(detectedLaunchableAgents)
+            return
+        }
+        applyLaunchableAgents(configured.map { config in
+            let descriptor = AgentCatalog.all.first { $0.id == config.id }
+            return LaunchableAgent(
+                id: config.id,
+                title: config.title,
+                command: config.command,
+                logo: descriptor?.logo ?? config.id,
+                fallbackSystemImage: descriptor?.fallbackSystemImage ?? "terminal")
+        })
     }
 
     // MARK: - 配置热更新
@@ -1141,6 +1184,7 @@ final class AppCoordinator: ObservableObject {
     /// 设置面板改配置：内存即时更新 + 应用终端/外壳/键位 + 落盘到 config.yaml。
     func applyConfig(_ new: AppConfig) {
         ConfigStore.shared.set(new)
+        refreshLaunchableAgentsFromConfig()
         applyTerminalAppearance(effectiveConfig())
         restyleChrome()
         commandRegistry.rebuildIndex()
@@ -1241,10 +1285,37 @@ final class AppCoordinator: ObservableObject {
 
     /// 一键启动 Agent：新开一个标签页，待 shell 就绪后自动执行 `command`（如 `codex`）。
     func launchAgent(command: String) {
+        if let agent = launchableAgents.first(where: { $0.command == command || $0.id == command })
+            ?? detectedLaunchableAgents.first(where: { $0.command == command || $0.id == command })
+            ?? AgentCatalog.all.first(where: { $0.command == command || $0.id == command }).map({
+                LaunchableAgent(
+                    id: $0.id,
+                    title: $0.name,
+                    command: $0.command,
+                    logo: $0.logo,
+                    fallbackSystemImage: $0.fallbackSystemImage)
+            })
+        {
+            launchAIAgentSession(agent)
+            return
+        }
         let paneID = PaneID(nextID("p"))
         run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID))
         (registry.surface(for: paneID) as? GhosttySurface)?.enqueueCommand(launchCommand(command, pane: paneID))
         tagPaneAgentOptimistically(paneID, command: command)
+    }
+
+    /// 新建一个 AI Agent 会话 tab。可指定工作区和 cwd，供工作区右键与 tab 加号菜单复用。
+    func launchAIAgentSession(_ agent: LaunchableAgent, workspaceID: WorkspaceID? = nil, cwd: String? = nil) {
+        if let workspaceID, store.activeWorkspace != workspaceID {
+            selectWorkspace(workspaceID)
+        }
+        let paneID = PaneID(nextID("p"))
+        let launchCwd = cwd
+        run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID, cwd: launchCwd))
+        if let launchCwd { paneCwds[paneID] = launchCwd }
+        (registry.surface(for: paneID) as? GhosttySurface)?.enqueueCommand(launchCommand(agent.command, pane: paneID))
+        tagPaneAgent(paneID, agentID: agent.id)
     }
 
     /// 在当前 tab 内分屏启动 Agent。`agentTag` 用于带参数命令（如二次意见）的 logo 即时识别。
@@ -1263,7 +1334,13 @@ final class AppCoordinator: ObservableObject {
 
     /// 启动后立即按命令乐观标记 pane 的 agent，让 logo 即时出现（轮询随后会校正/清除）。
     private func tagPaneAgentOptimistically(_ pane: PaneID, command: String) {
-        guard let agentID = AgentCatalog.all.first(where: { $0.command == command })?.id else { return }
+        guard let agentID = launchableAgents.first(where: { $0.command == command || $0.id == command })?.id
+            ?? AgentCatalog.all.first(where: { $0.command == command || $0.id == command })?.id
+        else { return }
+        tagPaneAgent(pane, agentID: agentID)
+    }
+
+    private func tagPaneAgent(_ pane: PaneID, agentID: String) {
         var map = paneAgents
         map[pane] = agentID
         applyPaneAgents(map)
@@ -1271,6 +1348,11 @@ final class AppCoordinator: ObservableObject {
 
     /// 由 CLI 检测面板回填可启动的 Agent 列表（带 logo），供右键菜单复用。
     func setLaunchableAgents(_ agents: [LaunchableAgent]) {
+        detectedLaunchableAgents = agents
+        refreshLaunchableAgentsFromConfig()
+    }
+
+    private func applyLaunchableAgents(_ agents: [LaunchableAgent]) {
         launchableAgents = agents
     }
 

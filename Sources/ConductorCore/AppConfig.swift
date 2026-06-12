@@ -157,13 +157,16 @@ public struct TerminalConfig: Codable, Equatable, Sendable {
     public var scrollback: Int
     public var copyOnSelect: Bool
     public var confirmCloseRunning: Bool
+    public var aiAgents: [AIAgentConfig]
 
     public init(shell: String? = nil, scrollback: Int = 60000,
-                copyOnSelect: Bool = false, confirmCloseRunning: Bool = true) {
+                copyOnSelect: Bool = false, confirmCloseRunning: Bool = true,
+                aiAgents: [AIAgentConfig] = []) {
         self.shell = shell
         self.scrollback = scrollback
         self.copyOnSelect = copyOnSelect
         self.confirmCloseRunning = confirmCloseRunning
+        self.aiAgents = aiAgents
     }
 
     public init(from decoder: Decoder) throws {
@@ -173,13 +176,51 @@ public struct TerminalConfig: Codable, Equatable, Sendable {
         scrollback = c.value(.scrollback, d.scrollback)
         copyOnSelect = c.value(.copyOnSelect, d.copyOnSelect)
         confirmCloseRunning = c.value(.confirmCloseRunning, d.confirmCloseRunning)
+        aiAgents = c.value(.aiAgents, d.aiAgents)
     }
 
     func validated() -> TerminalConfig {
         var copy = self
         // 下限 6 万行：保证 agent 长输出可回看（旧配置里的小值也会被抬上来）
         copy.scrollback = min(max(scrollback, 60_000), 1_000_000)
+        copy.aiAgents = AIAgentConfig.validatedList(aiAgents)
         return copy
+    }
+}
+
+public struct AIAgentConfig: Codable, Equatable, Sendable {
+    public var id: String
+    public var title: String
+    public var command: String
+    public var enabled: Bool
+
+    public init(id: String, title: String, command: String, enabled: Bool = true) {
+        self.id = id
+        self.title = title
+        self.command = command
+        self.enabled = enabled
+    }
+
+    func validated() -> AIAgentConfig? {
+        let cleanID = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanID.isEmpty, !cleanCommand.isEmpty else { return nil }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return AIAgentConfig(
+            id: cleanID,
+            title: cleanTitle.isEmpty ? cleanID : cleanTitle,
+            command: cleanCommand,
+            enabled: enabled)
+    }
+
+    public static func validatedList(_ agents: [AIAgentConfig]) -> [AIAgentConfig] {
+        var seen: Set<String> = []
+        var out: [AIAgentConfig] = []
+        for agent in agents {
+            guard let clean = agent.validated(), seen.insert(clean.id).inserted else { continue }
+            out.append(clean)
+        }
+        return out
     }
 }
 
