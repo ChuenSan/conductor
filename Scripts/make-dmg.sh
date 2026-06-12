@@ -10,7 +10,7 @@
 #   Scripts/make-dmg.sh arm64          # 只打 arm64
 #   Scripts/make-dmg.sh x86_64         # 只打 x86_64
 #   Scripts/make-dmg.sh universal      # 打单个双架构（universal）DMG
-#   VERSION=0.2.0 Scripts/make-dmg.sh  # 覆盖版本号（默认 0.1.0）
+#   VERSION=0.0.3 Scripts/make-dmg.sh  # 覆盖版本号（默认 0.0.2）
 #
 # 产物：dist/conductor-<version>-<arch>.dmg
 # 依赖：Vendor/GhosttyKit.xcframework（universal 静态库，缺失时先跑 Scripts/prepare-ghosttykit.sh）
@@ -19,7 +19,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-VERSION="${VERSION:-0.1.0}"
+VERSION="${VERSION:-0.0.2}"
 BUNDLE_ID="com.conductor.app"
 APP_NAME="Conductor"
 DIST="$ROOT/dist"
@@ -80,7 +80,7 @@ assemble_app() {
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>LSMinimumSystemVersion</key>
-  <string>13.0</string>
+  <string>14.0</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
   <key>NSHighResolutionCapable</key>
