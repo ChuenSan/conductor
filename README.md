@@ -98,5 +98,7 @@ swift run ConductorApp
 libghostty 终端视图基于 `CAMetalLayer`。终端容器里不能放非 Metal 的 layer-backed 兄弟视图，父级也不能重写 `draw()`，否则可能破坏 Metal 呈现导致非聚焦 pane 白屏。
 
 因此 pane 容器只承载终端视图本身，焦点环和 chrome 另行处理。
-友情链接
-LINUX DO —— 新的理想型社区，技术爱好者的聚集地。
+
+## 友情链接
+
+- [LINUX DO](https://linux.do/) —— 新的理想型社区，技术爱好者的聚集地。
