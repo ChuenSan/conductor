@@ -127,7 +127,11 @@ struct SidebarView: View {
                         Button {
                             coordinator.launchAIAgentSession(agent, workspaceID: ws.id, cwd: ws.path)
                         } label: {
-                            Label(L("新建%@会话", agent.title), systemImage: agent.fallbackSystemImage)
+                            Label {
+                                Text(AIAgentMenuPresentation.sessionTitle(for: agent))
+                            } icon: {
+                                LaunchableAgentIcon(agent: agent, size: 13)
+                            }
                         }
                     }
                     if !coordinator.launchableAgents.isEmpty {
