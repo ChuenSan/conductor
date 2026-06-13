@@ -125,6 +125,7 @@ struct UsageStatsView: View {
                     .animation(loading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: loading)
             }
             .buttonStyle(PressScaleStyle())
+            .help(L("刷新用量统计"))
             .disabled(loading)
         }
     }

@@ -11,7 +11,7 @@ final class PanelWidthStore: ObservableObject {
     @Published var tools: CGFloat { didSet { save("panelWidth.tools", tools) } }
     @Published var session: CGFloat { didSet { save("panelWidth.session", session) } }
 
-    static let sidebarRange: ClosedRange<CGFloat> = 180...400
+    static let sidebarRange: ClosedRange<CGFloat> = 160...340
     static let settingsRange: ClosedRange<CGFloat> = 480...760
     static let toolsRange: ClosedRange<CGFloat> = 360...680
     static let sessionRange: ClosedRange<CGFloat> = 320...600
@@ -21,10 +21,24 @@ final class PanelWidthStore: ObservableObject {
     static let sessionDefault: CGFloat = 400
 
     private init() {
-        sidebar = Self.load("panelWidth.sidebar", AppStyle.sidebarWidth, Self.sidebarRange)
+        sidebar = Self.loadMigratedSidebar()
         settings = Self.load("panelWidth.settings", Self.settingsDefault, Self.settingsRange)
         tools = Self.load("panelWidth.tools", Self.toolsDefault, Self.toolsRange)
         session = Self.load("panelWidth.session", Self.sessionDefault, Self.sessionRange)
+    }
+
+    private static func loadMigratedSidebar() -> CGFloat {
+        let key = "panelWidth.sidebar"
+        let migrationKey = "panelWidth.sidebar.compactV2Applied"
+        let raw = UserDefaults.standard.double(forKey: key)
+        guard raw > 0 else { return AppStyle.sidebarWidth }
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else {
+            return min(max(CGFloat(raw), sidebarRange.lowerBound), sidebarRange.upperBound)
+        }
+        let compact = min(max(CGFloat(raw) * 0.85, sidebarRange.lowerBound), sidebarRange.upperBound)
+        UserDefaults.standard.set(Double(compact), forKey: key)
+        UserDefaults.standard.set(true, forKey: migrationKey)
+        return compact
     }
 
     private static func load(_ key: String, _ fallback: CGFloat, _ range: ClosedRange<CGFloat>) -> CGFloat {

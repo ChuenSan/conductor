@@ -190,6 +190,7 @@ struct HooksManagerView: View {
                         .background(Circle().fill(AppStyle.hoverFill))
                 }
                 .buttonStyle(PressScaleStyle())
+                .help(L("刷新 Hook 市场"))
                 .disabled(loading)
             }
         }

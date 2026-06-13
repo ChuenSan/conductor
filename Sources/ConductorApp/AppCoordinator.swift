@@ -100,6 +100,12 @@ final class AppCoordinator: ObservableObject {
     /// 头条活计时的起点账本：pane 进入思考集合时记 busy 时刻为起点，离开即清。
     private var thinkingStartTimes: [PaneID: Date] = [:]
     private static let hookThinkingTimeout: TimeInterval = 600
+    /// 输出活动兜底：每个「思考中」pane 的可见视口文本哈希 + 上次变化时刻。
+    /// agent 答完停在 REPL 提示符时（进程还在、Stop hook 可能丢失），视口不再变化；
+    /// 静止超过 thinkingIdleWindow 即熄灭思考动效，不必死等 600s 超时。
+    private var thinkingViewportHash: [PaneID: Int] = [:]
+    private var thinkingLastOutputChange: [PaneID: Date] = [:]
+    private static let thinkingIdleWindow: TimeInterval = 6
     private var agentPollTimer: Timer?
     /// 命令面板（懒创建）。
     private lazy var commandPalette = CommandPaletteController(coordinator: self)
@@ -113,6 +119,7 @@ final class AppCoordinator: ObservableObject {
     private lazy var missionControl = MissionControlController()
     weak var window: NSWindow?
     private let stateStore: StateStore
+    private let workspaceAccessRegistry = SecurityScopedAccessRegistry()
     private var saveWorkItem: DispatchWorkItem?
     /// 最近关闭的 tab/pane（误关恢复，⌘⇧T 弹栈）。@Published 让右键菜单的可用态跟着变。
     @Published private(set) var recentlyClosed = RecentlyClosedStack()
@@ -473,6 +480,7 @@ final class AppCoordinator: ObservableObject {
             return
         }
         store = result.state.store
+        refreshWorkspaceSecurityScopes()
         // 修复：空 tab 的工作区（历史 bug 留下的残局）补一个新 tab，选中后不至于一片空白。
         for index in store.workspaces.indices where store.workspaces[index].tabs.isEmpty {
             let tab = ConductorCore.Tab.single(id: TabID(nextID("t")), title: "zsh", pane: PaneID(nextID("p")))
@@ -506,6 +514,7 @@ final class AppCoordinator: ObservableObject {
         let ws = Workspace(id: WorkspaceID(nextID("w")), name: "home", path: rootCwd,
                            tabs: [tab], activeTab: tab.id)
         store = WorkspaceStore(workspaces: [ws], activeWorkspace: ws.id)
+        refreshWorkspaceSecurityScopes()
         registry.apply([.createSurface(pane: pane, cwd: rootCwd), .focusSurface(pane: pane)])
     }
 
@@ -999,11 +1008,36 @@ final class AppCoordinator: ObservableObject {
     /// agent 进程已不在的 pane、点亮超时的条目，随轮询清掉。
     private func pruneHookThinking(agents: [PaneID: String]) {
         guard !hookThinkingSince.isEmpty else { return }
-        let cutoff = Date().addingTimeInterval(-Self.hookThinkingTimeout)
+        let now = Date()
+        let cutoff = now.addingTimeInterval(-Self.hookThinkingTimeout)
         hookThinkingSince = hookThinkingSince.filter { pane, since in
-            agents[pane] != nil && since > cutoff
+            // 1) agent 进程已不在（崩溃/被 kill）→ 熄灭
+            guard agents[pane] != nil else { return false }
+            // 2) 点亮超过硬上限 → 兜底熄灭
+            guard since > cutoff else { return false }
+            // 3) 输出活动兜底：可见视口持续静止超过窗口 → 这轮答完在等输入 → 熄灭
+            return !isThinkingOutputIdle(pane, now: now)
         }
+        // 清掉已离开思考集合的辅助账
+        let live = Set(hookThinkingSince.keys)
+        thinkingViewportHash = thinkingViewportHash.filter { live.contains($0.key) }
+        thinkingLastOutputChange = thinkingLastOutputChange.filter { live.contains($0.key) }
         publishThinking()
+    }
+
+    /// 读 pane 可见视口文本与上次比对：变了就刷新「上次变化时刻」并视为仍在动；
+    /// 自上次变化起静止超过 thinkingIdleWindow，判为输出空闲（agent 在等输入）。
+    /// 这是 hook 的 Stop 事件丢失时的兜底——agent 工作时会刷 spinner/输出，空闲时视口静止。
+    private func isThinkingOutputIdle(_ pane: PaneID, now: Date) -> Bool {
+        let text = (registry.surface(for: pane) as? GhosttySurface)?.readViewportText() ?? ""
+        let hash = text.hashValue
+        if thinkingViewportHash[pane] != hash {
+            thinkingViewportHash[pane] = hash
+            thinkingLastOutputChange[pane] = now
+            return false
+        }
+        let lastChange = thinkingLastOutputChange[pane] ?? hookThinkingSince[pane] ?? now
+        return now.timeIntervalSince(lastChange) >= Self.thinkingIdleWindow
     }
 
     /// 发布 hook 思考集合（仅在变化时触发 UI 更新）。
@@ -1030,8 +1064,13 @@ final class AppCoordinator: ObservableObject {
     private func setHookThinking(_ pane: PaneID, active: Bool) {
         if active {
             hookThinkingSince[pane] = Date()
+            // 重置输出活动基线：给这一轮一个 idle 窗口的宽限，等 agent 开始刷输出。
+            thinkingLastOutputChange[pane] = Date()
+            thinkingViewportHash.removeValue(forKey: pane)
         } else {
             hookThinkingSince.removeValue(forKey: pane)
+            thinkingViewportHash.removeValue(forKey: pane)
+            thinkingLastOutputChange.removeValue(forKey: pane)
         }
         publishThinking()
     }
@@ -1185,6 +1224,7 @@ final class AppCoordinator: ObservableObject {
     /// 设置面板改配置：内存即时更新 + 应用终端/外壳/键位 + 落盘到 config.yaml。
     func applyConfig(_ new: AppConfig) {
         ConfigStore.shared.set(new)
+        UsageCredentials.apply(new)   // 把应用内填的用量 API key 注入进程环境
         refreshLaunchableAgentsFromConfig()
         applyTerminalAppearance(effectiveConfig())
         restyleChrome()
@@ -1734,6 +1774,7 @@ final class AppCoordinator: ObservableObject {
         let panes = ws.tabs.flatMap { $0.rootSplit.leaves() }
         registry.apply(panes.map { .closeSurface(pane: $0) })
         store.remove(id)   // 若删的是 active，会切到第一个剩余工作区
+        workspaceAccessRegistry.deactivate(id: id.value)
         workspaceMetadata.forget(workspace: id)
         // 兜底：别让删除把人「切」进隐藏的文件夹上下文
         if store.activeWorkspace == Self.folderContextID, sidebarListMode == .workspaces {
@@ -1876,16 +1917,44 @@ final class AppCoordinator: ObservableObject {
         scheduleSave()
     }
 
-    func addWorkspace(path: String) {
+    func addWorkspace(path: String, bookmarkData: Data? = nil) {
+        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        if let existingIndex = store.workspaces.firstIndex(where: {
+            URL(fileURLWithPath: $0.path).standardizedFileURL.path == standardizedPath
+        }) {
+            if let bookmarkData {
+                store.workspaces[existingIndex].bookmarkData = bookmarkData
+                workspaceAccessRegistry.deactivate(id: store.workspaces[existingIndex].id.value)
+                workspaceAccessRegistry.activate(
+                    id: store.workspaces[existingIndex].id.value,
+                    bookmarkData: bookmarkData)
+            }
+            selectWorkspace(store.workspaces[existingIndex].id)
+            scheduleSave()
+            return
+        }
+
         let name = (path as NSString).lastPathComponent.isEmpty ? path : (path as NSString).lastPathComponent
         let pane = PaneID(nextID("p"))
         let tab = Tab.single(id: TabID(nextID("t")), title: "zsh", pane: pane)
-        let ws = Workspace(id: WorkspaceID(nextID("w")), name: name, path: path, tabs: [tab], activeTab: tab.id)
+        let ws = Workspace(
+            id: WorkspaceID(nextID("w")),
+            name: name,
+            path: standardizedPath,
+            bookmarkData: bookmarkData,
+            tabs: [tab],
+            activeTab: tab.id)
         store.upsert(ws)   // 设为 active
+        workspaceAccessRegistry.activate(id: ws.id.value, bookmarkData: bookmarkData)
         syncListModeWithActiveWorkspace()
-        registry.apply([.createSurface(pane: pane, cwd: path), .focusSurface(pane: pane)])
+        registry.apply([.createSurface(pane: pane, cwd: standardizedPath), .focusSurface(pane: pane)])
         rebuild()
         scheduleSave()
+    }
+
+    private func refreshWorkspaceSecurityScopes() {
+        workspaceAccessRegistry.replaceAll(
+            store.workspaces.map { (id: $0.id.value, bookmarkData: $0.bookmarkData) })
     }
 
     // MARK: - 核心循环

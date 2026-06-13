@@ -31,28 +31,54 @@ enum AppStyle {
     static let errorRed = Color(red: 0.92, green: 0.34, blue: 0.34)
 
     // 尺寸(与主题无关)
-    static let sidebarWidth: CGFloat = 224
-    static let sidebarCollapsedWidth: CGFloat = 56
+    static let sidebarWidth: CGFloat = 190
+    static let sidebarCollapsedWidth: CGFloat = 48
     static let tabBarHeight: CGFloat = 34
 }
 
-/// 侧栏/工具栏图标按钮：hover 高亮 + 按下弹簧缩放（微交互）。
-struct IconButtonStyle: ButtonStyle {
+/// 工具栏/导航里的纯图标按钮。只要没有可见文字，就走这个组件：tooltip 和可访问标签是必填语义。
+struct IconOnlyButton: View {
+    let systemName: String
+    let help: String
     var size: CGFloat = 26
+    var symbolSize: CGFloat = 12
+    var weight: Font.Weight = .medium
+    var tint: Color? = nil
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: symbolSize, weight: weight))
+                .foregroundStyle(tint ?? AppStyle.textSecondary)
+        }
+        .buttonStyle(IconOnlyButtonChromeStyle(size: size))
+        .help(help)
+        .accessibilityLabel(help)
+    }
+}
+
+private struct IconOnlyButtonChromeStyle: ButtonStyle {
+    var size: CGFloat
     @State private var hovering = false
 
     func makeBody(configuration: Configuration) -> some View {
+        let radius = max(7, min(9, size * 0.32))
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         configuration.label
             .frame(width: size, height: size)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(hovering ? AppStyle.hoverFill : Color.clear)
+                shape.fill(hovering ? AppStyle.hoverFill : AppStyle.theme.isDark ? Color.white.opacity(0.025) : Color.black.opacity(0.018))
             )
-            .contentShape(Rectangle())
-            .scaleEffect(configuration.isPressed ? 0.86 : 1)
-            .opacity(configuration.isPressed ? 0.6 : 1)
-            .animation(.spring(response: 0.26, dampingFraction: 0.6), value: configuration.isPressed)
-            .animation(.easeOut(duration: 0.14), value: hovering)
+            .overlay(
+                shape.strokeBorder(
+                    hovering ? AppStyle.accent.opacity(0.16) : Color.clear,
+                    lineWidth: 1))
+            .contentShape(shape)
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .opacity(configuration.isPressed ? 0.74 : 1)
+            .animation(Motion.snappy, value: configuration.isPressed)
+            .animation(Motion.hover, value: hovering)
             .onHover { hovering = $0 }
     }
 }

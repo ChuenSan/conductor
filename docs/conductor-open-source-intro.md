@@ -153,7 +153,7 @@ Conductor 是 Swift / SwiftUI / AppKit 写的原生 macOS 应用。
 
 https://github.com/zhengzizhe/conductor/releases/latest
 
-当前是 ad-hoc 签名，第一次打开可能会被 macOS 拦一下。可以右键 App 选择“打开”，或者执行：
+发布包优先使用稳定代码签名，避免 macOS 把每次更新都当成新 App 而反复要求权限。第一次打开如果仍被 macOS 拦一下，可以右键 App 选择“打开”，或者执行：
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Conductor.app
@@ -163,7 +163,9 @@ xattr -dr com.apple.quarantine /Applications/Conductor.app
 
 ```bash
 ./Scripts/prepare-ghosttykit.sh
-swift run ConductorApp
+./Scripts/make-dev-cert.sh
+./Scripts/make-app.sh
+open ./Conductor.app
 ```
 
 ## 最后

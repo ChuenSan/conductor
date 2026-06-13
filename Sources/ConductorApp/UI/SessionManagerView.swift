@@ -43,16 +43,11 @@ struct SessionManagerView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().overlay(AppStyle.separator)
             filterBar
-            Divider().overlay(AppStyle.separator)
             content
         }
         .frame(maxHeight: .infinity)
         .background(AppStyle.windowBackground)
-        .overlay(alignment: .leading) {
-            Rectangle().fill(AppStyle.separator).frame(width: 1).allowsHitTesting(false)
-        }
         .onAppear { store.refresh() }
     }
 
@@ -75,23 +70,22 @@ struct SessionManagerView: View {
                 }
             }
             Spacer(minLength: 8)
-            Button(action: { store.refresh(force: true) }) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(AppStyle.textSecondary)
-                    .frame(width: 26, height: 26)
-                    .background(Circle().fill(AppStyle.hoverFill))
-            }
-            .buttonStyle(PressScaleStyle())
+            IconOnlyButton(
+                systemName: "arrow.clockwise",
+                help: L("刷新会话"),
+                size: 28,
+                symbolSize: 11,
+                weight: .semibold) {
+                    store.refresh(force: true)
+                }
             .disabled(store.isLoading)
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(AppStyle.textSecondary)
-                    .frame(width: 26, height: 26)
-                    .background(Circle().fill(AppStyle.hoverFill))
-            }
-            .buttonStyle(PressScaleStyle())
+            IconOnlyButton(
+                systemName: "xmark",
+                help: L("关闭"),
+                size: 28,
+                symbolSize: 11,
+                weight: .bold,
+                action: onClose)
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)
@@ -287,6 +281,7 @@ private struct SessionRow: View {
                             .background(Circle().fill(AppStyle.hoverFill))
                     }
                     .menuStyle(.borderlessButton)
+                    .help(L("更多操作"))
                 }
             }
         }

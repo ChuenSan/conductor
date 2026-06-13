@@ -164,6 +164,9 @@ struct SidebarView: View {
                     Button { coordinator.copyToClipboard(ws.path) } label: {
                         Label(L("复制路径"), systemImage: "doc.on.doc")
                     }
+                    Button { reauthorizeWorkspace(ws) } label: {
+                        Label(L("重新授权目录"), systemImage: "lock.open")
+                    }
                     Divider()
                     Button(role: .destructive) { confirmRemoveWorkspace(ws) } label: {
                         Label(L("删除工作区"), systemImage: "trash")
@@ -251,14 +254,13 @@ struct SidebarView: View {
                         .foregroundStyle(AppStyle.textPrimary)
                     Spacer()
                 }
-                Button(action: coordinator.toggleSidebar) {
-                    Image(systemName: isCollapsed ? "sidebar.right" : "sidebar.left")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(AppStyle.textSecondary)
-                }
-                .buttonStyle(IconButtonStyle(size: 28))
-                .help(isCollapsed ? L("展开侧边栏") : L("收起侧边栏"))
-                .accessibilityLabel(isCollapsed ? L("展开侧边栏") : L("收起侧边栏"))
+                IconOnlyButton(
+                    systemName: isCollapsed ? "sidebar.right" : "sidebar.left",
+                    help: isCollapsed ? L("展开侧边栏") : L("收起侧边栏"),
+                    size: 28,
+                    symbolSize: 13) {
+                        coordinator.toggleSidebar()
+                    }
             }
             .frame(maxWidth: .infinity, alignment: isCollapsed ? .center : .leading)
             .padding(.horizontal, isCollapsed ? 0 : 16)
@@ -267,60 +269,52 @@ struct SidebarView: View {
 
             // 工作区分区头
             if isCollapsed {
-                Button {
+                IconOnlyButton(
+                    systemName: "bubble.left.and.text.bubble.right",
+                    help: L("Agent 会话"),
+                    size: 30,
+                    symbolSize: 12) {
                     let path = coordinator.store.workspaces
                         .first(where: { $0.id == coordinator.store.activeWorkspace })?.path
                     coordinator.openSessionManager(scopePath: path)
-                } label: {
-                    Image(systemName: "bubble.left.and.text.bubble.right")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppStyle.textSecondary)
                 }
-                .buttonStyle(IconButtonStyle(size: 30))
-                .help(L("Agent 会话"))
-                .accessibilityLabel(L("Agent 会话"))
-                Button(action: addWorkspace) {
-                    Image(systemName: "plus").font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppStyle.textSecondary)
-                }
-                .buttonStyle(IconButtonStyle(size: 30))
-                .help(L("新增工作区"))
-                .accessibilityLabel(L("新增工作区"))
+                IconOnlyButton(
+                    systemName: "plus",
+                    help: L("新增工作区"),
+                    size: 30,
+                    symbolSize: 12,
+                    action: addWorkspace)
                 .padding(.bottom, 6)
             } else {
                 HStack(spacing: 8) {
                     listModeSwitcher
                     Spacer(minLength: 4)
                     if listMode == .workspaces {
-                        Button {
-                            withAnimation(Motion.panel) { showSessions.toggle() }
-                        } label: {
-                            Image(systemName: showSessions
+                        IconOnlyButton(
+                            systemName: showSessions
                                 ? "bubble.left.and.text.bubble.right.fill"
-                                : "bubble.left.and.text.bubble.right")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(showSessions ? AppStyle.accent : AppStyle.textSecondary)
+                                : "bubble.left.and.text.bubble.right",
+                            help: showSessions ? L("隐藏 AI 会话") : L("显示 AI 会话"),
+                            size: 24,
+                            symbolSize: 11,
+                            tint: showSessions ? AppStyle.accent : AppStyle.textSecondary) {
+                            withAnimation(Motion.panel) { showSessions.toggle() }
                         }
-                        .buttonStyle(IconButtonStyle(size: 24))
-                        .help(showSessions ? L("隐藏 AI 会话") : L("显示 AI 会话"))
-                        .accessibilityLabel(showSessions ? L("隐藏 AI 会话") : L("显示 AI 会话"))
                         .transition(.scale.combined(with: .opacity))
-                        Button(action: addWorkspace) {
-                            Image(systemName: "plus").font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(AppStyle.textSecondary)
-                        }
-                        .buttonStyle(IconButtonStyle(size: 24))
-                        .help(L("新增工作区"))
-                        .accessibilityLabel(L("新增工作区"))
+                        IconOnlyButton(
+                            systemName: "plus",
+                            help: L("新增工作区"),
+                            size: 24,
+                            symbolSize: 12,
+                            action: addWorkspace)
                         .transition(.scale.combined(with: .opacity))
                     } else {
-                        Button(action: locateActiveDirectory) {
-                            Image(systemName: "scope").font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(AppStyle.textSecondary)
-                        }
-                        .buttonStyle(IconButtonStyle(size: 24))
-                        .help(L("在树中定位当前终端目录"))
-                        .accessibilityLabel(L("在树中定位当前终端目录"))
+                        IconOnlyButton(
+                            systemName: "scope",
+                            help: L("在树中定位当前终端目录"),
+                            size: 24,
+                            symbolSize: 12,
+                            action: locateActiveDirectory)
                         .transition(.scale.combined(with: .opacity))
                     }
                 }
@@ -393,6 +387,38 @@ struct SidebarView: View {
         if let id = editingWorkspace { coordinator.renameWorkspace(id, to: draftName) }
         editingWorkspace = nil
         renameFocused = false
+    }
+
+    private func reauthorizeWorkspace(_ ws: Workspace) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: ws.path)
+        panel.prompt = L("重新授权")
+        panel.message = L("选择「%@」目录以保存长期访问权限。", ws.name)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let selected = url.standardizedFileURL
+        let current = URL(fileURLWithPath: ws.path).standardizedFileURL
+        guard selected.path == current.path else {
+            ToastHUD.shared.show(
+                L("请选择同一个工作区目录"),
+                icon: "exclamationmark.triangle.fill",
+                over: coordinator.window)
+            return
+        }
+        guard let bookmarkData = SecurityScopedBookmarks.bookmarkData(for: selected) else {
+            ToastHUD.shared.show(
+                L("无法保存目录授权"),
+                icon: "exclamationmark.triangle.fill",
+                over: coordinator.window)
+            return
+        }
+        coordinator.addWorkspace(path: selected.path, bookmarkData: bookmarkData)
+        ToastHUD.shared.show(
+            L("已保存目录授权"),
+            icon: "lock.open.fill",
+            over: coordinator.window)
     }
 
     /// 会话归属去重：cwd 同时落在父子两个工作区路径下时，只归路径最深的那个，
@@ -523,9 +549,14 @@ struct SidebarView: View {
         var lastExisting: Workspace?
         for dir in dirs {
             if let existing = coordinator.visibleWorkspaces.first(where: { $0.path == dir.path }) {
+                coordinator.addWorkspace(
+                    path: dir.path,
+                    bookmarkData: SecurityScopedBookmarks.bookmarkData(for: dir))
                 lastExisting = existing
             } else {
-                coordinator.addWorkspace(path: dir.path)
+                coordinator.addWorkspace(
+                    path: dir.path,
+                    bookmarkData: SecurityScopedBookmarks.bookmarkData(for: dir))
                 created += 1
                 lastCreated = dir
             }
@@ -553,7 +584,9 @@ struct SidebarView: View {
         panel.allowsMultipleSelection = false
         panel.prompt = L("选为工作区")
         if panel.runModal() == .OK, let url = panel.url {
-            coordinator.addWorkspace(path: url.path)
+            coordinator.addWorkspace(
+                path: url.path,
+                bookmarkData: SecurityScopedBookmarks.bookmarkData(for: url))
         }
     }
 }
@@ -682,7 +715,7 @@ private struct WorkspaceRow: View {
 
     var body: some View {
         mainRow
-        .padding(.horizontal, isCollapsed ? 0 : 9)
+        .padding(.horizontal, isCollapsed ? 0 : 7)
         .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -703,12 +736,12 @@ private struct WorkspaceRow: View {
     }
 
     private var mainRow: some View {
-        HStack(alignment: .top, spacing: isCollapsed ? 0 : 8) {
+        HStack(alignment: .top, spacing: isCollapsed ? 0 : 7) {
             workspaceGlyph
                 .padding(.top, isCollapsed ? 0 : 2)
             if !isCollapsed {
                 VStack(alignment: .leading, spacing: 5) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
                         if isEditing {
                             TextField("", text: $draft)
                                 .textFieldStyle(.plain)
@@ -716,13 +749,14 @@ private struct WorkspaceRow: View {
                                 .foregroundStyle(AppStyle.textPrimary)
                                 .focused(focused)
                                 .onSubmit { onCommit() }
+                                .layoutPriority(3)
                         } else {
                             Text(name)
                                 .font(.system(size: 13, weight: selected ? .semibold : .regular))
                                 .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)   // 目录名头尾都可能是区分信息，砍中间
-                                .layoutPriority(1)         // 跟徽标抢空间时名字优先
+                                .layoutPriority(3)         // 窄侧栏里名字必须优先于状态徽标
                         }
                         if !isEditing, let collapsed = sessionsCollapsed {
                             Button(action: onToggleSessions) {
@@ -744,14 +778,18 @@ private struct WorkspaceRow: View {
                             unseenDoneBadge
                                 .transition(.scale.combined(with: .opacity))
                         }
-                        Spacer(minLength: 0)
-                        metricsBadge
                     }
 
-                    Text(summary.pathText)
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(AppStyle.textTertiary)
-                        .lineLimit(1)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(summary.pathText)
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundStyle(AppStyle.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .layoutPriority(1)
+                        Spacer(minLength: 4)
+                        metricsBadge
+                    }
 
                     if let activeDetail = summary.activeDetailText {
                         HStack(spacing: 5) {
@@ -765,6 +803,7 @@ private struct WorkspaceRow: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: isCollapsed ? .center : .leading)

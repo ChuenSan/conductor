@@ -114,5 +114,9 @@ struct ConfigLoader {
       shell: null
       startupCommand: null
 
+    # 账号用量 provider 设置。默认空配置；在 CLI 面板里启用、填 key 或调整来源后会写入。
+    usage:
+      providers: {}
+
     """
 }

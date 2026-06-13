@@ -12,19 +12,22 @@ public struct AppConfig: Codable, Equatable, Sendable {
     public var keybindings: [String: String]
     public var ghosttyOverrides: [String: String]
     public var workspaceDefaults: WorkspaceDefaults
+    public var usage: UsageConfig
 
     public init(appearance: Appearance = .init(),
                 terminal: TerminalConfig = .init(),
                 behavior: Behavior = .init(),
                 keybindings: [String: String] = [:],
                 ghosttyOverrides: [String: String] = [:],
-                workspaceDefaults: WorkspaceDefaults = .init()) {
+                workspaceDefaults: WorkspaceDefaults = .init(),
+                usage: UsageConfig = .init()) {
         self.appearance = appearance
         self.terminal = terminal
         self.behavior = behavior
         self.keybindings = keybindings
         self.ghosttyOverrides = ghosttyOverrides
         self.workspaceDefaults = workspaceDefaults
+        self.usage = usage
     }
 
     public static let `default` = AppConfig()
@@ -37,6 +40,7 @@ public struct AppConfig: Codable, Equatable, Sendable {
         keybindings = c.value(.keybindings, [:])
         ghosttyOverrides = c.value(.ghosttyOverrides, [:])
         workspaceDefaults = c.value(.workspaceDefaults, .init())
+        usage = c.value(.usage, .init())
     }
 
     /// 夹紧非法值，返回修正后的副本。
@@ -45,11 +49,143 @@ public struct AppConfig: Codable, Equatable, Sendable {
         copy.appearance = appearance.validated()
         copy.terminal = terminal.validated()
         copy.behavior = behavior.validated()
+        copy.usage = usage.validated()
         copy.ghosttyOverrides = ghosttyOverrides.compactMapValues { value in
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
         }
         return copy
+    }
+}
+
+// MARK: - usage（账号用量 provider 的启用与凭证）
+
+/// 用量 provider 配置：按 provider id 存「是否启用 + 凭证 + 来源偏好 + 高级字段」。
+/// 应用内填的 key 会被注入进程环境变量（解决 GUI 不继承 shell env），fetcher 据此取数。
+public struct UsageConfig: Codable, Equatable, Sendable {
+    public var providers: [String: UsageProviderConfig]
+
+    public init(providers: [String: UsageProviderConfig] = [:]) {
+        self.providers = providers
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        providers = c.value(.providers, [:])
+    }
+
+    func validated() -> UsageConfig {
+        var copy = self
+        copy.providers = providers.compactMapValues { $0.validated() }
+        return copy
+    }
+}
+
+public struct UsageProviderConfig: Codable, Equatable, Sendable {
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case apiKey
+        case sourceMode
+        case cookieSource
+        case cookieHeader
+        case projectID
+        case baseURL
+        case organizationID
+        case flags
+        case extra
+    }
+
+    /// 是否在用量区显示并抓取。nil = 未设置（回落到「检测到凭证才显示」）。
+    public var enabled: Bool?
+    /// 应用内填写的 API key / token；落盘到 config.yaml。
+    public var apiKey: String?
+    /// 用量来源偏好：auto / cli / oauth / api / browser / manual 等。具体 provider 自行解释。
+    public var sourceMode: String?
+    /// Cookie 来源偏好：auto / browser / manual / off 等。
+    public var cookieSource: String?
+    /// 手工粘贴的 Cookie 或 Authorization header。
+    public var cookieHeader: String?
+    /// 平台项目 ID（OpenAI project、Azure deployment/project 等）。
+    public var projectID: String?
+    /// 自定义 API base URL。
+    public var baseURL: String?
+    /// 组织 / workspace / account id。
+    public var organizationID: String?
+    /// provider 专属开关，如 historicalTracking、avoidKeychainPrompts。
+    public var flags: [String: Bool]
+    /// provider 专属字符串槽位，避免为了一个字段反复扩模型。
+    public var extra: [String: String]
+
+    public init(
+        enabled: Bool? = nil,
+        apiKey: String? = nil,
+        sourceMode: String? = nil,
+        cookieSource: String? = nil,
+        cookieHeader: String? = nil,
+        projectID: String? = nil,
+        baseURL: String? = nil,
+        organizationID: String? = nil,
+        flags: [String: Bool] = [:],
+        extra: [String: String] = [:])
+    {
+        self.enabled = enabled
+        self.apiKey = apiKey
+        self.sourceMode = sourceMode
+        self.cookieSource = cookieSource
+        self.cookieHeader = cookieHeader
+        self.projectID = projectID
+        self.baseURL = baseURL
+        self.organizationID = organizationID
+        self.flags = flags
+        self.extra = extra
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try? c.decodeIfPresent(Bool.self, forKey: .enabled)
+        let key = try? c.decodeIfPresent(String.self, forKey: .apiKey)
+        apiKey = (key?.isEmpty == true) ? nil : key
+        sourceMode = Self.nonEmpty(try? c.decodeIfPresent(String.self, forKey: .sourceMode))
+        cookieSource = Self.nonEmpty(try? c.decodeIfPresent(String.self, forKey: .cookieSource))
+        cookieHeader = Self.nonEmpty(try? c.decodeIfPresent(String.self, forKey: .cookieHeader))
+        projectID = Self.nonEmpty(try? c.decodeIfPresent(String.self, forKey: .projectID))
+        baseURL = Self.nonEmpty(try? c.decodeIfPresent(String.self, forKey: .baseURL))
+        organizationID = Self.nonEmpty(try? c.decodeIfPresent(String.self, forKey: .organizationID))
+        flags = (try? c.decodeIfPresent([String: Bool].self, forKey: .flags)) ?? [:]
+        extra = (try? c.decodeIfPresent([String: String].self, forKey: .extra)) ?? [:]
+        extra = extra.compactMapValues(Self.nonEmpty)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(enabled, forKey: .enabled)
+        try c.encodeIfPresent(apiKey, forKey: .apiKey)
+        try c.encodeIfPresent(sourceMode, forKey: .sourceMode)
+        try c.encodeIfPresent(cookieSource, forKey: .cookieSource)
+        try c.encodeIfPresent(cookieHeader, forKey: .cookieHeader)
+        try c.encodeIfPresent(projectID, forKey: .projectID)
+        try c.encodeIfPresent(baseURL, forKey: .baseURL)
+        try c.encodeIfPresent(organizationID, forKey: .organizationID)
+        if !flags.isEmpty { try c.encode(flags, forKey: .flags) }
+        if !extra.isEmpty { try c.encode(extra, forKey: .extra) }
+    }
+
+    func validated() -> UsageProviderConfig {
+        var copy = self
+        copy.apiKey = Self.nonEmpty(apiKey)
+        copy.sourceMode = Self.nonEmpty(sourceMode)
+        copy.cookieSource = Self.nonEmpty(cookieSource)
+        copy.cookieHeader = Self.nonEmpty(cookieHeader)
+        copy.projectID = Self.nonEmpty(projectID)
+        copy.baseURL = Self.nonEmpty(baseURL)
+        copy.organizationID = Self.nonEmpty(organizationID)
+        copy.extra = extra.compactMapValues(Self.nonEmpty)
+        return copy
+    }
+
+    private static func nonEmpty(_ raw: String?) -> String? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
     }
 }
 

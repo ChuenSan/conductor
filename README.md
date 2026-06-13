@@ -34,11 +34,13 @@ Conductor 是一个 macOS 多 Agent 终端工作台，用来同时跑 Codex、Cl
 - Apple Silicon：`arm64.dmg`
 - Intel：`x86_64.dmg`
 
-当前版本是 ad-hoc 签名。首次打开如被 macOS 拦截，可以右键 App 选择“打开”，或执行：
+发布包优先使用稳定代码签名，避免 macOS 把每次更新都当成新 App 而反复要求权限。首次打开如被 macOS 拦截，可以右键 App 选择“打开”，或执行：
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Conductor.app
 ```
+
+本地开发打包前建议先运行一次 `Scripts/make-dev-cert.sh`，再运行 `Scripts/make-app.sh` 或 `Scripts/make-dmg.sh`。这样桌面/文稿/下载、完全磁盘访问和通知授权会跟随稳定签名保留。
 
 ## 构建与运行
 
@@ -48,18 +50,24 @@ xattr -dr com.apple.quarantine /Applications/Conductor.app
 # 1. 拉取预编译的 GhosttyKit.xcframework（约 536MB，不入 git）
 ./Scripts/prepare-ghosttykit.sh
 
-# 2. 构建并运行
-swift run ConductorApp
+# 2. 一次性创建稳定开发签名，然后打包运行
+./Scripts/make-dev-cert.sh
+./Scripts/make-app.sh
+open ./Conductor.app
 ```
 
 `swift test` 运行 ConductorCore 和 ConductorApp 的单元测试。
+
+快速调试也可以用 `swift run ConductorApp`，但裸可执行不具备稳定 App 签名身份，macOS 权限授权不如打包后的 `Conductor.app` 稳定。
 
 ### 打包成 .app
 
 系统通知、bundle id 和部分 macOS 集成需要用打包后的 `Conductor.app` 运行，而不是 `swift run`：
 
 ```bash
-./Scripts/make-app.sh && open Conductor.app
+./Scripts/make-dev-cert.sh
+./Scripts/make-app.sh
+open ./Conductor.app
 ```
 
 首次运行后，可以在右侧工具面板的 CLI / Hooks 区域安装完成通知 hook。安装后 agent 完成、等待确认或需要关注时，会通过 conductor 的 pane id 跳回对应终端。

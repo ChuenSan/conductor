@@ -170,35 +170,47 @@ struct ToolsSectionLabel: View {
 
 /// 主操作按钮：高对比石墨实心胶囊（深色→近白，浅色→近黑）。全屏只该有一个。
 struct PrimaryButtonStyle: ButtonStyle {
+    var height: CGFloat = 32
+    var horizontalPadding: CGFloat = Space.md
+    var fontSize: CGFloat = 13
+    var weight: Font.Weight = .semibold
     @MainActor private var theme: Theme { AppStyle.theme }
 
     func makeBody(configuration: Configuration) -> some View {
+        let shape = Capsule()
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: fontSize, weight: weight))
             .foregroundStyle(theme.primarySolidText)
-            .padding(.horizontal, Space.md)
-            .frame(height: 32)
-            .background(Capsule().fill(theme.primarySolid))
+            .padding(.horizontal, horizontalPadding)
+            .frame(height: height)
+            .background(shape.fill(theme.primarySolid))
+            .contentShape(shape)
             .opacity(configuration.isPressed ? 0.82 : 1)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(Motion.snappy, value: configuration.isPressed)
     }
 }
 
 /// 次操作按钮：低对比描边胶囊，让位给主操作。
 struct SecondaryButtonStyle: ButtonStyle {
+    var height: CGFloat = 32
+    var horizontalPadding: CGFloat = Space.md
+    var fontSize: CGFloat = 13
+    var weight: Font.Weight = .medium
     @MainActor private var theme: Theme { AppStyle.theme }
 
     func makeBody(configuration: Configuration) -> some View {
+        let shape = Capsule()
         configuration.label
-            .font(.system(size: 13, weight: .medium))
+            .font(.system(size: fontSize, weight: weight))
             .foregroundStyle(theme.textPrimary)
-            .padding(.horizontal, Space.md)
-            .frame(height: 32)
-            .background(Capsule().fill(theme.isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.045)))
-            .overlay(Capsule().strokeBorder(theme.isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.07), lineWidth: 1))
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+            .padding(.horizontal, horizontalPadding)
+            .frame(height: height)
+            .background(shape.fill(theme.isDark ? Color.white.opacity(0.065) : Color.black.opacity(0.045)))
+            .overlay(shape.strokeBorder(theme.isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.07), lineWidth: 1))
+            .contentShape(shape)
+            .opacity(configuration.isPressed ? 0.72 : 1)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(Motion.snappy, value: configuration.isPressed)
     }
 }

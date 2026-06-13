@@ -57,11 +57,14 @@ struct TabBarView: View {
                 }
                 .onAppear { if let activeTab { proxy.scrollTo(activeTab) } }
             }
-            Button(action: { coordinator.newTab() }) {
-                Image(systemName: "plus").font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppStyle.textTertiary)
-            }
-            .buttonStyle(IconButtonStyle(size: 24))
+            IconOnlyButton(
+                systemName: "plus",
+                help: L("新建标签"),
+                size: 24,
+                symbolSize: 12,
+                tint: AppStyle.textTertiary) {
+                    coordinator.newTab()
+                }
             .onHover { inside in
                 isHoveringPlus = inside
                 updateAgentMenuVisibility()
@@ -96,27 +99,29 @@ struct TabBarView: View {
 
                 // 右侧快捷按钮组（软圆角容器，对标 Craft 的按钮组）
                 HStack(spacing: 2) {
-                    Button(action: { coordinator.toggleTheme() }) {
-                        Image(systemName: AppStyle.theme.isDark ? "moon.stars.fill" : "sun.max.fill")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppStyle.textSecondary)
-                    }
-                    .buttonStyle(IconButtonStyle(size: 26))
-                    .help(L("切换深/浅主题"))
-                    Button(action: { coordinator.toggleCLITools() }) {
-                        Image(systemName: "wand.and.stars")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(coordinator.cliToolsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary)
-                    }
-                    .buttonStyle(IconButtonStyle(size: 26))
-                    .help(L("检测命令行工具"))
-                    Button(action: { coordinator.openSettings() }) {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(coordinator.settingsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary)
-                    }
-                    .buttonStyle(IconButtonStyle(size: 26))
-                    .help(L("设置"))
+                    IconOnlyButton(
+                        systemName: AppStyle.theme.isDark ? "moon.stars.fill" : "sun.max.fill",
+                        help: L("切换深/浅主题"),
+                        size: 26,
+                        symbolSize: 12) {
+                            coordinator.toggleTheme()
+                        }
+                    IconOnlyButton(
+                        systemName: "wand.and.stars",
+                        help: L("检测命令行工具"),
+                        size: 26,
+                        symbolSize: 12,
+                        tint: coordinator.cliToolsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary) {
+                            coordinator.toggleCLITools()
+                        }
+                    IconOnlyButton(
+                        systemName: "gearshape",
+                        help: L("设置"),
+                        size: 26,
+                        symbolSize: 12,
+                        tint: coordinator.settingsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary) {
+                            coordinator.openSettings()
+                        }
                 }
                 .padding(3)
                 .background(

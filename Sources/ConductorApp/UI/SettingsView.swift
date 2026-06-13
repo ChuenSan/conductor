@@ -48,13 +48,6 @@ struct SettingsView: View {
         }
         .frame(maxHeight: .infinity)
         .background(AppStyle.windowBackground)   // 纯色主题背景：跟随浅/深，不用毛玻璃（停靠面板背后无内容，材质会误跟系统外观）
-        .overlay(alignment: .leading) {
-            // 左缘细线：把停靠面板与终端画布分开（深色用高光、浅色用淡阴影线）
-            Rectangle()
-                .fill(AppStyle.separator)
-                .frame(width: 1)
-                .allowsHitTesting(false)
-        }
     }
 
     private var header: some View {
@@ -63,15 +56,13 @@ struct SettingsView: View {
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(AppStyle.textPrimary)
             Spacer()
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(AppStyle.textSecondary)
-                    .frame(width: 26, height: 26)
-                    .background(Circle().fill(AppStyle.hoverFill))
-                    .contentShape(Circle())
-            }
-            .buttonStyle(PressScaleStyle())
+            IconOnlyButton(
+                systemName: "xmark",
+                help: L("关闭设置"),
+                size: 28,
+                symbolSize: 11,
+                weight: .bold,
+                action: onClose)
         }
         .padding(.horizontal, 20)
         .padding(.top, 22)
@@ -162,7 +153,7 @@ struct SettingsView: View {
     }
 
     private var aiAgentsSection: some View {
-        SettingsSection(title: L("AI Agent")) {
+        SettingsSection(title: L("AI 助手")) {
             SettingsRow(label: L("会话入口"), first: true) {
                 HStack(spacing: 8) {
                     Text(config.terminal.aiAgents.isEmpty ? L("自动检测") : L("%ld 个", config.terminal.aiAgents.count))
@@ -185,7 +176,7 @@ struct SettingsView: View {
             VStack(alignment: .trailing, spacing: 8) {
                 HStack(spacing: 8) {
                     ThemedTextField(placeholder: L("名称"), text: $draftAgentTitle)
-                    ThemedTextField(placeholder: L("命令"), text: $draftAgentCommand) {
+                    ThemedTextField(placeholder: L("Agent 启动命令"), text: $draftAgentCommand) {
                         addDraftAgent()
                     }
                     Button(action: addDraftAgent) {
@@ -198,6 +189,7 @@ struct SettingsView: View {
                                     .fill(AppStyle.hoverFill))
                     }
                     .buttonStyle(PressScaleStyle())
+                    .help(L("添加自定义 Agent"))
                     .disabled(draftAgentCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 Text(L("留空配置时使用自动检测结果；手动配置后，新建 AI 会话入口按这里的启用项显示。"))
@@ -622,15 +614,14 @@ private struct GhosttyFreeTextControl: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppStyle.textTertiary)
                     .frame(width: 48, alignment: .trailing)
-                Button {
-                    isEditing = true
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(AppStyle.textSecondary)
-                }
-                .buttonStyle(IconButtonStyle(size: 28))
-                .help(L("添加自定义值"))
+                IconOnlyButton(
+                    systemName: "pencil",
+                    help: L("添加自定义值"),
+                    size: 28,
+                    symbolSize: 11.5,
+                    weight: .semibold) {
+                        isEditing = true
+                    }
             }
         }
     }

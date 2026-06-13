@@ -1,26 +1,20 @@
 import ConductorCore
 import Foundation
 
-/// 周期性拉取 Codex 用量，供状态栏常驻显示。面板各自即时拉取，这里只负责后台节奏。
+/// 手动拉取 Codex 用量，供状态栏常驻显示。启动应用不会主动请求账号数据。
 @MainActor
 final class UsageMonitor: ObservableObject {
     @Published private(set) var codex: CodexUsageSnapshot?
     @Published private(set) var codexError: String?
     @Published private(set) var isRefreshing = false
 
-    private var timer: Timer?
     private var started = false
 
-    /// 默认 5 分钟刷新一次（额度变化不频繁，避免无谓请求）。
+    /// 保留给旧调用方；现在只标记已启动，不做自动刷新或定时轮询。
     func start(interval: TimeInterval = 300) {
         guard !started else { return }
         started = true
-        refresh()
-        let t = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
-        t.tolerance = 30
-        timer = t
+        _ = interval
     }
 
     func refresh() {
@@ -38,7 +32,4 @@ final class UsageMonitor: ObservableObject {
         }
     }
 
-    deinit {
-        timer?.invalidate()
-    }
 }

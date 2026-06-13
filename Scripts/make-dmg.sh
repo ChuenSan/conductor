@@ -23,6 +23,7 @@ VERSION="${VERSION:-0.0.2}"
 BUNDLE_ID="com.conductor.app"
 APP_NAME="Conductor"
 DIST="$ROOT/dist"
+SIGN_IDENTITY="${CONDUCTOR_SIGN_IDENTITY:-Conductor Dev}"
 
 # 交叉编译时部分工具链的 prebuilt 模块缓存与 SDK 不匹配会让编译器崩溃
 # （DESERIALIZATION FAILURE）；统一重定向到空目录，强制从 swiftinterface 构建。
@@ -89,9 +90,21 @@ assemble_app() {
 </plist>
 PLIST
 
-  # ad-hoc 签名：通知授权 / 持久化权限提示需要稳定的代码签名标识。
-  codesign --force --deep --sign - "$app" >/dev/null 2>&1 || \
-    echo "   (codesign 失败，可忽略；通知可能需要手动授权)"
+  # macOS 的 TCC 权限按代码签名身份记账。优先使用稳定签名身份，避免每次
+  # 重打包后桌面/文稿/下载、完全磁盘访问、通知等授权被系统当成新 app。
+  if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$SIGN_IDENTITY"; then
+    echo "==> 用稳定签名身份「$SIGN_IDENTITY」签名 $app"
+    if [ -f "$ROOT/Conductor.entitlements" ]; then
+      codesign --force --sign "$SIGN_IDENTITY" --entitlements "$ROOT/Conductor.entitlements" "$app"
+    else
+      codesign --force --sign "$SIGN_IDENTITY" "$app"
+    fi
+  else
+    echo "==> 未找到稳定身份「$SIGN_IDENTITY」，退回 ad-hoc 签名"
+    echo "    ⚠️  ad-hoc 下每次重打包都会丢失 TCC 授权；先运行 Scripts/make-dev-cert.sh 可根治。"
+    codesign --force --sign - "$app" >/dev/null 2>&1 || \
+      echo "   (codesign 失败，可忽略；通知可能需要手动授权)"
+  fi
 }
 
 # 把 .app 打成带 /Applications 软链的压缩 DMG。

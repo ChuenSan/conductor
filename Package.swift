@@ -14,8 +14,20 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.1.0"),
     ],
     targets: [
+        // 浏览器 cookie 抽取（Chrome/Safari/Firefox），源码自 steipete/SweetCookieKit 整目录拿入（非依赖）。
+        // 供 cookie 类用量 provider（cursor/grok/copilot…）读登录态。仅链 sqlite3 系统库。
+        .target(
+            name: "SweetCookieKit",
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+            ],
+            linkerSettings: [
+                .linkedLibrary("sqlite3"),
+            ]
+        ),
         .target(
             name: "ConductorCore",
+            dependencies: ["SweetCookieKit"],
             resources: [
                 .process("Resources/en.lproj"),
                 .process("Resources/zh-Hans.lproj"),

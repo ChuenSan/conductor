@@ -6,21 +6,22 @@ struct UpdateButton: View {
     @State private var showPopover = false
 
     var body: some View {
-        Button(action: { showPopover.toggle() }) {
-            Image(systemName: "arrow.down.circle")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(updater.updateAvailable ? AppStyle.accent : AppStyle.textSecondary)
-        }
-        .buttonStyle(IconButtonStyle(size: 26))
+        IconOnlyButton(
+            systemName: "arrow.down.circle",
+            help: updater.updateAvailable ? L("有新版本可用") : L("检查更新"),
+            size: 26,
+            symbolSize: 12,
+            tint: updater.updateAvailable ? AppStyle.accent : AppStyle.textSecondary) {
+                showPopover.toggle()
+            }
         .overlay(alignment: .topTrailing) {
             if updater.updateAvailable {
                 Circle()
                     .fill(AppStyle.accent)
                     .frame(width: 7, height: 7)
-                    .offset(x: -1, y: 1)
+                .offset(x: -1, y: 1)
             }
         }
-        .help(updater.updateAvailable ? L("有新版本可用") : L("检查更新"))
         .popover(isPresented: $showPopover, arrowEdge: .bottom) {
             UpdatePopover(updater: updater)
         }

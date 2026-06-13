@@ -44,29 +44,23 @@ struct ToolsPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().overlay(AppStyle.separator)
             content
         }
         .frame(maxHeight: .infinity)
         .background(AppStyle.windowBackground)
-        .overlay(alignment: .leading) {
-            Rectangle().fill(AppStyle.separator).frame(width: 1).allowsHitTesting(false)
-        }
     }
 
     private var header: some View {
         HStack(spacing: 10) {
             segmented
             Spacer(minLength: 8)
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(AppStyle.textSecondary)
-                    .frame(width: 26, height: 26)
-                    .background(Circle().fill(AppStyle.hoverFill))
-                    .contentShape(Circle())
-            }
-            .buttonStyle(PressScaleStyle())
+            IconOnlyButton(
+                systemName: "xmark",
+                help: L("关闭"),
+                size: 28,
+                symbolSize: 11,
+                weight: .bold,
+                action: onClose)
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)

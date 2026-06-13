@@ -53,7 +53,6 @@ struct StatusBarView: View {
         .overlay(alignment: .top) {
             Rectangle().fill(AppStyle.separator).frame(height: 1)
         }
-        .onAppear { usageMonitor.start() }
     }
 
     private func item(_ icon: String, _ text: String, accent: Bool = false) -> some View {

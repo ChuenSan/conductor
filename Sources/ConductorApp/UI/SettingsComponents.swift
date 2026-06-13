@@ -163,6 +163,7 @@ struct ThemedStepper: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressScaleStyle())
+        .help(icon == "minus" ? L("减少") : L("增加"))
     }
 }
 
@@ -188,12 +189,38 @@ struct ThemedTextField: View {
     }
 }
 
+/// 主题化密码输入框（API key 用，遮罩显示）。
+struct ThemedSecureField: View {
+    let placeholder: String
+    @Binding var text: String
+    var width: CGFloat = 200
+    var onSubmit: () -> Void = {}
+
+    var body: some View {
+        SecureField(placeholder, text: $text)
+            .textFieldStyle(.plain)
+            .font(.system(size: 12.5, design: .monospaced))
+            .foregroundStyle(AppStyle.textPrimary)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: width)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(AppStyle.theme.isDark ? Color.white.opacity(0.05) : Color.black.opacity(0.04)))
+            .onSubmit(onSubmit)
+    }
+}
+
 /// 按下轻微缩放反馈的按钮样式（通用微交互）。
 struct PressScaleStyle: ButtonStyle {
+    var pressedScale: CGFloat = 0.94
+    var pressedOpacity: Double = 0.72
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.86 : 1)
-            .opacity(configuration.isPressed ? 0.6 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .opacity(configuration.isPressed ? pressedOpacity : 1)
+            .animation(Motion.snappy, value: configuration.isPressed)
     }
 }
