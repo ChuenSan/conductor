@@ -61,6 +61,27 @@ final class TerminalHostView: NSView {
         owner?.syncGeometry()
     }
 
+    // MARK: - Live resize（窗口缩放 / 分隔条拖动期间的呈现同步）
+
+    /// 窗口 live resize 期间让 Metal 呈现与 CA 事务同步提交：终端内容和周围
+    /// chrome 同帧更新，消除缩放时内容滞后一帧的"果冻"错位。
+    /// 常态保持 false——异步呈现吞吐更好，正常输出滚动不受影响。
+    override func viewWillStartLiveResize() {
+        super.viewWillStartLiveResize()
+        setSynchronousPresentation(true)
+    }
+
+    override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        setSynchronousPresentation(false)
+        owner?.syncGeometry(force: true)
+    }
+
+    /// 分隔条拖动（RatioSplitView 的 tracking loop）也复用此开关。
+    func setSynchronousPresentation(_ on: Bool) {
+        (layer as? CAMetalLayer)?.presentsWithTransaction = on
+    }
+
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         owner?.syncGeometry(force: true)
@@ -102,24 +123,29 @@ final class TerminalHostView: NSView {
     /// 3. 其余（方向键/Ctrl 组合等）：照旧转发原始事件。
     override func keyDown(with event: NSEvent) {
         guard let owner else { return }
+        // 出字修饰键翻译（Option-as-Alt / 死键 / 异国布局）：翻译后的事件喂给输入法，
+        // 并随原始事件一起带给 forwardKey 校正 consumed_mods / text。无差异时即原事件，
+        // 复用原事件对韩文等输入法的对象等价判定是必需的。
+        let translationEvent = owner.translationEvent(for: event) ?? event
         let hadMarked = hasMarkedText()
         keyDownCommittedText = []
-        _ = inputContext?.handleEvent(event)
+        _ = inputContext?.handleEvent(translationEvent)
         let committed = keyDownCommittedText ?? []
         keyDownCommittedText = nil
 
         let composing = hasMarkedText()
         owner.setPreedit(composing ? markedText.string : nil)
+        let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
 
         if !committed.isEmpty {
             let text = committed.joined()
             if !hadMarked, !composing, text == event.characters {
-                owner.forwardKey(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
+                owner.forwardKey(event, action: action, translationEvent: translationEvent)
             } else {
                 owner.sendTextInput(text)
             }
         } else if !composing, !hadMarked {
-            owner.forwardKey(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
+            owner.forwardKey(event, action: action, translationEvent: translationEvent)
         }
     }
 

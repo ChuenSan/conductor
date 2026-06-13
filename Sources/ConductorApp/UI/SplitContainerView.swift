@@ -64,14 +64,29 @@ final class RatioSplitView: NSSplitView, NSSplitViewDelegate {
 
     /// 双击分隔条 → 两侧均分（macOS 原生分屏惯例）。新比例经
     /// `splitViewDidResizeSubviews` 回报模型，照常持久化。
+    /// 单击拖动：NSSplitView 的分隔条拖动是同步 tracking loop（整个拖动都在
+    /// `super.mouseDown` 里），期间让两侧终端的 Metal 呈现与布局事务同步，
+    /// 消除拖动时内容滞后一帧的果冻感。
     override func mouseDown(with event: NSEvent) {
-        if event.clickCount == 2,
-           arrangedSubviews.count == 2,
-           isOnDivider(convert(event.locationInWindow, from: nil)) {
+        guard isOnDivider(convert(event.locationInWindow, from: nil)) else {
+            return super.mouseDown(with: event)
+        }
+        if event.clickCount == 2, arrangedSubviews.count == 2 {
             setPosition(pixelAligned(splitExtent / 2), ofDividerAt: 0)
             return
         }
+        setTerminalSynchronousPresentation(true)
         super.mouseDown(with: event)
+        setTerminalSynchronousPresentation(false)
+    }
+
+    /// 递归找出本分屏树下所有终端视图，切换其呈现同步模式。
+    private func setTerminalSynchronousPresentation(_ on: Bool) {
+        func walk(_ view: NSView) {
+            if let host = view as? TerminalHostView { host.setSynchronousPresentation(on) }
+            for sub in view.subviews { walk(sub) }
+        }
+        walk(self)
     }
 
     /// 拖动分隔条时把位置吸附到物理像素边界：小数坐标会让两侧的 Metal 终端

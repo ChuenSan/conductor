@@ -10,21 +10,25 @@ final class PanelWidthStore: ObservableObject {
     @Published var settings: CGFloat { didSet { save("panelWidth.settings", settings) } }
     @Published var tools: CGFloat { didSet { save("panelWidth.tools", tools) } }
     @Published var session: CGFloat { didSet { save("panelWidth.session", session) } }
+    @Published var git: CGFloat { didSet { save("panelWidth.git", git) } }
 
     static let sidebarRange: ClosedRange<CGFloat> = 180...400
     static let settingsRange: ClosedRange<CGFloat> = 480...760
     static let toolsRange: ClosedRange<CGFloat> = 360...680
     static let sessionRange: ClosedRange<CGFloat> = 320...600
+    static let gitRange: ClosedRange<CGFloat> = 360...760
 
     static let settingsDefault: CGFloat = 560
     static let toolsDefault: CGFloat = 440
     static let sessionDefault: CGFloat = 400
+    static let gitDefault: CGFloat = 480
 
     private init() {
         sidebar = Self.load("panelWidth.sidebar", AppStyle.sidebarWidth, Self.sidebarRange)
         settings = Self.load("panelWidth.settings", Self.settingsDefault, Self.settingsRange)
         tools = Self.load("panelWidth.tools", Self.toolsDefault, Self.toolsRange)
         session = Self.load("panelWidth.session", Self.sessionDefault, Self.sessionRange)
+        git = Self.load("panelWidth.git", Self.gitDefault, Self.gitRange)
     }
 
     private static func load(_ key: String, _ fallback: CGFloat, _ range: ClosedRange<CGFloat>) -> CGFloat {

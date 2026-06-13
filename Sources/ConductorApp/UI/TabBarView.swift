@@ -103,6 +103,13 @@ struct TabBarView: View {
                     }
                     .buttonStyle(IconButtonStyle(size: 26))
                     .help(L("切换深/浅主题"))
+                    Button(action: { coordinator.toggleGit() }) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(coordinator.gitPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary)
+                    }
+                    .buttonStyle(IconButtonStyle(size: 26))
+                    .help(L("源代码管理"))
                     Button(action: { coordinator.toggleCLITools() }) {
                         Image(systemName: "wand.and.stars")
                             .font(.system(size: 12, weight: .medium))

@@ -26,11 +26,7 @@ struct RootView: View {
                 TabBarView(coordinator: coordinator)
                 ZStack(alignment: .center) {
                     TerminalAreaView(container: coordinator.containerView)
-                    if QuickStartAvailability.showsEmptyIllustration(
-                        tabCount: activeWorkspaceMetrics?.tabCount,
-                        totalPaneCount: activeWorkspaceMetrics?.totalPaneCount,
-                        isPanelPresented: coordinator.isSidePanelPresented
-                    ) {
+                    if showsQuickStartEmptyState {
                         QuickStartLaunchPanel(
                             title: activeWorkspaceName,
                             subtitle: L("空工作区"),
@@ -43,6 +39,9 @@ struct RootView: View {
                             removal: .scale(scale: 0.96).combined(with: .opacity)))
                     }
                 }
+                // 空状态插图的出现/消失就地动画；不放在根上——根级按 pane 数
+                // 触发动画会让整个 HStack 布局跟着 diff，殃及无关部分。
+                .animation(Motion.panel, value: showsQuickStartEmptyState)
                 StatusBarView(coordinator: coordinator, usageMonitor: coordinator.usageMonitor)
             }
             if coordinator.settingsPresentation.isPresented {
@@ -75,6 +74,16 @@ struct RootView: View {
                     }
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
+            if coordinator.gitPresentation.isPresented {
+                GitPanelView(model: coordinator.gitPanel, onClose: { coordinator.closeGit() })
+                    .frame(width: panelWidths.git)
+                    .overlay(alignment: .leading) {
+                        PanelResizeHandle(
+                            edge: .leading, width: $panelWidths.git,
+                            range: PanelWidthStore.gitRange, defaultWidth: PanelWidthStore.gitDefault)
+                    }
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
         }
         .id(localization.value)   // 语言切换 → 重建子树（TerminalAreaView 复用同一 NSView，终端不受影响）
         .background(AppStyle.windowBackground)
@@ -83,7 +92,26 @@ struct RootView: View {
         .animation(Motion.panel, value: coordinator.settingsPresentation.isPresented)
         .animation(Motion.panel, value: coordinator.cliToolsPresentation.isPresented)
         .animation(Motion.panel, value: coordinator.sessionPresentation.isPresented)
-        .animation(Motion.panel, value: activeWorkspaceMetrics?.totalPaneCount)
+        .animation(Motion.panel, value: coordinator.gitPresentation.isPresented)
+        // 这些动画会逐帧改终端区宽度；冻结期间终端只随层拉伸，结束后一次性 resize。
+        .onChange(of: coordinator.sidebarPresentation.isCollapsed) { freezeTerminalResizeForPanelAnimation() }
+        .onChange(of: coordinator.settingsPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
+        .onChange(of: coordinator.cliToolsPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
+        .onChange(of: coordinator.sessionPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
+        .onChange(of: coordinator.gitPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
+    }
+
+    /// Motion.panel（spring response 0.28）视觉上约 0.4s 收敛；冻结到动画结束再统一 resize。
+    private func freezeTerminalResizeForPanelAnimation() {
+        TerminalResizeFreeze.shared.freeze(for: 0.45)
+    }
+
+    private var showsQuickStartEmptyState: Bool {
+        QuickStartAvailability.showsEmptyIllustration(
+            tabCount: activeWorkspaceMetrics?.tabCount,
+            totalPaneCount: activeWorkspaceMetrics?.totalPaneCount,
+            isPanelPresented: coordinator.isSidePanelPresented
+        )
     }
 
     private var activeWorkspaceMetrics: (tabCount: Int, totalPaneCount: Int)? {

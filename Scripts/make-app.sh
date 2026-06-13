@@ -67,10 +67,29 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# ad-hoc 签名：通知授权 / 持久化权限提示需要稳定的代码签名标识。
-echo "==> ad-hoc 代码签名"
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || \
-  echo "   (codesign 失败，可忽略；通知可能需要手动授权)"
+# 代码签名：macOS 的 TCC 权限（桌面/文稿/下载、完全磁盘访问、通知…）是按
+# 「代码签名身份」记账的。ad-hoc 签名（--sign -）没有稳定身份，每次重编译 cdhash
+# 一变就被当成"新 app"，之前的授权全部作废 → 反复弹框要权限。
+# 因此优先用一个稳定的自签名身份签名；身份不变 → 授权重编译后依然有效。
+# 一次性创建该身份：Scripts/make-dev-cert.sh （或自定义 CONDUCTOR_SIGN_IDENTITY）。
+# 注意：不再用 --deep（已废弃；本 app 无嵌套可执行/框架，GhosttyKit 是静态库）。
+SIGN_IDENTITY="${CONDUCTOR_SIGN_IDENTITY:-Conductor Dev}"
+
+if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$SIGN_IDENTITY"; then
+  echo "==> 用稳定签名身份「$SIGN_IDENTITY」签名"
+  if [ -f "$ROOT/Conductor.entitlements" ]; then
+    codesign --force --sign "$SIGN_IDENTITY" --entitlements "$ROOT/Conductor.entitlements" "$APP"
+  else
+    codesign --force --sign "$SIGN_IDENTITY" "$APP"
+  fi
+else
+  echo "==> 未找到稳定身份「$SIGN_IDENTITY」，退回 ad-hoc 签名"
+  echo "    ⚠️  ad-hoc 下每次重编译都会丢失 TCC 授权（桌面/文稿/下载、完全磁盘访问会反复弹框）。"
+  echo "    根治：先运行一次  Scripts/make-dev-cert.sh  再重新打包。"
+  codesign --force --sign - "$APP" >/dev/null 2>&1 || \
+    echo "    (codesign 失败，可忽略)"
+fi
 
 echo "==> 完成：$APP"
 echo "    运行：open $APP   （或双击）"
+echo "    若仍被问「桌面/文稿/下载」：系统设置 › 隐私与安全性 › 完全磁盘访问 → 加入 Conductor.app（授权一次，签名稳定后永久生效）。"

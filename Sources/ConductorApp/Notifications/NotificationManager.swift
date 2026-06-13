@@ -49,7 +49,12 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// 发送一条通知。优先富通知（带 paneID 用于点击跳转），否则回退 osascript 横幅。
-    func notify(paneID: String?, title: String, body: String) {
+    /// 文案统一清洗：标题截断；body 若是成段内容（agent 把整段回复经 OSC 塞进来）
+    /// 则换成通用提示——内容本身留在终端和活动账本里，通知只负责提醒。
+    func notify(paneID: String?, title rawTitle: String, body rawBody: String,
+                bodyFallback: String? = nil) {
+        let title = NotificationText.title(rawTitle)
+        let body = NotificationText.body(rawBody, fallback: bodyFallback ?? L("有新结果，点击查看"))
         if canDeliverRich {
             let content = UNMutableNotificationContent()
             content.title = title

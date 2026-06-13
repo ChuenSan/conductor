@@ -51,6 +51,7 @@ final class GhosttySurface: TerminalSurface {
     init() {
         hostView = TerminalHostView()
         hostView.owner = self
+        TerminalResizeFreeze.shared.register(self)
     }
 
     static func fromGhosttySurface(_ handle: ghostty_surface_t?) -> GhosttySurface? {
@@ -222,6 +223,9 @@ final class GhosttySurface: TerminalSurface {
 
     func syncGeometry(force: Bool = false) {
         guard let surface, let window = hostView.window else { return }
+        // 面板开合动画期间不做真实 resize（每帧网格重排 + drawable 重分配是动画卡顿主因）；
+        // 解冻时 resizeFreezeDidEnd 会 force 补一次最终尺寸。
+        if TerminalResizeFreeze.shared.isFrozen, !force { return }
         let scale = window.backingScaleFactor
         if force || scale != lastScale {
             ghostty_surface_set_content_scale(surface, Double(scale), Double(scale))
@@ -275,7 +279,7 @@ final class GhosttySurface: TerminalSurface {
     func sendMouseButton(_ button: ghostty_input_mouse_button_e, state: ghostty_input_mouse_state_e, event: NSEvent) {
         guard let surface else { return }
         updateMouse(event)
-        _ = ghostty_surface_mouse_button(surface, state, button, event.modifierFlags.ghosttyMods)
+        _ = ghostty_surface_mouse_button(surface, state, button, GhosttyInput.ghosttyMods(event.modifierFlags))
     }
 
     func scroll(_ event: NSEvent) {
@@ -291,54 +295,65 @@ final class GhosttySurface: TerminalSurface {
     func updateMouse(_ event: NSEvent) {
         guard let surface else { return }
         let point = hostView.convert(event.locationInWindow, from: nil)
-        ghostty_surface_mouse_pos(surface, Double(point.x), Double(hostView.bounds.height - point.y), event.modifierFlags.ghosttyMods)
+        ghostty_surface_mouse_pos(surface, Double(point.x), Double(hostView.bounds.height - point.y), GhosttyInput.ghosttyMods(event.modifierFlags))
     }
 
-    func forwardKey(_ event: NSEvent, action: ghostty_input_action_e) {
+    /// 把一次按键转发给 libghostty。逻辑对齐 Ghostty 的 keyAction：
+    /// - mods / consumed_mods / unshifted_codepoint 由 `ghosttyKeyEvent` 统一构造；
+    /// - text 取 translationEvent（出字事件，已处理 Option-as-Alt/死键后的字符）的
+    ///   `ghosttyCharacters`，且仅当首字节 >= 0x20 时下发——控制字符让 ghostty 自己编码，
+    ///   否则 ctrl+enter / ctrl+h 之类会被双重编码。
+    /// translationEvent 为修饰键经 ghostty 翻译后重建的事件（无差异时传 nil / 原事件）。
+    func forwardKey(
+        _ event: NSEvent,
+        action: ghostty_input_action_e,
+        translationEvent: NSEvent? = nil,
+        composing: Bool = false
+    ) {
         guard let surface else { return }
-        var keyEvent = ghostty_input_key_s()
-        keyEvent.action = action
-        keyEvent.mods = event.modifierFlags.ghosttyMods
-        keyEvent.keycode = UInt32(event.keyCode)
-        keyEvent.composing = false
-        keyEvent.consumed_mods = GHOSTTY_MODS_NONE
+        var keyEvent = event.ghosttyKeyEvent(action, translationMods: translationEvent?.modifierFlags)
+        keyEvent.composing = composing
 
-        if let chars = event.charactersIgnoringModifiers ?? event.characters,
-           let scalar = chars.unicodeScalars.first,
-           !(scalar.value >= 0xF700 && scalar.value <= 0xF8FF) {
-            keyEvent.unshifted_codepoint = scalar.value
-        } else {
-            keyEvent.unshifted_codepoint = 0
-        }
+        // release 不带 text；其余取出字事件的可见字符。
+        let text = action == GHOSTTY_ACTION_RELEASE
+            ? nil
+            : (translationEvent ?? event).ghosttyCharacters
 
-        if action == GHOSTTY_ACTION_RELEASE {
-            keyEvent.text = nil
-            _ = ghostty_surface_key(surface, keyEvent)
-            return
-        }
-
-        if let text = printableText(for: event) {
+        if let text, !text.isEmpty, let first = text.utf8.first, first >= 0x20 {
             text.withCString { pointer in
                 keyEvent.text = pointer
                 _ = ghostty_surface_key(surface, keyEvent)
             }
         } else {
-            keyEvent.text = nil
             _ = ghostty_surface_key(surface, keyEvent)
         }
     }
 
-    private func printableText(for event: NSEvent) -> String? {
-        guard let characters = event.characters, !characters.isEmpty,
-              let scalar = characters.unicodeScalars.first else { return nil }
-        if scalar.value >= 0xF700 && scalar.value <= 0xF8FF { return nil }
-        if scalar.value < 0x20, event.modifierFlags.contains(.control) {
-            return event.charactersIgnoringModifiers ?? characters
+    /// 按 ghostty 的字符翻译规则（Option-as-Alt、死键、异国布局）算出"出字时实际生效的
+    /// 修饰键"。若与原事件不同则重建一个 NSEvent 供输入法/出字使用；相同则返回 nil，
+    /// 调用方复用原事件——复用原事件对韩文等输入法的对象等价判定是必需的。
+    func translationEvent(for event: NSEvent) -> NSEvent? {
+        guard let surface else { return nil }
+        let translated = GhosttyInput.eventModifierFlags(
+            ghostty_surface_key_translation_mods(
+                surface, GhosttyInput.ghosttyMods(event.modifierFlags)))
+        // ghostty 只判断四个基本修饰键；逐个对齐，保留事件里其余隐藏位（部分死键依赖）。
+        var translationMods = event.modifierFlags
+        for flag in [NSEvent.ModifierFlags.shift, .control, .option, .command] {
+            if translated.contains(flag) { translationMods.insert(flag) } else { translationMods.remove(flag) }
         }
-        if event.modifierFlags.contains(.command), !event.modifierFlags.contains(.option) {
-            return nil
-        }
-        return characters
+        guard translationMods != event.modifierFlags else { return nil }
+        return NSEvent.keyEvent(
+            with: event.type,
+            location: event.locationInWindow,
+            modifierFlags: translationMods,
+            timestamp: event.timestamp,
+            windowNumber: event.windowNumber,
+            context: nil,
+            characters: event.characters(byApplyingModifiers: translationMods) ?? "",
+            charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
+            isARepeat: event.isARepeat,
+            keyCode: event.keyCode)
     }
 
     /// 由 read_clipboard_cb 回到主线程后调用：把系统剪贴板内容回填给 libghostty（用于 paste）。
@@ -469,13 +484,12 @@ final class GhosttySurface: TerminalSurface {
 
 }
 
-extension NSEvent.ModifierFlags {
-    var ghosttyMods: ghostty_input_mods_e {
-        var mods = GHOSTTY_MODS_NONE
-        if contains(.shift) { mods = ghostty_input_mods_e(UInt32(mods.rawValue) | UInt32(GHOSTTY_MODS_SHIFT.rawValue)) }
-        if contains(.control) { mods = ghostty_input_mods_e(UInt32(mods.rawValue) | UInt32(GHOSTTY_MODS_CTRL.rawValue)) }
-        if contains(.option) { mods = ghostty_input_mods_e(UInt32(mods.rawValue) | UInt32(GHOSTTY_MODS_ALT.rawValue)) }
-        if contains(.command) { mods = ghostty_input_mods_e(UInt32(mods.rawValue) | UInt32(GHOSTTY_MODS_SUPER.rawValue)) }
-        return mods
+// MARK: - TerminalResizeFreezeParticipant
+
+extension GhosttySurface: TerminalResizeFreezeParticipant {
+    /// 解冻：按动画结束后的最终 frame 补一次真实 resize + 重画（恢复清晰内容）。
+    func resizeFreezeDidEnd() {
+        syncGeometry(force: true)
     }
 }
+

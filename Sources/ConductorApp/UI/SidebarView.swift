@@ -435,6 +435,7 @@ struct SidebarView: View {
             ForEach(records.prefix(displayLimit)) { record in
                 SidebarSessionRow(
                     record: record,
+                    coordinator: coordinator,
                     onResume: { coordinator.resumeSession(record, inPane: nil) },
                     onHover: { handleSessionHover(record, inside: $0) }
                 )
@@ -559,6 +560,7 @@ struct SidebarView: View {
 
 private struct SidebarSessionRow: View {
     let record: AgentSessionRecord
+    let coordinator: AppCoordinator
     let onResume: () -> Void
     let onHover: (Bool) -> Void
     @State private var hovering = false
@@ -591,6 +593,46 @@ private struct SidebarSessionRow: View {
         .onHover { inside in
             hovering = inside
             onHover(inside)
+        }
+        // 右键菜单：与「管理会话」面板同一套动作（侧栏行此前只能点击续聊）。
+        .contextMenu {
+            Button { coordinator.resumeSession(record, inPane: nil) } label: {
+                Label(L("新标签续聊"), systemImage: "plus.bubble")
+            }
+            Button { coordinator.resumeSession(record, inPane: coordinator.sessionTargetPane) } label: {
+                Label(L("当前面板续聊"), systemImage: "bubble.left.and.text.bubble.right")
+            }
+            .disabled(coordinator.sessionTargetPane == nil)
+            Divider()
+            Button { coordinator.copyToClipboard(record.sessionID) } label: {
+                Label(L("复制会话 ID"), systemImage: "number")
+            }
+            if let cmd = record.resumeCommand {
+                Button { coordinator.copyToClipboard(cmd) } label: {
+                    Label(L("复制续聊命令"), systemImage: "terminal")
+                }
+            }
+            Button { coordinator.openSessionManager(scopePath: record.cwd) } label: {
+                Label(L("管理全部会话…"), systemImage: "list.bullet.rectangle")
+            }
+            Divider()
+            Button(role: .destructive) { confirmDelete() } label: {
+                Label(L("删除会话…"), systemImage: "trash")
+            }
+        }
+    }
+
+    /// 删除确认（与管理面板同款；删的是磁盘上的会话日志）。
+    private func confirmDelete() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L("删除会话「%@」？", String(record.title.prefix(40)))
+        alert.informativeText = L("会删除磁盘上的会话日志文件，无法撤销。")
+        alert.addButton(withTitle: L("删除"))
+        alert.addButton(withTitle: L("取消"))
+        alert.buttons.first?.hasDestructiveAction = true
+        if alert.runModal() == .alertFirstButtonReturn {
+            SessionManagerStore.shared.delete(record)
         }
     }
 

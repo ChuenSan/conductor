@@ -59,6 +59,10 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var sessionScopePath: String?
     /// 会话面板「当前面板续聊」的目标 pane。
     @Published private(set) var sessionTargetPane: PaneID?
+    /// Git 面板展示状态（与设置 / 工具 / 会话面板互斥）。
+    @Published private(set) var gitPresentation = SettingsPresentationState()
+    /// Git 面板视图模型（懒创建，打开时绑定当前工作目录）。
+    lazy var gitPanel = GitPanelModel()
     /// 工具面板当前选中的分段。
     @Published var toolsTab: ToolsTab = .cli
     /// Codex 用量监视器（状态栏常驻配额条 + 周期刷新）。
@@ -367,6 +371,7 @@ final class AppCoordinator: ObservableObject {
     func openSettings() {
         cliToolsPresentation.close()
         sessionPresentation.close()
+        gitPresentation.close()
         settingsPresentation.open()
     }
 
@@ -374,9 +379,37 @@ final class AppCoordinator: ObservableObject {
         settingsPresentation.close()
     }
 
-    /// 是否有右侧侧栏面板（设置 / CLI 工具 / 会话）正在展示。用于让快捷操作面板让位。
+    /// 打开 Git 面板：与其它右侧面板互斥，打开时绑定当前聚焦目录并刷新。
+    func openGit() {
+        settingsPresentation.close()
+        cliToolsPresentation.close()
+        sessionPresentation.close()
+        gitPresentation.open()
+        gitPanel.bind(to: currentWorkingDirectory())
+    }
+
+    func closeGit() {
+        gitPresentation.close()
+    }
+
+    func toggleGit() {
+        if gitPresentation.isPresented {
+            gitPresentation.close()
+        } else {
+            openGit()
+        }
+    }
+
+    /// 当前聚焦 pane 的工作目录，回退到活动工作区路径。Git 面板绑定它。
+    func currentWorkingDirectory() -> String? {
+        if let pane = activePane(), let cwd = paneCwds[pane] { return cwd }
+        return activeWorkspace()?.path
+    }
+
+    /// 是否有右侧侧栏面板（设置 / CLI 工具 / 会话 / Git）正在展示。用于让快捷操作面板让位。
     var isSidePanelPresented: Bool {
-        settingsPresentation.isPresented || cliToolsPresentation.isPresented || sessionPresentation.isPresented
+        settingsPresentation.isPresented || cliToolsPresentation.isPresented
+            || sessionPresentation.isPresented || gitPresentation.isPresented
     }
 
     func openCLITools() {
@@ -384,6 +417,7 @@ final class AppCoordinator: ObservableObject {
         if toolsTab == .coCreate { toolsTab = .cli }
         settingsPresentation.close()
         sessionPresentation.close()
+        gitPresentation.close()
         cliToolsPresentation.open()
     }
 
@@ -392,6 +426,7 @@ final class AppCoordinator: ObservableObject {
         toolsTab = tab
         settingsPresentation.close()
         sessionPresentation.close()
+        gitPresentation.close()
         cliToolsPresentation.open()
     }
 
@@ -401,6 +436,7 @@ final class AppCoordinator: ObservableObject {
         sessionTargetPane = targetPane ?? activePane()
         settingsPresentation.close()
         cliToolsPresentation.close()
+        gitPresentation.close()
         sessionPresentation.open()
         SessionManagerStore.shared.refresh()
     }
@@ -645,7 +681,8 @@ final class AppCoordinator: ObservableObject {
             // 人不在 app 里才推系统通知（在的话状态栏琥珀计数已经够显眼）
             if !NSApp.isActive {
                 let title = paneTitles[pane].map { L("等你回复 · %@", $0) } ?? L("Agent 等你回复")
-                NotificationManager.shared.notify(paneID: event.paneID, title: title, body: message)
+                NotificationManager.shared.notify(paneID: event.paneID, title: title, body: message,
+                                                  bodyFallback: L("Agent 在等待你的确认或输入"))
             }
             bumpDockBadgeIfInactive()
             return
