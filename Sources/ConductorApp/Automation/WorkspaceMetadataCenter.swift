@@ -106,7 +106,7 @@ final class WorkspaceMetadataCenter: ObservableObject {
 
     // MARK: - 监听端口（lsof 周期扫描，按进程 cwd 归属工作区）
 
-    struct ListeningPort: Equatable, Identifiable {
+    struct ListeningPort: Equatable, Identifiable, Sendable {
         var port: Int
         var processName: String
         var pid: Int32
@@ -118,7 +118,7 @@ final class WorkspaceMetadataCenter: ObservableObject {
     private var portScanInFlight = false
 
     /// PR 状态（gh CLI）。
-    struct PullRequestInfo: Equatable {
+    struct PullRequestInfo: Equatable, Sendable {
         var number: Int
         var title: String
         var state: String          // OPEN / MERGED / CLOSED
@@ -179,9 +179,9 @@ final class WorkspaceMetadataCenter: ObservableObject {
             return
         }
         portScanInFlight = true
-        Task.detached(priority: .utility) { [weak self] in
+        Task.detached(priority: .utility) { [weak self, workspaces] in
             let result = Self.collectPorts(workspaces: workspaces)
-            await MainActor.run { [weak self] in
+            await MainActor.run { [weak self, result] in
                 guard let self else { return }
                 self.portScanInFlight = false
                 if self.ports != result { self.ports = result }
@@ -260,7 +260,7 @@ final class WorkspaceMetadataCenter: ObservableObject {
             ($0.id, $0.path, branchProvider?($0.path))
         }
         prScanInFlight = true
-        Task.detached(priority: .utility) { [weak self] in
+        Task.detached(priority: .utility) { [weak self, targets, ghPath] in
             var result: [WorkspaceID: PullRequestInfo] = [:]
             for target in targets {
                 guard FileManager.default.fileExists(atPath: target.path + "/.git") else { continue }
@@ -282,10 +282,11 @@ final class WorkspaceMetadataCenter: ObservableObject {
                     branch: object["headRefName"] as? String ?? (target.branch ?? ""),
                     fetchedAt: Date())
             }
-            await MainActor.run { [weak self] in
+            let resolved = result
+            await MainActor.run { [weak self, resolved] in
                 guard let self else { return }
                 self.prScanInFlight = false
-                if self.pullRequests != result { self.pullRequests = result }
+                if self.pullRequests != resolved { self.pullRequests = resolved }
             }
         }
     }

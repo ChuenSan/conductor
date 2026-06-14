@@ -244,110 +244,6 @@ public struct SkillScanResult: Codable, Equatable, Sendable {
     public var groups: [DiscoveredSkillGroup]
 }
 
-public enum SkillDoctorSeverity: String, Codable, CaseIterable, Sendable {
-    case info
-    case warning
-    case critical
-
-    public var weight: Int {
-        switch self {
-        case .info: return 1
-        case .warning: return 4
-        case .critical: return 9
-        }
-    }
-}
-
-public enum SkillDoctorCategory: String, Codable, CaseIterable, Sendable {
-    case source
-    case document
-    case deploy
-    case safety
-    case duplicate
-    case tool
-    case project
-}
-
-public struct SkillDoctorFinding: Codable, Equatable, Sendable, Identifiable {
-    public var id: String
-    public var severity: SkillDoctorSeverity
-    public var category: SkillDoctorCategory
-    public var skillID: String?
-    public var skillName: String?
-    public var title: String
-    public var detail: String
-    public var path: String?
-    public var action: String?
-
-    public init(id: String = UUID().uuidString,
-                severity: SkillDoctorSeverity,
-                category: SkillDoctorCategory,
-                skillID: String? = nil,
-                skillName: String? = nil,
-                title: String,
-                detail: String,
-                path: String? = nil,
-                action: String? = nil) {
-        self.id = id
-        self.severity = severity
-        self.category = category
-        self.skillID = skillID
-        self.skillName = skillName
-        self.title = title
-        self.detail = detail
-        self.path = path
-        self.action = action
-    }
-}
-
-public struct SkillDoctorReport: Codable, Equatable, Sendable {
-    public var generatedAt: Date
-    public var skillCount: Int
-    public var toolCount: Int
-    public var findings: [SkillDoctorFinding]
-
-    public init(generatedAt: Date = Date(),
-                skillCount: Int,
-                toolCount: Int,
-                findings: [SkillDoctorFinding]) {
-        self.generatedAt = generatedAt
-        self.skillCount = skillCount
-        self.toolCount = toolCount
-        self.findings = findings
-    }
-
-    public static var empty: SkillDoctorReport {
-        SkillDoctorReport(skillCount: 0, toolCount: 0, findings: [])
-    }
-
-    public var criticalCount: Int {
-        findings.filter { $0.severity == .critical }.count
-    }
-
-    public var warningCount: Int {
-        findings.filter { $0.severity == .warning }.count
-    }
-
-    public var infoCount: Int {
-        findings.filter { $0.severity == .info }.count
-    }
-
-    public var actionableCount: Int {
-        criticalCount + warningCount
-    }
-
-    public var scorePercent: Int {
-        guard skillCount > 0 || toolCount > 0 else { return 100 }
-        let capacity = max(12, (skillCount * 7) + (toolCount * 2))
-        let penalty = findings.reduce(0) { $0 + $1.severity.weight }
-        return max(0, min(100, Int(((Double(capacity - penalty) / Double(capacity)) * 100).rounded())))
-    }
-
-    public func findings(forSkillID skillID: String) -> [SkillDoctorFinding] {
-        findings.filter { $0.skillID == skillID }
-    }
-}
-
 public struct SkillDocument: Codable, Equatable, Sendable {
     public var skillID: String
     public var filename: String
@@ -480,6 +376,19 @@ public struct SkillBundleImportResult: Codable, Equatable, Sendable {
     public init(installed: [ManagedSkill], skipped: Int = 0) {
         self.installed = installed
         self.skipped = skipped
+    }
+}
+
+public struct GitSkillPreview: Codable, Equatable, Sendable, Identifiable {
+    public var id: String { relativePath }
+    public var relativePath: String
+    public var name: String
+    public var description: String?
+
+    public init(relativePath: String, name: String, description: String?) {
+        self.relativePath = relativePath
+        self.name = name
+        self.description = description
     }
 }
 

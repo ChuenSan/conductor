@@ -44,7 +44,7 @@ enum HookRecipes {
         HookRecipe(
             id: "log",
             title: L("完成日志"),
-            detail: L("agent 每次完成追加一行到 ~/.conductor/agent-events.log（时间 + pane）"),
+            detail: L("agent 完成时记录一条本机事件，方便之后排查节奏"),
             icon: "doc.append",
             command: gated(
                 "mkdir -p \"$HOME/.conductor\" && printf '%s stop pane=%s\\n' \"$(date '+%Y-%m-%d %H:%M:%S')\" \"$CONDUCTOR_PANE_ID\" >> \"$HOME/.conductor/agent-events.log\"",

@@ -16,6 +16,8 @@ struct TabBarView: View {
     @State private var showingAgentMenu = false
     @State private var isHoveringPlus = false
     @State private var isHoveringAgentMenu = false
+    @State private var agentMenuOpenWorkItem: DispatchWorkItem?
+    @State private var agentMenuCloseWorkItem: DispatchWorkItem?
 
     var body: some View {
         let ws = coordinator.store.workspaces.first { $0.id == coordinator.store.activeWorkspace }
@@ -49,7 +51,7 @@ struct TabBarView: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pillsWidth = $0 }
                 }
                 .scrollBounceBehavior(.basedOnSize, axes: [.horizontal])
-                .frame(maxWidth: pillsWidth > 0 ? pillsWidth : nil)
+                .frame(maxWidth: tabs.isEmpty ? 0 : (pillsWidth > 0 ? pillsWidth : nil))
                 .layoutPriority(2)
                 .onChange(of: activeTab) { _, id in
                     guard let id else { return }
@@ -63,6 +65,8 @@ struct TabBarView: View {
                 size: 24,
                 symbolSize: 12,
                 tint: AppStyle.textTertiary) {
+                    cancelAgentMenuTimers()
+                    showingAgentMenu = false
                     coordinator.newTab()
                 }
             .onHover { inside in
@@ -73,6 +77,7 @@ struct TabBarView: View {
                 AIAgentSessionHoverMenu(
                     agents: coordinator.launchableAgents,
                     onLaunch: { agent in
+                        cancelAgentMenuTimers()
                         showingAgentMenu = false
                         coordinator.launchAIAgentSession(agent)
                     },
@@ -88,14 +93,6 @@ struct TabBarView: View {
             .layoutPriority(1)
             HStack(spacing: 6) {
                 UpdateButton()
-                Button(action: { coordinator.openTools(.coCreate) }) {
-                    Text(L("共创计划"))
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                .buttonStyle(SharePlanButtonStyle(isSelected: coordinator.cliToolsPresentation.isPresented && coordinator.toolsTab == .coCreate))
-                .help(L("打开共创计划"))
 
                 // 右侧快捷按钮组（软圆角容器，对标 Craft 的按钮组）
                 HStack(spacing: 2) {
@@ -115,6 +112,14 @@ struct TabBarView: View {
                             coordinator.toggleCLITools()
                         }
                     IconOnlyButton(
+                        systemName: "rectangle.3.group",
+                        help: L("打开工具管理台"),
+                        size: 26,
+                        symbolSize: 12,
+                        tint: coordinator.agentToolsManagementPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary) {
+                            coordinator.openAgentToolsManagement()
+                        }
+                    IconOnlyButton(
                         systemName: "gearshape",
                         help: L("设置"),
                         size: 26,
@@ -125,7 +130,7 @@ struct TabBarView: View {
                 }
                 .padding(3)
                 .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
                         .fill(AppStyle.hoverFill))
             }
         }
@@ -155,18 +160,55 @@ struct TabBarView: View {
 
     private func updateAgentMenuVisibility() {
         guard !coordinator.launchableAgents.isEmpty else {
+            cancelAgentMenuTimers()
             showingAgentMenu = false
             return
         }
-        if isHoveringPlus || isHoveringAgentMenu {
+
+        if isHoveringAgentMenu {
+            agentMenuCloseWorkItem?.cancel()
+            agentMenuOpenWorkItem?.cancel()
             showingAgentMenu = true
+        } else if isHoveringPlus {
+            scheduleAgentMenuOpen()
         } else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                if !isHoveringPlus && !isHoveringAgentMenu {
-                    showingAgentMenu = false
-                }
+            scheduleAgentMenuClose()
+        }
+    }
+
+    private func scheduleAgentMenuOpen() {
+        agentMenuCloseWorkItem?.cancel()
+        guard !showingAgentMenu else { return }
+        agentMenuOpenWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem {
+            if isHoveringPlus || isHoveringAgentMenu {
+                showingAgentMenu = true
             }
         }
+        agentMenuOpenWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55, execute: workItem)
+    }
+
+    private func scheduleAgentMenuClose() {
+        agentMenuOpenWorkItem?.cancel()
+        guard !isHoveringPlus && !isHoveringAgentMenu else { return }
+        agentMenuCloseWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem {
+            if !isHoveringPlus && !isHoveringAgentMenu {
+                showingAgentMenu = false
+            }
+        }
+        agentMenuCloseWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22, execute: workItem)
+    }
+
+    private func cancelAgentMenuTimers() {
+        agentMenuOpenWorkItem?.cancel()
+        agentMenuCloseWorkItem?.cancel()
+        agentMenuOpenWorkItem = nil
+        agentMenuCloseWorkItem = nil
     }
 }
 
@@ -196,38 +238,6 @@ private struct AIAgentSessionHoverMenu: View {
         .padding(6)
         .background(AppStyle.windowBackground)
         .onHover(perform: onHover)
-    }
-}
-
-private struct SharePlanButtonStyle: ButtonStyle {
-    let isSelected: Bool
-    @State private var hovering = false
-
-    private let accent = Color(red: 0.12, green: 0.63, blue: 0.55)
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(AppStyle.theme.isDark ? Color.black.opacity(0.86) : Color.white)
-            .padding(.horizontal, 11)
-            .frame(height: 26)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(accent.opacity(isSelected || hovering ? 1 : 0.88))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(Color.white.opacity(AppStyle.theme.isDark ? 0.18 : 0.28), lineWidth: 1)
-            )
-            .shadow(
-                color: accent.opacity((isSelected || hovering) ? 0.26 : 0),
-                radius: 7,
-                y: 1
-            )
-            .scaleEffect(configuration.isPressed ? 0.96 : (hovering ? 1.02 : 1))
-            .opacity(configuration.isPressed ? 0.78 : 1)
-            .animation(Motion.hover, value: hovering)
-            .animation(Motion.snappy, value: configuration.isPressed)
-            .onHover { hovering = $0 }
     }
 }
 
@@ -368,7 +378,7 @@ private struct TabPill: View {
             if isGroup, !isEditing {
                 Text("\(tab.paneCount)")
                     .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppStyle.theme.primarySolidText)
                     .contentTransition(.numericText())
                     .frame(minWidth: 16, minHeight: 16)
                     .background(Circle().fill(Color(AppStyle.accent).opacity(selected ? 1 : 0.7)))
@@ -380,14 +390,14 @@ private struct TabPill: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                 .fill(selected ? AnyShapeStyle(AppStyle.elevated)
                                : (hovering ? AnyShapeStyle(AppStyle.hoverFill) : AnyShapeStyle(Color.clear)))
-                .shadow(color: (selected && !AppStyle.theme.isDark) ? Color.black.opacity(0.05) : .clear,
+                .shadow(color: (selected && !AppStyle.theme.isDark) ? Color(nsColor: AppStyle.theme.cardShadowColor).opacity(0.05) : .clear,
                         radius: 1.5, y: 0.5)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                 .strokeBorder(selected ? AppStyle.separator : Color.clear, lineWidth: 1)
         )
         .contentShape(Rectangle())
@@ -421,7 +431,7 @@ private struct TabPill: View {
         Button(action: { coordinator.closeTab(tab.id) }) {
             Image(systemName: "xmark")
                 .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(closeHovering ? Color.white : AppStyle.textSecondary)
+                .foregroundStyle(closeHovering ? AppStyle.theme.primarySolidText : AppStyle.textSecondary)
                 .frame(width: 16, height: 16)
                 .background(Circle().fill(closeHovering ? AppStyle.accent.opacity(0.9) : AppStyle.hoverFill))
                 .contentShape(Circle())

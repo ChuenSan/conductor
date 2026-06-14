@@ -60,7 +60,7 @@ struct UsageTrendChart: View {
                     if !self.compact, let p = s.secondaryPercent {
                         LineMark(x: .value("t", s.at), y: .value("used", p),
                                  series: .value("w", L("次")))
-                            .foregroundStyle(Color(red: 0.95, green: 0.62, blue: 0.20))
+                            .foregroundStyle(AppStyle.waitAmber)
                             .interpolationMethod(.monotone)
                     }
                     if !self.compact, let p = s.tertiaryPercent {

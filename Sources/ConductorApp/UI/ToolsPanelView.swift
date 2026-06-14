@@ -5,18 +5,30 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     case cli
     case usage
     case skills
+    case agents
     case hooks
     case snippets
     case coCreate
 
     var id: String { rawValue }
-    /// 面板分段里展示的 tab。共创计划由 tab 栏右上角按钮进入，不占面板分段。
-    static var panelTabs: [ToolsTab] { allCases.filter { $0 != .coCreate } }
+    /// 右侧只保留快速查看/轻量工具；大型管理对象进入 Agent Tools 管理台。
+    static var panelTabs: [ToolsTab] { [.cli, .usage, .snippets] }
+
+    var managementModule: AgentToolsManagementModule? {
+        switch self {
+        case .skills: return .skills
+        case .agents: return .agents
+        case .hooks: return .hooks
+        default: return nil
+        }
+    }
+
     var title: String {
         switch self {
         case .cli: return "CLI"
         case .usage: return L("用量")
         case .skills: return "Skills"
+        case .agents: return "Agents"
         case .hooks: return "Hooks"
         case .snippets: return L("片段")
         case .coCreate: return L("共创")
@@ -27,6 +39,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .cli: return "terminal"
         case .usage: return "chart.bar.xaxis"
         case .skills: return "wand.and.stars"
+        case .agents: return "cpu"
         case .hooks: return "link"
         case .snippets: return "text.badge.star"
         case .coCreate: return "text.bubble"
@@ -34,7 +47,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     }
 }
 
-/// 右侧多分段工具面板：CLI 工具检测 / Token 用量 / Skill 管理 / Hook 管理。
+/// 右侧快速工具面板：只放 CLI、用量和片段；Skills / Agents / Hooks 走完整管理台。
 struct ToolsPanelView: View {
     let coordinator: AppCoordinator
     var onClose: () -> Void = {}
@@ -118,11 +131,17 @@ struct ToolsPanelView: View {
         case .cli:
             CLIToolsView(coordinator: coordinator, onClose: onClose)
         case .usage:
-            UsageStatsView()
-        case .skills:
-            SkillsManagerView()
-        case .hooks:
-            HooksManagerView()
+            UsageStatsView {
+                coordinator.openAgentToolsManagement(.usage)
+            }
+        case .skills, .agents, .hooks:
+            Color.clear
+                .onAppear {
+                    if let module = coordinator.toolsTab.managementModule {
+                        coordinator.openAgentToolsManagement(module)
+                    }
+                    coordinator.toolsTab = .cli
+                }
         case .snippets:
             SnippetsManagerView(coordinator: coordinator)
         case .coCreate:

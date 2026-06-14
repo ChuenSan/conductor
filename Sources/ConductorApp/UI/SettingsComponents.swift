@@ -41,7 +41,7 @@ struct SettingsSection<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Space.xs) {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.6)
@@ -64,7 +64,7 @@ struct SettingsRow<Control: View>: View {
             Text(label)
                 .font(.system(size: 13))
                 .foregroundStyle(AppStyle.textPrimary)
-            Spacer(minLength: 12)
+            Spacer(minLength: Space.sm)
             control
         }
         .padding(.horizontal, 2)
@@ -146,7 +146,7 @@ struct ThemedStepper: View {
             button("plus") { set(value + step) }
         }
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                 .fill(AppStyle.theme.isDark ? Color.white.opacity(0.05) : Color.black.opacity(0.04)))
     }
 
@@ -183,7 +183,7 @@ struct ThemedTextField: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(AppStyle.theme.isDark ? Color.white.opacity(0.05) : Color.black.opacity(0.04)))
             .onSubmit(onSubmit)
     }
@@ -206,7 +206,7 @@ struct ThemedSecureField: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(AppStyle.theme.isDark ? Color.white.opacity(0.05) : Color.black.opacity(0.04)))
             .onSubmit(onSubmit)
     }

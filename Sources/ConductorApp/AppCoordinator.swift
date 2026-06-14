@@ -7,12 +7,6 @@ private enum TerminalAreaTransition: Equatable {
     case zoom(expanding: Bool)
 }
 
-/// 一条「等你回复」记录：hook Notification 事件带来的消息 + 进入等待的时刻。
-struct BlockedPaneInfo: Equatable {
-    let message: String
-    let since: Date
-}
-
 /// 应用协调器：持有 WorkspaceStore + SessionRegistry，把命令经 reducer 应用到状态、
 /// 执行副作用（建/关/聚焦真终端），并把当前 active tab 的分屏树重建进窗口。
 /// ObservableObject：SwiftUI 外壳（Tab 栏/侧栏）观察 store 变化自动刷新。
@@ -61,6 +55,15 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var sessionTargetPane: PaneID?
     /// 工具面板当前选中的分段。
     @Published var toolsTab: ToolsTab = .cli
+    /// 大型 Agent Tools 管理台展示状态（右侧工具面板只是快速入口，完整管理走这里）。
+    @Published private(set) var agentToolsManagementPresentation = SettingsPresentationState()
+    /// 管理台打开时默认落在哪个模块。
+    @Published var agentToolsManagementModule: AgentToolsManagementModule = .overview
+    /// 管理台独立窗口（不再用模态 sheet）：可缩放、与终端并排常开。
+    /// （非 private：窗口构造逻辑在 AppCoordinator+AgentToolsWindow.swift 扩展里。）
+    var agentToolsWindowController: NSWindowController?
+    /// 窗口开着时，coordinator 状态变化 → 重建 rootView，保持运行时数据实时。
+    var agentToolsRefreshCancellable: AnyCancellable?
     /// Codex 用量监视器（状态栏常驻配额条；账号请求只在用户手动刷新时触发）。
     let usageMonitor = UsageMonitor()
     /// CLI hook 收件箱监听（agent 完成 → 系统通知）。
@@ -83,9 +86,6 @@ final class AppCoordinator: ObservableObject {
     /// 「完成未读」：agent 跑完时不在屏上（其他标签/工作区）的 pane。
     /// 对应 tab 胶囊与侧栏工作区行亮小绿点，切过去看一眼即消。
     @Published private(set) var unseenDonePanes: Set<PaneID> = []
-    /// 「等你回复」收件箱：agent 卡在权限确认/提问（hook Notification 事件）的 pane。
-    /// 状态栏亮琥珀计数，弹层里可不切 pane 快捷回复。
-    @Published private(set) var blockedPanes: [PaneID: BlockedPaneInfo] = [:]
     /// 每个 pane 的任务队列：当前一条 Stop 后自动发下一条（夜间挂机/流水线）。
     @Published private(set) var paneQueues: [PaneID: [String]] = [:]
     /// OSC 9;4 进度上报（pane 头条进度徽标）；remove 即删。
@@ -283,7 +283,7 @@ final class AppCoordinator: ObservableObject {
 
     // MARK: - Mission Control（任务总览）
 
-    /// ⌘⇧M：全局 pane 卡片墙——所有工作区的终端实况（思考计时/等回复/完成未读/画面预览）。
+    /// ⌘⇧M：全局 pane 卡片墙——所有工作区的终端实况（思考计时/完成未读/画面预览）。
     func openMissionControl() {
         missionControl.toggle(coordinator: self, over: window)
     }
@@ -387,8 +387,8 @@ final class AppCoordinator: ObservableObject {
     }
 
     func openCLITools() {
-        // 共创计划不在面板分段里，普通入口重新打开时回到 CLI，避免落在无分段对应的页面。
-        if toolsTab == .coCreate { toolsTab = .cli }
+        // 大型管理对象不在右侧快速面板里，普通入口重新打开时回到 CLI。
+        if !ToolsTab.panelTabs.contains(toolsTab) { toolsTab = .cli }
         settingsPresentation.close()
         sessionPresentation.close()
         cliToolsPresentation.open()
@@ -396,10 +396,36 @@ final class AppCoordinator: ObservableObject {
 
     /// 打开工具面板到指定分段。
     func openTools(_ tab: ToolsTab) {
+        if let module = tab.managementModule {
+            settingsPresentation.close()
+            sessionPresentation.close()
+            cliToolsPresentation.close()
+            openAgentToolsManagement(module)
+            return
+        }
         toolsTab = tab
         settingsPresentation.close()
         sessionPresentation.close()
         cliToolsPresentation.open()
+    }
+
+    /// 打开完整 Agent Tools 管理台到指定模块（独立窗口）。
+    func openAgentToolsManagement(_ module: AgentToolsManagementModule = .overview) {
+        agentToolsManagementModule = module
+        agentToolsManagementPresentation.open()
+        showAgentToolsWindow()
+    }
+
+    func closeAgentToolsManagement() {
+        agentToolsManagementPresentation.close()
+        agentToolsWindowController?.close()
+    }
+
+    /// 用户直接关窗（红灯）时同步状态：翻转标志、停订阅，不回头再 close 窗口（避免重入）。
+    /// 单独成方法供 AppCoordinator+AgentToolsWindow 扩展调用（presentation 是 private(set)）。
+    func handleAgentToolsWindowClosed() {
+        agentToolsManagementPresentation.close()
+        agentToolsRefreshCancellable = nil
     }
 
     /// 打开 Agent 会话管理面板。`scopePath` 限定目录范围；`targetPane` 供「当前面板续聊」使用。
@@ -429,7 +455,7 @@ final class AppCoordinator: ObservableObject {
         if let pane {
             markActive(pane)
             (registry.surface(for: pane) as? GhosttySurface)?
-                .enqueueCommand(resumeCommand(command, pane: pane))
+                .enqueueCommand(launchCommand(command, pane: pane))
             tagPaneAgentOptimistically(pane, command: record.agent == "codex" ? "codex" : "claude")
             closeSessionManager()
             return
@@ -442,13 +468,9 @@ final class AppCoordinator: ObservableObject {
         run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID, cwd: sessionCwd))
         if let cwd = sessionCwd { paneCwds[paneID] = cwd }
         (registry.surface(for: paneID) as? GhosttySurface)?
-            .enqueueCommand(resumeCommand(command, pane: paneID))
+            .enqueueCommand(launchCommand(command, pane: paneID))
         tagPaneAgentOptimistically(paneID, command: record.agent == "codex" ? "codex" : "claude")
         closeSessionManager()
-    }
-
-    private func resumeCommand(_ command: String, pane: PaneID) -> String {
-        "CONDUCTOR_PANE_ID=\(pane.value) \(command)"
     }
 
     func closeCLITools() {
@@ -640,24 +662,7 @@ final class AppCoordinator: ObservableObject {
         if event.type == "busy" {
             if let pane {
                 setHookThinking(pane, active: true)
-                clearBlocked(pane)   // 又跑起来了 → 不再等回复
             }
-            return
-        }
-
-        // blocked（Notification）：agent 在等用户确认/输入 → 进「等你回复」收件箱
-        if event.type == "blocked" {
-            guard let pane, paneExists(pane) else { return }
-            let message = event.message.isEmpty ? L("Agent 在等待你的确认或输入") : event.message
-            blockedPanes[pane] = BlockedPaneInfo(message: message, since: Date())
-            paneContainers[pane]?.setAwaitingReply(true)
-            // 人不在 app 里才推系统通知（在的话状态栏琥珀计数已经够显眼）
-            if !NSApp.isActive {
-                let title = paneTitles[pane].map { L("等你回复 · %@", $0) } ?? L("Agent 等你回复")
-                NotificationManager.shared.notify(paneID: event.paneID, title: title, body: message,
-                                                  bodyFallback: L("Agent 在等待你的确认或输入"))
-            }
-            bumpDockBadgeIfInactive()
             return
         }
 
@@ -668,7 +673,6 @@ final class AppCoordinator: ObservableObject {
             .flatMap { $0 >= 1 ? $0 : nil }
         if let pane {
             setHookThinking(pane, active: false)
-            clearBlocked(pane)
         }
         // 通知标题尽量带上 pane 标题/工作区，方便辨认是哪个会话。
         var title = event.title
@@ -727,38 +731,6 @@ final class AppCoordinator: ObservableObject {
             paneProgress[pane] = PaneProgressInfo(state: state, percent: percent)
         }
         paneContainers[pane]?.setProgress(paneProgress[pane])
-    }
-
-    // MARK: - 等你回复（blocked 收件箱）
-
-    private func clearBlocked(_ pane: PaneID) {
-        guard blockedPanes.removeValue(forKey: pane) != nil else { return }
-        paneContainers[pane]?.setAwaitingReply(false)
-    }
-
-    /// 不切 pane 的快捷按键回复：`"enter"` / `"esc"` / 单字符（如选项数字 "1"）。
-    /// 数字/Esc 在 TUI 选择框里即时生效，不补回车。
-    func sendQuickKey(_ key: String, to pane: PaneID) {
-        guard let surface = registry.surface(for: pane) as? GhosttySurface else { return }
-        switch key {
-        case "enter": surface.sendEnterKey()
-        case "esc": surface.sendEscapeKey()
-        default: surface.sendTextInput(key)
-        }
-        clearBlocked(pane)
-    }
-
-    /// 不切 pane 的快捷文本回复：输入整段文字并回车提交。
-    func sendQuickReply(_ text: String, to pane: PaneID) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              let surface = registry.surface(for: pane) as? GhosttySurface else { return }
-        surface.sendTextInput(trimmed)
-        // 稍等 TUI 消化完文本再发真实回车（与命令注入同一招）
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak surface] in
-            surface?.sendEnterKey()
-        }
-        clearBlocked(pane)
     }
 
     // MARK: - 任务队列（pane 级接力）
@@ -881,12 +853,8 @@ final class AppCoordinator: ObservableObject {
         if cleaned != unseenDonePanes { unseenDonePanes = cleaned }
     }
 
-    /// pane 关闭后清理它名下的「等你回复」与任务队列（随 rebuild 顺手扫）。
+    /// pane 关闭后清理它名下的任务队列（随 rebuild 顺手扫）。
     private func pruneDeadPaneState() {
-        if !blockedPanes.isEmpty {
-            let alive = blockedPanes.filter { registry.surface(for: $0.key) != nil }
-            if alive.count != blockedPanes.count { blockedPanes = alive }
-        }
         if !paneQueues.isEmpty {
             let alive = paneQueues.filter { registry.surface(for: $0.key) != nil }
             if alive.count != paneQueues.count { paneQueues = alive }
@@ -912,14 +880,8 @@ final class AppCoordinator: ObservableObject {
     /// 状态栏中枢上次跳到的思考中 pane（轮转游标）。
     private var lastAttentionPane: PaneID?
 
-    /// 状态栏中枢点击：跳到下一个需要关注的 pane——等你回复最优先（agent 卡着），
-    /// 其次完成未读（看一眼即消），都没有就在思考中的 pane 间轮转。
+    /// 状态栏中枢点击：先跳完成未读（看一眼即消），没有就在思考中的 pane 间轮转。
     func revealNextAttentionPane() {
-        let blocked = blockedPanes.keys.filter { paneExists($0) }.sorted { $0.value < $1.value }
-        if let target = blocked.first {
-            revealPane(target)
-            return
-        }
         let done = unseenDonePanes.filter { paneExists($0) }.sorted { $0.value < $1.value }
         if let target = done.first {
             revealPane(target)
@@ -989,18 +951,20 @@ final class AppCoordinator: ObservableObject {
             }
         }
         let tokens: [(id: String, token: String)] = AgentCatalog.all.map { ($0.id, $0.command.lowercased()) }
-        Task.detached(priority: .utility) { [weak self] in
-            var map: [PaneID: String] = [:]
-            for (pane, pid) in pids {
-                guard let cmdline = ProcessInspector.commandLine(pid: pid) else { continue }
-                if let match = tokens.first(where: { cmdline.contains($0.token) }) {
-                    map[pane] = match.id
+        Task { [weak self, pids, tokens] in
+            let agents = await Task.detached(priority: .utility) {
+                var map: [PaneID: String] = [:]
+                for (pane, pid) in pids {
+                    guard let cmdline = ProcessInspector.commandLine(pid: pid) else { continue }
+                    if let match = tokens.first(where: { cmdline.contains($0.token) }) {
+                        map[pane] = match.id
+                    }
                 }
-            }
-            await MainActor.run {
-                self?.applyPaneAgents(map)
-                self?.pruneHookThinking(agents: map)
-            }
+                return map
+            }.value
+            guard let self else { return }
+            applyPaneAgents(agents)
+            pruneHookThinking(agents: agents)
         }
     }
 
@@ -1342,7 +1306,8 @@ final class AppCoordinator: ObservableObject {
         }
         let paneID = PaneID(nextID("p"))
         run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID))
-        (registry.surface(for: paneID) as? GhosttySurface)?.enqueueCommand(launchCommand(command, pane: paneID))
+        (registry.surface(for: paneID) as? GhosttySurface)?
+            .enqueueCommand(launchCommand(command, pane: paneID))
         tagPaneAgentOptimistically(paneID, command: command)
     }
 
@@ -1355,7 +1320,8 @@ final class AppCoordinator: ObservableObject {
         let launchCwd = cwd
         run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID, cwd: launchCwd))
         if let launchCwd { paneCwds[paneID] = launchCwd }
-        (registry.surface(for: paneID) as? GhosttySurface)?.enqueueCommand(launchCommand(agent.command, pane: paneID))
+        (registry.surface(for: paneID) as? GhosttySurface)?
+            .enqueueCommand(launchCommand(agent.command, pane: paneID))
         tagPaneAgent(paneID, agentID: agent.id)
     }
 
@@ -1363,8 +1329,10 @@ final class AppCoordinator: ObservableObject {
     func launchAgentInSplit(command: String, axis: SplitAxis, agentTag: String? = nil) {
         let paneID = PaneID(nextID("p"))
         plannedEntrances[paneID] = .split(axis: axis)
-        run(.split(axis: axis, newPaneID: paneID, splitID: SplitID(nextID("s")), cwd: inheritableCwd()))
-        (registry.surface(for: paneID) as? GhosttySurface)?.enqueueCommand(launchCommand(command, pane: paneID))
+        let splitCwd = inheritableCwd()
+        run(.split(axis: axis, newPaneID: paneID, splitID: SplitID(nextID("s")), cwd: splitCwd))
+        (registry.surface(for: paneID) as? GhosttySurface)?
+            .enqueueCommand(launchCommand(command, pane: paneID))
         tagPaneAgentOptimistically(paneID, command: agentTag ?? command)
     }
 
@@ -1373,11 +1341,14 @@ final class AppCoordinator: ObservableObject {
         "CONDUCTOR_PANE_ID=\(pane.value) \(command)"
     }
 
+    private func agentID(forCommand command: String) -> String? {
+        launchableAgents.first(where: { $0.command == command || $0.id == command })?.id
+            ?? AgentCatalog.all.first(where: { $0.command == command || $0.id == command })?.id
+    }
+
     /// 启动后立即按命令乐观标记 pane 的 agent，让 logo 即时出现（轮询随后会校正/清除）。
     private func tagPaneAgentOptimistically(_ pane: PaneID, command: String) {
-        guard let agentID = launchableAgents.first(where: { $0.command == command || $0.id == command })?.id
-            ?? AgentCatalog.all.first(where: { $0.command == command || $0.id == command })?.id
-        else { return }
+        guard let agentID = agentID(forCommand: command) else { return }
         tagPaneAgent(pane, agentID: agentID)
     }
 
@@ -2003,7 +1974,6 @@ final class AppCoordinator: ObservableObject {
               store.workspaces[wsIndex].tabs[tabIndex].rootSplit.contains(pane) else { return }
         store.workspaces[wsIndex].tabs[tabIndex].activePane = pane
         (registry.surface(for: pane) as? GhosttySurface)?.focus()
-        clearBlocked(pane)   // 人已经到场，这个 pane 不再「等你回复」
         refreshActiveRings()
         scheduleSave()
     }
@@ -2260,7 +2230,6 @@ final class AppCoordinator: ObservableObject {
         }
         container.setAgentLogo(agentLogoImage(for: paneAgents[pane]))
         container.setThinkingSince(thinkingStartTimes[pane])   // 已在思考的 pane，新容器直接亮表
-        container.setAwaitingReply(blockedPanes[pane] != nil)
         container.setQueuedCount(paneQueues[pane]?.count ?? 0)
         container.setProgress(paneProgress[pane])
         paneContainers[pane] = container

@@ -19,7 +19,7 @@ struct HooksManagerView: View {
                 configuredSection
                 configFilesSection
                 if let error {
-                    Text(error).font(.system(size: 10.5)).foregroundStyle(.red)
+                    ToolStatusLine(icon: "exclamationmark.triangle.fill", text: error, color: AppStyle.errorRed)
                 }
                 footnote
             }
@@ -52,14 +52,13 @@ struct HooksManagerView: View {
                     Text(recipe.title)
                         .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(AppStyle.textPrimary)
-                    // 双端安装状态徽标
                     ForEach(HookSource.allCases, id: \.self) { src in
                         if sources.contains(src) {
-                            Text(src.displayName)
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 4).padding(.vertical, 1)
-                                .background(Capsule().fill(src == .claude ? Color.orange : Color.green))
+                            ToolBadge(
+                                text: src.displayName,
+                                color: src == .claude ? .orange : AppStyle.doneGreen,
+                                style: .solid,
+                                height: 17)
                         }
                     }
                 }
@@ -69,21 +68,18 @@ struct HooksManagerView: View {
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 6)
-            Button {
-                installed ? uninstall(recipe) : install(recipe)
-            } label: {
-                Text(installed ? L("移除") : L("安装"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(installed ? AppStyle.textSecondary : AppStyle.theme.primarySolidText)
-                    .padding(.horizontal, 11).frame(height: 25)
-                    .background(Capsule().fill(installed ? AppStyle.hoverFill : AppStyle.theme.primarySolid))
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(PressScaleStyle())
+            ToolActionButton(
+                title: installed ? L("移除") : L("安装"),
+                role: installed ? .secondary : .primary,
+                height: 25,
+                fontSize: 11,
+                horizontalPadding: 11) {
+                    installed ? uninstall(recipe) : install(recipe)
+                }
         }
         .padding(.horizontal, 11).padding(.vertical, 9)
         .toolsCard(cornerRadius: Radius.sm + 2)
-        .help(recipe.command)
+        .help(recipe.detail)
     }
 
     // MARK: - 已配置（按事件分组）
@@ -103,8 +99,7 @@ struct HooksManagerView: View {
                     Spacer()
                 }.padding(.vertical, 12)
             } else if entries.isEmpty {
-                Text(L("还没有任何 hook")).font(.system(size: 12)).foregroundStyle(AppStyle.textTertiary)
-                    .padding(.vertical, 12)
+                ToolEmptyState(icon: "link", title: L("还没有任何 hook"), compact: true)
             } else {
                 ForEach(groupedEntries, id: \.event) { group in
                     VStack(alignment: .leading, spacing: 5) {
@@ -146,32 +141,19 @@ struct HooksManagerView: View {
             sectionTitle(L("配置文件"), trailing: nil)
             HStack(spacing: 8) {
                 ForEach(HookSource.allCases, id: \.self) { src in
-                    Button {
-                        NSWorkspace.shared.open(src.configURL)
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "doc.text")
-                                .font(.system(size: 10, weight: .semibold))
-                            Text(shortConfigPath(src))
-                                .font(.system(size: 10, design: .monospaced))
-                                .lineLimit(1).truncationMode(.middle)
+                    ToolActionButton(
+                        title: L("%@ 配置", src.displayName),
+                        systemImage: "doc.text",
+                        role: .secondary,
+                        height: 26,
+                        fontSize: 10.5,
+                        horizontalPadding: 9,
+                        help: L("用默认编辑器打开配置文件")) {
+                            NSWorkspace.shared.open(src.configURL)
                         }
-                        .foregroundStyle(AppStyle.textSecondary)
-                        .padding(.horizontal, 9).frame(height: 26)
-                        .frame(maxWidth: .infinity)
-                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppStyle.hoverFill))
-                    }
-                    .buttonStyle(PressScaleStyle())
-                    .help(L("用默认编辑器打开 %@", src.configURL.path))
                 }
             }
         }
-    }
-
-    private func shortConfigPath(_ src: HookSource) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let p = src.configURL.path
-        return p.hasPrefix(home) ? "~" + p.dropFirst(home.count) : p
     }
 
     private func sectionTitle(_ title: String, trailing: String?) -> some View {
@@ -182,22 +164,21 @@ struct HooksManagerView: View {
             }
             Spacer()
             if title == L("Hook 市场") {
-                Button(action: reload) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 10.5, weight: .bold))
-                        .foregroundStyle(AppStyle.textSecondary)
-                        .frame(width: 24, height: 24)
-                        .background(Circle().fill(AppStyle.hoverFill))
-                }
-                .buttonStyle(PressScaleStyle())
-                .help(L("刷新 Hook 市场"))
+                IconOnlyButton(
+                    systemName: "arrow.clockwise",
+                    help: L("刷新 Hook 市场"),
+                    size: 24,
+                    symbolSize: 10.5,
+                    weight: .bold,
+                    tint: AppStyle.textSecondary,
+                    action: reload)
                 .disabled(loading)
             }
         }
     }
 
     private var footnote: some View {
-        Text(L("安装写入 Claude（~/.claude/settings.json）与 Codex（~/.codex/hooks.json）的 Stop 事件；命令带 $CONDUCTOR_PANE_ID 网关，只对 conductor 启动的 agent 生效。其它配置项原样保留，移除只删 conductor 自己安装的条目。"))
+        Text(L("仅管理 Conductor 安装的 hook；已有配置会保留。通知只作用于从 Conductor 启动的 Agent。"))
             .font(.system(size: 9.5)).foregroundStyle(AppStyle.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -250,49 +231,89 @@ private struct HookEntryRow: View {
     let onRemove: () -> Void
     @State private var expanded = false
 
+    private var entryTitle: String {
+        if entry.command.contains("#conductor:notify") { return L("完成通知") }
+        if entry.command.contains("#conductor:sound") { return L("完成提示音") }
+        if entry.command.contains("#conductor:banner") { return L("系统横幅") }
+        if entry.command.contains("#conductor:log") { return L("完成日志") }
+        if entry.managedByConductor { return L("Conductor hook") }
+        return L("自定义命令")
+    }
+
+    private var entryDetail: String {
+        entry.managedByConductor
+            ? L("由 Conductor 管理，可一键移除。")
+            : L("来自现有 Agent 配置。")
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(entry.source.displayName)
-                        .font(.system(size: 8.5, weight: .bold)).foregroundStyle(.white)
-                        .padding(.horizontal, 5).padding(.vertical, 1.5)
-                        .background(Capsule().fill(entry.source == .claude ? Color.orange : Color.green))
+                    ToolBadge(
+                        text: entry.source.displayName,
+                        color: entry.source == .claude ? .orange : AppStyle.doneGreen,
+                        style: .solid,
+                        height: 17)
                     if entry.managedByConductor {
-                        Text("Conductor")
-                            .font(.system(size: 8.5, weight: .bold)).foregroundStyle(AppStyle.accent)
-                            .padding(.horizontal, 5).padding(.vertical, 1.5)
-                            .background(Capsule().fill(AppStyle.accent.opacity(0.18)))
+                        ToolBadge(
+                            text: "Conductor",
+                            color: AppStyle.accent,
+                            style: .soft,
+                            height: 17)
                     }
                     if let timeout = entry.timeout {
-                        Text("timeout \(timeout)")
-                            .font(.system(size: 8.5)).foregroundStyle(AppStyle.textTertiary)
+                        ToolBadge(
+                            text: L("%ld ms", timeout),
+                            color: AppStyle.textTertiary,
+                            style: .muted,
+                            height: 17)
                     }
                 }
-                Text(entry.command)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(AppStyle.textTertiary)
-                    .lineLimit(expanded ? nil : 2)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentShape(Rectangle())
-                    .onTapGesture { withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() } }
+                Text(entryTitle)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(AppStyle.textPrimary)
+                    .lineLimit(1)
+                if expanded {
+                    Text(entry.command)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(nil)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else {
+                    Text(entryDetail)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(AppStyle.textSecondary)
+                        .lineLimit(1)
+                        .transition(.opacity)
+                }
             }
             Spacer(minLength: 4)
-            if entry.managedByConductor {
-                Button(action: onRemove) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(.red.opacity(0.85))
-                        .frame(width: 24, height: 24)
-                        .background(Circle().fill(AppStyle.hoverFill))
+            IconOnlyButton(
+                systemName: expanded ? "chevron.up" : "chevron.down",
+                help: expanded ? L("收起命令") : L("查看命令"),
+                size: 24,
+                symbolSize: 10.5,
+                weight: .semibold,
+                tint: AppStyle.textSecondary) {
+                    withAnimation(Motion.snappy) { expanded.toggle() }
                 }
-                .buttonStyle(PressScaleStyle())
-                .help(L("移除该 conductor hook"))
+            if entry.managedByConductor {
+                IconOnlyButton(
+                    systemName: "trash",
+                    help: L("移除该 conductor hook"),
+                    size: 24,
+                    symbolSize: 10.5,
+                    weight: .semibold,
+                    tint: AppStyle.errorRed,
+                    action: onRemove)
             }
         }
         .padding(.horizontal, 11).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(AppStyle.hoverFill.opacity(0.5)))
+        .background(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous).fill(AppStyle.hoverFill.opacity(0.5)))
+        .contentShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
     }
 }

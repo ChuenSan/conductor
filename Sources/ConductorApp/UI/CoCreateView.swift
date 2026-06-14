@@ -49,31 +49,22 @@ struct CoCreateView: View {
                 .lineSpacing(4.5)
                 .foregroundStyle(AppStyle.textSecondary)
             HStack(spacing: 8) {
-                Button {
-                    NSWorkspace.shared.open(Self.newIssueURL)
-                } label: {
-                    Text(L("去提一条"))
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(AppStyle.theme.isDark ? Color.black.opacity(0.86) : Color.white)
-                        .padding(.horizontal, 14)
-                        .frame(height: 29)
-                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(coCreateAccent))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(PressScaleStyle())
-                .help(L("打开 GitHub，新 Issue 已带上简短模板"))
-                Button {
-                    NSWorkspace.shared.open(Self.repoURL)
-                } label: {
-                    Text(L("看看仓库"))
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(AppStyle.textSecondary)
-                        .padding(.horizontal, 12)
-                        .frame(height: 29)
-                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppStyle.hoverFill))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(PressScaleStyle())
+                // 主 CTA 保留品牌 teal（coCreateAccent），改用共享按钮组件去掉手搓的圆角矩形。
+                ToolActionButton(
+                    title: L("去提一条"),
+                    role: .tinted(coCreateAccent),
+                    height: 29,
+                    horizontalPadding: 14,
+                    help: L("打开 GitHub，新 Issue 已带上简短模板")) {
+                        NSWorkspace.shared.open(Self.newIssueURL)
+                    }
+                ToolActionButton(
+                    title: L("看看仓库"),
+                    role: .secondary,
+                    height: 29,
+                    horizontalPadding: 12) {
+                        NSWorkspace.shared.open(Self.repoURL)
+                    }
             }
             .padding(.top, 4)
         }
@@ -176,7 +167,7 @@ private struct IdeaRow: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(hovering ? AppStyle.hoverFill : Color.clear)
             )
             .contentShape(Rectangle())

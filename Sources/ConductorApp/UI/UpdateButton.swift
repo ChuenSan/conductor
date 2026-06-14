@@ -39,12 +39,10 @@ private struct UpdatePopover: View {
                 Spacer()
                 Text(L("当前 v%@", updater.currentVersion))
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppStyle.textTertiary)
             }
 
             statusSection
-
-            Divider()
 
             HStack {
                 Toggle(L("自动检查更新"), isOn: $updater.autoCheckEnabled)
@@ -69,7 +67,7 @@ private struct UpdatePopover: View {
                 ProgressView().controlSize(.small)
                 Text(L("正在检查更新…"))
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppStyle.textTertiary)
             }
         case .upToDate(let date):
             checkRow(statusText: L(
@@ -87,22 +85,28 @@ private struct UpdatePopover: View {
                     Text(message).font(.system(size: 11.5)).lineLimit(3)
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(AppStyle.waitAmber)
                 }
-                Button(L("重试")) { Task { await updater.check(manual: true) } }
-                    .controlSize(.small)
+                ToolActionButton(
+                    title: L("重试"),
+                    role: .secondary,
+                    height: 24,
+                    fontSize: 11) { Task { await updater.check(manual: true) } }
             }
         }
     }
 
     private func checkRow(statusText: String?) -> some View {
         HStack(spacing: 8) {
-            Button(L("检查更新")) { Task { await updater.check(manual: true) } }
-                .controlSize(.small)
+            ToolActionButton(
+                title: L("检查更新"),
+                role: .secondary,
+                height: 24,
+                fontSize: 11) { Task { await updater.check(manual: true) } }
             if let statusText {
                 Text(statusText)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppStyle.textTertiary)
             }
         }
     }
@@ -119,20 +123,17 @@ private struct UpdatePopover: View {
                 ScrollView {
                     Text(release.notes)
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppStyle.textTertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 120)
             }
-            Button {
-                updater.download(release)
-            } label: {
-                Label(
-                    L("下载更新（%@）", Self.sizeText(release.assetSize)),
-                    systemImage: "arrow.down.circle.fill")
-            }
-            .controlSize(.regular)
-            .buttonStyle(.borderedProminent)
+            ToolActionButton(
+                title: L("下载更新（%@）", Self.sizeText(release.assetSize)),
+                systemImage: "arrow.down.circle.fill",
+                role: .primary) {
+                    updater.download(release)
+                }
         }
     }
 
@@ -145,11 +146,14 @@ private struct UpdatePopover: View {
                     .frame(maxWidth: .infinity)
                 Text("\(Int(updater.downloadProgress * 100))%")
                     .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppStyle.textTertiary)
                     .frame(width: 36, alignment: .trailing)
             }
-            Button(L("取消下载")) { updater.cancelDownload() }
-                .controlSize(.small)
+            ToolActionButton(
+                title: L("取消下载"),
+                role: .secondary,
+                height: 24,
+                fontSize: 11) { updater.cancelDownload() }
         }
     }
 
@@ -159,17 +163,22 @@ private struct UpdatePopover: View {
                 Text(L("v%@ 已下载完成", release.version))
                     .font(.system(size: 12, weight: .semibold))
             } icon: {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(AppStyle.doneGreen)
             }
             Text(L("打开 DMG 后把 Conductor 拖进 Applications 即完成更新。"))
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppStyle.textTertiary)
             HStack(spacing: 8) {
-                Button(L("打开安装包")) { updater.openDownloaded() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                Button(L("在访达中显示")) { updater.revealDownloaded() }
-                    .controlSize(.small)
+                ToolActionButton(
+                    title: L("打开安装包"),
+                    role: .primary,
+                    height: 24,
+                    fontSize: 11) { updater.openDownloaded() }
+                ToolActionButton(
+                    title: L("在访达中显示"),
+                    role: .secondary,
+                    height: 24,
+                    fontSize: 11) { updater.revealDownloaded() }
             }
         }
     }

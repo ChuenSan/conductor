@@ -112,7 +112,7 @@ struct SessionManagerView: View {
             .padding(.horizontal, 10)
             .frame(height: 30)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(AppStyle.hoverFill))
         }
         .padding(.horizontal, 16)
@@ -169,19 +169,12 @@ struct SessionManagerView: View {
     }
 
     private func emptyState(_ title: String, _ detail: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "bubble.left.and.text.bubble.right")
-                .font(.system(size: 28))
-                .foregroundStyle(AppStyle.textTertiary)
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AppStyle.textSecondary)
-            Text(detail)
-                .font(.system(size: 11))
-                .foregroundStyle(AppStyle.textTertiary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-        }
+        ToolEmptyState(
+            icon: "bubble.left.and.text.bubble.right",
+            title: title,
+            detail: detail,
+            compact: true)
+        .padding(.horizontal, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -303,7 +296,7 @@ private struct SessionRow: View {
             } label: {
                 Image(systemName: isPinned ? "star.fill" : "star")
                     .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(isPinned ? Color.yellow.opacity(0.85) : AppStyle.textTertiary)
+                    .foregroundStyle(isPinned ? AppStyle.waitAmber : AppStyle.textTertiary)
                     .frame(width: 20, height: 20)
                     .contentShape(Rectangle())
             }
@@ -372,7 +365,7 @@ private struct SessionRow: View {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = L("删除会话「%@」？", String(record.title.prefix(40)))
-        alert.informativeText = L("会删除磁盘上的会话日志文件，无法撤销。")
+        alert.informativeText = L("会删除这条本机会话记录，无法撤销。")
         alert.addButton(withTitle: L("删除"))
         alert.addButton(withTitle: L("取消"))
         alert.buttons.first?.hasDestructiveAction = true
@@ -429,7 +422,7 @@ private struct SessionRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                 .fill(AppStyle.theme.isDark ? Color.white.opacity(0.04) : Color.black.opacity(0.03)))
         .transition(.opacity.combined(with: .move(edge: .top)))
     }

@@ -1,0 +1,305 @@
+import SwiftUI
+
+enum AgentToolsChrome {
+    // 几何常量收敛到统一阶梯（Radius / Space），保留符号名供 SkillsManagerView 等调用方编译。
+    static let pagePadding: CGFloat = Space.md      // 16
+    static let pageSpacing: CGFloat = Space.sm      // 12
+    static let controlHeight: CGFloat = 34
+    static let metricHeight: CGFloat = 48
+    static let rowHeight: CGFloat = 48
+    static let rowRadius: CGFloat = Radius.sm       // 8
+    static let panelRadius: CGFloat = Radius.lg     // 16
+    static let inspectorRadius: CGFloat = Radius.lg // 16
+    // 去卡片后，原来的一堆柔填充（panelFill/tableFill/metricFill/rowFill/sectionFill）已无人使用，删除。
+}
+
+enum AgentToolsMotion {
+    // 语义档位转发到统一 Motion token，保留符号名供调用方编译。
+    static let route = Motion.panel
+    static let selection = Motion.snappy
+    static let reveal = Motion.expand
+    static let hover = Motion.hover
+    static let loading = Animation.linear(duration: 0.85).repeatForever(autoreverses: false)
+
+    static let contentTransition = AnyTransition.opacity
+        .combined(with: .scale(scale: 0.985, anchor: .center))
+
+    static let revealTransition = AnyTransition.opacity
+        .combined(with: .scale(scale: 0.98, anchor: .top))
+}
+
+struct AgentToolsModuleHeader<Actions: View>: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    var color: Color?
+    let actions: Actions
+
+    init(title: String,
+         subtitle: String,
+         icon: String,
+         color: Color? = nil,
+         @ViewBuilder actions: () -> Actions) {
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
+        self.color = color
+        self.actions = actions()
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                identity
+                Spacer(minLength: 12)
+                actions
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                identity
+                actions
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var identity: some View {
+        let tint = color ?? AppStyle.accent
+        return HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 42, height: 42)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.12)))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(AppStyle.textPrimary)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .lineLimit(2)
+            }
+        }
+    }
+}
+
+struct AgentToolsSearchField: View {
+    let placeholder: String
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppStyle.textTertiary)
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+                .foregroundStyle(AppStyle.textPrimary)
+            if !text.isEmpty {
+                IconOnlyButton(
+                    systemName: "xmark.circle.fill",
+                    help: L("清空搜索"),
+                    size: 20,
+                    symbolSize: 10,
+                    tint: AppStyle.textTertiary) {
+                        withAnimation(AgentToolsMotion.selection) { text = "" }
+                    }
+                    .transition(AgentToolsMotion.revealTransition)
+            }
+        }
+        .padding(.horizontal, 11)
+        .frame(height: AgentToolsChrome.controlHeight)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                .fill(AppStyle.hoverFill.opacity(0.92)))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                .strokeBorder(AppStyle.separator.opacity(0.18), lineWidth: 1))
+        .animation(AgentToolsMotion.selection, value: text.isEmpty)
+    }
+}
+
+struct AgentToolsMenuButton<Content: View>: View {
+    let title: String
+    let icon: String
+    let content: Content
+
+    init(title: String,
+         icon: String,
+         @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.icon = icon
+        self.content = content()
+    }
+
+    var body: some View {
+        Menu {
+            content
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 10.5, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8.5, weight: .bold))
+            }
+            .foregroundStyle(AppStyle.textSecondary)
+            .padding(.horizontal, 10)
+            .frame(height: AgentToolsChrome.controlHeight)
+            .background(Capsule().fill(AppStyle.hoverFill.opacity(0.92)))
+            .overlay(Capsule().strokeBorder(AppStyle.separator.opacity(0.18), lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .help(title)
+    }
+}
+
+struct AgentToolsInspectorShell<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AgentToolsChrome.pageSpacing) {
+            ToolsSectionLabel(L("检查器"))
+            content
+            Spacer(minLength: 0)
+        }
+        .padding(Space.sm)
+        .frame(width: AgentToolsConsoleLayout.inspectorWidth)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .agentToolsGlass()   // 半透明玻璃面板（透出工作台底纹）
+    }
+}
+
+// MARK: - 编辑化构件（去卡片）：大号数字、分区、详情行、文字链接。
+// 替代旧的 AgentToolsMetricCard / AgentToolsTableSurface / 各文件重复的 inspectorSection。
+
+/// 大号数值块：值 + 标签 +（可选）副文，直接坐画布，不套卡片。
+struct AgentToolsStat: View {
+    let value: String
+    let title: String
+    var sub: String?
+    var valueColor: Color = AppStyle.textPrimary
+    var action: (() -> Void)?
+
+    var body: some View {
+        if let action {
+            Button(action: action) { content }.buttonStyle(PressScaleStyle())
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
+        HStack(spacing: 6) {
+            Text(value)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(valueColor)
+            Text(title)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(AppStyle.textSecondary)
+        }
+        .contentShape(Rectangle())
+        .help(sub ?? title)
+    }
+}
+
+/// 编辑化分区：小号大写区标题 + 内容，靠间距分组，不套盒子。
+struct AgentToolsSection<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.6)
+                .textCase(.uppercase)
+                .foregroundStyle(AppStyle.textTertiary)
+            content
+        }
+    }
+}
+
+/// label … value 详情行。
+struct AgentToolsInfoRow: View {
+    let label: String
+    let value: String
+    var monospaced = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(AppStyle.textTertiary)
+            Spacer(minLength: 0)
+            Text(value)
+                .font(.system(size: 10.5, weight: monospaced ? .regular : .semibold, design: monospaced ? .monospaced : .default))
+                .foregroundStyle(AppStyle.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+}
+
+/// 轻量文字链接动作（替代填充按钮汤）。
+struct AgentToolsLinkButton: View {
+    let title: String
+    var icon: String?
+    var tint: Color = AppStyle.textSecondary
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let icon {
+                    Image(systemName: icon).font(.system(size: 10.5, weight: .semibold))
+                }
+                Text(title).font(.system(size: 11.5, weight: .medium))
+            }
+            .foregroundStyle(tint)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressScaleStyle())
+    }
+}
+
+private struct AgentToolsPageModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(AgentToolsChrome.pagePadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+extension View {
+    func agentToolsPage() -> some View {
+        modifier(AgentToolsPageModifier())
+    }
+
+    /// 通透表面，替代不透明 toolsCard。
+    /// 深色：真·磨砂玻璃（`.ultraThinMaterial`）；浅色：磨砂会发白成"大白卡片"，
+    /// 改成几乎无填充 + 一条极淡描边，content 直接坐在底色上，保持通透不发白。
+    func agentToolsGlass(cornerRadius: CGFloat = Radius.lg) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let fill: AnyShapeStyle = AppStyle.theme.isDark
+            ? AnyShapeStyle(.ultraThinMaterial)
+            : AnyShapeStyle(Color.black.opacity(0.022))
+        return background(shape.fill(fill))
+            .overlay(shape.strokeBorder(AppStyle.separator.opacity(0.5), lineWidth: 1))
+    }
+}

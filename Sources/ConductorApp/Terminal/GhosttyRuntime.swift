@@ -8,6 +8,9 @@ import Foundation
 @MainActor
 final class GhosttyRuntime {
     static let shared = GhosttyRuntime()
+    static let managedTerminalType = "xterm-256color"
+    static let managedColorTerm = "truecolor"
+    static let managedTerminalProgram = "ghostty"
 
     private(set) var app: ghostty_app_t?
     private(set) var config: ghostty_config_t?
@@ -17,6 +20,8 @@ final class GhosttyRuntime {
 
     func ensureStarted() {
         guard app == nil else { return }
+
+        Self.configureManagedTerminalEnvironment()
 
         let resources = "/Applications/Ghostty.app/Contents/Resources/ghostty"
         if FileManager.default.fileExists(atPath: resources + "/shell-integration/zsh/.zshenv") {
@@ -71,8 +76,23 @@ final class GhosttyRuntime {
         self.app = created
         self.config = config
         ghostty_app_set_focus(created, true)
-        syncColorScheme(ConfigStore.shared.config)
         NSLog("[conductor] ghostty runtime started")
+    }
+
+    static func configureManagedTerminalEnvironment() {
+        // The Codex/dev parent environment can carry NO_COLOR=1. Terminal UIs
+        // such as Claude Code and Codex honor it and intentionally render in
+        // monochrome, even though the terminal palette itself supports color.
+        unsetenv("NO_COLOR")
+        if getenv("TERM") == nil {
+            setenv("TERM", managedTerminalType, 1)
+        }
+        if getenv("COLORTERM") == nil {
+            setenv("COLORTERM", managedColorTerm, 1)
+        }
+        if getenv("TERM_PROGRAM") == nil {
+            setenv("TERM_PROGRAM", managedTerminalProgram, 1)
+        }
     }
 
     /// 用 AppConfig 造一个 ghostty 配置对象(load string + finalize)。
@@ -93,37 +113,35 @@ final class GhosttyRuntime {
         let old = config
         config = newConfig
         if let old { ghostty_config_free(old) }
-        // 告知各 surface 里运行中的 TUI 配色方案变了(DEC mode 2031)：
-        // codex/claude 等启动时探测一次深浅色，不通知的话切主题后它们仍按旧方案画(深底上出白块)。
-        syncColorScheme(appConfig)
-    }
-
-    private func syncColorScheme(_ appConfig: AppConfig) {
-        guard let app else { return }
-        let dark = ThemePalette.resolve(appConfig.appearance).isDark
-        ghostty_app_set_color_scheme(
-            app, dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
     }
 
     /// 把 `AppConfig` 翻译成 libghostty 的 `key = value` 配置串(高扩展:数据驱动)。
     static func ghosttyConfigText(from config: AppConfig) -> String {
         let a = config.appearance
         let theme = ThemePalette.resolve(a)
-        var keys: [String] = []
-        var values: [String: String] = [:]
+        var lines: [(key: String, value: String)] = []
         func set(_ key: String, _ value: String) {
-            if values[key] == nil { keys.append(key) }
-            values[key] = value
+            if let index = lines.firstIndex(where: { $0.key == key }) {
+                lines[index].value = value
+            } else {
+                lines.append((key, value))
+            }
+        }
+        func append(_ key: String, _ value: String) {
+            lines.append((key, value))
         }
         // libghostty 默认 TERM=xterm-ghostty，其 terminfo 只有装了 Ghostty.app 的机器才有；
         // 缺失时 ls/TUI 都探测不到颜色能力，输出全灰。改用系统自带的 xterm-256color。
         // （用户仍可在 ghosttyOverrides 里改回 xterm-ghostty。）
-        set("term", "xterm-256color")
+        set("term", managedTerminalType)
         set("background", theme.background)
         set("foreground", theme.foreground)
         set("cursor-color", theme.cursor)
         set("selection-background", theme.selection)
         set("selection-foreground", theme.selectionForeground)
+        for (index, color) in theme.ansi.enumerated() {
+            append("palette", "\(index)=#\(color)")
+        }
         set("font-size", "\(a.font.size)")
         // 渲染质量（macOS）：ghostty 默认笔画偏细、且在 sRGB/P3 里混合会在彩色文字边缘
         // 产生暗边毛刺（似锯齿）。加粗贴近 Terminal.app 的系统级平滑；linear-corrected
@@ -145,9 +163,7 @@ final class GhosttyRuntime {
             guard ConductorGhosttyConfigCatalog.knownKeySet.contains(key), !value.isEmpty else { continue }
             set(key, value)
         }
-        return keys.compactMap { key in
-            values[key].map { "\(key) = \($0)" }
-        }
+        return lines.map { "\($0.key) = \($0.value)" }
         .joined(separator: "\n")
     }
 

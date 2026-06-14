@@ -156,11 +156,11 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     var canDrag = false
     /// 放大态：头条亮「已放大」徽标，点击还原（⌘⏎ 同效）。
     var isZoomed = false { didSet { if isZoomed != oldValue { header.isZoomed = isZoomed } } }
-
     /// 卡片四周留的间隙（露出画布 + 给柔阴影留空间）。紧凑一些。
     private let gap: CGFloat = 3
     private let headerH: CGFloat = 22
-    private let cornerRadius: CGFloat = 12
+    /// 与卡片圆角一致（统一到设计系统圆角阶梯）。
+    private let cornerRadius: CGFloat = Radius.md
     /// 柔阴影层（在 frameView 之下、同形状；frameView 不透明地盖住它的填充，只露出四周阴影）。
     private let shadowView = NSView()
     /// 统一圆角卡片：含头条 + 终端，共用一个圆角；masksToBounds 把里面的 Metal 终端裁成圆角。
@@ -226,10 +226,11 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
 
         dropOverlay.wantsLayer = true
         dropOverlay.layer?.backgroundColor = NSColor(AppStyle.accent).withAlphaComponent(0.15).cgColor
-        dropOverlay.layer?.cornerRadius = 10
+        dropOverlay.layer?.cornerRadius = cornerRadius   // 高亮与卡片圆角一致
         dropOverlay.layer?.cornerCurve = .continuous
-        dropOverlay.layer?.borderWidth = 2
-        dropOverlay.layer?.borderColor = NSColor(AppStyle.accent).withAlphaComponent(0.85).cgColor
+        // 落点高亮的静态边：克制，无硬线（与「焦点环细环」同一审美）。
+        dropOverlay.layer?.borderWidth = 1.5
+        dropOverlay.layer?.borderColor = NSColor(AppStyle.accent).withAlphaComponent(0.6).cgColor
         dropOverlay.isHidden = true
         addSubview(dropOverlay)   // 顶层，frameView 的兄弟
 
@@ -246,9 +247,6 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
 
     /// Agent 思考起点（nil = 没在思考）：头条右侧亮活计时，每秒走、停止即收。
     func setThinkingSince(_ date: Date?) { header.thinkingSince = date }
-
-    /// 「等你回复」态：头条亮琥珀徽标（agent 卡在确认/提问）。
-    func setAwaitingReply(_ awaiting: Bool) { header.awaitingReply = awaiting }
 
     /// 任务队列长度：>0 时头条显示排队数。
     func setQueuedCount(_ count: Int) { header.queuedCount = count }
@@ -533,11 +531,12 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         frameView.layer?.backgroundColor = AppStyle.cardBackground.cgColor
         card.layer?.backgroundColor = AppStyle.cardBackground.cgColor
         dropOverlay.layer?.backgroundColor = NSColor(AppStyle.accent).withAlphaComponent(0.15).cgColor
-        dropOverlay.layer?.borderColor = NSColor(AppStyle.accent).withAlphaComponent(0.85).cgColor
+        dropOverlay.layer?.borderColor = NSColor(AppStyle.accent).withAlphaComponent(0.6).cgColor
         applyCardShadow()
         updateRing()
         header.needsDisplay = true
         scrollbar.restyle()
+        searchBar?.refreshColors()   // 搜索条若开着也跟随主题热更新（否则停留在旧主题色）
     }
 
     private func updateRing() {
@@ -695,13 +694,6 @@ final class PaneHeaderView: NSView {
         }
     }
     private var thinkingTimer: Timer?
-    /// 「等你回复」：agent 卡在确认/提问，亮琥珀徽标（优先级高于思考计时）。
-    var awaitingReply = false {
-        didSet {
-            guard awaitingReply != oldValue else { return }
-            needsDisplay = true
-        }
-    }
     /// 任务队列长度：>0 时头条显示「队列 n」。
     var queuedCount = 0 {
         didSet {
@@ -821,7 +813,9 @@ final class PaneHeaderView: NSView {
 
     override func layout() {
         super.layout()
-        let layout = PaneHeaderControlLayout.layout(headerWidth: bounds.width, controlCount: controlButtons.count)
+        let layout = PaneHeaderControlLayout.layout(
+            headerWidth: bounds.width,
+            controlCount: controlButtons.count)
         let controlsFrame = layout.buttonFrames.reduce(NSRect.null) { partial, frame in
             partial.union(frame)
         }
@@ -865,12 +859,10 @@ final class PaneHeaderView: NSView {
             .font: NSFont.systemFont(ofSize: 11, weight: isActive ? .medium : .regular),
             .foregroundColor: NSColor(isActive ? AppStyle.textSecondary : AppStyle.textTertiary),
         ])
-        // 标题在状态徽标（等回复/思考计时/队列）、放大徽标（若亮）或控制按钮组前截断
+        // 标题在状态徽标（思考计时/队列）、放大徽标（若亮）或控制按钮组前截断
         var titleLimit = zoomBadge.isHidden ? controls.frame.minX : zoomBadge.frame.minX
-        // 「等你回复」徽标优先于思考计时（更需要行动）；计时每秒重绘走表
-        if awaitingReply {
-            titleLimit = drawStatusChip(L("等你回复"), color: NSColor(AppStyle.waitAmber), rightEdge: titleLimit)
-        } else if let since = thinkingSince {
+        // 思考计时每秒重绘走表
+        if let since = thinkingSince {
             titleLimit = drawStatusChip(Self.thinkingText(since: since),
                                         color: NSColor(AppStyle.accent), rightEdge: titleLimit)
         }

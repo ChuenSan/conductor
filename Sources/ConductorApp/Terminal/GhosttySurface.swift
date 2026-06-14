@@ -181,7 +181,7 @@ final class GhosttySurface: TerminalSurface {
         // 内容恢复：有待回放快照时换 wrapper 启动（cat 快照 → rm → exec 真 shell），
         // 路径与 shell 走 env 传参，避开引号/转义问题。
         var command = shell
-        var envPairs: [(key: String, value: String)] = extraEnvironment
+        var envPairs = startupEnvironmentPairs()
         if let restoreFile = restoreContentFile,
            FileManager.default.fileExists(atPath: restoreFile),
            let wrapper = ScrollbackStore.ensureWrapperScript() {
@@ -194,7 +194,7 @@ final class GhosttySurface: TerminalSurface {
         let cStrings = envPairs.map { (strdup($0.key), strdup($0.value)) }
         defer { cStrings.forEach { free($0.0); free($0.1) } }
         var envVars = cStrings.map { ghostty_env_var_s(key: $0.0, value: $0.1) }
-        command.withCString { commandPointer in
+        func createSurface(commandPointer: UnsafePointer<CChar>?) {
             cwd.withCString { directoryPointer in
                 envVars.withUnsafeMutableBufferPointer { envBuffer in
                     config.command = commandPointer
@@ -207,6 +207,7 @@ final class GhosttySurface: TerminalSurface {
                 }
             }
         }
+        command.withCString { createSurface(commandPointer: $0) }
 
         guard let surface else {
             userdata.release()
@@ -246,12 +247,19 @@ final class GhosttySurface: TerminalSurface {
     func reloadConfig() {
         guard let surface, let config = GhosttyRuntime.shared.config else { return }
         ghostty_surface_update_config(surface, config)
-        // app 级 set_color_scheme 只影响新 surface 的初值；运行中的 TUI（codex/claude 的输入框等）
-        // 要靠 surface 级通知（DEC 2031）才会按新深浅色重画。
-        let dark = ThemePalette.resolve(ConfigStore.shared.config.appearance).isDark
-        ghostty_surface_set_color_scheme(
-            surface, dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
         ghostty_surface_refresh(surface)
+    }
+
+    private func startupEnvironmentPairs() -> [(key: String, value: String)] {
+        var env: [String: String] = [
+            "TERM": GhosttyRuntime.managedTerminalType,
+            "COLORTERM": GhosttyRuntime.managedColorTerm,
+            "TERM_PROGRAM": GhosttyRuntime.managedTerminalProgram,
+        ]
+        for (key, value) in extraEnvironment where !key.isEmpty {
+            env[key] = value
+        }
+        return env.map { (key: $0.key, value: $0.value) }
     }
 
     /// 重挂视图层级后强制重画（避免变白）。
@@ -481,7 +489,6 @@ final class GhosttySurface: TerminalSurface {
         let pid = ghostty_surface_foreground_pid(surface)
         return pid > 0 ? Int32(truncatingIfNeeded: pid) : nil
     }
-
 }
 
 // MARK: - TerminalResizeFreezeParticipant
@@ -492,4 +499,3 @@ extension GhosttySurface: TerminalResizeFreezeParticipant {
         syncGeometry(force: true)
     }
 }
-

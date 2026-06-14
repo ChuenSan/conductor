@@ -367,6 +367,36 @@ final class SkillManagerEngineTests: XCTestCase {
         XCTAssertTrue(results.allSatisfy { $0.skill.sourceSubpath?.hasPrefix("skills/") == true })
     }
 
+    func testPreviewGitSkillsAndInstallSelectedSubpath() throws {
+        let root = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repo = root.appendingPathComponent("repo")
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        try makeSkill(at: repo.appendingPathComponent("skills/db"), name: "db-tools", description: "Database helpers")
+        try makeSkill(at: repo.appendingPathComponent("skills/review"), name: "review", description: "Review helper")
+        try Process.run(URL(fileURLWithPath: "/usr/bin/env"), arguments: ["git", "-C", repo.path, "init"]).waitUntilExit()
+        try Process.run(URL(fileURLWithPath: "/usr/bin/env"), arguments: ["git", "-C", repo.path, "add", "."]).waitUntilExit()
+        try Process.run(URL(fileURLWithPath: "/usr/bin/env"), arguments: [
+            "git", "-C", repo.path,
+            "-c", "user.name=Test",
+            "-c", "user.email=test@example.com",
+            "commit", "-m", "init"
+        ]).waitUntilExit()
+
+        let engine = try SkillManagerEngine(rootDirectory: root.appendingPathComponent("manager"))
+        let preview = try engine.previewGitSkills(repositoryURL: repo.path, subdirectory: "skills")
+        XCTAssertEqual(preview.map(\.relativePath), ["db", "review"])
+        XCTAssertEqual(preview.first { $0.relativePath == "review" }?.description, "Review helper")
+
+        let results = try engine.installGitSkills(
+            repositoryURL: repo.path,
+            subdirectory: "skills",
+            selectedSubpaths: ["review"])
+        XCTAssertEqual(results.map(\.skill.name), ["review"])
+        XCTAssertEqual(results.first?.skill.sourceSubpath, "skills/review")
+    }
+
     func testExportsAndImportsSkillBundleWithManifest() throws {
         let root = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: root) }

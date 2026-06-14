@@ -36,12 +36,6 @@ enum HookInstaller {
         "[ -n \"$CONDUCTOR_PANE_ID\" ] && '\(scriptURL.path)' busy >/dev/null 2>&1 || true #conductor:\(recipeID)"
     }
 
-    /// 写入 Notification hook 的命令：agent 在等用户确认/输入 → 进「等你回复」收件箱。
-    /// stdin 的事件 JSON 透传给脚本以提取 message。
-    static var blockedCommand: String {
-        "[ -n \"$CONDUCTOR_PANE_ID\" ] && '\(scriptURL.path)' blocked >/dev/null 2>&1 || true #conductor:\(recipeID)"
-    }
-
     // MARK: - 状态
 
     static func status() -> Status {
@@ -57,12 +51,9 @@ enum HookInstaller {
     private static func configHasNotify(_ source: HookSource) -> Bool {
         let managed = HookConfigDocument(source: source).entries()
             .filter { $0.command.contains("#conductor:\(recipeID)") }
-        // Stop（完成通知/熄灭）与 UserPromptSubmit（点亮思考）都在才算配置完整；
-        // Claude 还要求 Notification（等你回复收件箱），Codex 暂无该事件不强求。
-        let base = managed.contains { $0.event == HookEventName.stop }
+        // Stop（完成通知/熄灭）与 UserPromptSubmit（点亮思考）都在才算配置完整。
+        return managed.contains { $0.event == HookEventName.stop }
             && managed.contains { $0.event == HookEventName.userPromptSubmit }
-        guard source == .claude else { return base }
-        return base && managed.contains { $0.event == HookEventName.notification }
     }
 
     // MARK: - 安装
@@ -78,10 +69,6 @@ enum HookInstaller {
                 try doc.removeCommands(containing: "#cmux:")
                 try doc.addCommand(event: HookEventName.stop, command: stopCommand)
                 try doc.addCommand(event: HookEventName.userPromptSubmit, command: busyCommand)
-                // 等你回复收件箱：Claude 的 Notification 事件（权限请求/空闲等输入）
-                if source == .claude {
-                    try doc.addCommand(event: HookEventName.notification, command: blockedCommand)
-                }
             }
         } catch {
             throw InstallError.write(L("写 hook 配置失败：%@", error.localizedDescription))
@@ -109,7 +96,6 @@ enum HookInstaller {
         # 用法：
         #   conductor-notify          Stop hook：完成通知 + 熄灭思考动效（点击通知跳回对应 pane）
         #   conductor-notify busy     UserPromptSubmit hook：点亮思考动效，不发通知
-        #   conductor-notify blocked  Notification hook：agent 在等确认/输入 → 「等你回复」收件箱
         INBOX="$HOME/Library/Application Support/conductor/hooks-inbox"
         mkdir -p "$INBOX"
         PANE="${CONDUCTOR_PANE_ID:-}"
@@ -118,10 +104,6 @@ enum HookInstaller {
         F="$INBOX/$(date +%s)-$$.json"
         if [ "$1" = "busy" ]; then
           printf '{"type":"busy","paneId":"%s"}\\n' "$(esc "$PANE")" > "$F"
-        elif [ "$1" = "blocked" ]; then
-          # hook 的事件 JSON 从 stdin 进来，粗提 message 字段（拿不到就用通用文案）
-          MSG=$(cat 2>/dev/null | sed -n 's/.*"message"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' | head -c 300)
-          printf '{"type":"blocked","paneId":"%s","message":"%s"}\\n' "$(esc "$PANE")" "$(esc "$MSG")" > "$F"
         else
           TITLE="AI 已完成"
           MSG="可以查看结果了"

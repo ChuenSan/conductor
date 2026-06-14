@@ -30,7 +30,7 @@ final class TerminalHostView: NSView {
         layer.isOpaque = true
         layer.backgroundColor = AppStyle.cardBackground.cgColor
         layer.masksToBounds = true
-        layer.cornerRadius = 12              // 与卡片圆角一致
+        layer.cornerRadius = Radius.md       // 与卡片圆角一致
         layer.cornerCurve = .continuous
         configureLayer(layer)
         return layer

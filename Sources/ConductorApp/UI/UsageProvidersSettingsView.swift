@@ -65,7 +65,8 @@ struct UsageProvidersSettingsView: View {
                         tool: tools.first { $0.id == provider.id },
                         state: states[provider.id],
                         enabled: enabledBinding(for: provider),
-                        onOpen: { withAnimation(Motion.panel) { selectedID = provider.id } })
+                        onOpen: { withAnimation(Motion.panel) { selectedID = provider.id } },
+                        onReload: { onReload(provider) })
                 }
             }
         }
@@ -212,6 +213,7 @@ private struct ProviderSettingsListRow: View {
     let state: ToolUsageState?
     @Binding var enabled: Bool
     let onOpen: () -> Void
+    let onReload: () -> Void
 
     @ObservedObject private var configStore = ConfigStore.shared
     @State private var hovering = false
@@ -286,6 +288,21 @@ private struct ProviderSettingsListRow: View {
         .onHover { inside in
             withAnimation(Motion.hover) { hovering = inside }
         }
+        .contextMenu {
+            Button(L("打开详情")) { onOpen() }
+            Button(L("刷新用量")) { onReload() }
+            Button(L("复制渠道 ID")) { copy(provider.id) }
+            if let path = tool?.path {
+                Button(L("复制路径")) { copy(path) }
+                Button(L("在 Finder 中显示")) {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                }
+            }
+            Divider()
+            Button(enabled ? L("停用渠道") : L("启用渠道")) {
+                enabled.toggle()
+            }
+        }
     }
 
     private var sourceLabel: String {
@@ -315,6 +332,12 @@ private struct ProviderSettingsListRow: View {
             return profile.subtitle
         }
     }
+
+    private func copy(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
 }
 
 private struct ProviderStatusPill: View {
@@ -322,12 +345,7 @@ private struct ProviderStatusPill: View {
     let color: Color
 
     var body: some View {
-        Text(label)
-            .font(.system(size: 9.5, weight: .semibold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 6)
-            .frame(height: 18)
-            .background(Capsule().fill(color.opacity(0.13)))
+        ToolBadge(text: label, color: color, height: 18)
     }
 }
 
@@ -545,12 +563,15 @@ private struct ProviderSettingsDetailView: View {
                 if !profile.actions.isEmpty {
                     HStack(spacing: 8) {
                         ForEach(profile.actions) { action in
-                            Button(action: action.perform) {
-                                Label(action.title, systemImage: action.systemImage)
-                                    .font(.system(size: 11, weight: .medium))
-                            }
-                            .buttonStyle(SecondaryButtonStyle(height: 26, horizontalPadding: 10, fontSize: 11))
-                            .help(action.help)
+                            ToolActionButton(
+                                title: action.title,
+                                systemImage: action.systemImage,
+                                role: .secondary,
+                                height: 26,
+                                fontSize: 11,
+                                horizontalPadding: 10,
+                                help: action.help,
+                                action: action.perform)
                         }
                     }
                 }
@@ -697,28 +718,16 @@ private struct ProviderMiniUsage: View {
         switch state {
         case let .loaded(snapshot):
             if let text = compactSummary(snapshot) {
-                Text(text)
-                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(AppStyle.textSecondary)
-                    .padding(.horizontal, 7)
-                    .frame(height: 20)
-                    .background(Capsule().fill(AppStyle.hoverFill))
+                ToolBadge(text: text, color: AppStyle.textSecondary, style: .muted, height: 20)
             }
         case .loading:
             ProgressView().controlSize(.small).scaleEffect(0.65)
         case .manual:
-            Text(L("手动"))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(AppStyle.accent)
+            ToolBadge(text: L("手动"), color: AppStyle.accent, height: 18)
         case .unconfigured:
-            Text(L("配置"))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(AppStyle.waitAmber)
+            ToolBadge(text: L("配置"), color: AppStyle.waitAmber, height: 18)
         case .error:
-            Text(L("失败"))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(AppStyle.errorRed)
+            ToolBadge(text: L("失败"), color: AppStyle.errorRed, height: 18)
         case .unsupported, .none:
             EmptyView()
         }
@@ -815,11 +824,14 @@ private struct ProviderErrorView: View {
                 .foregroundStyle(AppStyle.textSecondary)
                 .lineLimit(4)
                 .fixedSize(horizontal: false, vertical: true)
-            Button(action: onReload) {
-                Label(L("重试"), systemImage: "arrow.clockwise")
-                    .font(.system(size: 11, weight: .medium))
-            }
-            .buttonStyle(SecondaryButtonStyle(height: 26, horizontalPadding: 10, fontSize: 11))
+            ToolActionButton(
+                title: L("重试"),
+                systemImage: "arrow.clockwise",
+                role: .secondary,
+                height: 26,
+                fontSize: 11,
+                horizontalPadding: 10,
+                action: onReload)
         }
     }
 }
@@ -1074,23 +1086,52 @@ private struct ProviderTextFieldRow: View {
                 }
                 Spacer(minLength: 0)
             }
-            Group {
-                switch field.kind {
-                case .plain:
-                    TextField(field.placeholder, text: $text)
-                case .secure:
-                    SecureField(field.placeholder, text: $text)
+            HStack(spacing: 6) {
+                Group {
+                    switch field.kind {
+                    case .plain:
+                        TextField(field.placeholder, text: $text)
+                    case .secure:
+                        SecureField(field.placeholder, text: $text)
+                    }
+                }
+                .textFieldStyle(.plain)
+                .font(.system(size: 11.5, design: field.kind == .secure ? .monospaced : .default))
+                .foregroundStyle(AppStyle.textPrimary)
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(AppStyle.hoverFill))
+                .onSubmit(onSubmit)
+
+                IconOnlyButton(
+                    systemName: "doc.on.doc",
+                    help: L("复制字段值"),
+                    size: 30,
+                    symbolSize: 11,
+                    tint: AppStyle.textTertiary,
+                    action: copyValue)
+                    .disabled(text.isEmpty)
+
+                IconOnlyButton(
+                    systemName: "clipboard",
+                    help: L("从剪贴板粘贴"),
+                    size: 30,
+                    symbolSize: 11,
+                    tint: AppStyle.textTertiary,
+                    action: pasteValue)
+            }
+            .contextMenu {
+                Button(action: copyValue) {
+                    Label(L("复制字段值"), systemImage: "doc.on.doc")
+                }
+                .disabled(text.isEmpty)
+
+                Button(action: pasteValue) {
+                    Label(L("从剪贴板粘贴"), systemImage: "clipboard")
                 }
             }
-            .textFieldStyle(.plain)
-            .font(.system(size: 11.5, design: field.kind == .secure ? .monospaced : .default))
-            .foregroundStyle(AppStyle.textPrimary)
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(AppStyle.hoverFill))
-            .onSubmit(onSubmit)
 
             if let footer = field.footer, !footer.isEmpty {
                 Text(footer)
@@ -1099,6 +1140,18 @@ private struct ProviderTextFieldRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private func copyValue() {
+        guard !text.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    private func pasteValue() {
+        guard let value = NSPasteboard.general.string(forType: .string) else { return }
+        text = value
     }
 }
 
@@ -1202,8 +1255,8 @@ private struct UsageProviderProfile {
                 return [
                     .init(id: "auto", title: L("自动")),
                     .init(id: "oauth", title: "OAuth"),
-                    .init(id: "keychain", title: L("钥匙串")),
-                    .init(id: "file", title: L("文件")),
+                    .init(id: "keychain", title: L("系统登录")),
+                    .init(id: "file", title: L("本机文件")),
                     .init(id: "api", title: L("管理 API")),
                 ]
             case "amp":
@@ -1237,9 +1290,9 @@ private struct UsageProviderProfile {
                 if isLocal {
                     return [
                         .init(id: "auto", title: L("自动")),
-                        .init(id: "file", title: L("文件")),
-                        .init(id: "cli", title: "CLI"),
-                    ]
+                .init(id: "file", title: L("本机文件")),
+                .init(id: "cli", title: "CLI"),
+            ]
                 }
                 return [.init(id: "auto", title: L("自动"))]
             }
@@ -1250,7 +1303,7 @@ private struct UsageProviderProfile {
             let title: String = provider.id == "openai" ? L("管理 / API 密钥") : L("API 密钥")
             let subtitle: String = provider.id == "openai"
                 ? L("需要带 billing 权限；project key 可能无法读取额度。")
-                : L("写入 config.yaml，并在刷新前注入 %@。", envVar)
+                : L("保存到本机配置，刷新时作为 %@ 使用。", envVar)
             fields.append(.init(
                 key: .apiKey,
                 title: title,
@@ -1264,7 +1317,7 @@ private struct UsageProviderProfile {
             fields.append(.init(
                 key: .cookieHeader,
                 title: L("手动 Cookie"),
-                subtitle: L("浏览器读取失败时，可临时粘贴 Cookie header。"),
+                subtitle: L("浏览器读取失败时，可临时粘贴 Cookie。"),
                 placeholder: "name=value; ...",
                 kind: .secure,
                 footer: nil))
@@ -1374,7 +1427,7 @@ private struct UsageProviderProfile {
                 .init(
                     key: .extra("password"),
                     title: L("密码"),
-                    subtitle: L("仅写入本机 config.yaml。"),
+                    subtitle: L("仅保存在本机配置中。"),
                     placeholder: "password",
                     kind: .secure,
                     footer: "STEPFUN_PASSWORD"),
@@ -1410,23 +1463,9 @@ private struct UsageProviderProfile {
         if provider.id == "claude" {
             toggles.append(.init(
                 key: "avoidKeychainPrompts",
-                title: L("避免钥匙串提示"),
-                subtitle: L("优先读取本地凭证文件，减少系统授权弹窗。"),
+                title: L("减少授权弹窗"),
+                subtitle: L("优先使用本机登录文件，减少重复授权。"),
                 defaultValue: false))
-        }
-        if provider.id == "codex" {
-            toggles.append(contentsOf: [
-                .init(
-                    key: "webExtras",
-                    title: L("网页扩展信息"),
-                    subtitle: L("为 ChatGPT/Codex 订阅保留网页侧信息槽位。"),
-                    defaultValue: true),
-                .init(
-                    key: "batterySaver",
-                    title: L("省电模式"),
-                    subtitle: L("后台刷新时倾向更保守的请求节奏。"),
-                    defaultValue: false),
-            ])
         }
 
         return UsageProviderProfile(
@@ -1436,7 +1475,7 @@ private struct UsageProviderProfile {
             credentialHint: credentialHint(for: provider, envVar: envVar, isCookie: isCookie, isLocal: isLocal),
             setupHint: setupHint(for: provider, envVar: envVar, isCookie: isCookie, isLocal: isLocal),
             sourceSubtitle: L("自动模式会优先使用已检测到的登录态或应用内凭证。"),
-            cookieSubtitle: L("默认从浏览器读取；手动模式使用上面的 Cookie header。"),
+            cookieSubtitle: L("默认从浏览器读取；失败时再手动粘贴 Cookie。"),
             sourceOptions: sourceOptions,
             cookieOptions: cookieOptions,
             fields: fields,
@@ -1457,9 +1496,9 @@ private struct UsageProviderProfile {
     private static func subtitle(for provider: UsageProviderEntry) -> String {
         switch provider.id {
         case "codex": return L("ChatGPT / Codex 订阅额度与窗口。")
-        case "claude": return L("Claude Code OAuth、Keychain 与订阅用量。")
+        case "claude": return L("Claude Code 本机登录态与订阅用量。")
         case "openai": return L("OpenAI API credit grants 与 billing 额度。")
-        case "amp": return L("Amp API token、CLI 或浏览器登录态。")
+        case "amp": return L("Amp 账号登录态与 API 用量。")
         case "bedrock": return L("AWS Bedrock 账号预算与凭证。")
         case "vertexai": return L("Google Vertex AI 本地凭证。")
         default: return L("%@ 账号级用量与凭证。", provider.name)
@@ -1485,8 +1524,8 @@ private struct UsageProviderProfile {
         isCookie: Bool,
         isLocal: Bool) -> String
     {
-        if provider.id == "claude" { return L("OAuth / 钥匙串") }
-        if provider.id == "codex" { return "OAuth / auth.json" }
+        if provider.id == "claude" { return L("本机登录") }
+        if provider.id == "codex" { return L("本机登录") }
         if envVar != nil, isCookie { return L("API 密钥 / Cookie") }
         if envVar != nil { return L("API 密钥") }
         if isCookie { return L("浏览器 Cookie") }
@@ -1500,12 +1539,12 @@ private struct UsageProviderProfile {
         isCookie: Bool,
         isLocal: Bool) -> String
     {
-        if let envVar { return L("可在这里填写 %@，Conductor 会在刷新前注入进程环境。", envVar) }
-        if provider.id == "codex" { return L("默认读取 ~/.codex/auth.json。") }
-        if provider.id == "claude" { return L("默认读取 ~/.claude/.credentials.json，必要时回退 Keychain。") }
+        if let envVar { return L("可在这里填写 %@，刷新时优先使用这里的值。", envVar) }
+        if provider.id == "codex" { return L("使用本机登录态自动检测。") }
+        if provider.id == "claude" { return L("使用本机登录态自动检测。") }
         if isCookie { return L("默认从浏览器读取登录态。") }
-        if isLocal { return L("默认读取本机 CLI 或云厂商凭证。") }
-        return L("该 provider 暂无额外配置项。")
+        if isLocal { return L("使用本机 CLI 或云厂商登录态自动检测。") }
+        return L("该渠道无需额外配置，检测到登录态即自动显示用量。")
     }
 
     private static func setupHint(
@@ -1514,25 +1553,25 @@ private struct UsageProviderProfile {
         isCookie: Bool,
         isLocal: Bool) -> String
     {
-        if let envVar { return L("填写 %@，或在 shell 环境里设置后刷新。", envVar) }
-        if provider.id == "codex" { return L("先运行 `codex login`，然后刷新。") }
-        if provider.id == "claude" { return L("先运行 `claude` 登录；若弹钥匙串授权，允许一次即可。") }
+        if let envVar { return L("填写 %@，或在本机 shell 配置后刷新。", envVar) }
+        if provider.id == "codex" { return L("先完成 Codex CLI 登录，然后刷新。") }
+        if provider.id == "claude" { return L("先完成 Claude Code 登录，然后刷新。") }
         if isCookie { return L("先在浏览器登录 %@，然后刷新。", provider.name) }
-        if isLocal { return L("确认本机凭证文件或 CLI 登录态可用。") }
-        return L("需要补充该 provider 的凭证检测方式。")
+        if isLocal { return L("确认本机 CLI 或云厂商登录态可用。") }
+        return L("该渠道通过本机登录态自动检测，无法自动获取时用量留空。")
     }
 
     private static func actions(for provider: UsageProviderEntry) -> [ProviderActionDescriptor] {
         switch provider.id {
         case "codex":
             return [
-                .init(title: L("打开 Codex 目录"), systemImage: "folder", help: "~/.codex") {
+                .init(title: L("打开本机配置"), systemImage: "folder", help: L("打开 Codex 本机配置目录")) {
                     NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex"))
                 },
             ]
         case "claude":
             return [
-                .init(title: L("打开 Claude 目录"), systemImage: "folder", help: "~/.claude") {
+                .init(title: L("打开本机配置"), systemImage: "folder", help: L("打开 Claude 本机配置目录")) {
                     NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude"))
                 },
             ]

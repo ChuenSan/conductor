@@ -2,6 +2,9 @@ import AppKit
 import ConductorCore
 import SwiftUI
 
+/// "1e1e2e" → Color；非法值回落近黑（仅用于内置主题字面量，恒合法）。
+private func gc(_ hex: String) -> Color { Color(hex: hex) ?? .black }
+
 /// 外壳(侧栏/Tab栏/卡片/文字/强调)的一整套色，按主题数据驱动。对标 Craft：柔和、暖、卡片浮起无硬线。
 /// 与 `ThemePalette`(终端配色，喂 ghostty)互补:这套给 SwiftUI/AppKit 外壳用。
 struct Theme {
@@ -77,10 +80,59 @@ struct Theme {
         panelHairline: Color.black.opacity(0.06),
         panelHighlight: Color.white.opacity(0.75))
 
+    /// 由一组深色配色派生整套外壳主题：沿用深色主题成熟的层级/高光规则，
+    /// 只替换底色、文字与强调色。让加新主题=填几个 hex，不再手调二十个字段。
+    /// 画布、终端卡底、侧栏/状态栏统一用同一个 `base`——终端不再是一块浮起的异色卡，
+    /// 与四周完全融为一色（这些配色本就是为单底色设计的）。
+    /// - base:    全局底色（= 该主题终端配色的 background，整窗一色）
+    /// - surface: 抬起表面（选中胶囊/分段指示器底）
+    /// - text:    主文字（次/三级文字按其透明度派生）
+    /// - accent:  强调色（链接/选中描边/开关）
+    private static func darkVariant(
+        base: String, surface: String, text: String, accent: String
+    ) -> Theme {
+        Theme(
+            windowBackground: gc(base),
+            sidebarBackground: gc(base),
+            cardBackground: NSColor(gc(base)),
+            elevated: gc(surface),
+            activeFill: Color.white.opacity(0.09),
+            separator: Color.white.opacity(0.07),
+            hoverFill: Color.white.opacity(0.05),
+            textPrimary: gc(text),
+            textSecondary: gc(text).opacity(0.64),
+            textTertiary: gc(text).opacity(0.40),
+            accent: gc(accent),
+            isDark: true,
+            cardShadowColor: .black,
+            cardShadowOpacity: 0,               // 整窗一色，终端不再浮起 → 无阴影、无异色块
+            cardShadowRadius: 0,
+            cardBorder: NSColor.white.withAlphaComponent(0.05),
+            primarySolid: gc(text),            // 主按钮：近白前景实心
+            primarySolidText: gc(base),        // 文字：取底色深色
+            panelTint: Color.white.opacity(0.04),
+            panelHairline: Color.white.opacity(0.10),
+            panelHighlight: Color.white.opacity(0.20))
+    }
+
+    // 以下四款为社区公认耐看的配色，hex 取自各自官方调色板（整窗单底色）。
+    static let tokyoNight = darkVariant(
+        base: "1a1b26", surface: "292e42", text: "c0caf5", accent: "7aa2f7")
+    static let catppuccin = darkVariant(   // Mocha
+        base: "1e1e2e", surface: "313244", text: "cdd6f4", accent: "cba6f7")
+    static let nord = darkVariant(
+        base: "2e3440", surface: "3b4252", text: "d8dee9", accent: "88c0d0")
+    static let rosePine = darkVariant(
+        base: "191724", surface: "26233a", text: "e0def4", accent: "c4a7e7")
+
     static func resolve(_ appearance: Appearance) -> Theme {
         switch appearance.theme {
         case "light": return .light
-        default: return .dark   // custom: 外壳暂用深色(终端用自定义色)
+        case "tokyo-night": return .tokyoNight
+        case "catppuccin": return .catppuccin
+        case "nord": return .nord
+        case "rose-pine": return .rosePine
+        default: return .dark   // dark / custom: 外壳走深色(custom 仅终端用自定义色)
         }
     }
 

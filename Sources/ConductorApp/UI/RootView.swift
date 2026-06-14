@@ -29,7 +29,7 @@ struct RootView: View {
                     if showsQuickStartEmptyState {
                         QuickStartLaunchPanel(
                             title: activeWorkspaceName,
-                            subtitle: L("空工作区"),
+                            subtitle: L("选择下一步开始工作"),
                             primaryActions: terminalPrimaryActions,
                             secondaryActions: terminalSecondaryActions
                         )
@@ -82,6 +82,7 @@ struct RootView: View {
         .animation(Motion.panel, value: coordinator.settingsPresentation.isPresented)
         .animation(Motion.panel, value: coordinator.cliToolsPresentation.isPresented)
         .animation(Motion.panel, value: coordinator.sessionPresentation.isPresented)
+        // Agent Tools 管理台改为独立 NSWindow（见 AppCoordinator+AgentToolsWindow），不再用模态 sheet。
         // 这些动画会逐帧改终端区宽度；冻结期间终端只随层拉伸，结束后一次性 resize。
         .onChange(of: coordinator.sidebarPresentation.isCollapsed) { freezeTerminalResizeForPanelAnimation() }
         .onChange(of: coordinator.settingsPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
@@ -118,7 +119,7 @@ struct RootView: View {
 
     private var terminalPrimaryActions: [QuickStartAction] {
         [
-            QuickStartAction(id: "newTab", title: L("新标签"), systemImage: "plus", isPrimary: true) {
+            QuickStartAction(id: "newTab", title: L("新标签"), systemImage: "plus", shortcut: shortcut("newTab"), isPrimary: true) {
                 coordinator.newTab()
             },
         ]
@@ -126,13 +127,18 @@ struct RootView: View {
 
     private var terminalSecondaryActions: [QuickStartAction] {
         [
-            QuickStartAction(id: "commandPalette", title: L("命令"), systemImage: "command") {
+            QuickStartAction(id: "commandPalette", title: L("命令"), systemImage: "command", shortcut: shortcut("commandPalette")) {
                 coordinator.openCommandPalette()
             },
-            QuickStartAction(id: "openSettings", title: L("设置"), systemImage: "gearshape") {
+            QuickStartAction(id: "openSettings", title: L("设置"), systemImage: "gearshape", shortcut: shortcut("openSettings")) {
                 coordinator.openSettings()
             },
         ]
+    }
+
+    /// 取命令当前有效键位并符号化（如「⌘T」），供空状态键帽展示；未绑定则回退到图标。
+    private func shortcut(_ id: String) -> String? {
+        coordinator.commandRegistry.effectiveKeybinding(for: id).map(ShortcutSymbolizer.symbolize)
     }
 }
 

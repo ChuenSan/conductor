@@ -334,7 +334,7 @@ struct SidebarView: View {
         }
         .padding(3)
         .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                 .fill(AppStyle.activeFill.opacity(0.7))
         )
         // 模式也可能被外部切换（命令面板跳工作区、通知跳进文件夹上下文），同样要有滑动
@@ -360,17 +360,17 @@ struct SidebarView: View {
             .frame(height: 21)
             .background {
                 if selected {
-                    RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(AppStyle.elevated)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 .strokeBorder(AppStyle.textPrimary.opacity(0.08), lineWidth: 1)
                         )
-                        .shadow(color: .black.opacity(0.28), radius: 2.5, y: 1)
+                        .shadow(color: Color(nsColor: AppStyle.theme.cardShadowColor).opacity(0.28), radius: 2.5, y: 1)
                         .matchedGeometryEffect(id: "modeTabSelection", in: modeTabNamespace)
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 6.5, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
@@ -619,7 +619,7 @@ private struct SidebarSessionRow: View {
             .padding(.horizontal, 9)
             .padding(.vertical, 5.5)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(hovering ? AppStyle.hoverFill : Color.clear))
         }
         .buttonStyle(.plain)
@@ -655,12 +655,12 @@ private struct SidebarSessionRow: View {
         }
     }
 
-    /// 删除确认（与管理面板同款；删的是磁盘上的会话日志）。
+    /// 删除确认（与管理面板同款）。
     private func confirmDelete() {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = L("删除会话「%@」？", String(record.title.prefix(40)))
-        alert.informativeText = L("会删除磁盘上的会话日志文件，无法撤销。")
+        alert.informativeText = L("会删除这条本机会话记录，无法撤销。")
         alert.addButton(withTitle: L("删除"))
         alert.addButton(withTitle: L("取消"))
         alert.buttons.first?.hasDestructiveAction = true
@@ -718,7 +718,7 @@ private struct WorkspaceRow: View {
         .padding(.horizontal, isCollapsed ? 0 : 7)
         .padding(.vertical, 7)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                 .fill(selected ? AppStyle.activeFill : (hovering ? AppStyle.hoverFill : Color.clear))
         )
         .contentShape(Rectangle())

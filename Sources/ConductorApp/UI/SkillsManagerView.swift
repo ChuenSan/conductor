@@ -2,9 +2,313 @@ import AppKit
 import ConductorCore
 import SwiftUI
 
+@MainActor
+private enum SkillUI {
+    static let railWidth: CGFloat = 220
+    static let panelRadius: CGFloat = Radius.sm + 2
+    static let rowRadius: CGFloat = Radius.sm + 2
+    static let controlRadius: CGFloat = Radius.sm + 1
+    static let iconRadius: CGFloat = Radius.sm + 1
+    static let panelHPadding: CGFloat = 11
+    static let panelVPadding: CGFloat = 10
+    static let controlHeight: CGFloat = 26
+    static let chipHeight: CGFloat = 22
+
+    static var railFill: Color { AppStyle.hoverFill.opacity(0.14) }
+    static var softFill: Color { AppStyle.hoverFill.opacity(0.46) }
+    static var softerFill: Color { AppStyle.hoverFill.opacity(0.36) }
+    static var selectedFill: Color { AppStyle.activeFill.opacity(0.62) }
+    static var selectedStroke: Color { AppStyle.accent.opacity(0.30) }
+    static var subtleStroke: Color { AppStyle.separator.opacity(0.12) }
+}
+
+@MainActor
+private extension View {
+    func skillPanelSurface() -> some View {
+        // 去白卡片：浅色下不再用不透明白卡，统一走通透表面（深色=磨砂玻璃，浅色=极淡描边）。
+        agentToolsGlass(cornerRadius: SkillUI.panelRadius)
+    }
+
+    func skillRailSurface() -> some View {
+        background(SkillUI.railFill)
+    }
+
+    func skillSoftSurface(opacity: Double = 1) -> some View {
+        background(RoundedRectangle(cornerRadius: SkillUI.rowRadius, style: .continuous)
+            .fill(SkillUI.softFill.opacity(opacity)))
+    }
+
+    func skillControlSurface(active: Bool = false,
+                             tint: Color? = nil,
+                             disabled: Bool = false) -> some View {
+        let resolvedTint = tint ?? AppStyle.accent
+        return background(RoundedRectangle(cornerRadius: SkillUI.controlRadius, style: .continuous)
+            .fill(disabled
+                ? AppStyle.textTertiary.opacity(0.28)
+                : active ? resolvedTint : AppStyle.hoverFill))
+    }
+
+    func skillPrimaryControlSurface(disabled: Bool = false) -> some View {
+        background(RoundedRectangle(cornerRadius: SkillUI.controlRadius, style: .continuous)
+            .fill(disabled ? AppStyle.textTertiary.opacity(0.55) : AppStyle.accent))
+    }
+
+    func skillIconSurface(color: Color,
+                          shape: SkillIconSurfaceShape = .rounded) -> some View {
+        background {
+            switch shape {
+            case .circle:
+                Circle().fill(color.opacity(0.11))
+            case .rounded:
+                RoundedRectangle(cornerRadius: SkillUI.iconRadius, style: .continuous)
+                    .fill(color.opacity(0.11))
+            }
+        }
+    }
+
+    func skillRowSurface(active: Bool = false,
+                         selected: Bool = false,
+                         hovering: Bool = false,
+                         tint: Color? = nil) -> some View {
+        let resolvedTint = tint ?? AppStyle.accent
+        return background(RoundedRectangle(cornerRadius: SkillUI.rowRadius, style: .continuous)
+            .fill(active || selected
+                ? SkillUI.selectedFill
+                : AppStyle.hoverFill.opacity(hovering ? 0.58 : 0.42)))
+        .overlay(RoundedRectangle(cornerRadius: SkillUI.rowRadius, style: .continuous)
+            .stroke(active || selected ? resolvedTint.opacity(0.30) : SkillUI.subtleStroke, lineWidth: 1))
+    }
+
+    func skillRailItemSurface(selected: Bool) -> some View {
+        background(RoundedRectangle(cornerRadius: SkillUI.rowRadius, style: .continuous)
+            .fill(selected ? SkillUI.selectedFill : Color.clear))
+        .overlay(RoundedRectangle(cornerRadius: SkillUI.rowRadius, style: .continuous)
+            .stroke(selected ? SkillUI.selectedStroke : Color.clear, lineWidth: 1))
+    }
+}
+
+private enum SkillIconSurfaceShape {
+    case rounded
+    case circle
+}
+
+@MainActor
+private struct SkillModalShell<Rail: View, Header: View, Content: View>: View {
+    let railWidth: CGFloat
+    let rail: Rail
+    let header: Header
+    let content: Content
+
+    init(railWidth: CGFloat = 220,
+         @ViewBuilder rail: () -> Rail,
+         @ViewBuilder header: () -> Header,
+         @ViewBuilder content: () -> Content) {
+        self.railWidth = railWidth
+        self.rail = rail()
+        self.header = header()
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            rail
+                .frame(width: railWidth)
+            VStack(spacing: 0) {
+                header
+                content
+            }
+        }
+        .background(AppStyle.windowBackground)
+    }
+}
+
+@MainActor
+private struct SkillRailBrand: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .skillIconSurface(color: tint)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AppStyle.textPrimary)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+    }
+}
+
+@MainActor
+private struct SkillModalHeader<Actions: View, Meta: View>: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let tint: Color
+    let actions: Actions
+    let meta: Meta
+
+    init(icon: String,
+         title: String,
+         subtitle: String,
+         tint: Color? = nil,
+         @ViewBuilder actions: () -> Actions,
+         @ViewBuilder meta: () -> Meta) {
+        self.icon = icon
+        self.title = title
+        self.subtitle = subtitle
+        self.tint = tint ?? AppStyle.accent
+        self.actions = actions()
+        self.meta = meta()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 10) {
+                    headerIdentity
+                    Spacer(minLength: 10)
+                    actions
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    headerIdentity
+                    actions
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            meta
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+    }
+
+    private var headerIdentity: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .skillIconSurface(color: tint)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(AppStyle.textPrimary)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .lineLimit(2)
+            }
+        }
+    }
+}
+
+@MainActor
+private struct SkillPanelTitle: View {
+    let icon: String
+    let title: String
+    let value: String?
+    var tint: Color = AppStyle.accent
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 16)
+            Text(title)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppStyle.textPrimary)
+                .lineLimit(1)
+            Spacer()
+            if let value {
+                Text(value)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+@MainActor
+private struct SkillHeaderActionButton: View {
+    let title: String
+    let systemImage: String
+    var primary = false
+    var tint: Color = AppStyle.accent
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(primary ? .white : AppStyle.textSecondary)
+                .padding(.horizontal, 10)
+                .frame(height: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: SkillUI.controlRadius, style: .continuous)
+                        .fill(primary ? tint : AppStyle.hoverFill)
+                )
+        }
+        .buttonStyle(PressScaleStyle())
+        .help(title)
+    }
+}
+
+enum SkillManagerPresentationMode {
+    case compactPanel
+    case workbench
+}
+
+private enum SkillDrawerSection: String, CaseIterable, Identifiable {
+    case library
+    case install
+    case detail
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .library: return L("技能库")
+        case .install: return L("安装")
+        case .detail: return L("详情")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .library: return "square.stack.3d.up"
+        case .install: return "sparkles"
+        case .detail: return "sidebar.right"
+        }
+    }
+}
+
 /// Skills Manager：中央库 + 多 Agent 同步 + 本机发现。
-/// 后端来自 ConductorCore.SkillManagerEngine；旧 SkillCatalog 仍保留给兼容测试。
+/// 后端来自 ConductorCore.SkillManagerEngine。
 struct SkillsManagerView: View {
+    private let presentationMode: SkillManagerPresentationMode
+    private let agentFocused: Bool
+    private let openAgents: (() -> Void)?
     @ObservedObject private var configStore = ConfigStore.shared
     @State private var engine: SkillManagerEngine?
     @State private var skills: [ManagedSkill] = []
@@ -15,9 +319,8 @@ struct SkillsManagerView: View {
     @State private var projectTargets: [SkillProjectTargetRecord] = []
     @State private var projectSkills: [String: [ProjectSkillInfo]] = [:]
     @State private var auditEntries: [SkillAuditEntry] = []
-    @State private var doctorReport: SkillDoctorReport = .empty
     @State private var scanResult: SkillScanResult?
-    @State private var selectedSection: SkillManagerSection = .command
+    @State private var selectedSection: SkillManagerSection
     @State private var query = ""
     @State private var syncMode = "symlink"
     @State private var newPresetName = ""
@@ -26,12 +329,24 @@ struct SkillsManagerView: View {
     @State private var tagFilters: Set<String> = []
     @State private var skillsShQuery = ""
     @State private var skillsShBoard = "hot"
+    @State private var skillsShSourceFilter = "all"
+    @State private var skillsShVisibleLimit = 24
+    @State private var installTab: SkillInstallTab = .market
+    @State private var drawerSection: SkillDrawerSection = .library
+    @State private var libraryViewMode: SkillLibraryViewMode = .grid
+    @State private var focusedWorkspaceToolKey: String?
     @State private var skillsShSkills: [SkillsShSkill] = []
     @State private var skillsShLoading = false
     @State private var skillsShError: String?
     @State private var gitInstallURL = ""
     @State private var gitInstallSubdirectory = ""
     @State private var gitInstallRef = ""
+    @State private var gitPreviewSkills: [GitSkillPreview] = []
+    @State private var gitPreviewSelectedPaths: Set<String> = []
+    @State private var gitPreviewLoading = false
+    @State private var gitPreviewError: String?
+    @State private var gitPreviewSignature: String?
+    @State private var selectedDiscoveryGroupIDs: Set<String> = []
     @State private var selectedSkillIDs: Set<String> = []
     @State private var loading = false
     @State private var loadingText = ""
@@ -49,6 +364,26 @@ struct SkillsManagerView: View {
     @State private var pendingBatchDelete = false
     @State private var pendingPresetDelete: SkillPreset?
     @State private var pendingProjectDelete: SkillProject?
+
+    init(
+        presentationMode: SkillManagerPresentationMode = .compactPanel,
+        agentFocused: Bool = false,
+        openAgents: (() -> Void)? = nil,
+        initialSection: String? = nil
+    ) {
+        self.presentationMode = presentationMode
+        self.agentFocused = agentFocused
+        self.openAgents = openAgents
+        let requestedSection = initialSection.flatMap(SkillManagerSection.init(rawValue:))
+        let fallbackSection: SkillManagerSection = agentFocused ? .agents : .library
+        let startSection = requestedSection ?? fallbackSection
+        _selectedSection = State(initialValue: startSection)
+    }
+
+    private var visibleSections: [SkillManagerSection] {
+        if agentFocused { return [.workspace, .agents] }
+        return [.library, .discover, .workspace, .deploy, .projects, .agents, .activity]
+    }
 
     private var availableTools: [SkillToolInfo] {
         tools
@@ -116,27 +451,6 @@ struct SkillsManagerView: View {
         skills.filter(\.targets.isEmpty).count
     }
 
-    private var doctorActionCount: Int {
-        doctorReport.actionableCount
-    }
-
-    private var doctorStatusColor: Color {
-        if doctorReport.criticalCount > 0 { return .red }
-        if doctorReport.findings.contains(where: isProminentDoctorFinding) { return .orange }
-        if doctorReport.warningCount > 0 { return AppStyle.textTertiary }
-        return AppStyle.accent
-    }
-
-    private var topDoctorFindings: [SkillDoctorFinding] {
-        let prominent = doctorReport.findings.filter(isProminentDoctorFinding)
-        if !prominent.isEmpty { return Array(prominent.prefix(2)) }
-        return Array(doctorReport.findings.filter { $0.severity != .info }.prefix(1))
-    }
-
-    private var attentionSkillsCount: Int {
-        skills.filter { ["update_available", "source_missing", "error"].contains($0.updateStatus) }.count
-    }
-
     private var sourceProblemSkillsCount: Int {
         skills.filter { ["source_missing", "error"].contains($0.updateStatus) }.count
     }
@@ -145,17 +459,17 @@ struct SkillsManagerView: View {
         skills.reduce(0) { $0 + $1.targets.count }
     }
 
-    private var maxDeploymentSlots: Int {
-        max(0, skills.count * availableTools.count)
+    private var deploymentCoverageSummary: String {
+        guard !skills.isEmpty, !availableTools.isEmpty else { return "0%" }
+        let total = skills.count * availableTools.count
+        guard total > 0 else { return "0%" }
+        let percent = Double(deployedTargetCount) / Double(total)
+        return "\(Int((percent * 100).rounded()))%"
     }
 
-    private var deploymentCoveragePercent: Int {
-        guard maxDeploymentSlots > 0 else { return 0 }
-        return Int((Double(deployedTargetCount) / Double(maxDeploymentSlots) * 100).rounded())
-    }
-
-    private var sourceBackedSkillsCount: Int {
-        skills.filter(canRefreshFromSource).count
+    private var deploymentCoverageColor: Color {
+        guard !skills.isEmpty, !availableTools.isEmpty else { return AppStyle.textTertiary }
+        return unsyncedSkillsCount == 0 ? AppStyle.accent : AppStyle.waitAmber
     }
 
     private var commandTasks: [SkillCommandTask] {
@@ -185,18 +499,8 @@ struct SkillsManagerView: View {
                 title: L("扫描本机"),
                 detail: L("发现 Codex / Claude / 自定义 Agent 里的旧 Skill"),
                 count: nil,
-                tint: .orange,
+                tint: AppStyle.waitAmber,
                 action: .scan))
-        }
-        if availableTools.isEmpty {
-            tasks.append(SkillCommandTask(
-                id: "agents",
-                icon: "cpu",
-                title: "Agents",
-                detail: L("启用或添加可接收 Skill 的工具"),
-                count: nil,
-                tint: AppStyle.accent,
-                action: .agents))
         }
         if unsyncedSkillsCount > 0, !availableTools.isEmpty {
             tasks.append(SkillCommandTask(
@@ -208,16 +512,6 @@ struct SkillsManagerView: View {
                 tint: AppStyle.accent,
                 action: .syncUnsynced))
         }
-        if doctorActionCount > 0 {
-            tasks.append(SkillCommandTask(
-                id: "doctor",
-                icon: "stethoscope",
-                title: L("诊断"),
-                detail: L("%ld 个问题需要处理", doctorActionCount),
-                count: doctorActionCount,
-                tint: doctorStatusColor,
-                action: .doctor))
-        }
         if !updatableSkills.isEmpty {
             tasks.append(SkillCommandTask(
                 id: "update",
@@ -225,7 +519,7 @@ struct SkillsManagerView: View {
                 title: L("更新可用"),
                 detail: L("刷新已经确认有新版的 Skill"),
                 count: updatableSkills.count,
-                tint: .orange,
+                tint: AppStyle.waitAmber,
                 action: .updateAvailable))
         }
         if sourceProblemSkillsCount > 0 {
@@ -235,18 +529,18 @@ struct SkillsManagerView: View {
                 title: L("来源异常"),
                 detail: L("重新绑定或解除失效来源"),
                 count: sourceProblemSkillsCount,
-                tint: .red,
+                tint: AppStyle.errorRed,
                 action: .library))
         }
         if tasks.isEmpty {
             tasks.append(SkillCommandTask(
-                id: "healthy",
-                icon: "checkmark.seal",
-                title: L("状态稳定"),
-                detail: L("可以检查来源更新或继续整理标签"),
+                id: "library",
+                icon: "square.stack.3d.up",
+                title: L("管理技能库"),
+                detail: L("筛选、标签、详情和同步"),
                 count: nil,
                 tint: AppStyle.accent,
-                action: .checkUpdates))
+                action: .library))
         }
         return Array(tasks.prefix(5))
     }
@@ -257,6 +551,21 @@ struct SkillsManagerView: View {
         })
     }
 
+    private var skillsShSources: [String] {
+        Array(Set(skillsShSkills.map(\.source))).sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
+    }
+
+    private var filteredSkillsShSkills: [SkillsShSkill] {
+        guard skillsShSourceFilter != "all" else { return skillsShSkills }
+        return skillsShSkills.filter { $0.source == skillsShSourceFilter }
+    }
+
+    private var visibleSkillsShSkills: [SkillsShSkill] {
+        Array(filteredSkillsShSkills.prefix(skillsShVisibleLimit))
+    }
+
     private var filteredGroups: [DiscoveredSkillGroup] {
         let groups = scanResult?.groups ?? []
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -265,6 +574,14 @@ struct SkillsManagerView: View {
             $0.name.lowercased().contains(q) ||
                 $0.locations.contains { $0.tool.lowercased().contains(q) || $0.foundPath.lowercased().contains(q) }
         }
+    }
+
+    private var importableFilteredGroups: [DiscoveredSkillGroup] {
+        filteredGroups.filter { !$0.imported }
+    }
+
+    private var selectedDiscoveryGroups: [DiscoveredSkillGroup] {
+        filteredGroups.filter { selectedDiscoveryGroupIDs.contains($0.id) && !$0.imported }
     }
 
     private var filteredPresets: [SkillPreset] {
@@ -281,12 +598,53 @@ struct SkillsManagerView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            sectionTabs
-            content
+        Group {
+            switch presentationMode {
+            case .compactPanel:
+                compactPanelBody
+            case .workbench:
+                workbenchBody
+            }
         }
-        .onAppear { if engine == nil { reload() } }
+    }
+
+    private var compactPanelBody: some View {
+        VStack(spacing: 0) {
+            compactHeader
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    if let error {
+                        ToolStatusLine(icon: "exclamationmark.triangle.fill", text: error, color: AppStyle.errorRed)
+                    }
+                    compactHero
+                    compactDrawerTabs
+                    compactDrawerContent
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            .scrollIndicators(.never)
+        }
+        .onAppear {
+            normalizeSelectedSection()
+            if engine == nil { reload() }
+        }
+    }
+
+    private var workbenchBody: some View {
+        GeometryReader { proxy in
+            SkillModalShell(railWidth: workbenchRailWidth(for: proxy.size.width)) {
+                workbenchSidebar
+            } header: {
+                header
+            } content: {
+                content
+            }
+        }
+        .onAppear {
+            normalizeSelectedSection()
+            if engine == nil { reload() }
+        }
         .sheet(isPresented: Binding(
             get: { detailSkill != nil },
             set: { if !$0 { detailSkillID = nil } }
@@ -301,7 +659,6 @@ struct SkillsManagerView: View {
                     auditEntries: auditEntries.filter { entry in
                         entry.skillID == skill.id || entry.skillName == skill.name
                     },
-                    doctorFindings: doctorFindings(for: skill),
                     readinessItems: readinessItems(for: skill),
                     selectedTab: $detailTab,
                     syncMode: syncModeLabel,
@@ -319,7 +676,8 @@ struct SkillsManagerView: View {
                         pendingDelete = skill
                     },
                     onLoadDetails: { loadSkillDetails(skill) })
-                    .frame(minWidth: 880, idealWidth: 980, minHeight: 620, idealHeight: 720)
+                    .frame(minWidth: 960, idealWidth: 1080, minHeight: 660, idealHeight: 760)
+                    .background(AppStyle.windowBackground)
             }
         }
         .alert(L("删除 Skill？"), isPresented: Binding(
@@ -369,10 +727,46 @@ struct SkillsManagerView: View {
         }
     }
 
+    private func workbenchRailWidth(for width: CGFloat) -> CGFloat {
+        if width < 860 { return 188 }
+        if width < 980 { return 204 }
+        return SkillUI.railWidth
+    }
+
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        SkillModalHeader(
+            icon: selectedSection.icon,
+            title: selectedSection.title,
+            subtitle: selectedSection.subtitle,
+            tint: AppStyle.accent) {
             HStack(spacing: 8) {
                 searchField
+                    .frame(minWidth: 260, idealWidth: 360, maxWidth: 420)
+
+                Menu {
+                    Button { selectedSection = .discover } label: {
+                        Label("skills.sh", systemImage: "sparkles")
+                    }
+                    Button(action: importLocal) {
+                        Label(L("导入本地"), systemImage: "folder.badge.plus")
+                    }
+                    Button { reload(scan: true) } label: {
+                        Label(L("扫描本机"), systemImage: "scope")
+                    }
+                    Button { selectedSection = .discover } label: {
+                        Label(L("从 Git 安装"), systemImage: "git.branch")
+                    }
+                } label: {
+                    Label(L("添加"), systemImage: "plus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppStyle.textSecondary)
+                        .padding(.horizontal, 10)
+                        .frame(height: 26)
+                        .skillControlSurface()
+                }
+                .menuStyle(.borderlessButton)
+                .help(L("添加 Skill"))
+
                 Picker("", selection: $syncMode) {
                     Text(L("软链")).tag("symlink")
                     Text(L("复制")).tag("copy")
@@ -381,44 +775,602 @@ struct SkillsManagerView: View {
                 .frame(width: 94)
                 .help(L("同步模式"))
 
-                iconButton("folder.badge.plus", help: L("从本地目录导入 Skill"), action: importLocal)
-                iconButton("folder.badge.gearshape", help: L("添加项目工作区"), action: addProject)
-                iconButton("scope", help: L("扫描本机已有 Skills")) { reload(scan: true) }
                 iconButton("arrow.clockwise", help: L("刷新")) { reload() }
                     .disabled(loading)
             }
+        } meta: {
+            HStack(spacing: 6) {
+                ToolBadge(text: L("%ld Skills", skills.count), color: AppStyle.textTertiary, style: .muted, height: 20)
+                ToolBadge(text: L("%ld Agent", availableTools.count), color: AppStyle.textTertiary, style: .muted, height: 20)
+                if unsyncedSkillsCount > 0 {
+                    ToolBadge(text: L("%ld 未同步", unsyncedSkillsCount), color: AppStyle.waitAmber, height: 20)
+                }
+                if loading {
+                    ProgressView().controlSize(.small)
+                    Text(loadingText)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(AppStyle.textTertiary)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
 
-            ScrollView(.horizontal) {
-                HStack(spacing: 6) {
-                    metricChip(title: L("中央库"), value: "\(skills.count)")
-                    metricChip(title: "Presets", value: "\(presets.count)")
-                    metricChip(title: L("项目"), value: "\(projects.count)")
-                    metricChip(title: L("Agent"), value: "\(availableTools.count)")
-                    metricChip(title: L("目标"), value: "\(skills.reduce(0) { $0 + $1.targets.count })")
-                    if doctorActionCount > 0 {
-                        metricChip(title: L("诊断"), value: "\(doctorActionCount)")
-                    }
-                    if !updatableSkills.isEmpty {
-                        metricChip(title: L("可更新"), value: "\(updatableSkills.count)")
-                    }
-                    if let scanResult {
-                        metricChip(title: L("发现"), value: "\(scanResult.skillsFound)")
-                    }
-                    if loading {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text(loadingText)
-                                .font(.system(size: 10.5, weight: .medium))
-                                .foregroundStyle(AppStyle.textTertiary)
-                        }
-                    }
+    private var compactHeader: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 7) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppStyle.accent)
+                    .frame(width: 24, height: 24)
+                    .skillIconSurface(color: AppStyle.accent)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Skills")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppStyle.textPrimary)
+                    Text(L("中央库 / Agent / 项目"))
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
                 }
             }
-            .scrollIndicators(.never)
+            Spacer(minLength: 6)
+            if let openAgents {
+                IconOnlyButton(
+                    systemName: "cpu",
+                    help: L("打开 Agent 管理"),
+                    size: 28,
+                    symbolSize: 11,
+                    weight: .semibold,
+                    action: openAgents)
+            }
+            IconOnlyButton(
+                systemName: "arrow.clockwise",
+                help: L("刷新"),
+                size: 28,
+                symbolSize: 11,
+                weight: .semibold) {
+                    reload()
+                }
+                .disabled(loading)
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 8)
+    }
+
+    private var compactHero: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L("Skill 控制台"))
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(AppStyle.textPrimary)
+                    Text(compactHeroSubtitle)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(AppStyle.textSecondary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 8)
+                if loading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.top, 2)
+                }
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 7) {
+                ToolBadge(text: L("%ld Skills", skills.count), color: AppStyle.textTertiary, style: .muted, height: 20)
+                ToolBadge(text: L("%ld Agent", availableTools.count), color: AppStyle.textTertiary, style: .muted, height: 20)
+                if unsyncedSkillsCount > 0 {
+                    ToolBadge(text: L("%ld 未同步", unsyncedSkillsCount), color: AppStyle.waitAmber, height: 20)
+                }
+                if !updatableSkills.isEmpty {
+                    ToolBadge(text: L("%ld 可更新", updatableSkills.count), color: AppStyle.waitAmber, height: 20)
+                }
+            }
+
+            Button {
+                withAnimation(AgentToolsMotion.selection) {
+                    drawerSection = .install
+                    installTab = .market
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 11.5, weight: .semibold))
+                    Text(L("安装 Skill"))
+                        .font(.system(size: 11.5, weight: .bold))
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .skillPrimaryControlSurface()
+            }
+            .buttonStyle(PressScaleStyle())
+            .help(L("从 skills.sh、Git 或本地导入 Skill"))
+        }
+        .padding(11)
+        .skillPanelSurface()
+    }
+
+    private var compactHeroSubtitle: String {
+        if skills.isEmpty {
+            return L("先从 skills.sh、Git 或本地导入 Skill。")
+        }
+        if unsyncedSkillsCount > 0 {
+            return L("%ld 个 Skill 还没有进入 Agent。", unsyncedSkillsCount)
+        }
+        return L("中央库、Agent 分发和项目工作区状态正常。")
+    }
+
+    private func performCompactCommand(_ action: SkillCommandAction) {
+        switch action {
+        case .importLocal:
+            withAnimation(AgentToolsMotion.selection) {
+                drawerSection = .install
+                installTab = .local
+            }
+            runCommandTask(action)
+        case .scan:
+            withAnimation(AgentToolsMotion.selection) {
+                drawerSection = .install
+                installTab = .scan
+            }
+            runCommandTask(action)
+        case .syncUnsynced, .checkUpdates:
+            runCommandTask(action)
+        case .market:
+            withAnimation(AgentToolsMotion.selection) {
+                drawerSection = .install
+                installTab = .market
+            }
+        case .updateAvailable, .library:
+            withAnimation(AgentToolsMotion.selection) {
+                drawerSection = .library
+            }
+        case .agents:
+            openAgents?()
+        }
+    }
+
+    private var compactDrawerTabs: some View {
+        HStack(spacing: 2) {
+            ForEach(SkillDrawerSection.allCases) { section in
+                Button {
+                    withAnimation(AgentToolsMotion.selection) {
+                        drawerSection = section
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: section.icon)
+                            .font(.system(size: 10, weight: .semibold))
+                        Text(section.title)
+                            .font(.system(size: 10.5, weight: drawerSection == section ? .bold : .semibold))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(drawerSection == section ? AppStyle.textPrimary : AppStyle.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 28)
+                    .skillRailItemSurface(selected: drawerSection == section)
+                }
+                .buttonStyle(.plain)
+                .help(section.title)
+            }
+        }
+        .padding(3)
+        .skillSoftSurface(opacity: 0.82)
+    }
+
+    @ViewBuilder
+    private var compactDrawerContent: some View {
+        switch drawerSection {
+        case .library:
+            compactPrimaryActions
+            compactLibraryDrawer
+        case .install:
+            discoveredContent
+        case .detail:
+            compactDetailDrawer
+        }
+    }
+
+    private func workbenchSection(for action: SkillCommandAction) -> SkillManagerSection {
+        switch action {
+        case .market:
+            return .discover
+        case .updateAvailable, .checkUpdates:
+            return .library
+        case .agents, .syncUnsynced:
+            return .workspace
+        case .library:
+            return .library
+        case .importLocal, .scan:
+            return .discover
+        }
+    }
+
+    private var compactPrimaryActions: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            compactPanelTitle(icon: "bolt.fill", title: L("快速动作"), value: nil)
+            let tasks = commandTasks
+            ForEach(Array(tasks.prefix(3))) { task in
+                Button {
+                    performCompactCommand(task.action)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: task.icon)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(task.tint)
+                            .frame(width: 22, height: 22)
+                            .skillIconSurface(color: task.tint, shape: .circle)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(task.title)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(AppStyle.textPrimary)
+                                .lineLimit(1)
+                            Text(task.detail)
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(AppStyle.textTertiary)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 4)
+                        if let count = task.count {
+                            tinyBadge("\(count)", color: task.tint)
+                        }
+                        Image(systemName: task.action == .importLocal ? "arrow.down" : "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(task.tint)
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(height: 38)
+                    .skillRowSurface(tint: task.tint)
+                }
+                .buttonStyle(PressScaleStyle())
+                .help(task.detail)
+            }
+        }
+        .padding(10)
+        .skillPanelSurface()
+    }
+
+    private var compactLibraryPreview: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            compactPanelTitle(icon: "square.stack.3d.up", title: L("技能库"), value: "\(filteredSkills.count)")
+            if filteredSkills.isEmpty {
+                compactEmpty(icon: "tray", title: L("还没有 Skill"))
+                    .frame(height: 68)
+            } else {
+                ForEach(filteredSkills.prefix(5)) { skill in
+                    SkillCommandRow(
+                        skill: skill,
+                        active: inspectedSkill?.id == skill.id,
+                        healthColor: skillHealthColor(skill)) {
+                            inspectSkill(skill)
+                        }
+                }
+            }
+        }
+        .padding(10)
+        .skillPanelSurface()
+    }
+
+    private var compactLibraryDrawer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            searchField
+            compactLibraryPreview
+            if inspectedSkill != nil {
+                commandInspectorPanel
+                    .transition(AgentToolsMotion.revealTransition)
+            }
+        }
+        .animation(AgentToolsMotion.reveal, value: inspectedSkill?.id)
+    }
+
+    private var compactDetailDrawer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if inspectedSkill == nil {
+                compactLibraryPreview
+            }
+            commandInspectorPanel
+        }
+    }
+
+    private var workbenchSidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SkillRailBrand(
+                icon: "wand.and.stars",
+                title: "Skills Manager",
+                subtitle: L("Central Library"),
+                tint: AppStyle.accent)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    workbenchRailSection(L("工作台")) {
+                        let primary: [SkillManagerSection] = agentFocused
+                            ? [.workspace, .agents]
+                            : [.library, .discover, .workspace]
+                        ForEach(primary) { section in
+                            workbenchSidebarItem(section)
+                        }
+                    }
+
+                    if !agentFocused {
+                        workbenchRailSection("Presets") {
+                            workbenchSidebarItem(.deploy)
+                            ForEach(Array(presets.prefix(6))) { preset in
+                                workbenchPresetItem(preset)
+                            }
+                            if presets.count > 6 {
+                                workbenchOverflowHint(count: presets.count - 6)
+                            }
+                        }
+
+                        workbenchRailSection(L("项目")) {
+                            workbenchSidebarItem(.projects)
+                            ForEach(Array(projects.prefix(6))) { project in
+                                workbenchProjectItem(project)
+                            }
+                            if projects.count > 6 {
+                                workbenchOverflowHint(count: projects.count - 6)
+                            }
+                        }
+
+                    }
+
+                    if !agentFocused {
+                        workbenchRailSection(L("迁移")) {
+                            workbenchSidebarItem(.activity)
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 10)
+            }
+            .scrollIndicators(.never)
+
+            Spacer(minLength: 0)
+
+            if !agentFocused {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("中央库"))
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundStyle(AppStyle.textTertiary)
+                    HStack(spacing: 6) {
+                        ToolBadge(text: L("%ld Skills", skills.count), color: AppStyle.textTertiary, style: .muted, height: 20)
+                        ToolBadge(text: L("%ld Agent", availableTools.count), color: AppStyle.textTertiary, style: .muted, height: 20)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+            }
+        }
+        .skillRailSurface()
+    }
+
+    private func workbenchSidebarItem(_ section: SkillManagerSection) -> some View {
+        let selected = selectedSection == section
+        return Button {
+            selectWorkbenchSection(section)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: section.icon)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+                    .frame(width: 18)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(section.title)
+                        .font(.system(size: 11.5, weight: selected ? .bold : .semibold))
+                        .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+                        .lineLimit(1)
+                    Text(section.sidebarHint)
+                        .font(.system(size: 8.8, weight: .medium))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                if let badge = sectionBadge(section) {
+                    Text(badge)
+                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+                }
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 38)
+            .skillRailItemSurface(selected: selected)
+        }
+        .buttonStyle(.plain)
+        .help(section.subtitle)
+    }
+
+    private func workbenchRailSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 9.5, weight: .bold))
+                .foregroundStyle(AppStyle.textTertiary)
+                .padding(.horizontal, 9)
+                .textCase(.uppercase)
+            content()
+        }
+    }
+
+    private func workbenchPresetItem(_ preset: SkillPreset) -> some View {
+        workbenchObjectItem(
+            icon: "rectangle.stack",
+            title: preset.name,
+            detail: L("%ld 个 Skill", preset.skills.count),
+            badge: nil,
+            selected: selectedSection == .deploy && expandedPresetID == preset.id) {
+                withAnimation(AgentToolsMotion.selection) {
+                    selectedSection = .deploy
+                    expandedPresetID = preset.id
+                }
+            }
+            .contextMenu {
+                Button(L("打开")) {
+                    selectedSection = .deploy
+                    expandedPresetID = preset.id
+                }
+                Button(L("应用 Preset")) { applyPreset(preset) }
+                Button(L("移除 Preset 同步")) { removePreset(preset) }
+                Divider()
+                Button(L("删除 Preset"), role: .destructive) { pendingPresetDelete = preset }
+            }
+    }
+
+    private func workbenchProjectItem(_ project: SkillProject) -> some View {
+        let targetCount = projectTargets.filter { $0.projectID == project.id }.count
+        return workbenchObjectItem(
+            icon: "folder",
+            title: project.name,
+            detail: collapsedPath(project.path),
+            badge: targetCount > 0 ? "\(targetCount)" : nil,
+            selected: selectedSection == .projects && expandedProjectID == project.id) {
+                withAnimation(AgentToolsMotion.selection) {
+                    selectedSection = .projects
+                    expandedProjectID = project.id
+                }
+            }
+            .contextMenu {
+                Button(L("打开")) {
+                    selectedSection = .projects
+                    expandedProjectID = project.id
+                }
+                Button(L("在 Finder 显示")) { reveal(project.path) }
+                Divider()
+                Button(L("移除项目"), role: .destructive) { pendingProjectDelete = project }
+            }
+    }
+
+    private func workbenchObjectItem(icon: String,
+                                     title: String,
+                                     detail: String,
+                                     badge: String?,
+                                     selected: Bool,
+                                     action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+                    .frame(width: 16)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 10.5, weight: selected ? .bold : .semibold))
+                        .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+                        .lineLimit(1)
+                    Text(detail)
+                        .font(.system(size: 8.8))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 4)
+                if let badge {
+                    Text(badge)
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+                }
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 34)
+            .skillRailItemSurface(selected: selected)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func workbenchOverflowHint(count: Int) -> some View {
+        Text(L("还有 %ld 个", count))
+            .font(.system(size: 9))
+            .foregroundStyle(AppStyle.textTertiary)
+            .padding(.horizontal, 30)
+            .frame(height: 18)
+    }
+
+    private func selectWorkbenchSection(_ section: SkillManagerSection) {
+        withAnimation(AgentToolsMotion.selection) {
+            selectedSection = section
+            if section != .workspace {
+                focusedWorkspaceToolKey = nil
+            }
+        }
+    }
+
+    private func sectionBadge(_ section: SkillManagerSection) -> String? {
+        switch section {
+        case .dashboard:
+            return nil
+        case .library:
+            return "\(skills.count)"
+        case .discover:
+            return nil
+        case .workspace:
+            return "\(availableTools.count)"
+        case .deploy:
+            return "\(presets.count)"
+        case .projects:
+            return "\(projects.count)"
+        case .maintain:
+            return nil
+        case .activity:
+            return auditEntries.isEmpty ? nil : "\(auditEntries.count)"
+        case .agents:
+            return "\(tools.filter(\.installed).count)"
+        }
+    }
+
+    private func compactPanelTitle(icon: String, title: String, value: String?) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(AppStyle.accent)
+            Text(title)
+                .font(.system(size: 11.5, weight: .bold))
+                .foregroundStyle(AppStyle.textPrimary)
+            Spacer(minLength: 0)
+            if let value {
+                Text(value)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(AppStyle.textTertiary)
+            }
+        }
+    }
+
+    private func compactMetric(title: String, value: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 20, height: 20)
+                .skillIconSurface(color: color, shape: .circle)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 8.8, weight: .semibold))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .lineLimit(1)
+                Text(value)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(color)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 40)
+        .skillSoftSurface()
+    }
+
+    private func normalizeSelectedSection() {
+        guard !visibleSections.contains(selectedSection),
+              let fallback = visibleSections.first else { return }
+        selectedSection = fallback
     }
 
     private var searchField: some View {
@@ -426,7 +1378,7 @@ struct SkillsManagerView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 10.5, weight: .semibold))
                 .foregroundStyle(AppStyle.textTertiary)
-            TextField(L("搜索 skill / agent / 路径"), text: $query)
+            TextField(L("搜索 Skill / 标签 / 来源"), text: $query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .foregroundStyle(AppStyle.textPrimary)
@@ -442,39 +1394,7 @@ struct SkillsManagerView: View {
         }
         .padding(.horizontal, 9)
         .frame(height: 28)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppStyle.hoverFill))
-    }
-
-    private var sectionTabs: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 6) {
-                ForEach(SkillManagerSection.allCases) { section in
-                    let selected = selectedSection == section
-                    Button {
-                        withAnimation(Motion.snappy) { selectedSection = section }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: section.icon)
-                                .font(.system(size: 10.5, weight: .semibold))
-                            Text(section.title)
-                                .font(.system(size: 10.8, weight: .semibold))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.86)
-                        }
-                        .foregroundStyle(selected ? .white : AppStyle.textSecondary)
-                        .padding(.horizontal, 8)
-                        .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(selected ? AppStyle.accent : AppStyle.hoverFill))
-                    }
-                    .buttonStyle(PressScaleStyle())
-                }
-            }
-            .padding(.vertical, 1)
-        }
-        .scrollIndicators(.never)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
+        .skillControlSurface()
     }
 
     @ViewBuilder
@@ -482,24 +1402,28 @@ struct SkillsManagerView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 8) {
                 if let error {
-                    StatusLine(icon: "exclamationmark.triangle.fill", text: error, color: .red)
+                    ToolStatusLine(icon: "exclamationmark.triangle.fill", text: error, color: AppStyle.errorRed)
                 }
 
                 switch selectedSection {
-                case .command:
-                    commandCenterContent
+                case .dashboard:
+                    libraryWorkbenchContent
                 case .library:
-                    libraryContent
-                case .presets:
-                    presetsContent
+                    libraryWorkbenchContent
+                case .deploy:
+                    deployContent
+                case .discover:
+                    discoveredContent
+                case .workspace:
+                    workspaceContent
                 case .projects:
                     projectsContent
+                case .maintain:
+                    maintenanceActionPanel
+                case .activity:
+                    backupActivityContent
                 case .agents:
                     agentsContent
-                case .activity:
-                    activityContent
-                case .discovered:
-                    discoveredContent
                 }
             }
             .padding(.horizontal, 12)
@@ -509,380 +1433,289 @@ struct SkillsManagerView: View {
     }
 
     @ViewBuilder
-    private var commandCenterContent: some View {
-        Group {
-            if loading && skills.isEmpty {
-                loadingRow
-            } else {
-                commandQuickBar
-                commandDoctorPanel
-                if !selectedSkillIDs.isEmpty {
-                    commandSelectionTray
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-                commandLibraryPanel
-                commandInspectorPanel
-            }
-        }
-        .animation(Motion.expand, value: selectedSkillIDs.isEmpty)
-        .animation(Motion.snappy, value: unsyncedSkillsCount)
-        .animation(Motion.snappy, value: updatableSkills.count)
+    private var deployContent: some View {
+        deploymentSummaryPanel
+        presetsContent
     }
 
-    private var commandQuickBar: some View {
-        HStack(spacing: 8) {
-            compactCommandButton(
-                title: L("导入"),
-                icon: "folder.badge.plus",
-                color: AppStyle.accent,
-                action: importLocal)
-            compactCommandButton(
-                title: L("扫描"),
-                icon: "scope",
-                color: .orange) {
-                    reload(scan: true)
-                }
-            compactCommandButton(
-                title: doctorActionCount > 0 ? L("诊断 %ld", doctorActionCount) : L("诊断"),
-                icon: "stethoscope",
-                color: doctorStatusColor) {
-                    focusDoctor()
-                }
-            compactCommandButton(
-                title: "skills.sh",
-                icon: "sparkles",
-                color: AppStyle.accent) {
-                    selectedSection = .discovered
-                    if skillsShSkills.isEmpty { loadSkillsShMarket() }
-                }
-            compactCommandButton(
-                title: "Agents",
+    @ViewBuilder
+    private var workspaceContent: some View {
+        workspaceSummaryPanel
+        if availableTools.isEmpty {
+            emptyState(
                 icon: "cpu",
-                color: AppStyle.textSecondary) {
-                    selectedSection = .agents
+                title: L("没有可用 Agent"),
+                detail: L("启用或添加可接收 Skill 的工具"))
+        } else if let focusedWorkspaceToolKey,
+                  let tool = availableTools.first(where: { $0.key == focusedWorkspaceToolKey }) {
+            agentWorkspaceDetail(tool)
+        } else {
+            ForEach(availableTools) { tool in
+                AgentWorkspaceRow(
+                    tool: tool,
+                    skills: skills.filter { skill in
+                        skill.targets.contains { $0.tool == tool.key }
+                    },
+                    unsyncedCount: unsyncedSkillsCount,
+                    onReveal: { reveal(tool.skillsDirectory) },
+                    onOpenAgents: { openAgentsView() })
+            }
+        }
+    }
+
+    private var workspaceSummaryPanel: some View {
+        HStack(spacing: 8) {
+            ToolBadge(text: L("%ld Agent", availableTools.count), color: AppStyle.textTertiary, style: .muted)
+            ToolBadge(text: L("%ld 目标", deployedTargetCount), color: deployedTargetCount == 0 ? AppStyle.textTertiary : AppStyle.accent)
+            ToolBadge(text: L("覆盖率 %@", deploymentCoverageSummary), color: deploymentCoverageColor)
+            if focusedWorkspaceToolKey != nil {
+                ToolActionButton(
+                    title: L("全部 Agent"),
+                    systemImage: "rectangle.grid.1x2",
+                    height: 26,
+                    fontSize: 10.5,
+                    horizontalPadding: 9) {
+                        focusedWorkspaceToolKey = nil
+                    }
+            }
+            Spacer(minLength: 0)
+            ToolActionButton(
+                title: L("分发未同步"),
+                systemImage: "arrow.triangle.2.circlepath",
+                role: .tinted(AppStyle.accent),
+                height: 26,
+                fontSize: 10.5,
+                horizontalPadding: 9,
+                help: L("把未同步的 Skills 分发到可用 Agent")) {
+                    syncUnsyncedSkills()
                 }
+                .disabled(unsyncedSkillsCount == 0 || availableTools.isEmpty)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .skillPanelSurface()
+    }
 
-            Spacer(minLength: 8)
-
-            if unsyncedSkillsCount > 0, !availableTools.isEmpty {
-                compactCommandButton(
-                    title: L("分发 %ld", unsyncedSkillsCount),
-                    icon: "arrow.triangle.2.circlepath",
-                    color: .orange,
-                    action: syncUnsyncedSkills)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+    private func agentWorkspaceDetail(_ tool: SkillToolInfo) -> some View {
+        let syncedSkills = skills.filter { skill in
+            skill.targets.contains { $0.tool == tool.key }
+        }
+        let localGroups = (scanResult?.groups ?? []).filter { group in
+            group.locations.contains { $0.tool == tool.key }
+        }
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                SkillAgentIconView(tool: tool, size: 34, cornerRadius: 9)
+                    .opacity(tool.enabled ? 1 : 0.5)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(tool.displayName)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(AppStyle.textPrimary)
+                        tinyBadge(tool.enabled ? L("启用") : L("停用"), color: tool.enabled ? AppStyle.accent : AppStyle.waitAmber)
+                        tinyBadge(tool.installed ? L("已检测") : L("未检测"), color: tool.installed ? AppStyle.textTertiary : AppStyle.waitAmber)
+                    }
+                    Text(collapsedPath(tool.skillsDirectory))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 8)
+                ToolActionButton(title: tool.enabled ? L("停用 Agent") : L("启用 Agent"), systemImage: tool.enabled ? "pause.circle" : "play.circle", height: 26, fontSize: 10.5, horizontalPadding: 9) {
+                    toggleToolEnabled(tool)
+                }
+                ToolActionButton(title: L("显示"), systemImage: "folder", height: 26, fontSize: 10.5, horizontalPadding: 9) {
+                    reveal(tool.skillsDirectory)
+                }
             }
+
+            HStack(spacing: 6) {
+                ToolBadge(text: L("%ld Skills", syncedSkills.count), color: syncedSkills.isEmpty ? AppStyle.textTertiary : AppStyle.accent)
+                ToolBadge(text: L("%ld 本地发现", localGroups.count), color: localGroups.isEmpty ? AppStyle.textTertiary : AppStyle.waitAmber)
+                if let relative = tool.projectRelativeSkillsDir, !relative.isEmpty {
+                    ToolBadge(text: collapsedPath(relative), color: AppStyle.textTertiary, style: .muted)
+                }
+            }
+
+            if syncedSkills.isEmpty {
+                compactEmpty(icon: "tray", title: L("这个 Agent 还没有由 Conductor 同步的 Skill。"))
+                    .frame(height: 72)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("已部署 Skills"))
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(AppStyle.textSecondary)
+                    ForEach(syncedSkills.prefix(10)) { skill in
+                        SkillCommandRow(
+                            skill: skill,
+                            active: inspectedSkill?.id == skill.id,
+                            healthColor: skillHealthColor(skill)) {
+                                inspectSkill(skill)
+                                selectedSection = .library
+                            }
+                    }
+                    if syncedSkills.count > 10 {
+                        Text(L("还有 %ld 个", syncedSkills.count - 10))
+                            .font(.system(size: 10))
+                            .foregroundStyle(AppStyle.textTertiary)
+                    }
+                }
+            }
+
+            if !localGroups.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("本地发现"))
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(AppStyle.textSecondary)
+                    ForEach(localGroups.prefix(8)) { group in
+                        DiscoveredSkillGroupRow(
+                            group: group,
+                            selected: selectedDiscoveryGroupIDs.contains(group.id),
+                            onToggleSelection: { toggleDiscoveryGroupSelection(group) },
+                            onImport: { importDiscovered(group) },
+                            onReveal: { path in reveal(path) })
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .skillPanelSurface()
+    }
+
+    @ViewBuilder
+    private var maintainContent: some View {
+        if !updatableSkills.isEmpty || sourceProblemSkillsCount > 0 {
+            maintenanceActionPanel
+        } else {
+            ToolStatusLine(icon: "checkmark.seal.fill", text: L("没有可更新或来源异常的 Skill"), color: AppStyle.accent)
+        }
+    }
+
+    @ViewBuilder
+    private var backupActivityContent: some View {
+        ToolsSectionLabel(L("备份与迁移"))
+        archivePanel
+
+        ToolsSectionLabel(L("活动记录"))
+        activityContent
+    }
+
+    private var deploymentSummaryPanel: some View {
+        HStack(spacing: 8) {
+            ToolBadge(text: L("%ld Skills", skills.count), color: AppStyle.textTertiary, style: .muted)
+            ToolBadge(text: L("%ld Agent", availableTools.count), color: AppStyle.textTertiary, style: .muted)
+            ToolBadge(text: L("%ld 目标", deployedTargetCount), color: deployedTargetCount == 0 ? AppStyle.textTertiary : AppStyle.accent)
+            if unsyncedSkillsCount > 0 {
+                ToolBadge(text: L("%ld 未同步", unsyncedSkillsCount), color: AppStyle.waitAmber)
+            }
+            Spacer(minLength: 0)
+            ToolActionButton(
+                title: L("分发未同步"),
+                systemImage: "arrow.triangle.2.circlepath",
+                role: .tinted(AppStyle.accent),
+                height: 26,
+                fontSize: 10.5,
+                horizontalPadding: 9,
+                help: L("把未同步的 Skills 分发到可用 Agent")) {
+                    syncUnsyncedSkills()
+                }
+                .disabled(unsyncedSkillsCount == 0 || availableTools.isEmpty)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .skillPanelSurface()
+    }
+
+    private var maintenanceActionPanel: some View {
+        HStack(spacing: 8) {
             if !updatableSkills.isEmpty {
-                compactCommandButton(
-                    title: L("更新 %ld", updatableSkills.count),
-                    icon: "arrow.down.circle",
-                    color: .orange,
-                    action: updateAvailableSkills)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                ToolBadge(text: L("%ld 可更新", updatableSkills.count), color: AppStyle.waitAmber)
+                ToolActionButton(
+                    title: L("更新"),
+                    systemImage: "arrow.down.circle",
+                    role: .tinted(AppStyle.waitAmber),
+                    height: 26,
+                    fontSize: 10.5,
+                    horizontalPadding: 9) {
+                        updateAvailableSkills()
+                    }
             }
-            compactCommandButton(
-                title: L("检查"),
-                icon: "checkmark.seal",
-                color: AppStyle.textTertiary,
-                action: checkAllSkillUpdates)
+            if sourceProblemSkillsCount > 0 {
+                ToolBadge(text: L("%ld 来源异常", sourceProblemSkillsCount), color: AppStyle.errorRed)
+                ToolActionButton(
+                    title: L("查看"),
+                    systemImage: "exclamationmark.triangle",
+                    role: .destructive,
+                    height: 26,
+                    fontSize: 10.5,
+                    horizontalPadding: 9) {
+                        selectedSkillIDs = Set(skills.filter { ["source_missing", "error"].contains($0.updateStatus) }.map(\.id))
+                        if let first = skills.first(where: { selectedSkillIDs.contains($0.id) }) {
+                            inspectSkill(first)
+                        }
+                        selectedSection = .library
+                    }
+            }
+            Spacer(minLength: 0)
+            ToolActionButton(
+                title: L("检查全部"),
+                systemImage: "checkmark.seal",
+                height: 26,
+                fontSize: 10.5,
+                horizontalPadding: 9) {
+                    checkAllSkillUpdates()
+                }
                 .disabled(skills.allSatisfy { !canRefreshFromSource($0) })
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 9)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .skillPanelSurface()
     }
 
-    private func compactCommandButton(title: String,
-                                      icon: String,
-                                      color: Color,
-                                      action: @escaping () -> Void) -> some View {
-        SkillToolbarButton(title: title, icon: icon, color: color, action: action)
-    }
-
-    private var commandDoctorPanel: some View {
-        SkillDoctorSummaryPanel(
-            report: doctorReport,
-            findings: topDoctorFindings,
-            onSelectFinding: focusDoctorFinding,
-            onOpenAll: focusDoctor)
-            .transition(.move(edge: .top).combined(with: .opacity))
-            .animation(Motion.expand, value: doctorReport.findings.map(\.id).joined(separator: "|"))
-    }
-
-    private var commandRunway: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 8)], spacing: 8) {
-            commandActionTile(
-                icon: "sparkles",
-                title: "skills.sh",
-                value: skillsShSkills.isEmpty ? L("市场") : L("%ld 项", skillsShSkills.count),
-                color: AppStyle.accent) {
-                    selectedSection = .discovered
-                    if skillsShSkills.isEmpty { loadSkillsShMarket() }
-                }
-            commandActionTile(
-                icon: "scope",
-                title: L("扫描"),
-                value: scanResult.map { L("%ld 个", $0.skillsFound) } ?? L("本机"),
-                color: .orange) {
-                    reload(scan: true)
-                }
-            commandActionTile(
-                icon: "folder.badge.plus",
-                title: L("导入"),
-                value: L("目录 / Zip"),
-                color: AppStyle.textSecondary,
-                action: importLocal)
-            commandActionTile(
-                icon: "cpu",
-                title: "Agents",
-                value: L("%ld 可用", availableTools.count),
-                color: AppStyle.accent) {
-                    selectedSection = .agents
-                }
-            commandActionTile(
-                icon: "exclamationmark.triangle",
-                title: L("待处理"),
-                value: "\(attentionSkillsCount + unsyncedSkillsCount)",
-                color: attentionSkillsCount > 0 ? .orange : AppStyle.textTertiary) {
-                    selectedSection = .library
-                }
-        }
-    }
-
-    private func commandActionTile(icon: String,
-                                   title: String,
-                                   value: String,
-                                   color: Color,
-                                   action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(color)
-                    .frame(width: 22, height: 22)
-                    .background(Circle().fill(color.opacity(0.12)))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(AppStyle.textTertiary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-                    Text(value)
-                        .font(.system(size: 11.5, weight: .bold))
-                        .foregroundStyle(AppStyle.textPrimary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 48)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(AppStyle.hoverFill.opacity(0.72)))
-        }
-        .buttonStyle(PressScaleStyle())
-    }
-
-    private var commandWorkflowPanel: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            commandPanelHeader(
-                icon: "point.topleft.down.curvedto.point.bottomright.up",
-                title: L("Mission Control"),
-                value: "\(deploymentCoveragePercent)%")
-
-            HStack(spacing: 7) {
-                commandStageItem(
-                    icon: "sparkles",
-                    title: L("发现"),
-                    value: scanResult.map { L("%ld 项", $0.skillsFound) } ?? (skillsShSkills.isEmpty ? L("待启动") : L("%ld 项", skillsShSkills.count)),
-                    active: skills.isEmpty || scanResult == nil) {
-                        selectedSection = .discovered
-                        if skillsShSkills.isEmpty { loadSkillsShMarket() }
-                    }
-                commandStageConnector(active: !skills.isEmpty)
-                commandStageItem(
-                    icon: "square.stack.3d.up",
-                    title: L("收纳"),
-                    value: L("%ld Skills", skills.count),
-                    active: !skills.isEmpty) {
-                        selectedSection = .library
-                    }
-                commandStageConnector(active: deployedTargetCount > 0)
-                commandStageItem(
-                    icon: "point.3.connected.trianglepath.dotted",
-                    title: L("分发"),
-                    value: maxDeploymentSlots == 0 ? L("待配置") : L("%ld / %ld", deployedTargetCount, maxDeploymentSlots),
-                    active: unsyncedSkillsCount == 0 && deployedTargetCount > 0) {
-                        selectedSection = .library
-                    }
-                commandStageConnector(active: attentionSkillsCount == 0 && !skills.isEmpty)
-                commandStageItem(
-                    icon: "checkmark.seal",
-                    title: L("维护"),
-                    value: attentionSkillsCount == 0 ? L("稳定") : L("%ld 待处理", attentionSkillsCount),
-                    active: attentionSkillsCount == 0 && !skills.isEmpty) {
-                        if attentionSkillsCount == 0 {
-                            checkAllSkillUpdates()
-                        } else {
-                            selectedSection = .library
-                        }
-                    }
-            }
-
-            HStack(spacing: 7) {
-                commandSignal(title: L("覆盖率"), value: maxDeploymentSlots == 0 ? "--" : "\(deploymentCoveragePercent)%", color: AppStyle.accent)
-                commandSignal(title: L("来源"), value: "\(sourceBackedSkillsCount)/\(skills.count)", color: sourceProblemSkillsCount > 0 ? .orange : AppStyle.textSecondary)
-                commandSignal(title: L("未分发"), value: "\(unsyncedSkillsCount)", color: unsyncedSkillsCount > 0 ? .orange : AppStyle.accent)
-                commandSignal(title: L("选中"), value: "\(selectedSkillIDs.count)", color: selectedSkillIDs.isEmpty ? AppStyle.textTertiary : AppStyle.accent)
-            }
-        }
-        .padding(11)
-        .toolsCard(cornerRadius: Radius.sm + 2)
-    }
-
-    private func commandStageItem(icon: String,
-                                  title: String,
-                                  value: String,
-                                  active: Bool,
-                                  action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 6) {
-                    Image(systemName: icon)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(active ? AppStyle.accent : AppStyle.textTertiary)
-                    Text(title)
-                        .font(.system(size: 10.5, weight: .bold))
-                        .foregroundStyle(AppStyle.textSecondary)
-                        .lineLimit(1)
-                }
-                Text(value)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(active ? AppStyle.textPrimary : AppStyle.textTertiary)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 9)
-            .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(active ? AppStyle.accent.opacity(0.12) : AppStyle.hoverFill.opacity(0.54)))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(active ? AppStyle.accent.opacity(0.28) : Color.clear, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func commandStageConnector(active: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 3, style: .continuous)
-            .fill(active ? AppStyle.accent.opacity(0.45) : AppStyle.separator.opacity(0.85))
-            .frame(width: 16, height: 3)
-    }
-
-    private func commandSignal(title: String, value: String, color: Color) -> some View {
-        HStack(spacing: 5) {
-            Text(title)
-                .font(.system(size: 9.5, weight: .bold))
-                .foregroundStyle(AppStyle.textTertiary)
-            Text(value)
-                .font(.system(size: 10.5, weight: .bold))
-                .foregroundStyle(color)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 28)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.52)))
-    }
-
-    private var commandSelectionTray: some View {
+    private var archivePanel: some View {
         HStack(spacing: 8) {
-            Label(L("已选 %ld", selectedSkillIDs.count), systemImage: "checklist")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(AppStyle.textSecondary)
-            Spacer()
-            Button {
-                syncSelectedSkills()
-            } label: {
-                Label(L("同步选中"), systemImage: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 10.5, weight: .semibold))
-            }
-            .buttonStyle(.plain)
-            .disabled(selectedSkillIDs.isEmpty)
-            Button {
-                exportSelectedSkills()
-            } label: {
-                Label(L("导出"), systemImage: "square.and.arrow.up")
-                    .font(.system(size: 10.5, weight: .semibold))
-            }
-            .buttonStyle(.plain)
-            .disabled(selectedSkillIDs.isEmpty)
-            Button {
-                selectedSkillIDs.removeAll()
-            } label: {
-                Image(systemName: "xmark.circle")
-                    .font(.system(size: 11, weight: .semibold))
-            }
-            .buttonStyle(.plain)
-            .help(L("清空选择"))
+            ToolActionButton(
+                title: L("导入 Bundle"),
+                systemImage: "square.and.arrow.down",
+                role: .tinted(AppStyle.accent),
+                height: 28,
+                fontSize: 10.5,
+                horizontalPadding: 10,
+                help: L("导入 Conductor Skill Bundle、单个 Skill 或父目录")) {
+                    importLocal()
+                }
+
+            ToolActionButton(
+                title: L("导出全部"),
+                systemImage: "square.and.arrow.up",
+                height: 28,
+                fontSize: 10.5,
+                horizontalPadding: 10,
+                help: L("把中央库全部 Skills 导出为可迁移 Bundle")) {
+                    exportAllSkills()
+                }
+                .disabled(skills.isEmpty)
+
+            ToolActionButton(
+                title: L("导出选中"),
+                systemImage: "checkmark.circle",
+                height: 28,
+                fontSize: 10.5,
+                horizontalPadding: 10,
+                help: L("把当前选中的 Skills 导出为 Bundle")) {
+                    exportSelectedSkills()
+                }
+                .disabled(selectedSkillIDs.isEmpty)
+
+            Spacer(minLength: 0)
+
+            ToolBadge(text: L("%ld 活动", auditEntries.count), color: AppStyle.textTertiary, style: .muted, height: 22)
         }
-        .foregroundStyle(AppStyle.textSecondary)
         .padding(.horizontal, 11)
-        .frame(height: 36)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.58)))
-    }
-
-    private var commandLibraryPanel: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            commandPanelHeader(
-                icon: "square.stack.3d.up",
-                title: "Skills",
-                value: "\(filteredSkills.count)")
-
-            if filteredSkills.isEmpty {
-                compactEmpty(icon: "tray", title: L("没有 Skill"))
-            } else {
-                ForEach(filteredSkills.prefix(8)) { skill in
-                    commandSkillRow(skill)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .bottom).combined(with: .opacity),
-                            removal: .opacity))
-                }
-                if filteredSkills.count > 8 {
-                    Button {
-                        selectedSection = .library
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(L("查看全部 %ld 个", filteredSkills.count))
-                                .font(.system(size: 10.5, weight: .semibold))
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 9, weight: .bold))
-                        }
-                        .foregroundStyle(AppStyle.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 28)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .padding(11)
-        .toolsCard(cornerRadius: Radius.sm + 2)
-        .animation(Motion.expand, value: filteredSkills.map(\.id).joined(separator: "|"))
-    }
-
-    private func commandSkillRow(_ skill: ManagedSkill) -> some View {
-        let active = inspectedSkill?.id == skill.id
-        return SkillCommandRow(
-            skill: skill,
-            active: active,
-            healthColor: skillHealthColor(skill)) {
-                withAnimation(Motion.snappy) {
-                    inspectSkill(skill)
-                }
-            }
+        .padding(.vertical, 9)
+        .skillPanelSurface()
     }
 
     private var commandInspectorPanel: some View {
@@ -895,21 +1728,21 @@ struct SkillsManagerView: View {
             if let skill = inspectedSkill {
                 inspectorBody(skill)
                     .id(skill.id)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)))
+                    .transition(AgentToolsMotion.contentTransition)
             } else {
                 compactEmpty(icon: "cursorarrow.click", title: L("选择一个 Skill"))
-                    .transition(.opacity)
+                    .transition(AgentToolsMotion.revealTransition)
             }
         }
         .padding(11)
-        .toolsCard(cornerRadius: Radius.sm + 2)
-        .animation(Motion.expand, value: inspectedSkill?.id)
+        .skillPanelSurface()
+        .animation(AgentToolsMotion.reveal, value: inspectedSkill?.id)
     }
 
     private func inspectorBody(_ skill: ManagedSkill) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let hasDeploymentSurface = !availableTools.isEmpty || !skill.targets.isEmpty
+
+        return VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(skill.name)
@@ -931,7 +1764,7 @@ struct SkillsManagerView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 9)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.accent))
+                        .skillPrimaryControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
                 .help(L("打开 Skill 详情控制台"))
@@ -942,7 +1775,7 @@ struct SkillsManagerView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                         .padding(.horizontal, 8)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+                        .skillControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
 
@@ -959,9 +1792,10 @@ struct SkillsManagerView: View {
             }
 
             inspectorStatusGrid(skill)
-            inspectorDoctor(skill)
-            inspectorReadiness(skill)
-            inspectorQuickDeployment(skill)
+            if hasDeploymentSurface {
+                inspectorQuickDeployment(skill)
+                    .transition(AgentToolsMotion.revealTransition)
+            }
         }
     }
 
@@ -982,70 +1816,39 @@ struct SkillsManagerView: View {
         }
     }
 
-    private func inspectorDoctor(_ skill: ManagedSkill) -> some View {
-        let findings = doctorFindings(for: skill)
-        let focusFinding = findings.first(where: { $0.severity == .critical }) ??
-            findings.first(where: isProminentDoctorFinding) ??
-            findings.first
-        let color: Color = focusFinding.map(doctorFindingColor) ?? AppStyle.accent
-        return Button {
-            if let finding = focusFinding {
-                focusDoctorFinding(finding)
-            } else {
-                openSkillDetail(skill)
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: findings.isEmpty ? "checkmark.seal.fill" : "stethoscope")
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(color)
-                    .frame(width: 24, height: 24)
-                    .background(Circle().fill(color.opacity(0.12)))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(focusFinding?.title ?? L("诊断通过"))
-                        .font(.system(size: 10.5, weight: .bold))
-                        .foregroundStyle(AppStyle.textPrimary)
-                        .lineLimit(1)
-                    Text(focusFinding?.detail ?? L("这个 Skill 没有诊断问题"))
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(AppStyle.textTertiary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                tinyBadge(findings.isEmpty ? "100%" : "\(findings.count)", color: color)
-            }
-            .padding(.horizontal, 9)
-            .frame(height: 46)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(color.opacity(0.08)))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(color.opacity(findings.isEmpty ? 0.08 : 0.18), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .help(focusFinding?.detail ?? L("打开 Skill 详情控制台"))
-    }
-
     private func inspectorReadiness(_ skill: ManagedSkill) -> some View {
         let items = readinessItems(for: skill)
+        let pendingItems = items.filter { !$0.ready }
         let readyCount = items.filter(\.ready).count
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(L("就绪检查"))
+                Image(systemName: pendingItems.isEmpty ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(pendingItems.isEmpty ? AppStyle.accent : AppStyle.waitAmber)
+                Text(L("就绪"))
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(AppStyle.textSecondary)
                 Spacer()
                 Text("\(readyCount)/\(items.count)")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(readyCount == items.count ? AppStyle.accent : .orange)
+                    .foregroundStyle(readyCount == items.count ? AppStyle.accent : AppStyle.waitAmber)
             }
 
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 6),
-                GridItem(.flexible(), spacing: 6),
-            ], spacing: 6) {
-                ForEach(items) { item in
-                    readinessTile(item)
+            if !pendingItems.isEmpty {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 94), spacing: 6)], spacing: 6) {
+                    ForEach(Array(pendingItems.prefix(3))) { item in
+                        readinessTile(item)
+                    }
+                    if pendingItems.count > 3 {
+                        Text(L("+%ld", pendingItems.count - 3))
+                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppStyle.waitAmber)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 28)
+                            .skillSoftSurface()
+                    }
                 }
+                .transition(AgentToolsMotion.revealTransition)
             }
         }
     }
@@ -1069,10 +1872,9 @@ struct SkillsManagerView: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 7)
-        .frame(height: 36)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(item.ready ? AppStyle.accent.opacity(0.10) : AppStyle.hoverFill.opacity(0.54)))
-        .animation(Motion.snappy, value: item.ready)
+        .frame(height: 30)
+        .skillRowSurface(selected: item.ready, tint: item.ready ? AppStyle.accent : item.color)
+        .animation(AgentToolsMotion.selection, value: item.ready)
     }
 
     private func inspectorQuickDeployment(_ skill: ManagedSkill) -> some View {
@@ -1116,8 +1918,7 @@ struct SkillsManagerView: View {
                             .padding(.horizontal, 6)
                             .frame(maxWidth: .infinity)
                             .frame(height: 24)
-                            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(synced ? AppStyle.accent : AppStyle.hoverFill.opacity(0.64)))
+                            .skillControlSurface(active: synced, tint: AppStyle.accent)
                         }
                         .buttonStyle(PressScaleStyle())
                         .help(synced ? L("移除同步") : L("同步到该 Agent"))
@@ -1128,34 +1929,11 @@ struct SkillsManagerView: View {
     }
 
     private func commandPanelHeader(icon: String, title: String, value: String) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: icon)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(AppStyle.accent)
-            Text(title)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(AppStyle.textPrimary)
-            Spacer()
-            Text(value)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(AppStyle.textTertiary)
-                .lineLimit(1)
-        }
+        SkillPanelTitle(icon: icon, title: title, value: value)
     }
 
     private func compactEmpty(icon: String, title: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(AppStyle.textTertiary)
-            Text(title)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(AppStyle.textSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 92)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.45)))
+        ToolEmptyState(icon: icon, title: title, compact: true)
     }
 
     private func statusPill(title: String, value: String, color: Color) -> some View {
@@ -1171,17 +1949,13 @@ struct SkillsManagerView: View {
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 38)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.52)))
+        .skillSoftSurface()
     }
 
     private func skillHealthColor(_ skill: ManagedSkill) -> Color {
-        let findings = doctorFindings(for: skill)
-        if findings.contains(where: { $0.severity == .critical }) { return .red }
-        if findings.contains(where: isProminentDoctorFinding) { return .orange }
         switch skill.updateStatus {
-        case "update_available": return .orange
-        case "source_missing", "error": return .red
+        case "update_available": return AppStyle.waitAmber
+        case "source_missing", "error": return AppStyle.errorRed
         default:
             return skill.targets.isEmpty ? AppStyle.textTertiary : AppStyle.accent
         }
@@ -1212,28 +1986,28 @@ struct SkillsManagerView: View {
                 detail: hasKnownSkillDocument ? L("已识别") : L("待读取"),
                 ready: hasKnownSkillDocument,
                 icon: "doc.text.magnifyingglass",
-                color: .orange),
+                color: AppStyle.waitAmber),
             SkillReadinessItem(
                 id: "description",
                 title: L("摘要"),
                 detail: hasDescription ? L("清晰") : L("缺少描述"),
                 ready: hasDescription,
                 icon: "text.alignleft",
-                color: .orange),
+                color: AppStyle.waitAmber),
             SkillReadinessItem(
                 id: "deployment",
                 title: L("分发"),
                 detail: skill.targets.isEmpty ? L("未同步") : L("%ld Agent", skill.targets.count),
                 ready: !skill.targets.isEmpty,
                 icon: "arrow.triangle.2.circlepath",
-                color: .orange),
+                color: AppStyle.waitAmber),
             SkillReadinessItem(
                 id: "source",
                 title: L("来源"),
                 detail: sourceProblem ? inspectorUpdateLabel(skill) : (canRefresh ? L("可维护") : L("静态")),
                 ready: !sourceProblem,
                 icon: "link.badge.plus",
-                color: sourceProblem ? .red : AppStyle.textTertiary),
+                color: sourceProblem ? AppStyle.errorRed : AppStyle.textTertiary),
             SkillReadinessItem(
                 id: "tags",
                 title: L("分类"),
@@ -1244,8 +2018,271 @@ struct SkillsManagerView: View {
         ]
     }
 
-    private func doctorFindings(for skill: ManagedSkill) -> [SkillDoctorFinding] {
-        doctorReport.findings(forSkillID: skill.id)
+    @ViewBuilder
+    private var libraryWorkbenchContent: some View {
+        if loading && skills.isEmpty {
+            loadingRow
+        } else if filteredSkills.isEmpty {
+            emptyState(
+                icon: "tray",
+                title: query.isEmpty ? L("中央库还没有 Skill") : L("没有匹配的 Skill"),
+                detail: L("从 Discover 添加，或扫描本机已有 Agent Skills 后纳入管理。"))
+        } else {
+            libraryHealthStrip
+            libraryFilterBar
+            if !selectedSkillIDs.isEmpty {
+                librarySelectionBar
+                    .transition(AgentToolsMotion.revealTransition)
+            }
+            libraryWorkspaceLayout
+        }
+    }
+
+    private var libraryWorkspaceLayout: some View {
+        ViewThatFits(in: .horizontal) {
+            libraryWorkspaceColumns(inspectorWidth: 318, gridMinimum: 220, minLibraryWidth: 340)
+            libraryWorkspaceColumns(inspectorWidth: 260, gridMinimum: 190, minLibraryWidth: 300)
+            libraryWorkspaceColumns(inspectorWidth: nil, gridMinimum: 190, minLibraryWidth: 0)
+        }
+        .animation(AgentToolsMotion.route, value: libraryViewMode)
+        .animation(AgentToolsMotion.selection, value: inspectedSkill?.id)
+    }
+
+    private func libraryWorkspaceColumns(inspectorWidth: CGFloat?,
+                                         gridMinimum: CGFloat,
+                                         minLibraryWidth: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            libraryCollection(gridMinimum: gridMinimum)
+                .frame(minWidth: minLibraryWidth, maxWidth: .infinity, alignment: .topLeading)
+
+            if let skill = inspectedSkill, let inspectorWidth {
+                libraryInspector(for: skill)
+                    .frame(width: inspectorWidth)
+                    .transition(AgentToolsMotion.revealTransition)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func libraryCollection(gridMinimum: CGFloat) -> some View {
+        switch libraryViewMode {
+        case .list:
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(filteredSkills) { skill in
+                    libraryRow(for: skill)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        case .grid:
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: gridMinimum), spacing: 8)], spacing: 8) {
+                ForEach(filteredSkills) { skill in
+                    libraryCard(for: skill)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private func libraryRow(for skill: ManagedSkill) -> some View {
+        SkillLibraryRow(
+            skill: skill,
+            active: inspectedSkill?.id == skill.id,
+            selected: selectedSkillIDs.contains(skill.id),
+            healthLabel: libraryHealthLabel(skill),
+            healthColor: skillHealthColor(skill),
+            updateLabel: inspectorUpdateLabel(skill),
+            canRefreshFromSource: canRefreshFromSource(skill),
+            allTags: allTags,
+            onActivate: { inspectSkill(skill) },
+            onToggleSelection: { toggleSkillSelection(skill.id) },
+            onOpenDetail: { openSkillDetail(skill) },
+            onSync: { syncAll(skill) },
+            onCheckUpdate: { checkSkillUpdate(skill) },
+            onRefreshSource: { refreshSkillFromSource(skill) },
+            onAddTag: { tag in
+                if let tag {
+                    applyTag(tag, to: [skill.id], add: true)
+                } else {
+                    promptTag(for: skill, add: true)
+                }
+            },
+            onRemoveTag: { tag in
+                applyTag(tag, to: [skill.id], add: false)
+            },
+            onReveal: { reveal(skill.centralPath) },
+            onDelete: { pendingDelete = skill })
+    }
+
+    private func libraryCard(for skill: ManagedSkill) -> some View {
+        SkillLibraryCard(
+            skill: skill,
+            active: inspectedSkill?.id == skill.id,
+            selected: selectedSkillIDs.contains(skill.id),
+            healthLabel: libraryHealthLabel(skill),
+            healthColor: skillHealthColor(skill),
+            updateLabel: inspectorUpdateLabel(skill),
+            canRefreshFromSource: canRefreshFromSource(skill),
+            allTags: allTags,
+            onActivate: { inspectSkill(skill) },
+            onToggleSelection: { toggleSkillSelection(skill.id) },
+            onOpenDetail: { openSkillDetail(skill) },
+            onSync: { syncAll(skill) },
+            onCheckUpdate: { checkSkillUpdate(skill) },
+            onRefreshSource: { refreshSkillFromSource(skill) },
+            onAddTag: { tag in
+                if let tag {
+                    applyTag(tag, to: [skill.id], add: true)
+                } else {
+                    promptTag(for: skill, add: true)
+                }
+            },
+            onRemoveTag: { tag in
+                applyTag(tag, to: [skill.id], add: false)
+            },
+            onReveal: { reveal(skill.centralPath) },
+            onDelete: { pendingDelete = skill })
+    }
+
+    private func libraryInspector(for skill: ManagedSkill) -> some View {
+        SkillLibraryInspectorPanel(
+            skill: skill,
+            tools: Array(availableTools.prefix(8)),
+            sourcePath: collapsedPath(skill.centralPath),
+            syncMode: syncModeLabel,
+            canRefreshFromSource: canRefreshFromSource(skill),
+            onOpenDetail: { openSkillDetail(skill) },
+            onSyncAll: { syncAll(skill) },
+            onToggleTool: { tool, enabled in
+                toggle(skill: skill, tool: tool, enabled: enabled)
+            },
+            onCheckUpdate: { checkSkillUpdate(skill) },
+            onRefreshSource: { refreshSkillFromSource(skill) },
+            onReveal: { reveal(skill.centralPath) },
+            onDelete: { pendingDelete = skill })
+    }
+
+    private var libraryHealthStrip: some View {
+        HStack(spacing: 8) {
+            ToolBadge(text: L("%ld 个 Skill", filteredSkills.count), color: AppStyle.textTertiary, style: .muted)
+            if unsyncedSkillsCount > 0 {
+                ToolBadge(text: L("%ld 未同步", unsyncedSkillsCount), color: AppStyle.waitAmber)
+            }
+            if !updatableSkills.isEmpty {
+                ToolBadge(text: L("%ld 可更新", updatableSkills.count), color: AppStyle.waitAmber)
+            }
+            if sourceProblemSkillsCount > 0 {
+                ToolBadge(text: L("%ld 来源异常", sourceProblemSkillsCount), color: AppStyle.errorRed)
+            }
+            Spacer(minLength: 0)
+            libraryViewModeToggle
+            ToolActionButton(
+                title: L("全选"),
+                systemImage: "checklist",
+                height: 24,
+                fontSize: 10.5,
+                horizontalPadding: 9) {
+                    selectAllFilteredSkills()
+                }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .skillPanelSurface()
+    }
+
+    private var libraryViewModeToggle: some View {
+        HStack(spacing: 2) {
+            ForEach(SkillLibraryViewMode.allCases) { mode in
+                IconOnlyButton(
+                    systemName: mode.icon,
+                    help: mode.title,
+                    size: 24,
+                    symbolSize: 10.5,
+                    tint: libraryViewMode == mode ? AppStyle.accent : AppStyle.textTertiary) {
+                        withAnimation(AgentToolsMotion.selection) { libraryViewMode = mode }
+                    }
+                    .skillControlSurface(
+                        active: libraryViewMode == mode,
+                        tint: AppStyle.accent.opacity(0.12),
+                        disabled: false)
+            }
+        }
+        .padding(2)
+        .skillSoftSurface(opacity: 0.9)
+    }
+
+    private var librarySelectionBar: some View {
+        HStack(spacing: 8) {
+            ToolBadge(text: L("已选 %ld", selectedSkillIDs.count), color: AppStyle.accent)
+            Spacer(minLength: 0)
+            Menu {
+                Button(L("添加标签…")) { promptTagForSelection(add: true) }
+                if !allTags.isEmpty {
+                    Menu(L("添加已有标签")) {
+                        ForEach(allTags, id: \.self) { tag in
+                            Button(tag) { applyTag(tag, to: Array(selectedSkillIDs), add: true) }
+                        }
+                    }
+                    Menu(L("移除已有标签")) {
+                        ForEach(allTags, id: \.self) { tag in
+                            Button(tag) { applyTag(tag, to: Array(selectedSkillIDs), add: false) }
+                        }
+                    }
+                }
+                Button(L("移除标签…")) { promptTagForSelection(add: false) }
+            } label: {
+                Label(L("标签"), systemImage: "tag")
+                    .font(.system(size: 10.5, weight: .semibold))
+            }
+            .menuStyle(.borderlessButton)
+            .disabled(selectedSkillIDs.isEmpty)
+
+            ToolActionButton(
+                title: L("同步"),
+                systemImage: "arrow.triangle.2.circlepath",
+                role: .tinted(AppStyle.accent),
+                height: 24,
+                fontSize: 10.5,
+                horizontalPadding: 9) {
+                    syncSelectedSkills()
+                }
+            ToolActionButton(
+                title: L("导出"),
+                systemImage: "square.and.arrow.up",
+                height: 24,
+                fontSize: 10.5,
+                horizontalPadding: 9) {
+                    exportSelectedSkills()
+                }
+            ToolActionButton(
+                title: L("删除"),
+                systemImage: "trash",
+                role: .destructive,
+                height: 24,
+                fontSize: 10.5,
+                horizontalPadding: 9) {
+                    pendingBatchDelete = true
+                }
+            IconOnlyButton(
+                systemName: "xmark",
+                help: L("清空选择"),
+                size: 24,
+                symbolSize: 10.5) {
+                    selectedSkillIDs.removeAll()
+                }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .skillPanelSurface()
+    }
+
+    private func libraryHealthLabel(_ skill: ManagedSkill) -> String {
+        switch skill.updateStatus {
+        case "update_available": return L("可更新")
+        case "source_missing": return L("来源失效")
+        case "error": return L("错误")
+        default:
+            return skill.targets.isEmpty ? L("未同步") : L("正常")
+        }
     }
 
     @ViewBuilder
@@ -1269,7 +2306,6 @@ struct SkillsManagerView: View {
                     document: skillDocuments[skill.id],
                     files: skillFiles[skill.id] ?? [],
                     sourceDiff: skillDiffs[skill.id],
-                    doctorFindings: doctorFindings(for: skill),
                     syncMode: syncModeLabel,
                     onExpand: {
                         toggleSkillExpansion(skill)
@@ -1316,7 +2352,7 @@ struct SkillsManagerView: View {
                             filterChip(
                                 title: L("未打标签"),
                                 active: tagFilters.contains("__untagged__"),
-                                color: .orange) {
+                                color: AppStyle.waitAmber) {
                                     toggleString("__untagged__", in: &tagFilters)
                                 }
                         }
@@ -1336,7 +2372,7 @@ struct SkillsManagerView: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 8)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .skillPanelSurface()
     }
 
     private var libraryBatchToolbar: some View {
@@ -1350,7 +2386,7 @@ struct SkillsManagerView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                         .padding(.horizontal, 8)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+                        .skillControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
 
@@ -1361,7 +2397,7 @@ struct SkillsManagerView: View {
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(AppStyle.textSecondary)
                         .frame(width: 24, height: 24)
-                        .background(Circle().fill(AppStyle.hoverFill))
+                        .skillIconSurface(color: AppStyle.textTertiary, shape: .circle)
                 }
                 .buttonStyle(PressScaleStyle())
                 .help(L("清空选择"))
@@ -1376,7 +2412,7 @@ struct SkillsManagerView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                         .padding(.horizontal, 8)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+                        .skillControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(selectedSkillIDs.isEmpty)
@@ -1389,7 +2425,7 @@ struct SkillsManagerView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                         .padding(.horizontal, 8)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+                        .skillControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(!selectedSkills.contains(where: canRefreshFromSource))
@@ -1402,7 +2438,7 @@ struct SkillsManagerView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                         .padding(.horizontal, 8)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+                        .skillControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(updatableSkills.isEmpty)
@@ -1415,7 +2451,7 @@ struct SkillsManagerView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                         .padding(.horizontal, 8)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+                        .skillControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(skills.allSatisfy { !canRefreshFromSource($0) })
@@ -1428,7 +2464,7 @@ struct SkillsManagerView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                         .padding(.horizontal, 8)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+                        .skillControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(!selectedSkills.contains(where: canRefreshFromSource))
@@ -1441,7 +2477,7 @@ struct SkillsManagerView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                         .padding(.horizontal, 8)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+                        .skillControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(selectedSkillIDs.isEmpty)
@@ -1452,7 +2488,7 @@ struct SkillsManagerView: View {
                     .foregroundStyle(AppStyle.textPrimary)
                     .padding(.horizontal, 8)
                     .frame(width: 150, height: 24)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+                    .skillControlSurface()
 
                 Button {
                     applyTagToSelection(add: true)
@@ -1462,8 +2498,7 @@ struct SkillsManagerView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 8)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(canApplyTag ? AppStyle.accent : AppStyle.textTertiary.opacity(0.55)))
+                        .skillPrimaryControlSurface(disabled: !canApplyTag)
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(!canApplyTag)
@@ -1476,7 +2511,7 @@ struct SkillsManagerView: View {
                         .foregroundStyle(AppStyle.textSecondary)
                         .padding(.horizontal, 8)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+                        .skillControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(!canApplyTag)
@@ -1486,9 +2521,9 @@ struct SkillsManagerView: View {
                 } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.92, green: 0.34, blue: 0.34))
+                        .foregroundStyle(AppStyle.errorRed)
                         .frame(width: 24, height: 24)
-                        .background(Circle().fill(AppStyle.hoverFill))
+                        .skillIconSurface(color: AppStyle.textTertiary, shape: .circle)
                 }
                 .buttonStyle(PressScaleStyle())
                 .help(L("删除选中"))
@@ -1498,7 +2533,7 @@ struct SkillsManagerView: View {
             .padding(.vertical, 8)
         }
         .scrollIndicators(.never)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .skillPanelSurface()
     }
 
     private var canApplyTag: Bool {
@@ -1530,7 +2565,7 @@ struct SkillsManagerView: View {
                     skills: skills,
                     expanded: expandedPresetID == preset.id,
                     onExpand: {
-                        withAnimation(Motion.expand) {
+                        withAnimation(AgentToolsMotion.reveal) {
                             expandedPresetID = expandedPresetID == preset.id ? nil : preset.id
                         }
                     },
@@ -1564,15 +2599,14 @@ struct SkillsManagerView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 9)
                     .frame(height: 24)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(canCreatePreset ? AppStyle.accent : AppStyle.textTertiary.opacity(0.55)))
+                    .skillPrimaryControlSurface(disabled: !canCreatePreset)
             }
             .buttonStyle(PressScaleStyle())
             .disabled(!canCreatePreset)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 9)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .skillPanelSurface()
     }
 
     private var canCreatePreset: Bool {
@@ -1588,7 +2622,7 @@ struct SkillsManagerView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
                     .frame(height: 28)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppStyle.accent))
+                    .skillPrimaryControlSurface()
             }
             .buttonStyle(PressScaleStyle())
             Spacer()
@@ -1610,7 +2644,7 @@ struct SkillsManagerView: View {
                     targets: projectTargets.filter { $0.projectID == project.id },
                     expanded: expandedProjectID == project.id,
                     onExpand: {
-                        withAnimation(Motion.expand) {
+                        withAnimation(AgentToolsMotion.reveal) {
                             expandedProjectID = expandedProjectID == project.id ? nil : project.id
                         }
                     },
@@ -1638,14 +2672,14 @@ struct SkillsManagerView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10)
                     .frame(height: 26)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppStyle.accent))
+                    .skillPrimaryControlSurface()
             }
             .buttonStyle(PressScaleStyle())
             Spacer()
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 8)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .skillPanelSurface()
 
         if tools.isEmpty {
             loadingRow
@@ -1678,8 +2712,41 @@ struct SkillsManagerView: View {
 
     @ViewBuilder
     private var discoveredContent: some View {
-        skillsShMarketPanel
-        gitInstallPanel
+        installTabBar
+        switch installTab {
+        case .market:
+            skillsShMarketPanel
+        case .local:
+            localInstallPanel
+        case .git:
+            gitInstallPanel
+        case .scan:
+            scanInstallContent
+        }
+    }
+
+    private var installTabBar: some View {
+        HStack(spacing: 8) {
+            Picker("", selection: $installTab) {
+                ForEach(SkillInstallTab.allCases) { tab in
+                    Label(tab.title, systemImage: tab.icon).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 420)
+            Spacer(minLength: 0)
+            if installTab == .scan, let scanResult {
+                ToolBadge(text: L("发现 %ld", scanResult.skillsFound), color: AppStyle.textTertiary, style: .muted, height: 22)
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .skillPanelSurface()
+    }
+
+    @ViewBuilder
+    private var scanInstallContent: some View {
+        scanInstallPanel
         if scanResult != nil {
             discoveryToolbar
         }
@@ -1689,15 +2756,6 @@ struct SkillsManagerView: View {
                 icon: "scope",
                 title: L("还没有扫描"),
                 detail: L("扫描会查找各 Agent 目录里不是由 Conductor 管理的 Skills。"))
-            Button { reload(scan: true) } label: {
-                Label(L("开始扫描"), systemImage: "scope")
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .frame(height: 28)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppStyle.accent))
-            }
-            .buttonStyle(PressScaleStyle())
         } else if filteredGroups.isEmpty {
             emptyState(
                 icon: "checkmark.circle",
@@ -1707,6 +2765,8 @@ struct SkillsManagerView: View {
             ForEach(filteredGroups) { group in
                 DiscoveredSkillGroupRow(
                     group: group,
+                    selected: selectedDiscoveryGroupIDs.contains(group.id),
+                    onToggleSelection: { toggleDiscoveryGroupSelection(group) },
                     onImport: { importDiscovered(group) },
                     onReveal: { path in reveal(path) })
             }
@@ -1721,34 +2781,181 @@ struct SkillsManagerView: View {
                     .foregroundStyle(AppStyle.textSecondary)
                     .padding(.horizontal, 8)
                     .frame(height: 24)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+                    .skillControlSurface()
             }
             .buttonStyle(PressScaleStyle())
 
-            Button { importAllDiscovered() } label: {
-                Label(L("全部导入"), systemImage: "square.and.arrow.down.on.square")
+            Button { importFilteredDiscovered() } label: {
+                Label(L("导入当前筛选"), systemImage: "line.3.horizontal.decrease.circle")
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
                     .frame(height: 24)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(canImportAllDiscovered ? AppStyle.accent : AppStyle.textTertiary.opacity(0.55)))
+                    .skillPrimaryControlSurface(disabled: !canImportAllDiscovered)
             }
             .buttonStyle(PressScaleStyle())
             .disabled(!canImportAllDiscovered)
 
+            Button { importSelectedDiscovered() } label: {
+                Label(L("导入选中"), systemImage: "checkmark.square")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(AppStyle.textSecondary)
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .skillControlSurface()
+            }
+            .buttonStyle(PressScaleStyle())
+            .disabled(!canImportSelectedDiscovered)
+
+            Button {
+                selectedDiscoveryGroupIDs = Set(importableFilteredGroups.map(\.id))
+            } label: {
+                Label(L("全选"), systemImage: "checklist")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(AppStyle.textSecondary)
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .skillControlSurface()
+            }
+            .buttonStyle(PressScaleStyle())
+            .disabled(importableFilteredGroups.isEmpty)
+
+            if !selectedDiscoveryGroups.isEmpty {
+                IconOnlyButton(
+                    systemName: "xmark",
+                    help: L("清空选择"),
+                    size: 24,
+                    symbolSize: 10.5) {
+                        selectedDiscoveryGroupIDs.removeAll()
+                    }
+                    .transition(AgentToolsMotion.revealTransition)
+            }
+
             if let scanResult {
                 tinyBadge(L("发现 %ld", scanResult.skillsFound), color: AppStyle.textTertiary)
+            }
+            if !selectedDiscoveryGroups.isEmpty {
+                tinyBadge(L("已选 %ld", selectedDiscoveryGroups.count), color: AppStyle.accent)
             }
             Spacer()
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 8)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .skillPanelSurface()
+    }
+
+    private var localInstallPanel: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppStyle.accent)
+                Text(L("本地安装"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppStyle.textPrimary)
+                Spacer()
+                if let scanResult {
+                    tinyBadge(L("发现 %ld", scanResult.skillsFound), color: AppStyle.textTertiary)
+                }
+            }
+
+            Text(L("导入单个 Skill、包含多个 Skills 的父目录，或扫描已有 Agent 目录后纳入中央库。"))
+                .font(.system(size: 10.5))
+                .foregroundStyle(AppStyle.textTertiary)
+                .lineLimit(2)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
+                localInstallAction(
+                    icon: "square.and.arrow.down",
+                    title: L("导入目录 / Bundle"),
+                    detail: L("选择 Skill 目录、父目录或 .zip"),
+                    color: AppStyle.accent,
+                    action: importLocal)
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .skillPanelSurface()
+    }
+
+    private var scanInstallPanel: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                Image(systemName: "scope")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppStyle.waitAmber)
+                Text(L("扫描本机"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppStyle.textPrimary)
+                Spacer()
+                if let scanResult {
+                    tinyBadge(L("%ld 个工具", scanResult.toolsScanned), color: AppStyle.textTertiary)
+                    tinyBadge(L("发现 %ld", scanResult.skillsFound), color: scanResult.skillsFound > 0 ? AppStyle.waitAmber : AppStyle.textTertiary)
+                }
+            }
+
+            Text(L("扫描各 Agent 目录，找出尚未进入中央库的本地 Skills。"))
+                .font(.system(size: 10.5))
+                .foregroundStyle(AppStyle.textTertiary)
+                .lineLimit(2)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
+                localInstallAction(
+                    icon: "scope",
+                    title: scanResult == nil ? L("开始扫描") : L("重新扫描"),
+                    detail: L("发现 Agent 目录里的旧 Skill"),
+                    color: AppStyle.waitAmber) {
+                        reload(scan: true)
+                    }
+                localInstallAction(
+                    icon: "square.and.arrow.down.on.square",
+                    title: L("全部导入发现项"),
+                    detail: scanResult == nil ? L("先扫描本机 Skills") : L("把发现项收纳到中央库"),
+                    color: canImportAllDiscovered ? AppStyle.accent : AppStyle.textTertiary) {
+                        importFilteredDiscovered()
+                    }
+                    .disabled(!canImportAllDiscovered)
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .skillPanelSurface()
+    }
+
+    private func localInstallAction(icon: String, title: String, detail: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 26, height: 26)
+                    .skillIconSurface(color: color)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(AppStyle.textPrimary)
+                        .lineLimit(1)
+                    Text(detail)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 46)
+            .skillRowSurface(tint: color)
+        }
+        .buttonStyle(PressScaleStyle())
+        .help(detail)
     }
 
     private var canImportAllDiscovered: Bool {
-        filteredGroups.contains { !$0.imported }
+        !importableFilteredGroups.isEmpty
+    }
+
+    private var canImportSelectedDiscovered: Bool {
+        !selectedDiscoveryGroups.isEmpty
     }
 
     private var skillsShMarketPanel: some View {
@@ -1768,6 +2975,9 @@ struct SkillsManagerView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 132)
                 Spacer()
+                if !skillsShSkills.isEmpty {
+                    tinyBadge(L("%ld / %ld", filteredSkillsShSkills.count, skillsShSkills.count), color: AppStyle.textTertiary)
+                }
                 Button {
                     loadSkillsShMarket()
                 } label: {
@@ -1775,7 +2985,7 @@ struct SkillsManagerView: View {
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(AppStyle.textSecondary)
                         .frame(width: 24, height: 24)
-                        .background(Circle().fill(AppStyle.hoverFill))
+                        .skillIconSurface(color: AppStyle.textTertiary, shape: .circle)
                 }
                 .buttonStyle(PressScaleStyle())
                 .help(L("刷新 skills.sh"))
@@ -1789,7 +2999,7 @@ struct SkillsManagerView: View {
                     .foregroundStyle(AppStyle.textPrimary)
                     .padding(.horizontal, 9)
                     .frame(height: 28)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppStyle.hoverFill))
+                    .skillControlSurface()
                     .onSubmit { loadSkillsShMarket() }
                 Button {
                     loadSkillsShMarket()
@@ -1799,10 +3009,14 @@ struct SkillsManagerView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 9)
                         .frame(height: 26)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.accent))
+                        .skillPrimaryControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(skillsShLoading)
+            }
+
+            if !skillsShSources.isEmpty {
+                skillsShSourceFilterBar
             }
 
             if skillsShLoading {
@@ -1814,30 +3028,74 @@ struct SkillsManagerView: View {
                     Spacer()
                 }
             } else if let skillsShError {
-                StatusLine(icon: "exclamationmark.triangle.fill", text: skillsShError, color: .orange)
+                ToolStatusLine(icon: "exclamationmark.triangle.fill", text: skillsShError, color: AppStyle.waitAmber)
             } else if skillsShSkills.isEmpty {
                 Text(L("加载榜单或搜索后，可以直接安装远程 Skill。"))
                     .font(.system(size: 10.5))
                     .foregroundStyle(AppStyle.textTertiary)
             } else {
                 LazyVStack(alignment: .leading, spacing: 6) {
-                    ForEach(skillsShSkills.prefix(16)) { skill in
+                    ForEach(visibleSkillsShSkills) { skill in
                         SkillsShMarketRow(
                             skill: skill,
                             installed: installedSkillsshRefs.contains(skill.id),
                             onInstall: { installSkillssh(skill) })
+                    }
+                    if filteredSkillsShSkills.count > visibleSkillsShSkills.count {
+                        Button {
+                            withAnimation(AgentToolsMotion.reveal) {
+                                skillsShVisibleLimit += 24
+                            }
+                        } label: {
+                            Label(L("显示更多"), systemImage: "chevron.down")
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .foregroundStyle(AppStyle.textSecondary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 30)
+                                .skillControlSurface()
+                        }
+                        .buttonStyle(PressScaleStyle())
                     }
                 }
             }
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .skillPanelSurface()
         .onAppear {
             if skillsShSkills.isEmpty, !skillsShLoading {
                 loadSkillsShMarket()
             }
         }
+    }
+
+    private var skillsShSourceFilterBar: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 5) {
+                filterChip(
+                    title: L("全部来源"),
+                    active: skillsShSourceFilter == "all",
+                    color: AppStyle.accent) {
+                        withAnimation(AgentToolsMotion.selection) {
+                            skillsShSourceFilter = "all"
+                            skillsShVisibleLimit = 24
+                        }
+                    }
+                ForEach(skillsShSources, id: \.self) { source in
+                    filterChip(
+                        title: source,
+                        active: skillsShSourceFilter == source,
+                        color: AppStyle.textTertiary) {
+                            withAnimation(AgentToolsMotion.selection) {
+                                skillsShSourceFilter = source
+                                skillsShVisibleLimit = 24
+                            }
+                        }
+                }
+            }
+            .padding(.vertical, 1)
+        }
+        .scrollIndicators(.never)
     }
 
     private var gitInstallPanel: some View {
@@ -1851,15 +3109,27 @@ struct SkillsManagerView: View {
                     .foregroundStyle(AppStyle.textPrimary)
                 Spacer()
                 Button {
+                    previewGitSkills()
+                } label: {
+                    Label(L("预览"), systemImage: "doc.text.magnifyingglass")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(AppStyle.textSecondary)
+                        .padding(.horizontal, 9)
+                        .frame(height: 24)
+                        .skillControlSurface()
+                }
+                .buttonStyle(PressScaleStyle())
+                .disabled(!canPreviewGitSkill || gitPreviewLoading)
+
+                Button {
                     installGitSkill()
                 } label: {
-                    Label(L("安装"), systemImage: "square.and.arrow.down")
+                    Label(L("安装选中"), systemImage: "square.and.arrow.down")
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 9)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(canInstallGitSkill ? AppStyle.accent : AppStyle.textTertiary.opacity(0.55)))
+                        .skillPrimaryControlSurface(disabled: !canInstallGitSkill)
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(!canInstallGitSkill)
@@ -1871,7 +3141,7 @@ struct SkillsManagerView: View {
                 .foregroundStyle(AppStyle.textPrimary)
                 .padding(.horizontal, 9)
                 .frame(height: 28)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppStyle.hoverFill))
+                .skillControlSurface()
 
             HStack(spacing: 8) {
                 TextField(L("子目录，可空"), text: $gitInstallSubdirectory)
@@ -1880,23 +3150,103 @@ struct SkillsManagerView: View {
                     .foregroundStyle(AppStyle.textPrimary)
                     .padding(.horizontal, 9)
                     .frame(height: 26)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppStyle.hoverFill))
+                    .skillControlSurface()
                 TextField("branch / tag / sha", text: $gitInstallRef)
                     .textFieldStyle(.plain)
                     .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(AppStyle.textPrimary)
                     .padding(.horizontal, 9)
                     .frame(height: 26)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppStyle.hoverFill))
+                    .skillControlSurface()
+            }
+
+            if gitPreviewLoading {
+                HStack(spacing: 7) {
+                    ProgressView().controlSize(.small)
+                    Text(L("正在预览 Git 仓库…"))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(AppStyle.textTertiary)
+                    Spacer()
+                }
+                .padding(.horizontal, 9)
+                .frame(height: 34)
+                .skillSoftSurface()
+            } else if let gitPreviewError {
+                ToolStatusLine(icon: "exclamationmark.triangle.fill", text: gitPreviewError, color: AppStyle.waitAmber)
+            } else if gitPreviewSkills.isEmpty {
+                Text(L("先预览仓库，选择要安装的 Skill。支持单个 Skill 仓库，也支持一个仓库里多个 Skill。"))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .lineLimit(2)
+            } else {
+                gitPreviewResults
             }
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .skillPanelSurface()
+    }
+
+    private var canPreviewGitSkill: Bool {
+        !gitInstallURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var canInstallGitSkill: Bool {
-        !gitInstallURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        canPreviewGitSkill &&
+            gitPreviewSignature == currentGitPreviewSignature &&
+            !gitPreviewSelectedPaths.isEmpty &&
+            !gitPreviewLoading
+    }
+
+    private var currentGitPreviewSignature: String {
+        [
+            gitInstallURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            gitInstallSubdirectory.trimmingCharacters(in: .whitespacesAndNewlines),
+            gitInstallRef.trimmingCharacters(in: .whitespacesAndNewlines)
+        ].joined(separator: "\u{1F}")
+    }
+
+    private var gitPreviewIsStale: Bool {
+        gitPreviewSignature != nil && gitPreviewSignature != currentGitPreviewSignature
+    }
+
+    private var gitPreviewResults: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 7) {
+                tinyBadge(L("%ld 个 Skill", gitPreviewSkills.count), color: AppStyle.textTertiary)
+                tinyBadge(L("已选 %ld", gitPreviewSelectedPaths.count), color: gitPreviewSelectedPaths.isEmpty ? AppStyle.textTertiary : AppStyle.accent)
+                if gitPreviewIsStale {
+                    tinyBadge(L("预览已过期"), color: AppStyle.waitAmber)
+                }
+                Spacer()
+                Button(L("全选")) {
+                    gitPreviewSelectedPaths = Set(gitPreviewSkills.map(\.relativePath))
+                }
+                .font(.system(size: 10.5, weight: .semibold))
+                .buttonStyle(.plain)
+                Button(L("清空")) {
+                    gitPreviewSelectedPaths.removeAll()
+                }
+                .font(.system(size: 10.5, weight: .semibold))
+                .buttonStyle(.plain)
+                Button(L("清空预览")) {
+                    clearGitPreview()
+                }
+                .font(.system(size: 10.5, weight: .semibold))
+                .buttonStyle(.plain)
+            }
+
+            LazyVStack(alignment: .leading, spacing: 6) {
+                ForEach(gitPreviewSkills) { preview in
+                    GitSkillPreviewRow(
+                        preview: preview,
+                        selected: gitPreviewSelectedPaths.contains(preview.relativePath),
+                        stale: gitPreviewIsStale) {
+                            toggleGitPreviewSelection(preview.relativePath)
+                        }
+                }
+            }
+        }
     }
 
     private var loadingRow: some View {
@@ -1911,21 +3261,8 @@ struct SkillsManagerView: View {
     }
 
     private func emptyState(icon: String, title: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(AppStyle.textTertiary)
-            Text(title)
-                .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(AppStyle.textPrimary)
-            Text(detail)
-                .font(.system(size: 11))
-                .foregroundStyle(AppStyle.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        ToolEmptyState(icon: icon, title: title, detail: detail)
+        .skillPanelSurface()
     }
 
     private func reload(scan: Bool = false) {
@@ -1952,7 +3289,6 @@ struct SkillsManagerView: View {
                                     ($0.id, engine.readProjectSkills(projectID: $0.id))
                                 }),
                             auditEntries: engine.listAudit(limit: 140),
-                            doctorReport: engine.doctorReport(),
                             scanResult: result)
                     }.value
                     await MainActor.run {
@@ -1964,7 +3300,6 @@ struct SkillsManagerView: View {
                         projectTargets = payload.projectTargets
                         projectSkills = payload.projectSkills
                         auditEntries = payload.auditEntries
-                        doctorReport = payload.doctorReport
                         selectedSkillIDs = selectedSkillIDs.intersection(Set(payload.skills.map(\.id)))
                         if let inspectedSkillID,
                            !payload.skills.contains(where: { $0.id == inspectedSkillID }) {
@@ -1972,7 +3307,7 @@ struct SkillsManagerView: View {
                         } else if inspectedSkillID == nil {
                             inspectedSkillID = payload.skills.first?.id
                         }
-                        if let result = payload.scanResult { scanResult = result }
+                        if let result = payload.scanResult { applyScanResult(result) }
                         loading = false
                         loadingText = ""
                     }
@@ -2088,16 +3423,95 @@ struct SkillsManagerView: View {
         }
     }
 
+    private func exportAllSkills() {
+        guard !skills.isEmpty else { return }
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.prompt = L("导出")
+        panel.nameFieldStringValue = "all-skills-bundle.zip"
+        panel.message = L("导出中央库全部 Skills，包含 manifest、标签和来源信息")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        run(L("正在导出 Skill Bundle…")) { engine in
+            _ = try engine.exportSkillBundle(skillIDs: nil, to: url)
+        }
+    }
+
     private func installGitSkill() {
         let remote = gitInstallURL
         let subdirectory = gitInstallSubdirectory
         let ref = gitInstallRef
+        let selectedSubpaths = Array(gitPreviewSelectedPaths).sorted()
         run(L("正在从 Git 安装 Skill…")) { engine in
             _ = try engine.installGitSkills(
                 repositoryURL: remote,
                 subdirectory: subdirectory.isEmpty ? nil : subdirectory,
-                ref: ref.isEmpty ? nil : ref)
+                ref: ref.isEmpty ? nil : ref,
+                selectedSubpaths: selectedSubpaths)
         }
+        gitPreviewSkills.removeAll()
+        gitPreviewSelectedPaths.removeAll()
+        gitPreviewError = nil
+        gitPreviewSignature = nil
+    }
+
+    private func previewGitSkills() {
+        do {
+            let engine = try ensureEngine()
+            let remote = gitInstallURL
+            let subdirectory = gitInstallSubdirectory
+            let ref = gitInstallRef
+            let signature = currentGitPreviewSignature
+            gitPreviewLoading = true
+            gitPreviewError = nil
+            Task {
+                do {
+                    let result = try await Task.detached(priority: .userInitiated) {
+                        try engine.previewGitSkills(
+                            repositoryURL: remote,
+                            subdirectory: subdirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : subdirectory,
+                            ref: ref.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : ref)
+                    }.value
+                    await MainActor.run {
+                        gitPreviewSkills = result
+                        gitPreviewSelectedPaths = Set(result.map(\.relativePath))
+                        gitPreviewSignature = signature
+                        gitPreviewLoading = false
+                    }
+                } catch {
+                    await MainActor.run {
+                        gitPreviewError = error.localizedDescription
+                        gitPreviewSkills.removeAll()
+                        gitPreviewSelectedPaths.removeAll()
+                        gitPreviewSignature = nil
+                        gitPreviewLoading = false
+                    }
+                }
+            }
+        } catch {
+            gitPreviewError = error.localizedDescription
+        }
+    }
+
+    private func toggleGitPreviewSelection(_ relativePath: String) {
+        if gitPreviewSelectedPaths.contains(relativePath) {
+            gitPreviewSelectedPaths.remove(relativePath)
+        } else {
+            gitPreviewSelectedPaths.insert(relativePath)
+        }
+    }
+
+    private func clearGitPreview() {
+        gitPreviewSkills.removeAll()
+        gitPreviewSelectedPaths.removeAll()
+        gitPreviewError = nil
+        gitPreviewSignature = nil
+    }
+
+    private func applyScanResult(_ result: SkillScanResult) {
+        scanResult = result
+        selectedDiscoveryGroupIDs.formIntersection(Set(result.groups.map(\.id)))
     }
 
     private func importDiscovered(_ group: DiscoveredSkillGroup) {
@@ -2105,11 +3519,44 @@ struct SkillsManagerView: View {
         run(L("正在导入发现的 Skill…"), scanAfter: true) { engine in
             _ = try engine.importDiscoveredSkill(recordID: id, name: group.name)
         }
+        selectedDiscoveryGroupIDs.remove(group.id)
     }
 
     private func importAllDiscovered() {
         run(L("正在导入全部发现 Skills…"), scanAfter: true) { engine in
             _ = try engine.importAllDiscoveredSkills()
+        }
+        selectedDiscoveryGroupIDs.removeAll()
+    }
+
+    private func importFilteredDiscovered() {
+        importDiscoveredGroups(importableFilteredGroups, loadingText: L("正在导入当前筛选 Skills…"))
+    }
+
+    private func importSelectedDiscovered() {
+        importDiscoveredGroups(selectedDiscoveryGroups, loadingText: L("正在导入选中 Skills…"))
+    }
+
+    private func importDiscoveredGroups(_ groups: [DiscoveredSkillGroup], loadingText: String) {
+        let items = groups.compactMap { group -> (id: String, name: String, groupID: String)? in
+            guard let id = group.locations.first?.id else { return nil }
+            return (id, group.name, group.id)
+        }
+        guard !items.isEmpty else { return }
+        run(loadingText, scanAfter: true) { engine in
+            for item in items {
+                _ = try engine.importDiscoveredSkill(recordID: item.id, name: item.name)
+            }
+        }
+        selectedDiscoveryGroupIDs.subtract(items.map(\.groupID))
+    }
+
+    private func toggleDiscoveryGroupSelection(_ group: DiscoveredSkillGroup) {
+        guard !group.imported else { return }
+        if selectedDiscoveryGroupIDs.contains(group.id) {
+            selectedDiscoveryGroupIDs.remove(group.id)
+        } else {
+            selectedDiscoveryGroupIDs.insert(group.id)
         }
     }
 
@@ -2131,6 +3578,11 @@ struct SkillsManagerView: View {
                     }.value
                     await MainActor.run {
                         skillsShSkills = result
+                        skillsShVisibleLimit = 24
+                        if skillsShSourceFilter != "all",
+                           !result.contains(where: { $0.source == skillsShSourceFilter }) {
+                            skillsShSourceFilter = "all"
+                        }
                         skillsShLoading = false
                     }
                 } catch {
@@ -2154,18 +3606,16 @@ struct SkillsManagerView: View {
     private func runCommandTask(_ action: SkillCommandAction) {
         switch action {
         case .market:
-            selectedSection = .discovered
+            selectedSection = .discover
             if skillsShSkills.isEmpty { loadSkillsShMarket() }
         case .importLocal:
             importLocal()
         case .scan:
             reload(scan: true)
         case .agents:
-            selectedSection = .agents
+            openAgentsView()
         case .syncUnsynced:
             syncUnsyncedSkills()
-        case .doctor:
-            focusDoctor()
         case .updateAvailable:
             updateAvailableSkills()
         case .library:
@@ -2184,44 +3634,11 @@ struct SkillsManagerView: View {
         }
     }
 
-    private func focusDoctor() {
-        guard let finding = doctorReport.findings.first else {
-            selectedSection = .library
-            return
-        }
-        focusDoctorFinding(finding)
-    }
-
-    private func focusDoctorFinding(_ finding: SkillDoctorFinding) {
-        if finding.category == .tool {
-            selectedSection = .agents
-            return
-        }
-        if finding.category == .project {
-            selectedSection = .projects
-            return
-        }
-        if let skillID = finding.skillID,
-           let skill = skills.first(where: { $0.id == skillID }) {
-            selectedSkillIDs = [skillID]
-            inspectSkill(skill)
-            selectedSection = .library
-            if finding.severity == .critical || finding.category == .safety {
-                openSkillDetail(skill, tab: detailTab(for: finding))
-            }
+    private func openAgentsView() {
+        if let openAgents {
+            openAgents()
         } else {
-            selectedSection = .library
-        }
-    }
-
-    private func detailTab(for finding: SkillDoctorFinding) -> SkillDetailTab {
-        switch finding.category {
-        case .deploy, .tool, .project:
-            return .deploy
-        case .source:
-            return .source
-        case .document, .safety, .duplicate:
-            return .docs
+            selectedSection = .workspace
         }
     }
 
@@ -2242,8 +3659,14 @@ struct SkillsManagerView: View {
 
     private func openSkillDetail(_ skill: ManagedSkill, tab: SkillDetailTab = .overview) {
         inspectedSkillID = skill.id
-        detailSkillID = skill.id
         detailTab = tab
+        if presentationMode == .compactPanel {
+            withAnimation(AgentToolsMotion.selection) {
+                drawerSection = .detail
+            }
+        } else {
+            detailSkillID = skill.id
+        }
         if skillDocuments[skill.id] == nil {
             loadSkillDetails(skill)
         }
@@ -2251,7 +3674,7 @@ struct SkillsManagerView: View {
 
     private func toggleSkillExpansion(_ skill: ManagedSkill) {
         let opening = expandedSkillID != skill.id
-        withAnimation(Motion.expand) {
+        withAnimation(AgentToolsMotion.reveal) {
             expandedSkillID = opening ? skill.id : nil
         }
         if opening {
@@ -2444,13 +3867,45 @@ struct SkillsManagerView: View {
         let tag = tagDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let ids = Array(selectedSkillIDs)
         guard !tag.isEmpty, !ids.isEmpty else { return }
+        applyTag(tag, to: ids, add: add)
+    }
+
+    private func applyTag(_ tag: String, to ids: [String], add: Bool) {
+        let normalized = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty, !ids.isEmpty else { return }
         run(add ? L("正在添加标签…") : L("正在移除标签…")) { engine in
             if add {
-                try engine.addTag(tag, toSkillIDs: ids)
+                try engine.addTag(normalized, toSkillIDs: ids)
             } else {
-                try engine.removeTag(tag, fromSkillIDs: ids)
+                try engine.removeTag(normalized, fromSkillIDs: ids)
             }
         }
+    }
+
+    private func promptTag(for skill: ManagedSkill, add: Bool) {
+        promptTag(skillIDs: [skill.id], add: add)
+    }
+
+    private func promptTagForSelection(add: Bool) {
+        promptTag(skillIDs: Array(selectedSkillIDs), add: add)
+    }
+
+    private func promptTag(skillIDs: [String], add: Bool) {
+        guard !skillIDs.isEmpty else { return }
+        let alert = NSAlert()
+        alert.messageText = add ? L("添加标签") : L("移除标签")
+        alert.informativeText = add ? L("输入要添加到所选 Skills 的标签。") : L("输入要从所选 Skills 移除的标签。")
+        alert.addButton(withTitle: add ? L("添加") : L("移除"))
+        alert.addButton(withTitle: L("取消"))
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        input.placeholderString = L("标签")
+        input.stringValue = tagDraft
+        alert.accessoryView = input
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let tag = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tag.isEmpty else { return }
+        tagDraft = tag
+        applyTag(tag, to: skillIDs, add: add)
     }
 
     private func createPreset() {
@@ -2611,7 +4066,6 @@ struct SkillsManagerView: View {
                                     ($0.id, engine.readProjectSkills(projectID: $0.id))
                                 }),
                             auditEntries: engine.listAudit(limit: 140),
-                            doctorReport: engine.doctorReport(),
                             scanResult: result)
                     }.value
                     await MainActor.run {
@@ -2623,7 +4077,6 @@ struct SkillsManagerView: View {
                         projectTargets = payload.projectTargets
                         projectSkills = payload.projectSkills
                         auditEntries = payload.auditEntries
-                        doctorReport = payload.doctorReport
                         selectedSkillIDs = selectedSkillIDs.intersection(Set(payload.skills.map(\.id)))
                         if let inspectedSkillID,
                            !payload.skills.contains(where: { $0.id == inspectedSkillID }) {
@@ -2631,7 +4084,7 @@ struct SkillsManagerView: View {
                         } else if inspectedSkillID == nil {
                             inspectedSkillID = payload.skills.first?.id
                         }
-                        if let result = payload.scanResult { scanResult = result }
+                        if let result = payload.scanResult { applyScanResult(result) }
                         loading = false
                         loadingText = ""
                     }
@@ -2671,15 +4124,14 @@ struct SkillsManagerView: View {
                             help: String,
                             destructive: Bool = false,
                             action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(destructive ? Color(red: 0.92, green: 0.34, blue: 0.34) : AppStyle.textSecondary)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(AppStyle.hoverFill))
-        }
-        .buttonStyle(PressScaleStyle())
-        .help(help)
+        IconOnlyButton(
+            systemName: icon,
+            help: help,
+            size: 28,
+            symbolSize: 11,
+            weight: .semibold,
+            tint: destructive ? AppStyle.errorRed : nil,
+            action: action)
     }
 
     private func metricChip(title: String, value: String) -> some View {
@@ -2693,7 +4145,7 @@ struct SkillsManagerView: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 22)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.hoverFill))
+        .skillControlSurface()
     }
 
     private func filterChip(title: String,
@@ -2711,8 +4163,7 @@ struct SkillsManagerView: View {
             .foregroundStyle(active ? .white : AppStyle.textSecondary)
             .padding(.horizontal, 7)
             .frame(height: 22)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(active ? color : AppStyle.hoverFill))
+            .skillControlSurface(active: active, tint: color)
         }
         .buttonStyle(PressScaleStyle())
     }
@@ -2724,38 +4175,309 @@ struct SkillsManagerView: View {
     }
 }
 
+struct SkillAgentsPanelView: View {
+    @ObservedObject private var configStore = ConfigStore.shared
+    @State private var engine: SkillManagerEngine?
+    @State private var tools: [SkillToolInfo] = []
+    @State private var skills: [ManagedSkill] = []
+    @State private var loading = false
+    @State private var loadingText = ""
+    @State private var error: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    if let error {
+                        ToolStatusLine(icon: "exclamationmark.triangle.fill", text: error, color: AppStyle.errorRed)
+                    }
+                    summaryPanel
+                    if loading && tools.isEmpty {
+                        loadingRow
+                    } else if tools.isEmpty {
+                        ToolEmptyState(
+                            icon: "cpu",
+                            title: L("没有可用 Agent"),
+                            detail: L("添加一个自定义 Agent，或确认 Codex / Claude 等工具目录存在。"))
+                            .skillPanelSurface()
+                    } else {
+                        ForEach(tools.sorted(by: toolSort)) { tool in
+                            SkillToolRow(
+                                tool: tool,
+                                syncedCount: skills.filter { skill in
+                                    skill.targets.contains { $0.tool == tool.key }
+                                }.count,
+                                onToggleEnabled: { toggleToolEnabled(tool) },
+                                onReveal: { reveal(tool.skillsDirectory) })
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            .scrollIndicators(.never)
+        }
+        .onAppear {
+            if engine == nil { reload() }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            SkillRailBrand(
+                icon: "cpu",
+                title: "Agents",
+                subtitle: L("可接收 Skill 的 Agent 工具"),
+                tint: AppStyle.accent)
+            Spacer(minLength: 8)
+            IconOnlyButton(
+                systemName: "plus.circle",
+                help: L("添加自定义 Agent"),
+                size: 28,
+                symbolSize: 11,
+                weight: .semibold,
+                action: addCustomAgent)
+            IconOnlyButton(
+                systemName: "arrow.clockwise",
+                help: L("刷新"),
+                size: 28,
+                symbolSize: 11,
+                weight: .semibold,
+                action: reload)
+                .disabled(loading)
+        }
+        .padding(.trailing, 12)
+    }
+
+    private var summaryPanel: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            SkillPanelTitle(icon: "cpu", title: L("Agent 管理"), value: "\(enabledToolsCount)/\(tools.count)")
+            HStack(spacing: 6) {
+                ToolBadge(text: L("%ld 已启用", enabledToolsCount), color: AppStyle.accent, style: .muted, height: 20)
+                ToolBadge(text: L("%ld 已检测", installedToolsCount), color: AppStyle.textTertiary, style: .muted, height: 20)
+                ToolBadge(text: L("%ld Skills", deployedSkillCount), color: AppStyle.textTertiary, style: .muted, height: 20)
+                if loading {
+                    ProgressView().controlSize(.small)
+                    Text(loadingText)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .skillPanelSurface()
+    }
+
+    private var loadingRow: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(loadingText.isEmpty ? L("正在刷新 Agent…") : loadingText)
+                .font(.system(size: 12))
+                .foregroundStyle(AppStyle.textSecondary)
+            Spacer()
+        }
+        .padding(.vertical, 20)
+    }
+
+    private var enabledToolsCount: Int {
+        tools.filter(\.enabled).count
+    }
+
+    private var installedToolsCount: Int {
+        tools.filter(\.installed).count
+    }
+
+    private var deployedSkillCount: Int {
+        skills.reduce(0) { $0 + $1.targets.count }
+    }
+
+    private func reload() {
+        do {
+            let engine = try ensureEngine()
+            loading = true
+            loadingText = L("正在刷新 Agent…")
+            error = nil
+            Task {
+                let payload = await Task.detached(priority: .userInitiated) {
+                    (tools: engine.tools(), skills: engine.listSkills())
+                }.value
+                await MainActor.run {
+                    tools = payload.tools
+                    skills = payload.skills
+                    loading = false
+                    loadingText = ""
+                }
+            }
+        } catch {
+            self.error = error.localizedDescription
+            loading = false
+            loadingText = ""
+        }
+    }
+
+    private func addCustomAgent() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = L("选择")
+        panel.message = L("选择这个 Agent 的 skills 目录")
+        guard panel.runModal() == .OK, let url = panel.urls.first else { return }
+
+        let alert = NSAlert()
+        alert.messageText = L("自定义 Agent")
+        alert.informativeText = L("给这个 skills 目录起一个显示名称。")
+        alert.addButton(withTitle: L("添加"))
+        alert.addButton(withTitle: L("取消"))
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        input.stringValue = url.deletingLastPathComponent().lastPathComponent.isEmpty
+            ? url.lastPathComponent
+            : url.deletingLastPathComponent().lastPathComponent
+        alert.accessoryView = input
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let name = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        let bookmarkData = SecurityScopedBookmarks.bookmarkData(for: url)
+        run(L("正在添加自定义 Agent…")) { engine in
+            try engine.addCustomTool(
+                key: name,
+                displayName: name,
+                skillsDirectory: url,
+                bookmarkData: bookmarkData)
+        }
+    }
+
+    private func toggleToolEnabled(_ tool: SkillToolInfo) {
+        run(tool.enabled ? L("正在停用 Agent…") : L("正在启用 Agent…")) { engine in
+            try engine.setToolEnabled(tool.key, enabled: !tool.enabled)
+        }
+    }
+
+    private func run(_ message: String,
+                     operation: @escaping @Sendable (SkillManagerEngine) throws -> Void) {
+        do {
+            let engine = try ensureEngine()
+            loading = true
+            loadingText = message
+            error = nil
+            Task {
+                do {
+                    let payload = try await Task.detached(priority: .userInitiated) {
+                        try operation(engine)
+                        return (tools: engine.tools(), skills: engine.listSkills())
+                    }.value
+                    await MainActor.run {
+                        tools = payload.tools
+                        skills = payload.skills
+                        loading = false
+                        loadingText = ""
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.error = error.localizedDescription
+                        loading = false
+                        loadingText = ""
+                    }
+                }
+            }
+        } catch {
+            self.error = error.localizedDescription
+            loading = false
+            loadingText = ""
+        }
+    }
+
+    private func ensureEngine() throws -> SkillManagerEngine {
+        if let engine { return engine }
+        let created = try SkillManagerEngine()
+        engine = created
+        return created
+    }
+
+    private func reveal(_ path: String) {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+
+    private func toolSort(_ lhs: SkillToolInfo, _ rhs: SkillToolInfo) -> Bool {
+        if lhs.installed != rhs.installed { return lhs.installed && !rhs.installed }
+        if lhs.category != rhs.category { return lhs.category.rawValue < rhs.category.rawValue }
+        return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+    }
+}
+
 private enum SkillManagerSection: String, CaseIterable, Identifiable {
-    case command
+    case dashboard
     case library
-    case presets
+    case deploy
+    case discover
+    case workspace
     case projects
-    case agents
+    case maintain
     case activity
-    case discovered
+    case agents
 
     var id: String { rawValue }
 
+    /// 窄栏 tab 上的短标题（中文，2–3 字最佳）。
     var title: String {
         switch self {
-        case .command: return L("工作台")
+        case .dashboard: return L("首页")
         case .library: return L("技能库")
-        case .presets: return "Presets"
+        case .discover: return L("安装")
+        case .workspace: return L("工作区")
+        case .deploy: return "Presets"
         case .projects: return L("项目")
+        case .maintain: return L("更新")
+        case .activity: return L("备份")
         case .agents: return "Agents"
-        case .activity: return L("活动")
-        case .discovered: return L("发现")
+        }
+    }
+
+    /// tab 栏下方一行说明：直接讲清这个分区里装的是什么——窄栏里「不知道什么是什么」的解药。
+    var subtitle: String {
+        switch self {
+        case .dashboard: return L("技能库、安装和工作区入口")
+        case .library: return L("你收藏的全部 Skill · 搜索、详情、同步")
+        case .deploy: return L("可复用 Skill 分组 · 一键应用")
+        case .discover: return L("skills.sh / Git / 本地导入 / 扫描本机")
+        case .workspace: return L("全局 Agent 目录 · 实际可见状态")
+        case .projects: return L("项目级 Skills · 本地目录同步")
+        case .maintain: return L("更新与来源异常")
+        case .activity: return L("导入导出 · Bundle 迁移 · 操作记录")
+        case .agents: return L("可接收 Skill 的 Agent 工具")
+        }
+    }
+
+    var sidebarHint: String {
+        switch self {
+        case .dashboard: return L("状态")
+        case .library: return L("中央库")
+        case .discover: return L("市场/Git/本地")
+        case .workspace: return L("全局目录")
+        case .deploy: return L("分组")
+        case .projects: return L("项目目录")
+        case .maintain: return L("更新")
+        case .activity: return L("迁移/日志")
+        case .agents: return L("工具")
         }
     }
 
     var icon: String {
         switch self {
-        case .command: return "rectangle.3.group"
+        case .dashboard: return "square.grid.2x2"
         case .library: return "square.stack.3d.up"
-        case .presets: return "rectangle.stack.badge.plus"
+        case .discover: return "sparkles"
+        case .workspace: return "globe"
+        case .deploy: return "rectangle.stack.badge.plus"
         case .projects: return "folder.badge.gearshape"
+        case .maintain: return "arrow.down.circle"
+        case .activity: return "archivebox"
         case .agents: return "cpu"
-        case .activity: return "clock.arrow.circlepath"
-        case .discovered: return "scope"
         }
     }
 }
@@ -2790,13 +4512,60 @@ private enum SkillDetailTab: String, CaseIterable, Identifiable {
     }
 }
 
-private enum SkillCommandAction {
+private enum SkillInstallTab: String, CaseIterable, Identifiable {
+    case market
+    case local
+    case git
+    case scan
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .market: return L("市场")
+        case .local: return L("本地")
+        case .git: return "Git"
+        case .scan: return L("扫描")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .market: return "sparkles"
+        case .local: return "folder.badge.plus"
+        case .git: return "git.branch"
+        case .scan: return "scope"
+        }
+    }
+}
+
+private enum SkillLibraryViewMode: String, CaseIterable, Identifiable {
+    case grid
+    case list
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .grid: return L("网格")
+        case .list: return L("列表")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .grid: return "square.grid.2x2"
+        case .list: return "list.bullet"
+        }
+    }
+}
+
+private enum SkillCommandAction: Equatable {
     case market
     case importLocal
     case scan
     case agents
     case syncUnsynced
-    case doctor
     case updateAvailable
     case library
     case checkUpdates
@@ -2839,36 +4608,6 @@ private struct SkillActionCue {
     let action: SkillCueAction
 }
 
-private enum SkillPipelineState {
-    case ready
-    case attention
-    case error
-
-    var symbol: String {
-        switch self {
-        case .ready: return "checkmark.circle.fill"
-        case .attention: return "circle.dashed"
-        case .error: return "exclamationmark.triangle.fill"
-        }
-    }
-
-    @MainActor
-    var color: Color {
-        switch self {
-        case .ready: return AppStyle.accent
-        case .attention: return .orange
-        case .error: return .red
-        }
-    }
-}
-
-private struct SkillPipelineStep: Identifiable {
-    let id: String
-    let title: String
-    let detail: String
-    let icon: String
-    let state: SkillPipelineState
-}
 
 private struct SkillActionCuePanel: View {
     let cue: SkillActionCue
@@ -2877,15 +4616,14 @@ private struct SkillActionCuePanel: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: cue.icon)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(cue.color)
-                .frame(width: 34, height: 34)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(cue.color.opacity(0.12)))
+                .frame(width: 28, height: 28)
+                .skillIconSurface(color: cue.color)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(cue.title)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(AppStyle.textPrimary)
                     .lineLimit(1)
                 Text(cue.detail)
@@ -2896,424 +4634,16 @@ private struct SkillActionCuePanel: View {
 
             Spacer(minLength: 8)
 
-            Button(action: action) {
-                Label(cue.actionTitle, systemImage: "arrow.right")
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .frame(height: 28)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(cue.color))
-            }
-            .buttonStyle(PressScaleStyle())
-            .help(cue.actionTitle)
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(cue.color.opacity(0.08)))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .stroke(cue.color.opacity(0.22), lineWidth: 1))
-        .animation(Motion.snappy, value: cue.title)
-    }
-}
-
-private struct SkillDoctorCategorySummary: Identifiable {
-    let category: SkillDoctorCategory
-    let count: Int
-    let severity: SkillDoctorSeverity
-    let routineOnly: Bool
-
-    var id: String { category.rawValue }
-}
-
-private struct SkillDoctorSummaryPanel: View {
-    let report: SkillDoctorReport
-    let findings: [SkillDoctorFinding]
-    let onSelectFinding: (SkillDoctorFinding) -> Void
-    let onOpenAll: () -> Void
-
-    private var categorySummaries: [SkillDoctorCategorySummary] {
-        SkillDoctorCategory.allCases.compactMap { category in
-            let items = report.findings.filter { $0.category == category }
-            guard !items.isEmpty else { return nil }
-            let severity: SkillDoctorSeverity
-            if items.contains(where: { $0.severity == .critical }) {
-                severity = .critical
-            } else if items.contains(where: { $0.severity == .warning }) {
-                severity = .warning
-            } else {
-                severity = .info
-            }
-            return SkillDoctorCategorySummary(
-                category: category,
-                count: items.count,
-                severity: severity,
-                routineOnly: items.allSatisfy(isRoutineDoctorFinding))
-        }
-        .sorted {
-            if $0.severity.weight != $1.severity.weight {
-                return $0.severity.weight > $1.severity.weight
-            }
-            if $0.routineOnly != $1.routineOnly {
-                return !$0.routineOnly
-            }
-            return $0.count > $1.count
-        }
-    }
-
-    private var collapsedCount: Int {
-        max(0, report.findings.count - findings.count)
-    }
-
-    private var statusColor: Color {
-        if report.criticalCount > 0 { return .red }
-        if report.findings.contains(where: isProminentDoctorFinding) { return .orange }
-        if report.warningCount > 0 { return AppStyle.textTertiary }
-        return AppStyle.accent
-    }
-
-    private var statusIcon: String {
-        report.actionableCount == 0 ? "checkmark.seal.fill" : "stethoscope"
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 8) {
-                Image(systemName: statusIcon)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(statusColor)
-                    .frame(width: 26, height: 26)
-                    .background(Circle().fill(statusColor.opacity(0.12)))
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Doctor")
-                        .font(.system(size: 12.5, weight: .bold))
-                        .foregroundStyle(AppStyle.textPrimary)
-                    Text(report.actionableCount == 0
-                         ? L("全部稳定")
-                         : L("%ld 个问题需要处理", report.actionableCount))
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .foregroundStyle(AppStyle.textTertiary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 6)
-
-                tinyBadge("\(report.scorePercent)%", color: statusColor)
-
-                if report.actionableCount > 0 {
-                    Button(action: onOpenAll) {
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 9.5, weight: .bold))
-                            .foregroundStyle(statusColor)
-                            .frame(width: 22, height: 22)
-                            .background(Circle().fill(statusColor.opacity(0.10)))
-                    }
-                    .buttonStyle(PressScaleStyle())
-                    .help(L("处理诊断问题"))
-                }
-            }
-
-            HStack(spacing: 6) {
-                doctorCountChip(title: L("严重"), value: "\(report.criticalCount)", color: report.criticalCount > 0 ? .red : AppStyle.textTertiary)
-                doctorCountChip(title: L("警告"), value: "\(report.warningCount)", color: report.findings.contains(where: isProminentDoctorFinding) ? .orange : AppStyle.textTertiary)
-                doctorCountChip(title: L("提示"), value: "\(report.infoCount)", color: AppStyle.textTertiary)
-            }
-
-            if !categorySummaries.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 5) {
-                        ForEach(categorySummaries) { summary in
-                            SkillDoctorCategoryPill(summary: summary)
-                        }
-                    }
-                    .padding(.vertical, 1)
-                }
-                .scrollIndicators(.never)
-            }
-
-            if report.findings.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 10.5, weight: .semibold))
-                    Text(L("没有发现需要处理的问题"))
-                        .font(.system(size: 10.5, weight: .semibold))
-                }
-                .foregroundStyle(AppStyle.accent)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 9)
-                .frame(height: 30)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(AppStyle.accent.opacity(0.08)))
-            } else {
-                VStack(spacing: 6) {
-                    ForEach(findings) { finding in
-                        SkillDoctorFindingRow(finding: finding) {
-                            onSelectFinding(finding)
-                        }
-                    }
-                    if collapsedCount > 0 {
-                        Button(action: onOpenAll) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "rectangle.stack.badge.plus")
-                                    .font(.system(size: 10.5, weight: .semibold))
-                                Text(L("还有 %ld 个诊断项已按类别收起", collapsedCount))
-                                    .font(.system(size: 10.5, weight: .semibold))
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .foregroundStyle(AppStyle.textTertiary)
-                            .padding(.horizontal, 9)
-                            .frame(height: 28)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(AppStyle.hoverFill.opacity(0.50)))
-                        }
-                        .buttonStyle(.plain)
-                        .help(L("处理诊断问题"))
-                    }
-                }
-            }
-        }
-        .padding(11)
-        .toolsCard(cornerRadius: Radius.sm + 2)
-    }
-}
-
-private struct SkillDoctorCategoryPill: View {
-    let summary: SkillDoctorCategorySummary
-
-    private var color: Color {
-        doctorCategorySummaryColor(summary)
-    }
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: doctorCategoryIcon(summary.category))
-                .font(.system(size: 9.5, weight: .semibold))
-            Text(doctorCategoryLabel(summary.category))
-                .font(.system(size: 9.5, weight: .semibold))
-                .lineLimit(1)
-            Text("\(summary.count)")
-                .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                .monospacedDigit()
-        }
-        .foregroundStyle(color)
-        .padding(.horizontal, 7)
-        .frame(height: 22)
-        .background(Capsule().fill(color.opacity(0.10)))
-    }
-}
-
-private struct SkillDoctorFindingsPanel: View {
-    let title: String
-    let findings: [SkillDoctorFinding]
-    let emptyTitle: String
-    let onSelect: ((SkillDoctorFinding) -> Void)?
-
-    private var displayedFindings: [SkillDoctorFinding] {
-        let prominent = findings.filter(isProminentDoctorFinding)
-        let source = prominent.isEmpty ? findings : prominent
-        return Array(source.prefix(5))
-    }
-
-    private var hiddenCount: Int {
-        max(0, findings.count - displayedFindings.count)
-    }
-
-    var body: some View {
-        SkillCockpitPanel(icon: "stethoscope", title: title) {
-            if findings.isEmpty {
-                HStack(spacing: 7) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(emptyTitle)
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                .foregroundStyle(AppStyle.accent)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .frame(height: 36)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(AppStyle.accent.opacity(0.08)))
-            } else {
-                VStack(spacing: 7) {
-                    ForEach(displayedFindings) { finding in
-                        SkillDoctorFindingRow(finding: finding) {
-                            onSelect?(finding)
-                        }
-                    }
-                    if hiddenCount > 0 {
-                        HStack(spacing: 6) {
-                            Image(systemName: "rectangle.stack")
-                                .font(.system(size: 10, weight: .semibold))
-                            Text(L("还有 %ld 个诊断项", hiddenCount))
-                                .font(.system(size: 10.5, weight: .semibold))
-                            Spacer(minLength: 0)
-                        }
-                        .foregroundStyle(AppStyle.textTertiary)
-                        .padding(.horizontal, 9)
-                        .frame(height: 28)
-                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(AppStyle.hoverFill.opacity(0.50)))
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct SkillDoctorFindingRow: View {
-    let finding: SkillDoctorFinding
-    let action: (() -> Void)?
-    @State private var hovering = false
-
-    private var color: Color {
-        doctorFindingColor(finding)
-    }
-
-    var body: some View {
-        Button {
-            action?()
-        } label: {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: doctorCategoryIcon(finding.category))
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(color)
-                    .frame(width: 24, height: 24)
-                    .background(Circle().fill(color.opacity(0.12)))
-
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 5) {
-                        Text(finding.title)
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(AppStyle.textPrimary)
-                            .lineLimit(1)
-                        tinyBadge(doctorSeverityLabel(finding.severity), color: color)
-                        Spacer(minLength: 0)
-                    }
-                    Text(finding.detail)
-                        .font(.system(size: 9.8))
-                        .foregroundStyle(AppStyle.textTertiary)
-                        .lineLimit(2)
-                    HStack(spacing: 5) {
-                        tinyBadge(doctorCategoryLabel(finding.category), color: AppStyle.textTertiary)
-                        if let skillName = finding.skillName {
-                            tinyBadge(skillName, color: AppStyle.textTertiary)
-                        }
-                        if let path = finding.path, !path.isEmpty {
-                            Text(collapsedPath(path))
-                                .font(.system(size: 8.8, design: .monospaced))
-                                .foregroundStyle(AppStyle.textTertiary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                }
-
-                if action != nil {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8.5, weight: .bold))
-                        .foregroundStyle(color.opacity(hovering ? 0.9 : 0.45))
-                        .padding(.top, 5)
-                }
-            }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(color.opacity(hovering ? 0.12 : 0.08)))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(color.opacity(hovering ? 0.22 : 0.10), lineWidth: 1))
-            .offset(x: hovering && action != nil ? 2 : 0)
-        }
-        .buttonStyle(.plain)
-        .disabled(action == nil)
-        .help(finding.detail)
-        .onHover { hovering = $0 }
-        .animation(Motion.hover, value: hovering)
-    }
-}
-
-private struct SkillPipeline: View {
-    let steps: [SkillPipelineStep]
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
-                SkillPipelineNode(step: step)
-                    .frame(maxWidth: .infinity)
-                if index < steps.count - 1 {
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(step.state.color.opacity(0.45))
-                        .frame(width: 22, height: 3)
-                }
-            }
+            SkillHeaderActionButton(
+                title: cue.actionTitle,
+                systemImage: "arrow.right",
+                primary: true,
+                tint: cue.color,
+                action: action)
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.40)))
-        .animation(Motion.expand, value: steps.map { "\($0.id):\($0.detail)" }.joined(separator: "|"))
-    }
-}
-
-private struct SkillPipelineNode: View {
-    let step: SkillPipelineStep
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: step.state.symbol)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(step.state.color)
-                Image(systemName: step.icon)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(AppStyle.textTertiary)
-                Spacer(minLength: 0)
-            }
-            Text(step.title)
-                .font(.system(size: 10.5, weight: .bold))
-                .foregroundStyle(AppStyle.textPrimary)
-                .lineLimit(1)
-            Text(step.detail)
-                .font(.system(size: 9.5))
-                .foregroundStyle(AppStyle.textTertiary)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(step.state.color.opacity(0.08)))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .stroke(step.state.color.opacity(0.16), lineWidth: 1))
-        .animation(Motion.snappy, value: step.detail)
-    }
-}
-
-private struct SkillToolbarButton: View {
-    let title: String
-    let icon: String
-    let color: Color
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: icon)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(color)
-                .padding(.horizontal, 9)
-                .frame(height: 26)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(AppStyle.hoverFill.opacity(hovering ? 0.82 : 0.58)))
-                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .stroke(color.opacity(hovering ? 0.22 : 0), lineWidth: 1))
-                .offset(y: hovering ? -1 : 0)
-                .shadow(color: color.opacity(hovering ? 0.12 : 0), radius: 8, y: 3)
-        }
-        .buttonStyle(PressScaleStyle())
-        .help(title)
-        .onHover { hovering = $0 }
-        .animation(Motion.hover, value: hovering)
+        .skillRowSurface(tint: cue.color)
+        .animation(AgentToolsMotion.selection, value: cue.title)
     }
 }
 
@@ -3339,8 +4669,8 @@ private struct SkillCommandRow: View {
                             .foregroundStyle(AppStyle.textPrimary)
                             .lineLimit(1)
                         if skill.updateStatus == "update_available" {
-                            tinyBadge(L("可更新"), color: .orange)
-                                .transition(.scale.combined(with: .opacity))
+                            tinyBadge(L("可更新"), color: AppStyle.waitAmber)
+                                .transition(AgentToolsMotion.revealTransition)
                         }
                     }
                     Text((skill.description?.isEmpty == false) ? skill.description! : collapsedPath(skill.centralPath))
@@ -3362,19 +4692,205 @@ private struct SkillCommandRow: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(active ? AppStyle.accent.opacity(0.14) : AppStyle.hoverFill.opacity(hovering ? 0.68 : 0.52)))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(active ? AppStyle.accent.opacity(0.35) : healthColor.opacity(hovering ? 0.18 : 0), lineWidth: 1)
-            )
+            .skillRowSurface(active: active, hovering: hovering, tint: healthColor)
             .offset(x: hovering && !active ? 2 : 0)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .animation(Motion.hover, value: hovering)
-        .animation(Motion.snappy, value: active)
-        .animation(Motion.snappy, value: skill.updateStatus)
+        .animation(AgentToolsMotion.hover, value: hovering)
+        .animation(AgentToolsMotion.selection, value: active)
+        .animation(AgentToolsMotion.selection, value: skill.updateStatus)
+    }
+}
+
+private struct SkillAgentIconView: View {
+    let tool: SkillToolInfo
+    let size: CGFloat
+    let cornerRadius: CGFloat
+    @ObservedObject private var configStore = ConfigStore.shared
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(AppStyle.hoverFill.opacity(0.62))
+            if let logoName = skillToolLogoName(tool.key),
+               let logo = CLIToolLogo.image(named: logoName) {
+                if CLIToolLogo.isMonochrome(logoName) {
+                    Image(nsImage: logo)
+                        .resizable()
+                        .renderingMode(.template)
+                        .interpolation(.high)
+                        .scaledToFit()
+                        .foregroundStyle(tool.enabled ? AppStyle.textPrimary : AppStyle.textTertiary)
+                        .padding(size * 0.18)
+                } else {
+                    Image(nsImage: logo)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                        .padding(size * 0.14)
+                }
+            } else {
+                Image(systemName: tool.category == .lobster ? "person.wave.2" : "cpu")
+                    .font(.system(size: max(10, size * 0.38), weight: .semibold))
+                    .foregroundStyle(tool.enabled ? AppStyle.accent : AppStyle.textTertiary)
+            }
+        }
+        .frame(width: size, height: size)
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(AppStyle.separator.opacity(0.28), lineWidth: 1)
+        )
+    }
+}
+
+private func skillToolLogoName(_ key: String) -> String? {
+    switch key {
+    case "claude_code":
+        return "claude"
+    case "codex":
+        return "codex"
+    case "cursor":
+        return "cursor"
+    case "gemini_cli":
+        return "gemini"
+    case "github_copilot":
+        return "copilot"
+    case "grok":
+        return "grok"
+    case "opencode":
+        return "opencode"
+    case "windsurf":
+        return "windsurf"
+    case "antigravity":
+        return "antigravity"
+    case "amp":
+        return "amp"
+    case "kilo_code":
+        return "kilo"
+    case "kiro":
+        return "kiro"
+    case "qwen_code":
+        return "qwen"
+    case "kimi":
+        return "kimi"
+    case "warp":
+        return "warp"
+    case "augment":
+        return "augment"
+    case "command_code":
+        return "commandcode"
+    case "droid":
+        return "factory"
+    default:
+        return nil
+    }
+}
+
+private struct AgentWorkspaceRow: View {
+    let tool: SkillToolInfo
+    let skills: [ManagedSkill]
+    let unsyncedCount: Int
+    let onReveal: () -> Void
+    let onOpenAgents: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                SkillAgentIconView(tool: tool, size: 34, cornerRadius: 9)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(tool.displayName)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(AppStyle.textPrimary)
+                            .lineLimit(1)
+                        tinyBadge(tool.installed ? L("已检测") : L("未检测"), color: tool.installed ? AppStyle.accent : AppStyle.textTertiary)
+                        if tool.isCustom {
+                            tinyBadge(L("自定义"), color: AppStyle.accent)
+                        }
+                    }
+                    Text(collapsedPath(tool.skillsDirectory))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+
+                Spacer(minLength: 8)
+
+                HStack(spacing: 6) {
+                    ToolBadge(text: L("%ld Skills", skills.count), color: skills.isEmpty ? AppStyle.textTertiary : AppStyle.accent, style: .muted)
+                    IconOnlyButton(
+                        systemName: "folder",
+                        help: L("在 Finder 显示"),
+                        size: 26,
+                        symbolSize: 10.5,
+                        weight: .semibold,
+                        action: onReveal)
+                    IconOnlyButton(
+                        systemName: "slider.horizontal.3",
+                        help: L("管理 Agent"),
+                        size: 26,
+                        symbolSize: 10.5,
+                        weight: .semibold,
+                        action: onOpenAgents)
+                }
+            }
+
+            if skills.isEmpty {
+                HStack(spacing: 7) {
+                    Image(systemName: unsyncedCount > 0 ? "arrow.triangle.2.circlepath" : "tray")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(unsyncedCount > 0
+                         ? L("中央库里有 %ld 个未同步 Skill，可以从工作区顶部一键分发。", unsyncedCount)
+                         : L("这个 Agent 还没有由 Conductor 同步的 Skill。"))
+                        .font(.system(size: 10.5))
+                        .lineLimit(2)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(AppStyle.textTertiary)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 34)
+                .skillSoftSurface(opacity: 0.84)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 6)], spacing: 6) {
+                    ForEach(skills.prefix(8)) { skill in
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 9.5, weight: .semibold))
+                                .foregroundStyle(AppStyle.accent)
+                            Text(skill.name)
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .foregroundStyle(AppStyle.textSecondary)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 8)
+                        .frame(height: 26)
+                        .skillSoftSurface(opacity: 0.88)
+                    }
+                    if skills.count > 8 {
+                        Text(L("+%ld", skills.count - 8))
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppStyle.textTertiary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 26)
+                            .skillSoftSurface(opacity: 0.74)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .skillPanelSurface()
+        .overlay(
+            RoundedRectangle(cornerRadius: SkillUI.panelRadius, style: .continuous)
+                .stroke(hovering ? AppStyle.accent.opacity(0.20) : Color.clear, lineWidth: 1)
+        )
+        .onHover { hovering = $0 }
+        .animation(AgentToolsMotion.hover, value: hovering)
     }
 }
 
@@ -3385,7 +4901,6 @@ private struct SkillDetailCockpit: View {
     let files: [SkillFileInfo]
     let sourceDiff: SkillSourceDiff?
     let auditEntries: [SkillAuditEntry]
-    let doctorFindings: [SkillDoctorFinding]
     let readinessItems: [SkillReadinessItem]
     @Binding var selectedTab: SkillDetailTab
     let syncMode: String
@@ -3413,11 +4928,9 @@ private struct SkillDetailCockpit: View {
     }
 
     private var healthColor: Color {
-        if doctorFindings.contains(where: { $0.severity == .critical }) { return .red }
-        if doctorFindings.contains(where: isProminentDoctorFinding) { return .orange }
         switch skill.updateStatus {
-        case "update_available": return .orange
-        case "source_missing", "error": return .red
+        case "update_available": return AppStyle.waitAmber
+        case "source_missing", "error": return AppStyle.errorRed
         default:
             return skill.targets.isEmpty ? AppStyle.textTertiary : AppStyle.accent
         }
@@ -3461,6 +4974,7 @@ private struct SkillDetailCockpit: View {
         let other = max(0, files.count - markdown - code - assets)
         return [
             SkillProfileSegment(title: L("文档"), count: markdown, color: AppStyle.accent),
+            // 文件类型构成是分类色板（非信号），与下方紫色资产同属一组分类色，保留原色。
             SkillProfileSegment(title: L("代码"), count: code, color: .orange),
             SkillProfileSegment(title: L("资产"), count: assets, color: Color(red: 0.58, green: 0.48, blue: 0.92)),
             SkillProfileSegment(title: L("其他"), count: other, color: AppStyle.textTertiary),
@@ -3476,23 +4990,12 @@ private struct SkillDetailCockpit: View {
     }
 
     private var nextCue: SkillActionCue {
-        if let finding = doctorFindings.first(where: { $0.severity == .critical }) ??
-            doctorFindings.first(where: isProminentDoctorFinding) ??
-            doctorFindings.first(where: { $0.severity == .warning }) {
-            return SkillActionCue(
-                icon: doctorCategoryIcon(finding.category),
-                title: finding.title,
-                detail: finding.detail,
-                color: doctorFindingColor(finding),
-                actionTitle: L("处理"),
-                action: cueAction(for: finding))
-        }
         if sourceProblem {
             return SkillActionCue(
                 icon: "exclamationmark.triangle.fill",
                 title: L("来源需要处理"),
                 detail: skill.lastCheckError?.isEmpty == false ? skill.lastCheckError! : L("这个 Skill 的来源不可用或更新检查失败，先进入来源页确认绑定信息。"),
-                color: .red,
+                color: AppStyle.errorRed,
                 actionTitle: L("查看来源"),
                 action: .source)
         }
@@ -3501,7 +5004,7 @@ private struct SkillDetailCockpit: View {
                 icon: "arrow.down.circle.fill",
                 title: L("发现可更新版本"),
                 detail: L("来源里已有新版内容，可以先看差异再决定刷新中央库。"),
-                color: .orange,
+                color: AppStyle.waitAmber,
                 actionTitle: L("查看差异"),
                 action: .source)
         }
@@ -3519,158 +5022,73 @@ private struct SkillDetailCockpit: View {
                 icon: "point.3.connected.trianglepath.dotted",
                 title: L("还没有分发到 Agent"),
                 detail: L("这个 Skill 已进入中央库，但还没有同步到任何可用 Agent。"),
-                color: .orange,
+                color: AppStyle.waitAmber,
                 actionTitle: L("打开部署"),
                 action: .deploy)
         }
-        if readinessScore < 1 {
-            return SkillActionCue(
-                icon: "wrench.and.screwdriver.fill",
-                title: L("还有整理项"),
-                detail: L("就绪检查里仍有可优化项目，优先补齐描述、标签或来源状态。"),
-                color: .orange,
-                actionTitle: L("看检查项"),
-                action: .overview)
-        }
         return SkillActionCue(
             icon: "checkmark.seal.fill",
-            title: L("状态稳定"),
-            detail: L("文档、来源和部署状态都健康，可以定期检查更新。"),
+            title: L("已纳入管理"),
+            detail: L("这个 Skill 已在中央库中，可以继续查看文档、同步到 Agent 或检查来源更新。"),
             color: AppStyle.accent,
             actionTitle: L("检查更新"),
             action: .checkUpdate)
     }
 
-    private var pipelineSteps: [SkillPipelineStep] {
-        [
-            SkillPipelineStep(
-                id: "docs",
-                title: L("文档"),
-                detail: documentKnown ? L("已读取") : L("待读取"),
-                icon: "doc.text",
-                state: documentKnown ? .ready : .attention),
-            SkillPipelineStep(
-                id: "source",
-                title: L("来源"),
-                detail: sourceProblem ? updateLabel : (canRefreshFromSource ? L("可维护") : L("静态")),
-                icon: "link",
-                state: sourceProblem ? .error : .ready),
-            SkillPipelineStep(
-                id: "deploy",
-                title: L("分发"),
-                detail: skill.targets.isEmpty ? L("未分发") : L("%ld Agent", skill.targets.count),
-                icon: "point.3.connected.trianglepath.dotted",
-                state: skill.targets.isEmpty ? .attention : .ready),
-            SkillPipelineStep(
-                id: "maintain",
-                title: L("维护"),
-                detail: skill.updateStatus == "update_available" ? L("可更新") : updateLabel,
-                icon: "checkmark.seal",
-                state: skill.updateStatus == "update_available" ? .attention : (sourceProblem ? .error : .ready)),
-        ]
-    }
 
     var body: some View {
-        VStack(spacing: 0) {
+        SkillModalShell {
+            tabRail
+        } header: {
             header
-            Rectangle()
-                .fill(AppStyle.separator.opacity(0.18))
-                .frame(height: 1)
-            HStack(spacing: 0) {
-                tabRail
-                    .frame(width: 164)
-                Rectangle()
-                    .fill(AppStyle.separator.opacity(0.14))
-                    .frame(width: 1)
-                ScrollView {
-                    selectedContent
-                        .id(selectedTab)
-                        .padding(16)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .move(edge: .leading).combined(with: .opacity)))
-                }
-                .scrollIndicators(.never)
+        } content: {
+            ScrollView {
+                selectedContent
+                    .id(selectedTab)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .transition(AgentToolsMotion.contentTransition)
             }
+            .scrollIndicators(.never)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
-        .animation(Motion.panel, value: selectedTab)
-        .animation(Motion.snappy, value: skill.targets.count)
-        .animation(Motion.snappy, value: skill.updateStatus)
+        .animation(AgentToolsMotion.route, value: selectedTab)
+        .animation(AgentToolsMotion.selection, value: skill.targets.count)
+        .animation(AgentToolsMotion.selection, value: skill.updateStatus)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(healthColor.opacity(0.13))
-                    Image(systemName: sourceIcon)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(healthColor)
-                }
-                .frame(width: 46, height: 46)
-
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(spacing: 7) {
-                        Text(skill.name)
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundStyle(AppStyle.textPrimary)
-                            .lineLimit(1)
-                        tinyBadge(skill.sourceType.rawValue, color: AppStyle.textTertiary)
-                        tinyBadge(updateLabel, color: healthColor)
-                        if skill.targets.isEmpty {
-                            tinyBadge(L("未分发"), color: .orange)
-                        } else {
-                            tinyBadge(L("%ld Agent", skill.targets.count), color: AppStyle.accent)
-                        }
-                    }
-                    Text((skill.description?.isEmpty == false) ? skill.description! : collapsedPath(skill.centralPath))
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppStyle.textSecondary)
-                        .lineLimit(2)
-                }
-
-                Spacer(minLength: 8)
-
-                SkillScoreDial(
-                    value: readinessScore,
-                    label: readinessLabel,
-                    caption: L("就绪"),
-                    color: readinessScore >= 1 ? AppStyle.accent : healthColor)
-
-                HStack(spacing: 4) {
-                    iconButton("folder", help: L("在 Finder 显示"), action: onReveal)
-                    iconButton("trash", help: L("删除 Skill"), destructive: true, action: onDelete)
-                    iconButton("xmark", help: L("关闭"), action: onClose)
-                }
-            }
-
-            HStack(spacing: 8) {
-                cockpitActionButton(
+        SkillModalHeader(
+            icon: sourceIcon,
+            title: skill.name,
+            subtitle: (skill.description?.isEmpty == false) ? skill.description! : collapsedPath(skill.centralPath),
+            tint: healthColor) {
+            HStack(spacing: 6) {
+                SkillHeaderActionButton(
                     title: L("同步全部"),
-                    icon: "arrow.triangle.2.circlepath",
+                    systemImage: "arrow.triangle.2.circlepath",
                     primary: true,
+                    tint: AppStyle.accent,
                     action: onSyncAll)
 
                 if canRefreshFromSource {
-                    cockpitActionButton(
-                        title: L("检查更新"),
-                        icon: "magnifyingglass.circle",
-                        primary: false,
-                        action: onCheckUpdate)
-                    cockpitActionButton(
-                        title: L("刷新来源"),
-                        icon: "arrow.clockwise.circle",
-                        primary: false,
-                        action: onRefreshSource)
+                    iconButton("magnifyingglass.circle", help: L("检查更新"), action: onCheckUpdate)
+                    iconButton("arrow.clockwise.circle", help: L("刷新来源"), action: onRefreshSource)
                 }
 
-                cockpitActionButton(
-                    title: L("读取文档"),
-                    icon: "doc.text.magnifyingglass",
-                    primary: false,
-                    action: onLoadDetails)
+                iconButton("doc.text.magnifyingglass", help: L("读取文档"), action: onLoadDetails)
+                iconButton("folder", help: L("在 Finder 显示"), action: onReveal)
+                iconButton("trash", help: L("删除 Skill"), destructive: true, action: onDelete)
+                iconButton("xmark", help: L("关闭"), action: onClose)
+            }
+        } meta: {
+            HStack(spacing: 8) {
+                tinyBadge(skill.sourceType.rawValue, color: AppStyle.textTertiary)
+                tinyBadge(updateLabel, color: healthColor)
+                if skill.targets.isEmpty {
+                    tinyBadge(L("未分发"), color: AppStyle.waitAmber)
+                } else {
+                    tinyBadge(L("%ld Agent", skill.targets.count), color: AppStyle.accent)
+                }
 
                 Spacer()
 
@@ -3682,14 +5100,19 @@ private struct SkillDetailCockpit: View {
                     .textSelection(.enabled)
             }
         }
-        .padding(18)
     }
 
     private var tabRail: some View {
         VStack(alignment: .leading, spacing: 6) {
+            SkillRailBrand(
+                icon: sourceIcon,
+                title: L("Skill 详情"),
+                subtitle: skill.name,
+                tint: healthColor)
+
             ForEach(SkillDetailTab.allCases) { tab in
                 Button {
-                    withAnimation(Motion.snappy) { selectedTab = tab }
+                    withAnimation(AgentToolsMotion.selection) { selectedTab = tab }
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: tab.icon)
@@ -3702,34 +5125,32 @@ private struct SkillDetailCockpit: View {
                         if let value = tabValue(tab) {
                             Text(value)
                                 .font(.system(size: 8.8, weight: .bold))
-                                .foregroundStyle(selectedTab == tab ? .white.opacity(0.86) : tabValueColor(tab))
+                                .foregroundStyle(selectedTab == tab ? AppStyle.textSecondary : tabValueColor(tab))
                                 .padding(.horizontal, 5)
                                 .frame(height: 17)
-                                .background(Capsule().fill((selectedTab == tab ? Color.white : tabValueColor(tab)).opacity(0.13)))
+                                .background(Capsule().fill(tabValueColor(tab).opacity(selectedTab == tab ? 0.10 : 0.13)))
                         }
                     }
-                    .foregroundStyle(selectedTab == tab ? .white : AppStyle.textSecondary)
+                    .foregroundStyle(selectedTab == tab ? AppStyle.textPrimary : AppStyle.textSecondary)
                     .padding(.horizontal, 10)
                     .frame(height: 34)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(selectedTab == tab ? AppStyle.accent : Color.clear))
+                    .skillRailItemSurface(selected: selectedTab == tab)
                 }
                 .buttonStyle(.plain)
                 .help(tabValue(tab).map { "\(tab.title) \($0)" } ?? tab.title)
-                .animation(Motion.snappy, value: selectedTab)
+                .animation(AgentToolsMotion.selection, value: selectedTab)
             }
 
             Spacer()
 
-            VStack(alignment: .leading, spacing: 6) {
-                SkillRailStat(title: L("同步模式"), value: syncMode, color: AppStyle.textSecondary)
-                SkillRailStat(title: L("文件"), value: "\(files.count)", color: AppStyle.textSecondary)
-                SkillRailStat(title: L("诊断"), value: "\(doctorFindings.count)", color: doctorFindings.isEmpty ? AppStyle.accent : healthColor)
-                SkillRailStat(title: L("最近检查"), value: skill.lastCheckedAt.map { $0.formatted(date: .numeric, time: .shortened) } ?? "--", color: AppStyle.textTertiary)
-            }
+            Text(syncMode)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(AppStyle.textTertiary)
+                .padding(.horizontal, 10)
+                .frame(height: 26)
         }
         .padding(12)
-        .background(AppStyle.hoverFill.opacity(0.14))
+        .skillRailSurface()
     }
 
     @ViewBuilder
@@ -3754,50 +5175,13 @@ private struct SkillDetailCockpit: View {
                 runCueAction(nextCue.action)
             }
 
-            SkillDoctorFindingsPanel(
-                title: "Doctor",
-                findings: doctorFindings,
-                emptyTitle: L("这个 Skill 没有诊断问题"),
-                onSelect: nil)
-
-            SkillPipeline(steps: pipelineSteps)
-
-            LazyVGrid(columns: [
-                GridItem(.adaptive(minimum: 150), spacing: 10),
-            ], spacing: 10) {
-                SkillMetricTile(
-                    icon: "checkmark.seal",
-                    title: L("健康度"),
-                    value: readinessLabel,
-                    detail: L("%ld / %ld 项就绪", readinessItems.filter(\.ready).count, readinessItems.count),
-                    color: readinessScore >= 1 ? AppStyle.accent : .orange)
-                SkillMetricTile(
-                    icon: "point.3.connected.trianglepath.dotted",
-                    title: L("部署"),
-                    value: L("%ld / %ld", skill.targets.count, tools.count),
-                    detail: skill.targets.isEmpty ? L("尚未进入 Agent") : L("已分发"),
-                    color: skill.targets.isEmpty ? .orange : AppStyle.accent)
-                SkillMetricTile(
-                    icon: "arrow.down.circle",
-                    title: L("更新"),
-                    value: updateLabel,
-                    detail: skill.lastCheckError?.isEmpty == false ? skill.lastCheckError! : (skill.lastCheckedAt.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? L("未检查")),
-                    color: healthColor)
-                SkillMetricTile(
-                    icon: "doc.on.doc",
-                    title: L("内容"),
-                    value: L("%ld 文件", files.count),
-                    detail: document?.filename ?? "SKILL.md",
-                    color: AppStyle.textSecondary)
-            }
-
-            SkillCockpitPanel(icon: "waveform.path.ecg", title: L("就绪检查")) {
-                LazyVGrid(columns: [
-                    GridItem(.adaptive(minimum: 180), spacing: 8),
-                ], spacing: 8) {
-                    ForEach(readinessItems) { item in
-                        SkillReadinessCard(item: item)
-                    }
+            SkillCockpitPanel(icon: "info.circle", title: L("属性")) {
+                VStack(alignment: .leading, spacing: 7) {
+                    detailPropertyRow(L("同步"), skill.targets.isEmpty ? L("未分发") : L("%ld Agent", skill.targets.count))
+                    detailPropertyRow(L("更新"), updateLabel)
+                    detailPropertyRow(L("文件"), L("%ld 文件", files.count))
+                    detailPropertyRow(L("最近检查"), skill.lastCheckedAt.map { $0.formatted(date: .numeric, time: .shortened) } ?? "--")
+                    detailPropertyRow(L("路径"), collapsedPath(skill.centralPath), monospaced: true)
                 }
             }
 
@@ -3808,12 +5192,50 @@ private struct SkillDetailCockpit: View {
         }
     }
 
+    private func detailPropertyRow(_ label: String, _ value: String, monospaced: Bool = false) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(AppStyle.textTertiary)
+                .frame(width: 64, alignment: .leading)
+            Text(value)
+                .font(.system(size: 10.5, design: monospaced ? .monospaced : .default))
+                .foregroundStyle(AppStyle.textSecondary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func quietReadinessRow(_ item: SkillReadinessItem) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: item.ready ? "checkmark.circle.fill" : item.icon)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(item.ready ? AppStyle.accent : item.color)
+                .frame(width: 18)
+            Text(item.title)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(AppStyle.textSecondary)
+                .frame(width: 86, alignment: .leading)
+            Text(item.detail)
+                .font(.system(size: 10.5))
+                .foregroundStyle(AppStyle.textTertiary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .skillRowSurface(selected: !item.ready, tint: item.color)
+    }
+
     private var deployContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                cockpitActionButton(
+                SkillHeaderActionButton(
                     title: L("同步到所有可用 Agent"),
-                    icon: "arrow.triangle.2.circlepath",
+                    systemImage: "arrow.triangle.2.circlepath",
                     primary: true,
                     action: onSyncAll)
                 tinyBadge("\(L("当前模式")) \(syncMode)", color: AppStyle.textTertiary)
@@ -3827,7 +5249,7 @@ private struct SkillDetailCockpit: View {
                 detail: tools.isEmpty
                     ? L("还没有可用 Agent")
                     : L("%ld 个已同步，%ld 个待同步", skill.targets.count, max(0, tools.count - skill.targets.count)),
-                color: skill.targets.isEmpty ? .orange : AppStyle.accent,
+                color: skill.targets.isEmpty ? AppStyle.waitAmber : AppStyle.accent,
                 progress: tools.isEmpty ? nil : deploymentCoverage)
 
             SkillCockpitPanel(icon: "point.3.connected.trianglepath.dotted", title: L("Agent 部署矩阵")) {
@@ -3865,7 +5287,7 @@ private struct SkillDetailCockpit: View {
                             HStack(spacing: 6) {
                                 tinyBadge(byteCount(Int64(document.content.utf8.count)), color: AppStyle.textTertiary)
                                 if document.truncated {
-                                    tinyBadge(L("已截断"), color: .orange)
+                                    tinyBadge(L("已截断"), color: AppStyle.waitAmber)
                                 }
                                 Spacer()
                                 Button(action: onLoadDetails) {
@@ -3883,8 +5305,7 @@ private struct SkillDetailCockpit: View {
                                     .padding(10)
                             }
                             .frame(minHeight: 360)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(AppStyle.hoverFill.opacity(0.50)))
+                            .skillSoftSurface()
                         }
                     } else {
                         Button(action: onLoadDetails) {
@@ -3897,8 +5318,7 @@ private struct SkillDetailCockpit: View {
                             .foregroundStyle(AppStyle.textSecondary)
                             .frame(maxWidth: .infinity)
                             .frame(height: 180)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(AppStyle.hoverFill.opacity(0.50)))
+                            .skillSoftSurface()
                         }
                         .buttonStyle(.plain)
                     }
@@ -3943,7 +5363,7 @@ private struct SkillDetailCockpit: View {
                         VStack(alignment: .leading, spacing: 9) {
                             HStack(spacing: 6) {
                                 tinyBadge(collapsedPath(sourceDiff.sourcePath), color: AppStyle.textTertiary)
-                                tinyBadge(L("%ld 个文件", sourceDiff.entries.count), color: .orange)
+                                tinyBadge(L("%ld 个文件", sourceDiff.entries.count), color: AppStyle.waitAmber)
                                 Spacer()
                             }
 
@@ -3965,8 +5385,7 @@ private struct SkillDetailCockpit: View {
                             .foregroundStyle(AppStyle.textSecondary)
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(AppStyle.hoverFill.opacity(0.50)))
+                            .skillSoftSurface()
                     }
                     .buttonStyle(.plain)
                 } else {
@@ -4029,7 +5448,7 @@ private struct SkillDetailCockpit: View {
                         HStack(spacing: 7) {
                             Image(systemName: target.status == "ok" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                                 .font(.system(size: 10.5, weight: .semibold))
-                                .foregroundStyle(target.status == "ok" ? AppStyle.accent : .orange)
+                                .foregroundStyle(target.status == "ok" ? AppStyle.accent : AppStyle.waitAmber)
                             Text(target.tool)
                                 .font(.system(size: 10.5, weight: .semibold))
                                 .foregroundStyle(AppStyle.textPrimary)
@@ -4067,27 +5486,10 @@ private struct SkillDetailCockpit: View {
         }
     }
 
-    private func cockpitActionButton(title: String,
-                                     icon: String,
-                                     primary: Bool,
-                                     action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(primary ? .white : AppStyle.textSecondary)
-                .padding(.horizontal, 10)
-                .frame(height: 28)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(primary ? AppStyle.accent : AppStyle.hoverFill))
-        }
-        .buttonStyle(PressScaleStyle())
-        .help(title)
-    }
-
     private func tabValue(_ tab: SkillDetailTab) -> String? {
         switch tab {
         case .overview:
-            return readinessLabel
+            return nil
         case .deploy:
             return tools.isEmpty ? nil : "\(skill.targets.count)/\(tools.count)"
         case .docs:
@@ -4102,9 +5504,9 @@ private struct SkillDetailCockpit: View {
     private func tabValueColor(_ tab: SkillDetailTab) -> Color {
         switch tab {
         case .overview:
-            return readinessScore >= 1 ? AppStyle.accent : .orange
+            return AppStyle.textTertiary
         case .deploy:
-            return skill.targets.isEmpty ? .orange : AppStyle.accent
+            return skill.targets.isEmpty ? AppStyle.waitAmber : AppStyle.accent
         case .docs:
             return documentKnown ? AppStyle.accent : AppStyle.textTertiary
         case .source:
@@ -4151,17 +5553,6 @@ private struct SkillDetailCockpit: View {
         }
     }
 
-    private func cueAction(for finding: SkillDoctorFinding) -> SkillCueAction {
-        switch finding.category {
-        case .deploy, .tool, .project:
-            return .deploy
-        case .source:
-            return .source
-        case .document, .safety, .duplicate:
-            return .docs
-        }
-    }
-
     private func emptyCockpitState(icon: String, title: String) -> some View {
         VStack(spacing: 8) {
             Image(systemName: icon)
@@ -4173,8 +5564,7 @@ private struct SkillDetailCockpit: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 118)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.45)))
+        .skillSoftSurface()
     }
 }
 
@@ -4199,44 +5589,28 @@ private struct SkillCoverageStrip: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(color)
-                .frame(width: 32, height: 32)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(color.opacity(0.12)))
-
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 8) {
-                    Text(title)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(AppStyle.textTertiary)
-                    Text(value)
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(AppStyle.textPrimary)
+        VStack(alignment: .leading, spacing: 10) {
+            SkillPanelTitle(icon: icon, title: title, value: value, tint: color)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(AppStyle.hoverFill)
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(color)
+                        .frame(width: proxy.size.width * CGFloat(normalizedProgress))
                 }
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(AppStyle.hoverFill)
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(color)
-                            .frame(width: proxy.size.width * CGFloat(normalizedProgress))
-                    }
-                }
-                .frame(height: 6)
-                Text(detail)
-                    .font(.system(size: 10))
-                    .foregroundStyle(AppStyle.textTertiary)
-                    .lineLimit(1)
             }
+            .frame(height: 6)
+            Text(detail)
+                .font(.system(size: 10))
+                .foregroundStyle(AppStyle.textTertiary)
+                .lineLimit(1)
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.40)))
-        .animation(Motion.panel, value: normalizedProgress)
-        .animation(Motion.snappy, value: value)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .skillPanelSurface()
+        .animation(AgentToolsMotion.route, value: normalizedProgress)
+        .animation(AgentToolsMotion.selection, value: value)
     }
 }
 
@@ -4248,45 +5622,37 @@ private struct SkillFileProfilePanel: View {
     let onLoadDetails: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: documentKnown ? "doc.text.fill" : "doc.text.magnifyingglass")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(documentKnown ? AppStyle.accent : .orange)
-                .frame(width: 34, height: 34)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill((documentKnown ? AppStyle.accent : Color.orange).opacity(0.12)))
-
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 7) {
-                    Text(documentKnown ? L("文件画像") : L("等待读取文件画像"))
-                        .font(.system(size: 12.5, weight: .bold))
-                        .foregroundStyle(AppStyle.textPrimary)
-                    tinyBadge(L("%ld 文件", totalFiles), color: totalFiles == 0 ? AppStyle.textTertiary : AppStyle.accent)
-                    if totalBytes > 0 {
-                        tinyBadge(byteCount(totalBytes), color: AppStyle.textTertiary)
-                    }
-                    Spacer()
-                    Button(action: onLoadDetails) {
-                        Label(documentKnown ? L("刷新画像") : L("读取"), systemImage: "arrow.clockwise")
-                            .font(.system(size: 10.5, weight: .semibold))
-                    }
-                    .buttonStyle(.plain)
-                    .help(documentKnown ? L("刷新文件画像") : L("读取文件画像"))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                SkillPanelTitle(
+                    icon: documentKnown ? "doc.text.fill" : "doc.text.magnifyingglass",
+                    title: documentKnown ? L("文件画像") : L("等待读取文件画像"),
+                    value: L("%ld 文件", totalFiles),
+                    tint: documentKnown ? AppStyle.accent : AppStyle.waitAmber)
+                if totalBytes > 0 {
+                    tinyBadge(byteCount(totalBytes), color: AppStyle.textTertiary)
                 }
+                IconOnlyButton(
+                    systemName: "arrow.clockwise",
+                    help: documentKnown ? L("刷新文件画像") : L("读取文件画像"),
+                    size: 24,
+                    symbolSize: 10.5,
+                    weight: .semibold,
+                    action: onLoadDetails)
+            }
 
-                if segments.isEmpty {
-                    Text(L("读取 SKILL.md 后会展示文档、代码、资产等结构占比。"))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(AppStyle.textTertiary)
-                        .lineLimit(1)
-                } else {
-                    SkillSegmentBar(segments: segments)
-                }
+            if segments.isEmpty {
+                Text(L("读取 SKILL.md 后会展示文档、代码、资产等结构占比。"))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .lineLimit(1)
+            } else {
+                SkillSegmentBar(segments: segments)
             }
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.40)))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .skillPanelSurface()
     }
 }
 
@@ -4309,7 +5675,7 @@ private struct SkillSegmentBar: View {
                 }
             }
             .frame(height: 7)
-            .animation(Motion.panel, value: segments.map { "\($0.id):\($0.count)" }.joined(separator: "|"))
+            .animation(AgentToolsMotion.route, value: segments.map { "\($0.id):\($0.count)" }.joined(separator: "|"))
 
             HStack(spacing: 8) {
                 ForEach(segments) { segment in
@@ -4322,7 +5688,7 @@ private struct SkillSegmentBar: View {
                             .foregroundStyle(AppStyle.textTertiary)
                             .lineLimit(1)
                     }
-                    .transition(.scale.combined(with: .opacity))
+                    .transition(AgentToolsMotion.revealTransition)
                 }
             }
         }
@@ -4335,40 +5701,29 @@ private struct SkillDiffStatsPanel: View {
     private var segments: [SkillProfileSegment] {
         [
             SkillProfileSegment(title: L("新增"), count: count("added"), color: AppStyle.accent),
-            SkillProfileSegment(title: L("修改"), count: count("modified"), color: .orange),
-            SkillProfileSegment(title: L("删除"), count: count("removed"), color: .red),
+            SkillProfileSegment(title: L("修改"), count: count("modified"), color: AppStyle.waitAmber),
+            SkillProfileSegment(title: L("删除"), count: count("removed"), color: AppStyle.errorRed),
         ].filter { $0.count > 0 }
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: entries.isEmpty ? "checkmark.seal.fill" : "arrow.left.arrow.right")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(entries.isEmpty ? AppStyle.accent : .orange)
-                .frame(width: 34, height: 34)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill((entries.isEmpty ? AppStyle.accent : Color.orange).opacity(0.12)))
-
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 7) {
-                    Text(entries.isEmpty ? L("来源一致") : L("差异分布"))
-                        .font(.system(size: 12.5, weight: .bold))
-                        .foregroundStyle(AppStyle.textPrimary)
-                    tinyBadge(L("%ld 文件", entries.count), color: entries.isEmpty ? AppStyle.accent : .orange)
-                    Spacer()
-                }
-                if segments.isEmpty {
-                    Text(L("中央库和来源当前没有文件级差异。"))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(AppStyle.textTertiary)
-                } else {
-                    SkillSegmentBar(segments: segments)
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            SkillPanelTitle(
+                icon: entries.isEmpty ? "checkmark.seal.fill" : "arrow.left.arrow.right",
+                title: entries.isEmpty ? L("来源一致") : L("差异分布"),
+                value: L("%ld 文件", entries.count),
+                tint: entries.isEmpty ? AppStyle.accent : AppStyle.waitAmber)
+            if segments.isEmpty {
+                Text(L("中央库和来源当前没有文件级差异。"))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(AppStyle.textTertiary)
+            } else {
+                SkillSegmentBar(segments: segments)
             }
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.40)))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .skillPanelSurface()
     }
 
     private func count(_ status: String) -> Int {
@@ -4391,147 +5746,15 @@ private struct SkillCockpitPanel<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 7) {
-                Image(systemName: icon)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(AppStyle.accent)
-                    .frame(width: 16)
-                Text(title)
-                    .font(.system(size: 12.5, weight: .bold))
-                    .foregroundStyle(AppStyle.textPrimary)
-                    .lineLimit(1)
-                Spacer()
-            }
+            SkillPanelTitle(icon: icon, title: title, value: nil)
             content
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(AppStyle.theme.isDark ? Color.white.opacity(0.04) : Color.white.opacity(0.74)))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .stroke(AppStyle.separator.opacity(0.22), lineWidth: 1))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .skillPanelSurface()
     }
 }
 
-private struct SkillScoreDial: View {
-    let value: Double
-    let label: String
-    let caption: String
-    let color: Color
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(AppStyle.hoverFill, lineWidth: 5)
-            Circle()
-                .trim(from: 0, to: min(max(value, 0), 1))
-                .stroke(color, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            VStack(spacing: 1) {
-                Text(label)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(AppStyle.textPrimary)
-                    .lineLimit(1)
-                Text(caption)
-                    .font(.system(size: 8.5, weight: .semibold))
-                    .foregroundStyle(AppStyle.textTertiary)
-            }
-        }
-        .frame(width: 58, height: 58)
-        .animation(Motion.panel, value: value)
-        .animation(Motion.snappy, value: label)
-    }
-}
-
-private struct SkillRailStat: View {
-    let title: String
-    let value: String
-    let color: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(AppStyle.textTertiary)
-            Text(value)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 8)
-        .frame(height: 42)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.55)))
-    }
-}
-
-private struct SkillMetricTile: View {
-    let icon: String
-    let title: String
-    let value: String
-    let detail: String
-    let color: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 7) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(color)
-                    .frame(width: 24, height: 24)
-                    .background(Circle().fill(color.opacity(0.12)))
-                Text(title)
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(AppStyle.textTertiary)
-                    .lineLimit(1)
-                Spacer()
-            }
-            Text(value)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(AppStyle.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-            Text(detail)
-                .font(.system(size: 10))
-                .foregroundStyle(AppStyle.textTertiary)
-                .lineLimit(2)
-        }
-        .padding(11)
-        .frame(minHeight: 108, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.46)))
-    }
-}
-
-private struct SkillReadinessCard: View {
-    let item: SkillReadinessItem
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Image(systemName: item.ready ? "checkmark.circle.fill" : item.icon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(item.ready ? AppStyle.accent : item.color)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill((item.ready ? AppStyle.accent : item.color).opacity(0.11)))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(.system(size: 11.5, weight: .bold))
-                    .foregroundStyle(AppStyle.textPrimary)
-                    .lineLimit(1)
-                Text(item.detail)
-                    .font(.system(size: 10))
-                    .foregroundStyle(AppStyle.textTertiary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 48)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(item.ready ? AppStyle.accent.opacity(0.09) : AppStyle.hoverFill.opacity(0.52)))
-    }
-}
 
 private struct SkillDeploymentLane: View {
     let tool: SkillToolInfo
@@ -4559,7 +5782,7 @@ private struct SkillDeploymentLane: View {
                             tinyBadge(L("自定义"), color: AppStyle.accent)
                         }
                         if !tool.installed {
-                            tinyBadge(L("未检测"), color: .orange)
+                            tinyBadge(L("未检测"), color: AppStyle.waitAmber)
                         }
                     }
                     Text(target.map { "\($0.mode.rawValue) · \(collapsedPath($0.targetPath))" } ?? collapsedPath(tool.skillsDirectory))
@@ -4570,7 +5793,7 @@ private struct SkillDeploymentLane: View {
                 }
                 Spacer(minLength: 8)
                 if let target, target.status != "ok" {
-                    tinyBadge(target.status, color: .orange)
+                    tinyBadge(target.status, color: AppStyle.waitAmber)
                 }
                 Image(systemName: synced ? "minus.circle" : "arrow.right.circle")
                     .font(.system(size: 12, weight: .semibold))
@@ -4579,17 +5802,14 @@ private struct SkillDeploymentLane: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 48)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(synced ? AppStyle.accent.opacity(hovering ? 0.13 : 0.09) : AppStyle.hoverFill.opacity(hovering ? 0.66 : 0.48)))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(synced ? AppStyle.accent.opacity(hovering ? 0.28 : 0.14) : AppStyle.separator.opacity(hovering ? 0.7 : 0), lineWidth: 1))
+            .skillRowSurface(selected: synced, hovering: hovering, tint: AppStyle.accent)
             .offset(x: hovering ? 2 : 0)
         }
         .buttonStyle(.plain)
         .help(synced ? L("移除同步") : L("同步到该 Agent"))
         .onHover { hovering = $0 }
-        .animation(Motion.hover, value: hovering)
-        .animation(Motion.snappy, value: synced)
+        .animation(AgentToolsMotion.hover, value: hovering)
+        .animation(AgentToolsMotion.selection, value: synced)
     }
 }
 
@@ -4623,8 +5843,7 @@ private struct SkillFileListRow: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 36)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.42)))
+        .skillSoftSurface(opacity: 0.92)
     }
 }
 
@@ -4651,8 +5870,7 @@ private struct SkillDiffSummaryRow: View {
         }
         .padding(.horizontal, 9)
         .frame(height: 32)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.45)))
+        .skillSoftSurface()
     }
 }
 
@@ -4687,8 +5905,7 @@ private struct SkillDiffPreview: View {
                     .padding(8)
             }
             .frame(maxHeight: 210)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(AppStyle.hoverFill.opacity(0.50)))
+            .skillSoftSurface()
         }
     }
 }
@@ -4712,7 +5929,7 @@ private struct SkillActivityLine: View {
                         tinyBadge(tool, color: AppStyle.textTertiary)
                     }
                     if !entry.success {
-                        tinyBadge(L("失败"), color: .red)
+                        tinyBadge(L("失败"), color: AppStyle.errorRed)
                     }
                     Spacer()
                     Text(entry.timestamp.formatted(date: .abbreviated, time: .shortened))
@@ -4732,15 +5949,14 @@ private struct SkillActivityLine: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.42)))
+        .skillSoftSurface(opacity: 0.92)
     }
 
     private var color: Color {
-        if !entry.success { return .red }
+        if !entry.success { return AppStyle.errorRed }
         switch entry.action {
         case "delete", "unsync", "project_unsync", "tag_remove", "tool_disable", "preset_delete":
-            return .orange
+            return AppStyle.waitAmber
         default:
             return AppStyle.accent
         }
@@ -4778,8 +5994,367 @@ private struct SkillManagerPayload: Sendable {
     var projectTargets: [SkillProjectTargetRecord]
     var projectSkills: [String: [ProjectSkillInfo]]
     var auditEntries: [SkillAuditEntry]
-    var doctorReport: SkillDoctorReport
     var scanResult: SkillScanResult?
+}
+
+private struct SkillLibraryRow: View {
+    let skill: ManagedSkill
+    let active: Bool
+    let selected: Bool
+    let healthLabel: String
+    let healthColor: Color
+    let updateLabel: String
+    let canRefreshFromSource: Bool
+    let allTags: [String]
+    let onActivate: () -> Void
+    let onToggleSelection: () -> Void
+    let onOpenDetail: () -> Void
+    let onSync: () -> Void
+    let onCheckUpdate: () -> Void
+    let onRefreshSource: () -> Void
+    let onAddTag: (String?) -> Void
+    let onRemoveTag: (String) -> Void
+    let onReveal: () -> Void
+    let onDelete: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            IconOnlyButton(
+                systemName: selected ? "checkmark.square.fill" : "square",
+                help: selected ? L("取消选择") : L("选择"),
+                size: 24,
+                symbolSize: 11,
+                weight: .semibold,
+                tint: selected ? AppStyle.accent : AppStyle.textTertiary,
+                action: onToggleSelection)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(skill.name)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(AppStyle.textPrimary)
+                        .lineLimit(1)
+                    ToolBadge(text: skill.sourceType.rawValue, color: AppStyle.textTertiary, style: .muted, height: 18)
+                    if updateLabel != L("未知") {
+                        ToolBadge(text: updateLabel, color: healthColor, height: 18)
+                    }
+                }
+
+                Text((skill.description?.isEmpty == false) ? skill.description! : collapsedPath(skill.centralPath))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(AppStyle.textSecondary)
+                    .lineLimit(2)
+
+                HStack(spacing: 5) {
+                    ToolBadge(
+                        text: skill.targets.isEmpty ? L("未同步") : L("%ld Agent", skill.targets.count),
+                        color: skill.targets.isEmpty ? AppStyle.textTertiary : AppStyle.accent,
+                        height: 18)
+                    ToolBadge(text: healthLabel, color: healthColor, height: 18)
+                    ForEach(skill.tags.prefix(3), id: \.self) { tag in
+                        ToolBadge(text: tag, color: AppStyle.textTertiary, style: .muted, height: 18)
+                    }
+                    if skill.tags.count > 3 {
+                        ToolBadge(text: "+\(skill.tags.count - 3)", color: AppStyle.textTertiary, style: .muted, height: 18)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onActivate)
+
+            HStack(spacing: 4) {
+                if hovering || active {
+                    IconOnlyButton(systemName: "arrow.triangle.2.circlepath", help: L("同步到所有可用 Agent"), size: 24, symbolSize: 10.5, action: onSync)
+                    IconOnlyButton(systemName: "rectangle.and.text.magnifyingglass", help: L("打开详情"), size: 24, symbolSize: 10.5, action: onOpenDetail)
+                    IconOnlyButton(systemName: "folder", help: L("在 Finder 显示"), size: 24, symbolSize: 10.5, action: onReveal)
+                    IconOnlyButton(systemName: "trash", help: L("删除"), size: 24, symbolSize: 10.5, tint: AppStyle.errorRed, action: onDelete)
+                }
+            }
+            .frame(width: 112, alignment: .trailing)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .skillRowSurface(active: active, selected: selected, hovering: hovering)
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button(L("打开详情")) { onOpenDetail() }
+            Button(selected ? L("取消选择") : L("选择")) { onToggleSelection() }
+            Divider()
+            Button(L("同步到所有可用 Agent")) { onSync() }
+            Button(L("检查更新")) { onCheckUpdate() }
+                .disabled(!canRefreshFromSource)
+            Button(L("刷新来源")) { onRefreshSource() }
+                .disabled(!canRefreshFromSource)
+            Divider()
+            Menu(L("标签")) {
+                Button(L("添加标签…")) { onAddTag(nil) }
+                let addableTags = allTags.filter { !skill.tags.contains($0) }
+                if !addableTags.isEmpty {
+                    Menu(L("添加已有标签")) {
+                        ForEach(addableTags, id: \.self) { tag in
+                            Button(tag) { onAddTag(tag) }
+                        }
+                    }
+                }
+                if !skill.tags.isEmpty {
+                    Menu(L("移除标签")) {
+                        ForEach(skill.tags, id: \.self) { tag in
+                            Button(tag) { onRemoveTag(tag) }
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button(L("在 Finder 显示")) { onReveal() }
+            Button(L("删除"), role: .destructive) { onDelete() }
+        }
+        .animation(AgentToolsMotion.hover, value: hovering)
+        .animation(AgentToolsMotion.selection, value: active)
+    }
+}
+
+private struct SkillLibraryCard: View {
+    let skill: ManagedSkill
+    let active: Bool
+    let selected: Bool
+    let healthLabel: String
+    let healthColor: Color
+    let updateLabel: String
+    let canRefreshFromSource: Bool
+    let allTags: [String]
+    let onActivate: () -> Void
+    let onToggleSelection: () -> Void
+    let onOpenDetail: () -> Void
+    let onSync: () -> Void
+    let onCheckUpdate: () -> Void
+    let onRefreshSource: () -> Void
+    let onAddTag: (String?) -> Void
+    let onRemoveTag: (String) -> Void
+    let onReveal: () -> Void
+    let onDelete: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: sourceIcon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(healthColor)
+                    .frame(width: 26, height: 26)
+                    .skillIconSurface(color: healthColor)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(skill.name)
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundStyle(AppStyle.textPrimary)
+                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        ToolBadge(text: skill.sourceType.rawValue, color: AppStyle.textTertiary, style: .muted, height: 18)
+                        if updateLabel != L("未知") {
+                            ToolBadge(text: updateLabel, color: healthColor, height: 18)
+                        }
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                IconOnlyButton(
+                    systemName: selected ? "checkmark.square.fill" : "square",
+                    help: selected ? L("取消选择") : L("选择"),
+                    size: 24,
+                    symbolSize: 11,
+                    weight: .semibold,
+                    tint: selected ? AppStyle.accent : AppStyle.textTertiary,
+                    action: onToggleSelection)
+            }
+
+            Text((skill.description?.isEmpty == false) ? skill.description! : collapsedPath(skill.centralPath))
+                .font(.system(size: 10.5))
+                .foregroundStyle(AppStyle.textSecondary)
+                .lineLimit(2)
+                .frame(minHeight: 30, alignment: .topLeading)
+
+            HStack(spacing: 5) {
+                ToolBadge(
+                    text: skill.targets.isEmpty ? L("未同步") : L("%ld Agent", skill.targets.count),
+                    color: skill.targets.isEmpty ? AppStyle.textTertiary : AppStyle.accent,
+                    height: 18)
+                ToolBadge(text: healthLabel, color: healthColor, height: 18)
+                Spacer(minLength: 0)
+            }
+
+            if !skill.tags.isEmpty {
+                HStack(spacing: 5) {
+                    ForEach(skill.tags.prefix(3), id: \.self) { tag in
+                        ToolBadge(text: tag, color: AppStyle.textTertiary, style: .muted, height: 18)
+                    }
+                    if skill.tags.count > 3 {
+                        ToolBadge(text: "+\(skill.tags.count - 3)", color: AppStyle.textTertiary, style: .muted, height: 18)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 5) {
+                IconOnlyButton(systemName: "arrow.triangle.2.circlepath", help: L("同步到所有可用 Agent"), size: 24, symbolSize: 10.5, action: onSync)
+                IconOnlyButton(systemName: "rectangle.and.text.magnifyingglass", help: L("打开详情"), size: 24, symbolSize: 10.5, action: onOpenDetail)
+                IconOnlyButton(systemName: "folder", help: L("在 Finder 显示"), size: 24, symbolSize: 10.5, action: onReveal)
+                Spacer(minLength: 0)
+                IconOnlyButton(systemName: "trash", help: L("删除"), size: 24, symbolSize: 10.5, tint: AppStyle.errorRed, action: onDelete)
+            }
+            .opacity(hovering || active ? 1 : 0.62)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 164, alignment: .topLeading)
+        .skillRowSurface(active: active, selected: selected, hovering: hovering, tint: healthColor)
+        .contentShape(RoundedRectangle(cornerRadius: SkillUI.rowRadius, style: .continuous))
+        .onTapGesture(perform: onActivate)
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button(L("打开详情")) { onOpenDetail() }
+            Button(selected ? L("取消选择") : L("选择")) { onToggleSelection() }
+            Divider()
+            Button(L("同步到所有可用 Agent")) { onSync() }
+            Button(L("检查更新")) { onCheckUpdate() }
+                .disabled(!canRefreshFromSource)
+            Button(L("刷新来源")) { onRefreshSource() }
+                .disabled(!canRefreshFromSource)
+            Divider()
+            Menu(L("标签")) {
+                Button(L("添加标签…")) { onAddTag(nil) }
+                let addableTags = allTags.filter { !skill.tags.contains($0) }
+                if !addableTags.isEmpty {
+                    Menu(L("添加已有标签")) {
+                        ForEach(addableTags, id: \.self) { tag in
+                            Button(tag) { onAddTag(tag) }
+                        }
+                    }
+                }
+                if !skill.tags.isEmpty {
+                    Menu(L("移除标签")) {
+                        ForEach(skill.tags, id: \.self) { tag in
+                            Button(tag) { onRemoveTag(tag) }
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button(L("在 Finder 显示")) { onReveal() }
+            Button(L("删除"), role: .destructive) { onDelete() }
+        }
+        .animation(AgentToolsMotion.hover, value: hovering)
+        .animation(AgentToolsMotion.selection, value: active)
+        .animation(AgentToolsMotion.selection, value: selected)
+    }
+
+    private var sourceIcon: String {
+        switch skill.sourceType {
+        case .git: return "git.branch"
+        case .skillssh: return "sparkles"
+        case .local: return "folder"
+        case .imported: return "archivebox"
+        }
+    }
+}
+
+private struct SkillLibraryInspectorPanel: View {
+    let skill: ManagedSkill
+    let tools: [SkillToolInfo]
+    let sourcePath: String
+    let syncMode: String
+    let canRefreshFromSource: Bool
+    let onOpenDetail: () -> Void
+    let onSyncAll: () -> Void
+    let onToggleTool: (SkillToolInfo, Bool) -> Void
+    let onCheckUpdate: () -> Void
+    let onRefreshSource: () -> Void
+    let onReveal: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        ToolSoftGroup {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Text(L("详情"))
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(AppStyle.textPrimary)
+                    Spacer()
+                    ToolActionButton(title: L("打开"), systemImage: "rectangle.and.text.magnifyingglass", height: 24, fontSize: 10.5, horizontalPadding: 9, action: onOpenDetail)
+                    ToolActionButton(title: L("同步"), systemImage: "arrow.triangle.2.circlepath", role: .tinted(AppStyle.accent), height: 24, fontSize: 10.5, horizontalPadding: 9, action: onSyncAll)
+                }
+
+                Text((skill.description?.isEmpty == false) ? skill.description! : L("无描述"))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(AppStyle.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    inspectorLine(L("来源"), skill.sourceType.rawValue)
+                    inspectorLine(L("路径"), sourcePath, monospace: true)
+                    inspectorLine(L("同步模式"), syncMode)
+                }
+
+                if !tools.isEmpty {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 6)], spacing: 6) {
+                        ForEach(tools) { tool in
+                            let synced = skill.targets.contains { $0.tool == tool.key }
+                            Button {
+                                onToggleTool(tool, !synced)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: synced ? "checkmark.circle.fill" : "circle")
+                                        .font(.system(size: 9.5, weight: .semibold))
+                                    Text(tool.displayName)
+                                        .font(.system(size: 9.5, weight: .semibold))
+                                        .lineLimit(1)
+                                }
+                                .foregroundStyle(synced ? AppStyle.accent : AppStyle.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 7)
+                                .frame(height: 24)
+                                .skillControlSurface(
+                                    active: synced,
+                                    tint: AppStyle.accent.opacity(0.11),
+                                    disabled: false)
+                            }
+                            .buttonStyle(PressScaleStyle())
+                            .help(synced ? L("移除同步") : L("同步到该 Agent"))
+                        }
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    if canRefreshFromSource {
+                        ToolActionButton(title: L("检查更新"), systemImage: "magnifyingglass.circle", height: 24, fontSize: 10.5, horizontalPadding: 9, action: onCheckUpdate)
+                        ToolActionButton(title: L("刷新来源"), systemImage: "arrow.clockwise.circle", height: 24, fontSize: 10.5, horizontalPadding: 9, action: onRefreshSource)
+                    }
+                    ToolActionButton(title: L("显示"), systemImage: "folder", height: 24, fontSize: 10.5, horizontalPadding: 9, action: onReveal)
+                    ToolActionButton(title: L("删除"), systemImage: "trash", role: .destructive, height: 24, fontSize: 10.5, horizontalPadding: 9, action: onDelete)
+                }
+            }
+        }
+    }
+
+    private func inspectorLine(_ label: String, _ value: String, monospace: Bool = false) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label)
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(AppStyle.textTertiary)
+                .frame(width: 48, alignment: .leading)
+            Text(value)
+                .font(.system(size: 9.5, design: monospace ? .monospaced : .default))
+                .foregroundStyle(AppStyle.textSecondary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+            Spacer(minLength: 0)
+        }
+    }
 }
 
 private struct ManagedSkillRow: View {
@@ -4790,7 +6365,6 @@ private struct ManagedSkillRow: View {
     let document: SkillDocument?
     let files: [SkillFileInfo]
     let sourceDiff: SkillSourceDiff?
-    let doctorFindings: [SkillDoctorFinding]
     let syncMode: String
     let onExpand: () -> Void
     let onSelect: () -> Void
@@ -4821,9 +6395,6 @@ private struct ManagedSkillRow: View {
                         }
                         if let updateLabel {
                             tinyBadge(updateLabel, color: updateColor)
-                        }
-                        if let doctorBadgeText {
-                            tinyBadge(doctorBadgeText, color: doctorColor)
                         }
                     }
                     Text((skill.description?.isEmpty == false) ? skill.description! : L("无描述"))
@@ -4876,53 +6447,49 @@ private struct ManagedSkillRow: View {
             }
 
             if expanded {
-                Divider().overlay(AppStyle.separator)
-                VStack(alignment: .leading, spacing: 5) {
-                    metaRow(L("中央库"), collapsedPath(skill.centralPath))
-                    metaRow(L("来源"), skill.sourceType.rawValue)
-                    if let sourceRef = skill.sourceRef {
-                        metaRow("source", sourceRef)
-                    }
-                    if let sourceSubpath = skill.sourceSubpath {
-                        metaRow("subpath", sourceSubpath)
-                    }
-                    if let sourceBranch = skill.sourceBranch {
-                        metaRow("ref", sourceBranch)
-                    }
-                    if let sourceRevision = skill.sourceRevision {
-                        metaRow("rev", String(sourceRevision.prefix(12)))
-                    }
-                    if let remoteRevision = skill.remoteRevision {
-                        metaRow("remote", String(remoteRevision.prefix(12)))
-                    }
-                    metaRow(L("更新状态"), updateLabel ?? L("未知"))
-                    if let lastCheckedAt = skill.lastCheckedAt {
-                        metaRow(L("上次检查"), lastCheckedAt.formatted(date: .abbreviated, time: .shortened))
-                    }
-                    if let lastCheckError = skill.lastCheckError, !lastCheckError.isEmpty {
-                        metaRow(L("检查错误"), lastCheckError)
-                    }
-                    if let contentHash = skill.contentHash {
-                        metaRow("hash", String(contentHash.prefix(12)))
-                    }
-                    HStack(spacing: 5) {
-                        iconButton("link", help: L("重新绑定来源"), action: onRelinkSource)
-                        if canRefreshFromSource {
-                            iconButton("link.slash", help: L("解除来源绑定"), action: onDetachSource)
+                ToolSoftGroup {
+                    VStack(alignment: .leading, spacing: 5) {
+                        metaRow(L("中央库"), collapsedPath(skill.centralPath))
+                        metaRow(L("来源"), skill.sourceType.rawValue)
+                        if let sourceRef = skill.sourceRef {
+                            metaRow("source", sourceRef)
                         }
-                    }
-                    metaRow(L("同步模式"), syncMode)
-                    if !skill.targets.isEmpty {
-                        ForEach(skill.targets) { target in
-                            metaRow(target.tool, "\(target.mode.rawValue) · \(collapsedPath(target.targetPath))")
+                        if let sourceSubpath = skill.sourceSubpath {
+                            metaRow("subpath", sourceSubpath)
+                        }
+                        if let sourceBranch = skill.sourceBranch {
+                            metaRow("ref", sourceBranch)
+                        }
+                        if let sourceRevision = skill.sourceRevision {
+                            metaRow("rev", String(sourceRevision.prefix(12)))
+                        }
+                        if let remoteRevision = skill.remoteRevision {
+                            metaRow("remote", String(remoteRevision.prefix(12)))
+                        }
+                        metaRow(L("更新状态"), updateLabel ?? L("未知"))
+                        if let lastCheckedAt = skill.lastCheckedAt {
+                            metaRow(L("上次检查"), lastCheckedAt.formatted(date: .abbreviated, time: .shortened))
+                        }
+                        if let lastCheckError = skill.lastCheckError, !lastCheckError.isEmpty {
+                            metaRow(L("检查错误"), lastCheckError)
+                        }
+                        if let contentHash = skill.contentHash {
+                            metaRow("hash", String(contentHash.prefix(12)))
+                        }
+                        HStack(spacing: 5) {
+                            iconButton("link", help: L("重新绑定来源"), action: onRelinkSource)
+                            if canRefreshFromSource {
+                                iconButton("link.slash", help: L("解除来源绑定"), action: onDetachSource)
+                            }
+                        }
+                        metaRow(L("同步模式"), syncMode)
+                        if !skill.targets.isEmpty {
+                            ForEach(skill.targets) { target in
+                                metaRow(target.tool, "\(target.mode.rawValue) · \(collapsedPath(target.targetPath))")
+                            }
                         }
                     }
                 }
-                SkillDoctorFindingsPanel(
-                    title: L("诊断"),
-                    findings: doctorFindings,
-                    emptyTitle: L("没有诊断问题"),
-                    onSelect: nil)
                 skillDocumentPreview
                 sourceDiffPreview
                 skillFilesPreview
@@ -4930,7 +6497,7 @@ private struct ManagedSkillRow: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .skillPanelSurface()
     }
 
     private func toolToggle(_ tool: SkillToolInfo) -> some View {
@@ -4948,8 +6515,7 @@ private struct ManagedSkillRow: View {
             .foregroundStyle(synced ? .white : AppStyle.textSecondary)
             .padding(.horizontal, 7)
             .frame(height: 23)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(synced ? AppStyle.accent : AppStyle.hoverFill))
+            .skillControlSurface(active: synced, tint: AppStyle.accent)
         }
         .buttonStyle(PressScaleStyle())
         .help(synced ? L("点击移除同步") : L("点击同步到该 Agent"))
@@ -4980,24 +6546,10 @@ private struct ManagedSkillRow: View {
     private var updateColor: Color {
         switch skill.updateStatus {
         case "current": return AppStyle.accent
-        case "update_available": return .orange
-        case "source_missing", "error": return .red
+        case "update_available": return AppStyle.waitAmber
+        case "source_missing", "error": return AppStyle.errorRed
         default: return AppStyle.textTertiary
         }
-    }
-
-    private var doctorColor: Color {
-        if doctorFindings.contains(where: { $0.severity == .critical }) { return .red }
-        if doctorFindings.contains(where: isProminentDoctorFinding) { return .orange }
-        return AppStyle.textTertiary
-    }
-
-    private var doctorBadgeText: String? {
-        let criticalCount = doctorFindings.filter { $0.severity == .critical }.count
-        if criticalCount > 0 { return L("严重 %ld", criticalCount) }
-        let prominentCount = doctorFindings.filter(isProminentDoctorFinding).count
-        if prominentCount > 0 { return L("诊断 %ld", prominentCount) }
-        return nil
     }
 
     @ViewBuilder
@@ -5008,7 +6560,7 @@ private struct ManagedSkillRow: View {
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(AppStyle.textSecondary)
                 if document?.truncated == true {
-                    tinyBadge(L("已截断"), color: .orange)
+                    tinyBadge(L("已截断"), color: AppStyle.waitAmber)
                 }
                 Spacer()
             }
@@ -5022,8 +6574,7 @@ private struct ManagedSkillRow: View {
                         .padding(8)
                 }
                 .frame(maxHeight: 180)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(AppStyle.hoverFill.opacity(0.55)))
+                .skillSoftSurface()
             } else {
                 Text(L("展开后会读取 Skill 文档。"))
                     .font(.system(size: 10))
@@ -5073,7 +6624,7 @@ private struct ManagedSkillRow: View {
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(AppStyle.textSecondary)
                     if let sourceDiff {
-                        tinyBadge(L("%ld 个文件", sourceDiff.entries.count), color: .orange)
+                        tinyBadge(L("%ld 个文件", sourceDiff.entries.count), color: AppStyle.waitAmber)
                     }
                     Spacer()
                 }
@@ -5147,8 +6698,7 @@ private struct ManagedSkillRow: View {
                     .padding(6)
             }
             .frame(maxHeight: 110)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(AppStyle.hoverFill.opacity(0.55)))
+            .skillSoftSurface()
         }
     }
 
@@ -5164,8 +6714,8 @@ private struct ManagedSkillRow: View {
     private func diffStatusColor(_ status: String) -> Color {
         switch status {
         case "added": return AppStyle.accent
-        case "removed": return .red
-        case "modified": return .orange
+        case "removed": return AppStyle.errorRed
+        case "modified": return AppStyle.waitAmber
         default: return AppStyle.textTertiary
         }
     }
@@ -5209,8 +6759,8 @@ private struct PresetRow: View {
             .sorted { (order[$0.id] ?? Int.max) < (order[$1.id] ?? Int.max) }
     }
 
-    private var presetSkillRows: [ManagedSkill] {
-        orderedIncludedSkills + skills
+    private var availablePresetSkills: [ManagedSkill] {
+        skills
             .filter { !includedIDs.contains($0.id) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
@@ -5263,18 +6813,34 @@ private struct PresetRow: View {
             }
 
             if expanded {
-                Divider().overlay(AppStyle.separator)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L("勾选这个 Preset 包含的 Skills"))
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(AppStyle.textSecondary)
-                    if skills.isEmpty {
-                        Text(L("中央库还没有 Skill。先导入或扫描发现。"))
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(AppStyle.textTertiary)
-                    } else {
-                        ForEach(presetSkillRows) { skill in
-                            skillToggle(skill)
+                ToolSoftGroup {
+                    VStack(alignment: .leading, spacing: 9) {
+                        if skills.isEmpty {
+                            Text(L("中央库还没有 Skill。先导入或扫描发现。"))
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(AppStyle.textTertiary)
+                        } else {
+                            VStack(alignment: .leading, spacing: 6) {
+                                presetSectionHeader(title: L("已启用"), count: orderedIncludedSkills.count)
+                                if orderedIncludedSkills.isEmpty {
+                                    compactPresetEmpty(L("这个 Preset 还没有 Skill"))
+                                } else {
+                                    ForEach(orderedIncludedSkills) { skill in
+                                        skillToggle(skill)
+                                    }
+                                }
+                            }
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                presetSectionHeader(title: L("可加入"), count: availablePresetSkills.count)
+                                if availablePresetSkills.isEmpty {
+                                    compactPresetEmpty(L("全部 Skill 都已在这个 Preset 中"))
+                                } else {
+                                    ForEach(availablePresetSkills) { skill in
+                                        skillToggle(skill)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -5282,7 +6848,34 @@ private struct PresetRow: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .contextMenu {
+            Button(L("打开")) { onExpand() }
+            Button(L("应用 Preset")) { onApply() }
+            Button(L("移除 Preset 同步")) { onRemove() }
+            Divider()
+            Button(L("删除 Preset"), role: .destructive) { onDelete() }
+        }
+        .skillPanelSurface()
+    }
+
+    private func presetSectionHeader(title: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundStyle(AppStyle.textSecondary)
+            tinyBadge(L("%ld", count), color: AppStyle.textTertiary)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func compactPresetEmpty(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10.5))
+            .foregroundStyle(AppStyle.textTertiary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 8)
+            .frame(height: 30)
+            .skillSoftSurface(opacity: 0.8)
     }
 
     private func skillToggle(_ skill: ManagedSkill) -> some View {
@@ -5322,7 +6915,7 @@ private struct PresetRow: View {
                         .font(.system(size: 9.5, weight: .bold))
                         .foregroundStyle(index == 0 ? AppStyle.textTertiary.opacity(0.45) : AppStyle.textSecondary)
                         .frame(width: 22, height: 22)
-                        .background(Circle().fill(AppStyle.hoverFill))
+                        .skillIconSurface(color: AppStyle.textTertiary, shape: .circle)
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(index == 0)
@@ -5335,7 +6928,7 @@ private struct PresetRow: View {
                         .font(.system(size: 9.5, weight: .bold))
                         .foregroundStyle(index >= orderedIncludedSkills.count - 1 ? AppStyle.textTertiary.opacity(0.45) : AppStyle.textSecondary)
                         .frame(width: 22, height: 22)
-                        .background(Circle().fill(AppStyle.hoverFill))
+                        .skillIconSurface(color: AppStyle.textTertiary, shape: .circle)
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(index >= orderedIncludedSkills.count - 1)
@@ -5344,8 +6937,18 @@ private struct PresetRow: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .fill(included ? AppStyle.hoverFill : AppStyle.hoverFill.opacity(0.45)))
+        .skillRowSurface(selected: included)
+        .contextMenu {
+            Button(included ? L("移出 Preset") : L("加入 Preset")) {
+                onToggleSkill(skill, !included)
+            }
+            if let index {
+                Button(L("上移")) { onMoveSkill(skill, -1) }
+                    .disabled(index == 0)
+                Button(L("下移")) { onMoveSkill(skill, 1) }
+                    .disabled(index >= orderedIncludedSkills.count - 1)
+            }
+        }
     }
 
     private var healthLabel: String? {
@@ -5365,7 +6968,7 @@ private struct PresetRow: View {
     private var statusColor: Color {
         guard let summary, summary.totalPairs > 0 else { return AppStyle.textTertiary }
         if summary.syncedPairs >= summary.totalPairs { return AppStyle.accent }
-        if summary.syncedPairs > 0 { return .orange }
+        if summary.syncedPairs > 0 { return AppStyle.waitAmber }
         return AppStyle.textTertiary
     }
 }
@@ -5437,17 +7040,37 @@ private struct ProjectWorkspaceRow: View {
             }
 
             if expanded {
-                Divider().overlay(AppStyle.separator)
-                VStack(alignment: .leading, spacing: 10) {
-                    presetControls
-                    centralSkillControls
-                    projectSkillList
+                ToolSoftGroup {
+                    VStack(alignment: .leading, spacing: 10) {
+                        presetControls
+                        centralSkillControls
+                        projectSkillList
+                    }
                 }
             }
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .contextMenu {
+            Button(L("打开")) { onExpand() }
+            Button(L("在 Finder 显示")) { onReveal() }
+            if !presets.isEmpty {
+                Divider()
+                Menu(L("应用 Preset")) {
+                    ForEach(presets) { preset in
+                        Button(preset.name) { onApplyPreset(preset) }
+                    }
+                }
+                Menu(L("移除 Preset 同步")) {
+                    ForEach(presets) { preset in
+                        Button(preset.name) { onRemovePreset(preset) }
+                    }
+                }
+            }
+            Divider()
+            Button(L("移除项目"), role: .destructive) { onDelete() }
+        }
+        .skillPanelSurface()
     }
 
     @ViewBuilder
@@ -5467,8 +7090,7 @@ private struct ProjectWorkspaceRow: View {
                                         .foregroundStyle(.white)
                                         .padding(.horizontal, 7)
                                         .frame(height: 23)
-                                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                            .fill(AppStyle.accent))
+                                        .skillPrimaryControlSurface()
                                 }
                                 .buttonStyle(PressScaleStyle())
                                 Button { onRemovePreset(preset) } label: {
@@ -5476,7 +7098,7 @@ private struct ProjectWorkspaceRow: View {
                                         .font(.system(size: 10, weight: .semibold))
                                         .foregroundStyle(AppStyle.textSecondary)
                                         .frame(width: 23, height: 23)
-                                        .background(Circle().fill(AppStyle.hoverFill))
+                                        .skillIconSurface(color: AppStyle.textTertiary, shape: .circle)
                                 }
                                 .buttonStyle(PressScaleStyle())
                                 .help(L("移除这个 Preset 在项目里的同步"))
@@ -5523,8 +7145,7 @@ private struct ProjectWorkspaceRow: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(AppStyle.hoverFill.opacity(0.45)))
+                    .skillRowSurface()
                 }
             }
         }
@@ -5576,8 +7197,7 @@ private struct ProjectWorkspaceRow: View {
             .foregroundStyle(synced ? .white : AppStyle.textSecondary)
             .padding(.horizontal, 7)
             .frame(height: 22)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(synced ? AppStyle.accent : AppStyle.hoverFill))
+            .skillControlSurface(active: synced, tint: AppStyle.accent)
         }
         .buttonStyle(PressScaleStyle())
     }
@@ -5593,7 +7213,7 @@ private struct ProjectWorkspaceRow: View {
     private func statusColor(_ status: String) -> Color {
         switch status {
         case "in_sync": return AppStyle.accent
-        case "diverged": return .orange
+        case "diverged": return AppStyle.waitAmber
         default: return AppStyle.textTertiary
         }
     }
@@ -5607,10 +7227,16 @@ private struct SkillToolRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: tool.installed ? "checkmark.circle.fill" : "circle.dashed")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(tool.installed ? AppStyle.accent : AppStyle.textTertiary)
-                .frame(width: 18)
+            ZStack(alignment: .bottomTrailing) {
+                SkillAgentIconView(tool: tool, size: 30, cornerRadius: 8)
+                    .opacity(tool.enabled ? 1 : 0.48)
+                Image(systemName: tool.installed ? "checkmark.circle.fill" : "circle.dashed")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(tool.installed ? AppStyle.accent : AppStyle.textTertiary)
+                    .background(Circle().fill(AppStyle.windowBackground))
+                    .offset(x: 3, y: 3)
+            }
+            .frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(tool.displayName)
@@ -5618,7 +7244,7 @@ private struct SkillToolRow: View {
                         .foregroundStyle(AppStyle.textPrimary)
                     tinyBadge(tool.category.rawValue, color: AppStyle.textTertiary)
                     if tool.isCustom { tinyBadge(L("自定义"), color: AppStyle.accent) }
-                    if !tool.enabled { tinyBadge(L("停用"), color: .red) }
+                    if !tool.enabled { tinyBadge(L("停用"), color: AppStyle.errorRed) }
                 }
                 Text(collapsedPath(tool.skillsDirectory))
                     .font(.system(size: 10, design: .monospaced))
@@ -5636,7 +7262,7 @@ private struct SkillToolRow: View {
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(AppStyle.textSecondary)
                         .frame(width: 26, height: 26)
-                        .background(Circle().fill(AppStyle.hoverFill))
+                        .skillIconSurface(color: AppStyle.textTertiary, shape: .circle)
                 }
                 .buttonStyle(PressScaleStyle())
                 .help(tool.enabled ? L("停用 Agent") : L("启用 Agent"))
@@ -5646,7 +7272,7 @@ private struct SkillToolRow: View {
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(AppStyle.textSecondary)
                         .frame(width: 26, height: 26)
-                        .background(Circle().fill(AppStyle.hoverFill))
+                        .skillIconSurface(color: AppStyle.textTertiary, shape: .circle)
                 }
                 .buttonStyle(PressScaleStyle())
                 .help(L("在 Finder 显示"))
@@ -5654,7 +7280,11 @@ private struct SkillToolRow: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .contextMenu {
+            Button(tool.enabled ? L("停用 Agent") : L("启用 Agent")) { onToggleEnabled() }
+            Button(L("在 Finder 显示")) { onReveal() }
+        }
+        .skillPanelSurface()
     }
 }
 
@@ -5680,7 +7310,7 @@ private struct SkillAuditRow: View {
                         tinyBadge(tool, color: AppStyle.textTertiary)
                     }
                     if !entry.success {
-                        tinyBadge(L("失败"), color: .red)
+                        tinyBadge(L("失败"), color: AppStyle.errorRed)
                     }
                     Spacer(minLength: 6)
                     Text(entry.timestamp.formatted(date: .abbreviated, time: .shortened))
@@ -5699,7 +7329,7 @@ private struct SkillAuditRow: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 9)
-        .toolsCard(cornerRadius: Radius.sm + 2)
+        .skillPanelSurface()
     }
 
     private var actionLabel: String {
@@ -5748,10 +7378,10 @@ private struct SkillAuditRow: View {
     }
 
     private var color: Color {
-        if !entry.success { return .red }
+        if !entry.success { return AppStyle.errorRed }
         switch entry.action {
         case "delete", "unsync", "project_unsync", "tag_remove", "tool_disable", "preset_delete":
-            return .orange
+            return AppStyle.waitAmber
         default:
             return AppStyle.accent
         }
@@ -5798,26 +7428,85 @@ private struct SkillsShMarketRow: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 9)
                     .frame(height: 24)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(AppStyle.accent))
+                    .skillPrimaryControlSurface()
             }
             .buttonStyle(PressScaleStyle())
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(AppStyle.hoverFill.opacity(0.45)))
+        .skillRowSurface()
+    }
+}
+
+private struct GitSkillPreviewRow: View {
+    let preview: GitSkillPreview
+    let selected: Bool
+    let stale: Bool
+    let onToggle: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: selected ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+                    .frame(width: 16, height: 22)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(preview.name)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(AppStyle.textPrimary)
+                            .lineLimit(1)
+                        tinyBadge(preview.relativePath, color: AppStyle.textTertiary)
+                        if stale {
+                            tinyBadge(L("已过期"), color: AppStyle.waitAmber)
+                        }
+                    }
+                    Text((preview.description?.isEmpty == false) ? preview.description! : L("无描述"))
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 7)
+            .skillRowSurface(selected: selected, hovering: hovering)
+            .opacity(stale ? 0.68 : 1)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(selected ? L("取消选择") : L("选择")) { onToggle() }
+        }
+        .onHover { hovering = $0 }
+        .animation(AgentToolsMotion.hover, value: hovering)
+        .animation(AgentToolsMotion.selection, value: selected)
     }
 }
 
 private struct DiscoveredSkillGroupRow: View {
     let group: DiscoveredSkillGroup
+    let selected: Bool
+    let onToggleSelection: () -> Void
     let onImport: () -> Void
     let onReveal: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 10) {
+                IconOnlyButton(
+                    systemName: selected ? "checkmark.square.fill" : "square",
+                    help: selected ? L("取消选择") : L("选择"),
+                    size: 24,
+                    symbolSize: 11,
+                    tint: selected ? AppStyle.accent : AppStyle.textTertiary,
+                    action: onToggleSelection)
+                    .disabled(group.imported)
+
                 Image(systemName: group.imported ? "checkmark.seal.fill" : "sparkle.magnifyingglass")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(group.imported ? AppStyle.accent : AppStyle.textTertiary)
@@ -5845,7 +7534,7 @@ private struct DiscoveredSkillGroupRow: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 9)
                         .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AppStyle.accent))
+                        .skillPrimaryControlSurface()
                 }
                 .buttonStyle(PressScaleStyle())
             }
@@ -5864,7 +7553,7 @@ private struct DiscoveredSkillGroupRow: View {
                             .font(.system(size: 9.5, weight: .semibold))
                             .foregroundStyle(AppStyle.textSecondary)
                             .frame(width: 22, height: 22)
-                            .background(Circle().fill(AppStyle.hoverFill))
+                            .skillIconSurface(color: AppStyle.textTertiary, shape: .circle)
                     }
                     .buttonStyle(.plain)
                     .help(L("在 Finder 显示"))
@@ -5873,118 +7562,25 @@ private struct DiscoveredSkillGroupRow: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
-        .toolsCard(cornerRadius: Radius.sm + 2)
-    }
-}
-
-private struct StatusLine: View {
-    let icon: String
-    let text: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: icon).font(.system(size: 11, weight: .semibold))
-            Text(text).font(.system(size: 11))
-            Spacer()
+        .contextMenu {
+            if !group.imported {
+                Button(selected ? L("取消选择") : L("选择")) { onToggleSelection() }
+                Divider()
+            }
+            Button(group.imported ? L("更新") : L("导入")) { onImport() }
+            if let firstPath = group.locations.first?.foundPath {
+                Button(L("在 Finder 显示")) { onReveal(firstPath) }
+            }
         }
-        .foregroundStyle(color)
-        .padding(.horizontal, 10)
-        .frame(minHeight: 30)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(color.opacity(0.10)))
-    }
-}
-
-@MainActor
-private func doctorSeverityColor(_ severity: SkillDoctorSeverity) -> Color {
-    switch severity {
-    case .critical: return .red
-    case .warning: return .orange
-    case .info: return AppStyle.textTertiary
-    }
-}
-
-private func isRoutineDoctorFinding(_ finding: SkillDoctorFinding) -> Bool {
-    finding.severity == .info ||
-        (finding.category == .deploy && finding.action == "sync")
-}
-
-private func isProminentDoctorFinding(_ finding: SkillDoctorFinding) -> Bool {
-    finding.severity == .critical ||
-        (finding.severity == .warning && !isRoutineDoctorFinding(finding))
-}
-
-@MainActor
-private func doctorFindingColor(_ finding: SkillDoctorFinding) -> Color {
-    if isRoutineDoctorFinding(finding) { return AppStyle.textTertiary }
-    return doctorSeverityColor(finding.severity)
-}
-
-@MainActor
-private func doctorCategorySummaryColor(_ summary: SkillDoctorCategorySummary) -> Color {
-    if summary.severity == .critical { return .red }
-    if summary.severity == .warning, !summary.routineOnly { return .orange }
-    return AppStyle.textTertiary
-}
-
-@MainActor
-private func doctorCountChip(title: String, value: String, color: Color) -> some View {
-    HStack(spacing: 4) {
-        Text(title)
-            .font(.system(size: 8.8, weight: .bold))
-            .foregroundStyle(AppStyle.textTertiary)
-        Text(value)
-            .font(.system(size: 10.5, weight: .bold, design: .rounded))
-            .monospacedDigit()
-            .foregroundStyle(color)
-    }
-    .padding(.horizontal, 8)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .frame(height: 26)
-    .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-        .fill(AppStyle.hoverFill.opacity(0.50)))
-}
-
-private func doctorSeverityLabel(_ severity: SkillDoctorSeverity) -> String {
-    switch severity {
-    case .critical: return L("严重")
-    case .warning: return L("警告")
-    case .info: return L("提示")
-    }
-}
-
-private func doctorCategoryIcon(_ category: SkillDoctorCategory) -> String {
-    switch category {
-    case .source: return "link.badge.plus"
-    case .document: return "doc.text.magnifyingglass"
-    case .deploy: return "point.3.connected.trianglepath.dotted"
-    case .safety: return "shield.lefthalf.filled"
-    case .duplicate: return "square.on.square"
-    case .tool: return "cpu"
-    case .project: return "folder.badge.gearshape"
-    }
-}
-
-private func doctorCategoryLabel(_ category: SkillDoctorCategory) -> String {
-    switch category {
-    case .source: return L("来源")
-    case .document: return L("文档")
-    case .deploy: return L("分发")
-    case .safety: return L("安全")
-    case .duplicate: return L("重复")
-    case .tool: return L("工具")
-    case .project: return L("项目")
+        .skillRowSurface(selected: selected)
+        .animation(AgentToolsMotion.selection, value: selected)
     }
 }
 
 @MainActor
 private func tinyBadge(_ text: String, color: Color) -> some View {
-    Text(text)
-        .font(.system(size: 8.5, weight: .bold))
-        .foregroundStyle(color)
-        .padding(.horizontal, 5)
-        .padding(.vertical, 1.5)
-        .background(Capsule().stroke(color.opacity(0.35), lineWidth: 1))
+    // 统一到 ToolBadge 的软胶囊样式，保留 tiny 体量（小号 + 矮胶囊）。
+    ToolBadge(text: text, color: color, style: .soft, height: 18)
 }
 
 @MainActor
@@ -5992,15 +7588,14 @@ private func iconButton(_ icon: String,
                         help: String,
                         destructive: Bool = false,
                         action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-        Image(systemName: icon)
-            .font(.system(size: 10.5, weight: .semibold))
-            .foregroundStyle(destructive ? Color(red: 0.92, green: 0.34, blue: 0.34) : AppStyle.textSecondary)
-            .frame(width: 24, height: 24)
-            .background(Circle().fill(AppStyle.hoverFill))
-    }
-    .buttonStyle(PressScaleStyle())
-    .help(help)
+    IconOnlyButton(
+        systemName: icon,
+        help: help,
+        size: 24,
+        symbolSize: 10.5,
+        weight: .semibold,
+        tint: destructive ? AppStyle.errorRed : nil,
+        action: action)
 }
 
 private func diffStatusLabel(_ status: String) -> String {
@@ -6016,8 +7611,8 @@ private func diffStatusLabel(_ status: String) -> String {
 private func diffStatusColor(_ status: String) -> Color {
     switch status {
     case "added": return AppStyle.accent
-    case "removed": return .red
-    case "modified": return .orange
+    case "removed": return AppStyle.errorRed
+    case "modified": return AppStyle.waitAmber
     default: return AppStyle.textTertiary
     }
 }

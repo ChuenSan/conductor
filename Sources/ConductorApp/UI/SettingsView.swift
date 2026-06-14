@@ -36,10 +36,10 @@ struct SettingsView: View {
                 sectionRail
 
                 ScrollView {
-                    VStack(spacing: 18) {
+                    VStack(spacing: Space.lg) {
                         selectedSectionContent
                     }
-                    .padding(.top, 12)
+                    .padding(.top, Space.sm)
                     .padding(.trailing, 22)
                     .padding(.bottom, 22)
                 }
@@ -64,7 +64,7 @@ struct SettingsView: View {
                 weight: .bold,
                 action: onClose)
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, Space.lg)
         .padding(.top, 22)
         .padding(.bottom, 10)
     }
@@ -82,12 +82,36 @@ struct SettingsView: View {
                 }
             }
             Spacer(minLength: 0)
+            settingsFeedbackButton
         }
         .padding(.leading, 10)
         .padding(.trailing, 4)
-        .padding(.vertical, 12)
+        .padding(.vertical, Space.sm)
         .frame(width: 136)
         .frame(maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var settingsFeedbackButton: some View {
+        Button {
+            coordinator.openTools(.coCreate)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "text.bubble")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .frame(width: 18)
+                Text(L("反馈 / 共创"))
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(AppStyle.textSecondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .contentShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+        }
+        .buttonStyle(PressScaleStyle())
+        .help(L("打开反馈与共创"))
     }
 
     @ViewBuilder
@@ -109,10 +133,7 @@ struct SettingsView: View {
 
     private var appearanceSection: some View {
         SettingsSection(title: L("外观")) {
-            SettingsRow(label: L("主题"), first: true) {
-                ThemedSegmented(options: [(L("深色"), "dark"), (L("浅色"), "light"), (L("自定义"), "custom")],
-                                selection: bind(\.appearance.theme))
-            }
+            ThemePickerRow(selection: bind(\.appearance.theme))
             SettingsRow(label: L("语言")) {
                 // 语言名按惯例保持各自语言原文，不随界面语言翻译
                 ThemedSegmented(
@@ -131,7 +152,7 @@ struct SettingsView: View {
     }
 
     private var terminalSection: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: Space.lg) {
             SettingsSection(title: L("终端")) {
                 SettingsRow(label: "Shell", first: true) {
                     ThemedTextField(placeholder: L("登录 shell"), text: $shell) {
@@ -159,11 +180,14 @@ struct SettingsView: View {
                     Text(config.terminal.aiAgents.isEmpty ? L("自动检测") : L("%ld 个", config.terminal.aiAgents.count))
                         .font(.system(size: 12))
                         .foregroundStyle(AppStyle.textSecondary)
-                    Button { coordinator.scanAIAgentsIntoConfig() } label: {
-                        Label(L("自动扫描"), systemImage: "wand.and.stars")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .buttonStyle(.borderless)
+                    ToolActionButton(
+                        title: L("自动扫描"),
+                        systemImage: "wand.and.stars",
+                        height: 24,
+                        fontSize: 11,
+                        horizontalPadding: 9) {
+                            coordinator.scanAIAgentsIntoConfig()
+                        }
                 }
             }
             ForEach(config.terminal.aiAgents, id: \.id) { agent in
@@ -179,17 +203,13 @@ struct SettingsView: View {
                     ThemedTextField(placeholder: L("Agent 启动命令"), text: $draftAgentCommand) {
                         addDraftAgent()
                     }
-                    Button(action: addDraftAgent) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(AppStyle.textSecondary)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(AppStyle.hoverFill))
-                    }
-                    .buttonStyle(PressScaleStyle())
-                    .help(L("添加自定义 Agent"))
+                    IconOnlyButton(
+                        systemName: "plus",
+                        help: L("添加自定义 Agent"),
+                        size: 28,
+                        symbolSize: 12,
+                        weight: .bold,
+                        action: addDraftAgent)
                     .disabled(draftAgentCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 Text(L("留空配置时使用自动检测结果；手动配置后，新建 AI 会话入口按这里的启用项显示。"))
@@ -203,7 +223,7 @@ struct SettingsView: View {
     }
 
     private var ghosttySection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Space.lg) {
             SettingsSection(title: L("常用能力")) {
                 GhosttyMappedConfigRow(
                     title: L("字体与字号"),
@@ -379,6 +399,106 @@ struct SettingsView: View {
     }
 }
 
+/// 主题选择：带实时预览色卡的网格（纯色 / 渐变 / 玻璃一眼可辨），替代朴素分段控件。
+private struct ThemePickerRow: View {
+    @Binding var selection: String
+
+    private var options: [(value: String, label: String)] {
+        // 配色专名不随界面语言翻译，保留原文。
+        [("dark", L("深色")), ("light", L("浅色")),
+         ("tokyo-night", "Tokyo Night"), ("catppuccin", "Catppuccin"),
+         ("nord", "Nord"), ("rose-pine", "Rosé Pine"),
+         ("custom", L("自定义"))]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L("主题"))
+                .font(.system(size: 13))
+                .foregroundStyle(AppStyle.textPrimary)
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 92, maximum: 150), spacing: 12)],
+                alignment: .leading, spacing: 12
+            ) {
+                ForEach(options, id: \.value) { opt in
+                    ThemeSwatchButton(
+                        value: opt.value, label: opt.label,
+                        isSelected: selection == opt.value,
+                        action: { withAnimation(Motion.snappy) { selection = opt.value } })
+                }
+            }
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 2)
+    }
+}
+
+private struct ThemeSwatchButton: View {
+    let value: String
+    let label: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    private var theme: Theme { Theme.resolve(Appearance(theme: value)) }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                ThemeSwatch(theme: theme, selected: isSelected)
+                    .frame(height: 52)
+                Text(label)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? AppStyle.textPrimary : AppStyle.textSecondary)
+            }
+        }
+        .buttonStyle(PressScaleStyle())
+        .help(label)
+    }
+}
+
+/// 单个主题的迷你预览：画布（纯色/渐变/玻璃）+ 侧栏条 + 两行示意文字 + 强调点。
+private struct ThemeSwatch: View {
+    let theme: Theme
+    let selected: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        ZStack(alignment: .topLeading) {
+            theme.windowBackground
+            HStack(spacing: 0) {
+                Rectangle()
+                    .fill(theme.isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.05))
+                    .frame(width: 15)
+                VStack(alignment: .leading, spacing: 4) {
+                    Capsule().fill(theme.textSecondary.opacity(0.55)).frame(width: 28, height: 4)
+                    Capsule().fill(theme.textTertiary.opacity(0.5)).frame(width: 18, height: 4)
+                }
+                .padding(7)
+                Spacer(minLength: 0)
+            }
+            HStack {
+                Spacer()
+                Circle().fill(theme.accent).frame(width: 7, height: 7)
+            }
+            .padding(7)
+        }
+        .frame(maxWidth: .infinity)
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(
+            selected ? AppStyle.accent : AppStyle.separator.opacity(0.7),
+            lineWidth: selected ? 2 : 1))
+        .overlay(alignment: .bottomTrailing) {
+            if selected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white, AppStyle.accent)
+                    .padding(4)
+            }
+        }
+        .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+    }
+}
+
 private struct ConfiguredAgentRow: View {
     let agent: AIAgentConfig
     @Binding var isEnabled: Bool
@@ -397,15 +517,13 @@ private struct ConfiguredAgentRow: View {
             }
             Spacer(minLength: 12)
             ThemedToggle(isOn: $isEnabled)
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(AppStyle.textTertiary)
-                    .frame(width: 26, height: 26)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(PressScaleStyle())
-            .help(L("删除"))
+            IconOnlyButton(
+                systemName: "trash",
+                help: L("删除"),
+                size: 26,
+                symbolSize: 11.5,
+                tint: AppStyle.textTertiary,
+                action: onDelete)
         }
         .padding(.horizontal, 2)
         .frame(height: 46)
@@ -437,7 +555,7 @@ private struct SettingsRailButton: View {
             .padding(.horizontal, 9)
             .frame(height: 42)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(selected ? AppStyle.activeFill.opacity(0.78) : Color.clear)
             )
             .contentShape(Rectangle())
@@ -525,16 +643,15 @@ private struct GhosttyOverrideRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Spacer(minLength: 10)
             control
-            Button(action: reset) {
-                Image(systemName: "arrow.uturn.backward")
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(isOverridden ? AppStyle.textSecondary : AppStyle.textTertiary)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(PressScaleStyle())
+            IconOnlyButton(
+                systemName: "arrow.uturn.backward",
+                help: L("恢复默认"),
+                size: 24,
+                symbolSize: 10.5,
+                weight: .bold,
+                tint: isOverridden ? AppStyle.textSecondary : AppStyle.textTertiary,
+                action: reset)
             .disabled(!isOverridden)
-            .help(L("恢复默认"))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -772,7 +889,7 @@ private struct GhosttyPathControl: View {
             .foregroundStyle(value.isEmpty ? AppStyle.textSecondary : AppStyle.accent)
             .frame(width: 142, height: 28)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(AppStyle.hoverFill.opacity(0.76))
             )
         }

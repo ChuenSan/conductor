@@ -25,7 +25,7 @@ enum AppStyle {
     @MainActor static var accent: Color { theme.accent }
     /// 「完成未读」信号绿（tab 胶囊 / 侧栏工作区行的小绿点，深浅主题下都够亮）。
     static let doneGreen = Color(red: 0.28, green: 0.76, blue: 0.43)
-    /// 「等你回复」信号琥珀（agent 卡在确认/提问，需要人来一下）。
+    /// 警示信号琥珀（配额告警、命令待确认等需要注意的状态）。
     static let waitAmber = Color(red: 0.95, green: 0.62, blue: 0.20)
     /// 出错信号红（OSC 进度 error / PR 检查失败等，深浅主题下都够亮）。
     static let errorRed = Color(red: 0.92, green: 0.34, blue: 0.34)

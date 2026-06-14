@@ -347,7 +347,7 @@ struct CLIToolsView: View {
                 }
                 .padding(.horizontal, Space.sm)
                 .frame(height: 36)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .background(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(AppStyle.hoverFill.opacity(0.46)))
             }
         }
@@ -389,30 +389,33 @@ struct CLIToolsView: View {
                         .foregroundStyle(AppStyle.textTertiary)
                         .help(lastDetectedAt.formatted(date: .abbreviated, time: .standard))
                 } else {
-                    Text(L("从登录 Shell 的 PATH 与常见安装路径中查找"))
+                    Text(L("检测本机 AI CLI"))
                         .font(.system(size: 10.5))
                         .foregroundStyle(AppStyle.textTertiary)
+                        .help(L("会检查登录 Shell PATH 与常见安装位置"))
                 }
             }
             Spacer()
-            Button(action: detect) {
-                HStack(spacing: 5) {
-                    if detecting {
-                        ProgressView().controlSize(.small).scaleEffect(0.7)
-                    } else {
-                        Image(systemName: "arrow.clockwise").font(.system(size: 10.5, weight: .bold))
-                    }
-                    Text(detecting ? L("检测中") : L("重新检测"))
-                        .font(.system(size: 11, weight: .semibold))
+            ToolActionButton(
+                title: L("管理台"),
+                systemImage: "rectangle.3.group",
+                height: 26,
+                fontSize: 11,
+                horizontalPadding: 9,
+                help: L("打开工具管理台")) {
+                    coordinator.openAgentToolsManagement(inspectorMode == .providers ? .usage : .cli)
                 }
-                .foregroundStyle(AppStyle.textSecondary)
-                .padding(.horizontal, 10)
-                .frame(height: 26)
-                .background(Capsule().fill(AppStyle.hoverFill))
-                .contentShape(Capsule())
-            }
-            .buttonStyle(PressScaleStyle())
+            ToolActionButton(
+                title: detecting ? L("检测中") : L("重新检测"),
+                systemImage: detecting ? nil : "arrow.clockwise",
+                height: 26,
+                fontSize: 11,
+                horizontalPadding: 10,
+                help: L("重新扫描本机 CLI")) {
+                    detect()
+                }
             .disabled(detecting)
+            .opacity(detecting ? 0.64 : 1)
         }
         .padding(.bottom, 2)
     }
@@ -435,12 +438,12 @@ struct CLIToolsView: View {
                     .frame(height: 28)
                     .background {
                         if selected {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                                 .fill(AppStyle.elevated)
                                 .shadow(color: .black.opacity(AppStyle.theme.isDark ? 0.30 : 0.08), radius: 3, y: 1)
                         }
                     }
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -460,7 +463,7 @@ struct CLIToolsView: View {
                     .foregroundStyle(AppStyle.accent)
                     .frame(width: 30, height: 30)
                     .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                             .fill(AppStyle.accent.opacity(0.12)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L("完成通知"))
@@ -482,29 +485,18 @@ struct CLIToolsView: View {
             }
 
             HStack(spacing: 8) {
-                Button(action: installHooks) {
-                    Text(hookStatus.allDone ? L("重新安装 hook") : L("安装通知 hook"))
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(AppStyle.theme.primarySolidText)
-                        .padding(.horizontal, 12)
-                        .frame(height: 27)
-                        .background(Capsule().fill(AppStyle.theme.primarySolid))
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(PressScaleStyle())
+                ToolActionButton(
+                    title: hookStatus.allDone ? L("重新安装 hook") : L("安装通知 hook"),
+                    role: .primary,
+                    action: installHooks)
 
                 if !NotificationManager.shared.canDeliverRich {
-                    Button { NotificationManager.shared.openSystemNotificationSettings() } label: {
-                        Text(L("去系统设置授权"))
-                            .font(.system(size: 11.5, weight: .medium))
-                            .foregroundStyle(AppStyle.textSecondary)
-                            .padding(.horizontal, 12)
-                            .frame(height: 27)
-                            .background(Capsule().fill(AppStyle.hoverFill))
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(PressScaleStyle())
-                    .help(L("ad-hoc 签名的 app 通知可能被系统默认拒绝；在此手动开启即可恢复点击跳转。"))
+                    ToolActionButton(
+                        title: L("去系统设置授权"),
+                        role: .secondary,
+                        help: L("打开 macOS 通知设置，允许 Conductor 发送可点击通知。")) {
+                            NotificationManager.shared.openSystemNotificationSettings()
+                        }
                 }
                 Spacer()
             }
@@ -518,7 +510,7 @@ struct CLIToolsView: View {
             if let hookError {
                 Text(hookError)
                     .font(.system(size: 10.5))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppStyle.errorRed)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -528,17 +520,12 @@ struct CLIToolsView: View {
     }
 
     private func hookBadge(_ label: String, _ on: Bool) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: on ? "checkmark.circle.fill" : "circle.dashed")
-                .font(.system(size: 9.5, weight: .bold))
-                .foregroundStyle(on ? Color(red: 0.22, green: 0.62, blue: 0.40) : AppStyle.textTertiary)
-            Text(label)
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(on ? AppStyle.textSecondary : AppStyle.textTertiary)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 22)
-        .background(Capsule().fill(AppStyle.hoverFill.opacity(on ? 1 : 0.6)))
+        ToolBadge(
+            text: label,
+            icon: on ? "checkmark.circle.fill" : "circle.dashed",
+            color: on ? AppStyle.doneGreen : AppStyle.textTertiary,
+            style: on ? .soft : .muted,
+            height: 22)
     }
 
     private func installHooks() {
@@ -598,20 +585,50 @@ struct CLIToolsView: View {
             }
         }
         if !inactive.isEmpty {
-            ToolsSectionLabel(L("其它渠道（未配置）"))
-            ForEach(inactive) { provider in
-                ProviderUsageRow(
-                    provider: provider,
-                    state: providerUsage[provider.id] ?? .unconfigured,
-                    onConfigure: { openProviderSettings(provider.id) },
-                    onReload: { reloadProvider(provider) })
+            if active.isEmpty {
+                ToolsSectionLabel(L("账号用量"))
             }
+            Button(action: openProviderCatalog) {
+                HStack(spacing: 10) {
+                    Image(systemName: "plus.circle")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppStyle.accent)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                                .fill(AppStyle.accent.opacity(0.12)))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("添加渠道"))
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundStyle(AppStyle.textPrimary)
+                        Text(L("%ld 个可配置渠道", inactive.count))
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(AppStyle.textTertiary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(AppStyle.textTertiary)
+                }
+                .padding(Space.sm)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressScaleStyle())
+            .toolsCard()
+            .help(L("打开渠道配置"))
         }
     }
 
     private func openProviderSettings(_ id: String) {
         withAnimation(Motion.panel) {
             selectedProviderID = id
+            inspectorMode = .providers
+        }
+    }
+
+    private func openProviderCatalog() {
+        withAnimation(Motion.panel) {
+            selectedProviderID = nil
             inspectorMode = .providers
         }
     }
@@ -740,7 +757,7 @@ private struct CLIToolRow: View {
                 }
                 .padding(.horizontal, 8)
                 .frame(height: 28)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .background(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(AppStyle.hoverFill.opacity(0.48)))
             }
         }
@@ -795,7 +812,7 @@ private struct CLIToolRow: View {
                     if let path = tool.path {
                         CLIInfoChip(icon: "externaldrive", text: installRootLabel(path))
                     } else {
-                        CLIInfoChip(icon: "questionmark.folder", text: L("PATH 未找到"))
+                        CLIInfoChip(icon: "questionmark.folder", text: L("未检测到位置"))
                     }
                 }
             }
@@ -820,28 +837,21 @@ private struct CLIToolRow: View {
                     tint: AppStyle.textTertiary) {
                         onReveal(path)
                     }
-                Button(action: onLaunch) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 8.5, weight: .bold))
-                        Text(L("启动"))
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .foregroundStyle(AppStyle.theme.primarySolidText)
-                    .padding(.horizontal, 10)
-                    .frame(height: 25)
-                    .background(Capsule().fill(AppStyle.theme.primarySolid))
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(PressScaleStyle())
-                .help(L("在新标签页启动 %@", tool.name))
+                ToolActionButton(
+                    title: L("启动"),
+                    systemImage: "play.fill",
+                    role: .primary,
+                    height: 25,
+                    fontSize: 11,
+                    horizontalPadding: 10,
+                    help: L("在新标签页启动 %@", tool.name),
+                    action: onLaunch)
             } else {
-                Text(L("未安装"))
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(AppStyle.textTertiary)
-                    .padding(.horizontal, 8)
-                    .frame(height: 22)
-                    .background(Capsule().fill(AppStyle.hoverFill))
+                ToolBadge(
+                    text: L("未安装"),
+                    color: AppStyle.textTertiary,
+                    style: .muted,
+                    height: 22)
             }
         }
     }
@@ -859,12 +869,11 @@ private struct CLIToolStatusPill: View {
 
     var body: some View {
         let color = installed ? AppStyle.doneGreen : AppStyle.textTertiary
-        Text(installed ? L("可用") : L("缺失"))
-            .font(.system(size: 9.5, weight: .semibold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 6)
-            .frame(height: 18)
-            .background(Capsule().fill(color.opacity(0.13)))
+        ToolBadge(
+            text: installed ? L("可用") : L("缺失"),
+            color: color,
+            style: installed ? .soft : .muted,
+            height: 18)
     }
 }
 
@@ -901,9 +910,6 @@ private struct ProviderUsageRow: View {
     let onReload: () -> Void
     @ObservedObject private var history = UsageHistoryStore.shared
     @State private var expanded = false
-
-    private var amber: Color { Color(red: 0.95, green: 0.62, blue: 0.20) }
-    private var red: Color { Color(red: 0.92, green: 0.34, blue: 0.34) }
 
     var body: some View {
         let samples = history.samples(for: provider.id)
@@ -993,8 +999,8 @@ private struct ProviderUsageRow: View {
         switch state {
         case .loaded: return AppStyle.doneGreen
         case .loading, .manual: return AppStyle.accent
-        case .unconfigured: return amber
-        case .error: return red
+        case .unconfigured: return AppStyle.waitAmber
+        case .error: return AppStyle.errorRed
         case .unsupported: return AppStyle.textTertiary
         }
     }
@@ -1005,18 +1011,11 @@ private struct ProviderUsageRow: View {
         case .loading:
             ProgressView().controlSize(.small).scaleEffect(0.7)
         case .manual:
-            Text(L("手动"))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(AppStyle.accent)
-                .padding(.horizontal, 7)
-                .frame(height: 18)
-                .background(Capsule().fill(AppStyle.accent.opacity(0.13)))
+            ToolBadge(text: L("手动"), color: AppStyle.accent, height: 18)
         case .unconfigured:
             EmptyView()
         case .error:
-            Text(L("失败"))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(red)
+            ToolBadge(text: L("失败"), color: AppStyle.errorRed, height: 18)
         case let .loaded(snap):
             if let summary = compactSummary(snap) {
                 Text(summary)
@@ -1062,7 +1061,7 @@ private struct ProviderUsageRow: View {
         case .manual:
             ProviderUsageHint(icon: "hand.tap", text: L("不会自动请求账号；点击刷新获取用量。"), color: AppStyle.accent)
         case let .error(message):
-            ProviderUsageHint(icon: "exclamationmark.triangle.fill", text: message, color: red)
+            ProviderUsageHint(icon: "exclamationmark.triangle.fill", text: message, color: AppStyle.errorRed)
         case let .loaded(snap):
             if snap.isEmpty {
                 ProviderUsageHint(icon: "chart.bar.xaxis", text: L("暂无用量数据"), color: AppStyle.textTertiary)
@@ -1083,16 +1082,22 @@ private struct ProviderUsageRow: View {
     private var quickActions: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Button(action: onConfigure) {
-                    Label(L("打开配置"), systemImage: "slider.horizontal.3")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .buttonStyle(SecondaryButtonStyle(height: 26, horizontalPadding: 10, fontSize: 11))
-                Button(action: onReload) {
-                    Label(L("刷新"), systemImage: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .buttonStyle(SecondaryButtonStyle(height: 26, horizontalPadding: 10, fontSize: 11))
+                ToolActionButton(
+                    title: L("打开配置"),
+                    systemImage: "slider.horizontal.3",
+                    role: .secondary,
+                    height: 26,
+                    fontSize: 11,
+                    horizontalPadding: 10,
+                    action: onConfigure)
+                ToolActionButton(
+                    title: L("刷新"),
+                    systemImage: "arrow.clockwise",
+                    role: .secondary,
+                    height: 26,
+                    fontSize: 11,
+                    horizontalPadding: 10,
+                    action: onReload)
                 Spacer(minLength: 0)
             }
         }
@@ -1106,12 +1111,7 @@ private struct ProviderUsageStateBadge: View {
     let color: Color
 
     var body: some View {
-        Text(label)
-            .font(.system(size: 9.5, weight: .semibold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 6)
-            .frame(height: 18)
-            .background(Capsule().fill(color.opacity(0.13)))
+        ToolBadge(text: label, color: color, height: 18)
     }
 }
 
@@ -1151,8 +1151,8 @@ private struct UsageBar: View {
     private var barColor: Color {
         switch window.usedPercent {
         case ..<70: AppStyle.accent
-        case 70..<90: Color(red: 0.95, green: 0.62, blue: 0.20)
-        default: Color(red: 0.92, green: 0.34, blue: 0.34)
+        case 70..<90: AppStyle.waitAmber
+        default: AppStyle.errorRed
         }
     }
 
@@ -1194,7 +1194,7 @@ private struct UsageBar: View {
         }
         .padding(8)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                 .fill(AppStyle.hoverFill.opacity(0.54)))
     }
 
@@ -1239,7 +1239,7 @@ struct CostLine: View {
         }
         .padding(8)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                 .fill(AppStyle.hoverFill.opacity(0.54)))
     }
 
