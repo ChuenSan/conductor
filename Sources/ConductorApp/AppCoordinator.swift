@@ -61,7 +61,7 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var sessionTargetPane: PaneID?
     /// 工具面板当前选中的分段。
     @Published var toolsTab: ToolsTab = .cli
-    /// Codex 用量监视器（状态栏常驻配额条 + 周期刷新）。
+    /// Codex 用量监视器（状态栏常驻配额条；账号请求只在用户手动刷新时触发）。
     let usageMonitor = UsageMonitor()
     /// CLI hook 收件箱监听（agent 完成 → 系统通知）。
     private let hooksInbox = HooksInbox()

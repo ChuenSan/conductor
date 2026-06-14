@@ -10,7 +10,7 @@
 #   Scripts/make-dmg.sh arm64          # 只打 arm64
 #   Scripts/make-dmg.sh x86_64         # 只打 x86_64
 #   Scripts/make-dmg.sh universal      # 打单个双架构（universal）DMG
-#   VERSION=0.0.3 Scripts/make-dmg.sh  # 覆盖版本号（默认 0.0.2）
+#   VERSION=0.0.4 Scripts/make-dmg.sh  # 覆盖版本号（默认 0.0.3）
 #
 # 产物：dist/conductor-<version>-<arch>.dmg
 # 依赖：Vendor/GhosttyKit.xcframework（universal 静态库，缺失时先跑 Scripts/prepare-ghosttykit.sh）
@@ -19,7 +19,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-VERSION="${VERSION:-0.0.2}"
+VERSION="${VERSION:-0.0.3}"
 BUNDLE_ID="com.conductor.app"
 APP_NAME="Conductor"
 DIST="$ROOT/dist"
@@ -93,14 +93,14 @@ PLIST
   # macOS 的 TCC 权限按代码签名身份记账。优先使用稳定签名身份，避免每次
   # 重打包后桌面/文稿/下载、完全磁盘访问、通知等授权被系统当成新 app。
   if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$SIGN_IDENTITY"; then
-    echo "==> 用稳定签名身份「$SIGN_IDENTITY」签名 $app"
+    echo "==> 用稳定签名身份「${SIGN_IDENTITY}」签名 $app"
     if [ -f "$ROOT/Conductor.entitlements" ]; then
       codesign --force --sign "$SIGN_IDENTITY" --entitlements "$ROOT/Conductor.entitlements" "$app"
     else
       codesign --force --sign "$SIGN_IDENTITY" "$app"
     fi
   else
-    echo "==> 未找到稳定身份「$SIGN_IDENTITY」，退回 ad-hoc 签名"
+    echo "==> 未找到稳定身份「${SIGN_IDENTITY}」，退回 ad-hoc 签名"
     echo "    ⚠️  ad-hoc 下每次重打包都会丢失 TCC 授权；先运行 Scripts/make-dev-cert.sh 可根治。"
     codesign --force --sign - "$app" >/dev/null 2>&1 || \
       echo "   (codesign 失败，可忽略；通知可能需要手动授权)"

@@ -4,7 +4,7 @@
 set -euo pipefail
 
 CONFIG="${1:-release}"
-VERSION="${VERSION:-0.0.2}"
+VERSION="${VERSION:-0.0.3}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
@@ -76,14 +76,14 @@ PLIST
 SIGN_IDENTITY="${CONDUCTOR_SIGN_IDENTITY:-Conductor Dev}"
 
 if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$SIGN_IDENTITY"; then
-  echo "==> 用稳定签名身份「$SIGN_IDENTITY」签名"
+  echo "==> 用稳定签名身份「${SIGN_IDENTITY}」签名"
   if [ -f "$ROOT/Conductor.entitlements" ]; then
     codesign --force --sign "$SIGN_IDENTITY" --entitlements "$ROOT/Conductor.entitlements" "$APP"
   else
     codesign --force --sign "$SIGN_IDENTITY" "$APP"
   fi
 else
-  echo "==> 未找到稳定身份「$SIGN_IDENTITY」，退回 ad-hoc 签名"
+  echo "==> 未找到稳定身份「${SIGN_IDENTITY}」，退回 ad-hoc 签名"
   echo "    ⚠️  ad-hoc 下每次重编译都会丢失 TCC 授权（桌面/文稿/下载、完全磁盘访问会反复弹框）。"
   echo "    根治：先运行一次  Scripts/make-dev-cert.sh  再重新打包。"
   codesign --force --sign - "$APP" >/dev/null 2>&1 || \

@@ -15,12 +15,12 @@ IDENTITY="${CONDUCTOR_SIGN_IDENTITY:-Conductor Dev}"
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 
 if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$IDENTITY"; then
-  echo "✅ 签名身份「$IDENTITY」已存在，无需重复创建。"
+  echo "✅ 签名身份「${IDENTITY}」已存在，无需重复创建。"
   echo "   直接运行 Scripts/make-app.sh 即可。"
   exit 0
 fi
 
-echo "==> 生成自签名代码签名证书「$IDENTITY」"
+echo "==> 生成自签名代码签名证书「${IDENTITY}」"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -31,7 +31,7 @@ distinguished_name = dn
 prompt = no
 x509_extensions = v3
 [dn]
-CN = $IDENTITY
+CN = ${IDENTITY}
 [v3]
 basicConstraints = critical, CA:false
 keyUsage = critical, digitalSignature
@@ -54,13 +54,13 @@ security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN" "$TMP/cert.pem
 
 # 自检：确认 find-identity 能列出它（make-app.sh 用同样方式判断）。
 if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$IDENTITY"; then
-  echo "✅ 完成。签名身份「$IDENTITY」已就绪。"
+  echo "✅ 完成。签名身份「${IDENTITY}」已就绪。"
   echo "   下一步：Scripts/make-app.sh 重新打包，再去"
   echo "   系统设置 › 隐私与安全性 › 完全磁盘访问 → 加入 Conductor.app（授权一次即永久）。"
 else
   echo "❌ 身份未能注册为有效的代码签名标识。"
   echo "   请改用钥匙串 GUI 法："
   echo "     钥匙串访问 › 菜单「证书助理」› 创建证书 →"
-  echo "     名称填「$IDENTITY」、身份类型「自签名根」、证书类型「代码签名」，创建即可。"
+  echo "     名称填「${IDENTITY}」、身份类型「自签名根」、证书类型「代码签名」，创建即可。"
   exit 1
 fi

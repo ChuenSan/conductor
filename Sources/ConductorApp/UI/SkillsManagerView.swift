@@ -15,6 +15,7 @@ struct SkillsManagerView: View {
     @State private var projectTargets: [SkillProjectTargetRecord] = []
     @State private var projectSkills: [String: [ProjectSkillInfo]] = [:]
     @State private var auditEntries: [SkillAuditEntry] = []
+    @State private var doctorReport: SkillDoctorReport = .empty
     @State private var scanResult: SkillScanResult?
     @State private var selectedSection: SkillManagerSection = .command
     @State private var query = ""
@@ -115,6 +116,23 @@ struct SkillsManagerView: View {
         skills.filter(\.targets.isEmpty).count
     }
 
+    private var doctorActionCount: Int {
+        doctorReport.actionableCount
+    }
+
+    private var doctorStatusColor: Color {
+        if doctorReport.criticalCount > 0 { return .red }
+        if doctorReport.findings.contains(where: isProminentDoctorFinding) { return .orange }
+        if doctorReport.warningCount > 0 { return AppStyle.textTertiary }
+        return AppStyle.accent
+    }
+
+    private var topDoctorFindings: [SkillDoctorFinding] {
+        let prominent = doctorReport.findings.filter(isProminentDoctorFinding)
+        if !prominent.isEmpty { return Array(prominent.prefix(2)) }
+        return Array(doctorReport.findings.filter { $0.severity != .info }.prefix(1))
+    }
+
     private var attentionSkillsCount: Int {
         skills.filter { ["update_available", "source_missing", "error"].contains($0.updateStatus) }.count
     }
@@ -190,6 +208,16 @@ struct SkillsManagerView: View {
                 tint: AppStyle.accent,
                 action: .syncUnsynced))
         }
+        if doctorActionCount > 0 {
+            tasks.append(SkillCommandTask(
+                id: "doctor",
+                icon: "stethoscope",
+                title: L("诊断"),
+                detail: L("%ld 个问题需要处理", doctorActionCount),
+                count: doctorActionCount,
+                tint: doctorStatusColor,
+                action: .doctor))
+        }
         if !updatableSkills.isEmpty {
             tasks.append(SkillCommandTask(
                 id: "update",
@@ -256,7 +284,6 @@ struct SkillsManagerView: View {
         VStack(spacing: 0) {
             header
             sectionTabs
-            Divider().overlay(AppStyle.separator)
             content
         }
         .onAppear { if engine == nil { reload() } }
@@ -274,6 +301,7 @@ struct SkillsManagerView: View {
                     auditEntries: auditEntries.filter { entry in
                         entry.skillID == skill.id || entry.skillName == skill.name
                     },
+                    doctorFindings: doctorFindings(for: skill),
                     readinessItems: readinessItems(for: skill),
                     selectedTab: $detailTab,
                     syncMode: syncModeLabel,
@@ -360,32 +388,37 @@ struct SkillsManagerView: View {
                     .disabled(loading)
             }
 
-            HStack(spacing: 6) {
-                metricChip(title: L("中央库"), value: "\(skills.count)")
-                metricChip(title: "Presets", value: "\(presets.count)")
-                metricChip(title: L("项目"), value: "\(projects.count)")
-                metricChip(title: L("可同步 Agent"), value: "\(availableTools.count)")
-                metricChip(title: L("已同步目标"), value: "\(skills.reduce(0) { $0 + $1.targets.count })")
-                if !updatableSkills.isEmpty {
-                    metricChip(title: L("可更新"), value: "\(updatableSkills.count)")
-                }
-                if let scanResult {
-                    metricChip(title: L("发现"), value: "\(scanResult.skillsFound)")
-                }
-                Spacer()
-                if loading {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text(loadingText)
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(AppStyle.textTertiary)
+            ScrollView(.horizontal) {
+                HStack(spacing: 6) {
+                    metricChip(title: L("中央库"), value: "\(skills.count)")
+                    metricChip(title: "Presets", value: "\(presets.count)")
+                    metricChip(title: L("项目"), value: "\(projects.count)")
+                    metricChip(title: L("Agent"), value: "\(availableTools.count)")
+                    metricChip(title: L("目标"), value: "\(skills.reduce(0) { $0 + $1.targets.count })")
+                    if doctorActionCount > 0 {
+                        metricChip(title: L("诊断"), value: "\(doctorActionCount)")
+                    }
+                    if !updatableSkills.isEmpty {
+                        metricChip(title: L("可更新"), value: "\(updatableSkills.count)")
+                    }
+                    if let scanResult {
+                        metricChip(title: L("发现"), value: "\(scanResult.skillsFound)")
+                    }
+                    if loading {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text(loadingText)
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundStyle(AppStyle.textTertiary)
+                        }
                     }
                 }
             }
+            .scrollIndicators(.never)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 14)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
     }
 
     private var searchField: some View {
@@ -413,30 +446,35 @@ struct SkillsManagerView: View {
     }
 
     private var sectionTabs: some View {
-        HStack(spacing: 6) {
-            ForEach(SkillManagerSection.allCases) { section in
-                let selected = selectedSection == section
-                Button {
-                    withAnimation(Motion.snappy) { selectedSection = section }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: section.icon)
-                            .font(.system(size: 10.5, weight: .semibold))
-                        Text(section.title)
-                            .font(.system(size: 11, weight: .semibold))
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                ForEach(SkillManagerSection.allCases) { section in
+                    let selected = selectedSection == section
+                    Button {
+                        withAnimation(Motion.snappy) { selectedSection = section }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: section.icon)
+                                .font(.system(size: 10.5, weight: .semibold))
+                            Text(section.title)
+                                .font(.system(size: 10.8, weight: .semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.86)
+                        }
+                        .foregroundStyle(selected ? .white : AppStyle.textSecondary)
+                        .padding(.horizontal, 8)
+                        .frame(height: 24)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(selected ? AppStyle.accent : AppStyle.hoverFill))
                     }
-                    .foregroundStyle(selected ? .white : AppStyle.textSecondary)
-                    .padding(.horizontal, 9)
-                    .frame(height: 24)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(selected ? AppStyle.accent : AppStyle.hoverFill))
+                    .buttonStyle(PressScaleStyle())
                 }
-                .buttonStyle(PressScaleStyle())
             }
-            Spacer()
+            .padding(.vertical, 1)
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 10)
+        .scrollIndicators(.never)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     @ViewBuilder
@@ -464,8 +502,8 @@ struct SkillsManagerView: View {
                     discoveredContent
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
         }
         .scrollIndicators(.never)
     }
@@ -477,6 +515,7 @@ struct SkillsManagerView: View {
                 loadingRow
             } else {
                 commandQuickBar
+                commandDoctorPanel
                 if !selectedSkillIDs.isEmpty {
                     commandSelectionTray
                         .transition(.move(edge: .top).combined(with: .opacity))
@@ -502,6 +541,12 @@ struct SkillsManagerView: View {
                 icon: "scope",
                 color: .orange) {
                     reload(scan: true)
+                }
+            compactCommandButton(
+                title: doctorActionCount > 0 ? L("诊断 %ld", doctorActionCount) : L("诊断"),
+                icon: "stethoscope",
+                color: doctorStatusColor) {
+                    focusDoctor()
                 }
             compactCommandButton(
                 title: "skills.sh",
@@ -552,6 +597,16 @@ struct SkillsManagerView: View {
                                       color: Color,
                                       action: @escaping () -> Void) -> some View {
         SkillToolbarButton(title: title, icon: icon, color: color, action: action)
+    }
+
+    private var commandDoctorPanel: some View {
+        SkillDoctorSummaryPanel(
+            report: doctorReport,
+            findings: topDoctorFindings,
+            onSelectFinding: focusDoctorFinding,
+            onOpenAll: focusDoctor)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .animation(Motion.expand, value: doctorReport.findings.map(\.id).joined(separator: "|"))
     }
 
     private var commandRunway: some View {
@@ -904,6 +959,7 @@ struct SkillsManagerView: View {
             }
 
             inspectorStatusGrid(skill)
+            inspectorDoctor(skill)
             inspectorReadiness(skill)
             inspectorQuickDeployment(skill)
         }
@@ -924,6 +980,49 @@ struct SkillsManagerView: View {
                 }
             }
         }
+    }
+
+    private func inspectorDoctor(_ skill: ManagedSkill) -> some View {
+        let findings = doctorFindings(for: skill)
+        let focusFinding = findings.first(where: { $0.severity == .critical }) ??
+            findings.first(where: isProminentDoctorFinding) ??
+            findings.first
+        let color: Color = focusFinding.map(doctorFindingColor) ?? AppStyle.accent
+        return Button {
+            if let finding = focusFinding {
+                focusDoctorFinding(finding)
+            } else {
+                openSkillDetail(skill)
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: findings.isEmpty ? "checkmark.seal.fill" : "stethoscope")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(color.opacity(0.12)))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(focusFinding?.title ?? L("诊断通过"))
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(AppStyle.textPrimary)
+                        .lineLimit(1)
+                    Text(focusFinding?.detail ?? L("这个 Skill 没有诊断问题"))
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                tinyBadge(findings.isEmpty ? "100%" : "\(findings.count)", color: color)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 46)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(color.opacity(0.08)))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(color.opacity(findings.isEmpty ? 0.08 : 0.18), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help(focusFinding?.detail ?? L("打开 Skill 详情控制台"))
     }
 
     private func inspectorReadiness(_ skill: ManagedSkill) -> some View {
@@ -1077,6 +1176,9 @@ struct SkillsManagerView: View {
     }
 
     private func skillHealthColor(_ skill: ManagedSkill) -> Color {
+        let findings = doctorFindings(for: skill)
+        if findings.contains(where: { $0.severity == .critical }) { return .red }
+        if findings.contains(where: isProminentDoctorFinding) { return .orange }
         switch skill.updateStatus {
         case "update_available": return .orange
         case "source_missing", "error": return .red
@@ -1142,6 +1244,10 @@ struct SkillsManagerView: View {
         ]
     }
 
+    private func doctorFindings(for skill: ManagedSkill) -> [SkillDoctorFinding] {
+        doctorReport.findings(forSkillID: skill.id)
+    }
+
     @ViewBuilder
     private var libraryContent: some View {
         if loading && skills.isEmpty {
@@ -1163,6 +1269,7 @@ struct SkillsManagerView: View {
                     document: skillDocuments[skill.id],
                     files: skillFiles[skill.id] ?? [],
                     sourceDiff: skillDiffs[skill.id],
+                    doctorFindings: doctorFindings(for: skill),
                     syncMode: syncModeLabel,
                     onExpand: {
                         toggleSkillExpansion(skill)
@@ -1845,6 +1952,7 @@ struct SkillsManagerView: View {
                                     ($0.id, engine.readProjectSkills(projectID: $0.id))
                                 }),
                             auditEntries: engine.listAudit(limit: 140),
+                            doctorReport: engine.doctorReport(),
                             scanResult: result)
                     }.value
                     await MainActor.run {
@@ -1856,6 +1964,7 @@ struct SkillsManagerView: View {
                         projectTargets = payload.projectTargets
                         projectSkills = payload.projectSkills
                         auditEntries = payload.auditEntries
+                        doctorReport = payload.doctorReport
                         selectedSkillIDs = selectedSkillIDs.intersection(Set(payload.skills.map(\.id)))
                         if let inspectedSkillID,
                            !payload.skills.contains(where: { $0.id == inspectedSkillID }) {
@@ -2055,6 +2164,8 @@ struct SkillsManagerView: View {
             selectedSection = .agents
         case .syncUnsynced:
             syncUnsyncedSkills()
+        case .doctor:
+            focusDoctor()
         case .updateAvailable:
             updateAvailableSkills()
         case .library:
@@ -2070,6 +2181,47 @@ struct SkillsManagerView: View {
             selectedSection = .library
         case .checkUpdates:
             checkAllSkillUpdates()
+        }
+    }
+
+    private func focusDoctor() {
+        guard let finding = doctorReport.findings.first else {
+            selectedSection = .library
+            return
+        }
+        focusDoctorFinding(finding)
+    }
+
+    private func focusDoctorFinding(_ finding: SkillDoctorFinding) {
+        if finding.category == .tool {
+            selectedSection = .agents
+            return
+        }
+        if finding.category == .project {
+            selectedSection = .projects
+            return
+        }
+        if let skillID = finding.skillID,
+           let skill = skills.first(where: { $0.id == skillID }) {
+            selectedSkillIDs = [skillID]
+            inspectSkill(skill)
+            selectedSection = .library
+            if finding.severity == .critical || finding.category == .safety {
+                openSkillDetail(skill, tab: detailTab(for: finding))
+            }
+        } else {
+            selectedSection = .library
+        }
+    }
+
+    private func detailTab(for finding: SkillDoctorFinding) -> SkillDetailTab {
+        switch finding.category {
+        case .deploy, .tool, .project:
+            return .deploy
+        case .source:
+            return .source
+        case .document, .safety, .duplicate:
+            return .docs
         }
     }
 
@@ -2459,6 +2611,7 @@ struct SkillsManagerView: View {
                                     ($0.id, engine.readProjectSkills(projectID: $0.id))
                                 }),
                             auditEntries: engine.listAudit(limit: 140),
+                            doctorReport: engine.doctorReport(),
                             scanResult: result)
                     }.value
                     await MainActor.run {
@@ -2470,6 +2623,7 @@ struct SkillsManagerView: View {
                         projectTargets = payload.projectTargets
                         projectSkills = payload.projectSkills
                         auditEntries = payload.auditEntries
+                        doctorReport = payload.doctorReport
                         selectedSkillIDs = selectedSkillIDs.intersection(Set(payload.skills.map(\.id)))
                         if let inspectedSkillID,
                            !payload.skills.contains(where: { $0.id == inspectedSkillID }) {
@@ -2642,6 +2796,7 @@ private enum SkillCommandAction {
     case scan
     case agents
     case syncUnsynced
+    case doctor
     case updateAvailable
     case library
     case checkUpdates
@@ -2759,6 +2914,323 @@ private struct SkillActionCuePanel: View {
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
             .stroke(cue.color.opacity(0.22), lineWidth: 1))
         .animation(Motion.snappy, value: cue.title)
+    }
+}
+
+private struct SkillDoctorCategorySummary: Identifiable {
+    let category: SkillDoctorCategory
+    let count: Int
+    let severity: SkillDoctorSeverity
+    let routineOnly: Bool
+
+    var id: String { category.rawValue }
+}
+
+private struct SkillDoctorSummaryPanel: View {
+    let report: SkillDoctorReport
+    let findings: [SkillDoctorFinding]
+    let onSelectFinding: (SkillDoctorFinding) -> Void
+    let onOpenAll: () -> Void
+
+    private var categorySummaries: [SkillDoctorCategorySummary] {
+        SkillDoctorCategory.allCases.compactMap { category in
+            let items = report.findings.filter { $0.category == category }
+            guard !items.isEmpty else { return nil }
+            let severity: SkillDoctorSeverity
+            if items.contains(where: { $0.severity == .critical }) {
+                severity = .critical
+            } else if items.contains(where: { $0.severity == .warning }) {
+                severity = .warning
+            } else {
+                severity = .info
+            }
+            return SkillDoctorCategorySummary(
+                category: category,
+                count: items.count,
+                severity: severity,
+                routineOnly: items.allSatisfy(isRoutineDoctorFinding))
+        }
+        .sorted {
+            if $0.severity.weight != $1.severity.weight {
+                return $0.severity.weight > $1.severity.weight
+            }
+            if $0.routineOnly != $1.routineOnly {
+                return !$0.routineOnly
+            }
+            return $0.count > $1.count
+        }
+    }
+
+    private var collapsedCount: Int {
+        max(0, report.findings.count - findings.count)
+    }
+
+    private var statusColor: Color {
+        if report.criticalCount > 0 { return .red }
+        if report.findings.contains(where: isProminentDoctorFinding) { return .orange }
+        if report.warningCount > 0 { return AppStyle.textTertiary }
+        return AppStyle.accent
+    }
+
+    private var statusIcon: String {
+        report.actionableCount == 0 ? "checkmark.seal.fill" : "stethoscope"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: statusIcon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(statusColor)
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(statusColor.opacity(0.12)))
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Doctor")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundStyle(AppStyle.textPrimary)
+                    Text(report.actionableCount == 0
+                         ? L("全部稳定")
+                         : L("%ld 个问题需要处理", report.actionableCount))
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 6)
+
+                tinyBadge("\(report.scorePercent)%", color: statusColor)
+
+                if report.actionableCount > 0 {
+                    Button(action: onOpenAll) {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundStyle(statusColor)
+                            .frame(width: 22, height: 22)
+                            .background(Circle().fill(statusColor.opacity(0.10)))
+                    }
+                    .buttonStyle(PressScaleStyle())
+                    .help(L("处理诊断问题"))
+                }
+            }
+
+            HStack(spacing: 6) {
+                doctorCountChip(title: L("严重"), value: "\(report.criticalCount)", color: report.criticalCount > 0 ? .red : AppStyle.textTertiary)
+                doctorCountChip(title: L("警告"), value: "\(report.warningCount)", color: report.findings.contains(where: isProminentDoctorFinding) ? .orange : AppStyle.textTertiary)
+                doctorCountChip(title: L("提示"), value: "\(report.infoCount)", color: AppStyle.textTertiary)
+            }
+
+            if !categorySummaries.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 5) {
+                        ForEach(categorySummaries) { summary in
+                            SkillDoctorCategoryPill(summary: summary)
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+                .scrollIndicators(.never)
+            }
+
+            if report.findings.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10.5, weight: .semibold))
+                    Text(L("没有发现需要处理的问题"))
+                        .font(.system(size: 10.5, weight: .semibold))
+                }
+                .foregroundStyle(AppStyle.accent)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 9)
+                .frame(height: 30)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(AppStyle.accent.opacity(0.08)))
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(findings) { finding in
+                        SkillDoctorFindingRow(finding: finding) {
+                            onSelectFinding(finding)
+                        }
+                    }
+                    if collapsedCount > 0 {
+                        Button(action: onOpenAll) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "rectangle.stack.badge.plus")
+                                    .font(.system(size: 10.5, weight: .semibold))
+                                Text(L("还有 %ld 个诊断项已按类别收起", collapsedCount))
+                                    .font(.system(size: 10.5, weight: .semibold))
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .foregroundStyle(AppStyle.textTertiary)
+                            .padding(.horizontal, 9)
+                            .frame(height: 28)
+                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(AppStyle.hoverFill.opacity(0.50)))
+                        }
+                        .buttonStyle(.plain)
+                        .help(L("处理诊断问题"))
+                    }
+                }
+            }
+        }
+        .padding(11)
+        .toolsCard(cornerRadius: Radius.sm + 2)
+    }
+}
+
+private struct SkillDoctorCategoryPill: View {
+    let summary: SkillDoctorCategorySummary
+
+    private var color: Color {
+        doctorCategorySummaryColor(summary)
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: doctorCategoryIcon(summary.category))
+                .font(.system(size: 9.5, weight: .semibold))
+            Text(doctorCategoryLabel(summary.category))
+                .font(.system(size: 9.5, weight: .semibold))
+                .lineLimit(1)
+            Text("\(summary.count)")
+                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                .monospacedDigit()
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 7)
+        .frame(height: 22)
+        .background(Capsule().fill(color.opacity(0.10)))
+    }
+}
+
+private struct SkillDoctorFindingsPanel: View {
+    let title: String
+    let findings: [SkillDoctorFinding]
+    let emptyTitle: String
+    let onSelect: ((SkillDoctorFinding) -> Void)?
+
+    private var displayedFindings: [SkillDoctorFinding] {
+        let prominent = findings.filter(isProminentDoctorFinding)
+        let source = prominent.isEmpty ? findings : prominent
+        return Array(source.prefix(5))
+    }
+
+    private var hiddenCount: Int {
+        max(0, findings.count - displayedFindings.count)
+    }
+
+    var body: some View {
+        SkillCockpitPanel(icon: "stethoscope", title: title) {
+            if findings.isEmpty {
+                HStack(spacing: 7) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(emptyTitle)
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(AppStyle.accent)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .frame(height: 36)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(AppStyle.accent.opacity(0.08)))
+            } else {
+                VStack(spacing: 7) {
+                    ForEach(displayedFindings) { finding in
+                        SkillDoctorFindingRow(finding: finding) {
+                            onSelect?(finding)
+                        }
+                    }
+                    if hiddenCount > 0 {
+                        HStack(spacing: 6) {
+                            Image(systemName: "rectangle.stack")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text(L("还有 %ld 个诊断项", hiddenCount))
+                                .font(.system(size: 10.5, weight: .semibold))
+                            Spacer(minLength: 0)
+                        }
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .padding(.horizontal, 9)
+                        .frame(height: 28)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(AppStyle.hoverFill.opacity(0.50)))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct SkillDoctorFindingRow: View {
+    let finding: SkillDoctorFinding
+    let action: (() -> Void)?
+    @State private var hovering = false
+
+    private var color: Color {
+        doctorFindingColor(finding)
+    }
+
+    var body: some View {
+        Button {
+            action?()
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: doctorCategoryIcon(finding.category))
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(color.opacity(0.12)))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        Text(finding.title)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(AppStyle.textPrimary)
+                            .lineLimit(1)
+                        tinyBadge(doctorSeverityLabel(finding.severity), color: color)
+                        Spacer(minLength: 0)
+                    }
+                    Text(finding.detail)
+                        .font(.system(size: 9.8))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(2)
+                    HStack(spacing: 5) {
+                        tinyBadge(doctorCategoryLabel(finding.category), color: AppStyle.textTertiary)
+                        if let skillName = finding.skillName {
+                            tinyBadge(skillName, color: AppStyle.textTertiary)
+                        }
+                        if let path = finding.path, !path.isEmpty {
+                            Text(collapsedPath(path))
+                                .font(.system(size: 8.8, design: .monospaced))
+                                .foregroundStyle(AppStyle.textTertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+
+                if action != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundStyle(color.opacity(hovering ? 0.9 : 0.45))
+                        .padding(.top, 5)
+                }
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(color.opacity(hovering ? 0.12 : 0.08)))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(color.opacity(hovering ? 0.22 : 0.10), lineWidth: 1))
+            .offset(x: hovering && action != nil ? 2 : 0)
+        }
+        .buttonStyle(.plain)
+        .disabled(action == nil)
+        .help(finding.detail)
+        .onHover { hovering = $0 }
+        .animation(Motion.hover, value: hovering)
     }
 }
 
@@ -2913,6 +3385,7 @@ private struct SkillDetailCockpit: View {
     let files: [SkillFileInfo]
     let sourceDiff: SkillSourceDiff?
     let auditEntries: [SkillAuditEntry]
+    let doctorFindings: [SkillDoctorFinding]
     let readinessItems: [SkillReadinessItem]
     @Binding var selectedTab: SkillDetailTab
     let syncMode: String
@@ -2940,6 +3413,8 @@ private struct SkillDetailCockpit: View {
     }
 
     private var healthColor: Color {
+        if doctorFindings.contains(where: { $0.severity == .critical }) { return .red }
+        if doctorFindings.contains(where: isProminentDoctorFinding) { return .orange }
         switch skill.updateStatus {
         case "update_available": return .orange
         case "source_missing", "error": return .red
@@ -3001,6 +3476,17 @@ private struct SkillDetailCockpit: View {
     }
 
     private var nextCue: SkillActionCue {
+        if let finding = doctorFindings.first(where: { $0.severity == .critical }) ??
+            doctorFindings.first(where: isProminentDoctorFinding) ??
+            doctorFindings.first(where: { $0.severity == .warning }) {
+            return SkillActionCue(
+                icon: doctorCategoryIcon(finding.category),
+                title: finding.title,
+                detail: finding.detail,
+                color: doctorFindingColor(finding),
+                actionTitle: L("处理"),
+                action: cueAction(for: finding))
+        }
         if sourceProblem {
             return SkillActionCue(
                 icon: "exclamationmark.triangle.fill",
@@ -3238,6 +3724,7 @@ private struct SkillDetailCockpit: View {
             VStack(alignment: .leading, spacing: 6) {
                 SkillRailStat(title: L("同步模式"), value: syncMode, color: AppStyle.textSecondary)
                 SkillRailStat(title: L("文件"), value: "\(files.count)", color: AppStyle.textSecondary)
+                SkillRailStat(title: L("诊断"), value: "\(doctorFindings.count)", color: doctorFindings.isEmpty ? AppStyle.accent : healthColor)
                 SkillRailStat(title: L("最近检查"), value: skill.lastCheckedAt.map { $0.formatted(date: .numeric, time: .shortened) } ?? "--", color: AppStyle.textTertiary)
             }
         }
@@ -3266,6 +3753,12 @@ private struct SkillDetailCockpit: View {
             SkillActionCuePanel(cue: nextCue) {
                 runCueAction(nextCue.action)
             }
+
+            SkillDoctorFindingsPanel(
+                title: "Doctor",
+                findings: doctorFindings,
+                emptyTitle: L("这个 Skill 没有诊断问题"),
+                onSelect: nil)
 
             SkillPipeline(steps: pipelineSteps)
 
@@ -3655,6 +4148,17 @@ private struct SkillDetailCockpit: View {
             onLoadDetails()
         case .checkUpdate:
             onCheckUpdate()
+        }
+    }
+
+    private func cueAction(for finding: SkillDoctorFinding) -> SkillCueAction {
+        switch finding.category {
+        case .deploy, .tool, .project:
+            return .deploy
+        case .source:
+            return .source
+        case .document, .safety, .duplicate:
+            return .docs
         }
     }
 
@@ -4274,6 +4778,7 @@ private struct SkillManagerPayload: Sendable {
     var projectTargets: [SkillProjectTargetRecord]
     var projectSkills: [String: [ProjectSkillInfo]]
     var auditEntries: [SkillAuditEntry]
+    var doctorReport: SkillDoctorReport
     var scanResult: SkillScanResult?
 }
 
@@ -4285,6 +4790,7 @@ private struct ManagedSkillRow: View {
     let document: SkillDocument?
     let files: [SkillFileInfo]
     let sourceDiff: SkillSourceDiff?
+    let doctorFindings: [SkillDoctorFinding]
     let syncMode: String
     let onExpand: () -> Void
     let onSelect: () -> Void
@@ -4315,6 +4821,9 @@ private struct ManagedSkillRow: View {
                         }
                         if let updateLabel {
                             tinyBadge(updateLabel, color: updateColor)
+                        }
+                        if let doctorBadgeText {
+                            tinyBadge(doctorBadgeText, color: doctorColor)
                         }
                     }
                     Text((skill.description?.isEmpty == false) ? skill.description! : L("无描述"))
@@ -4409,6 +4918,11 @@ private struct ManagedSkillRow: View {
                         }
                     }
                 }
+                SkillDoctorFindingsPanel(
+                    title: L("诊断"),
+                    findings: doctorFindings,
+                    emptyTitle: L("没有诊断问题"),
+                    onSelect: nil)
                 skillDocumentPreview
                 sourceDiffPreview
                 skillFilesPreview
@@ -4470,6 +4984,20 @@ private struct ManagedSkillRow: View {
         case "source_missing", "error": return .red
         default: return AppStyle.textTertiary
         }
+    }
+
+    private var doctorColor: Color {
+        if doctorFindings.contains(where: { $0.severity == .critical }) { return .red }
+        if doctorFindings.contains(where: isProminentDoctorFinding) { return .orange }
+        return AppStyle.textTertiary
+    }
+
+    private var doctorBadgeText: String? {
+        let criticalCount = doctorFindings.filter { $0.severity == .critical }.count
+        if criticalCount > 0 { return L("严重 %ld", criticalCount) }
+        let prominentCount = doctorFindings.filter(isProminentDoctorFinding).count
+        if prominentCount > 0 { return L("诊断 %ld", prominentCount) }
+        return nil
     }
 
     @ViewBuilder
@@ -5364,6 +5892,88 @@ private struct StatusLine: View {
         .padding(.horizontal, 10)
         .frame(minHeight: 30)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(color.opacity(0.10)))
+    }
+}
+
+@MainActor
+private func doctorSeverityColor(_ severity: SkillDoctorSeverity) -> Color {
+    switch severity {
+    case .critical: return .red
+    case .warning: return .orange
+    case .info: return AppStyle.textTertiary
+    }
+}
+
+private func isRoutineDoctorFinding(_ finding: SkillDoctorFinding) -> Bool {
+    finding.severity == .info ||
+        (finding.category == .deploy && finding.action == "sync")
+}
+
+private func isProminentDoctorFinding(_ finding: SkillDoctorFinding) -> Bool {
+    finding.severity == .critical ||
+        (finding.severity == .warning && !isRoutineDoctorFinding(finding))
+}
+
+@MainActor
+private func doctorFindingColor(_ finding: SkillDoctorFinding) -> Color {
+    if isRoutineDoctorFinding(finding) { return AppStyle.textTertiary }
+    return doctorSeverityColor(finding.severity)
+}
+
+@MainActor
+private func doctorCategorySummaryColor(_ summary: SkillDoctorCategorySummary) -> Color {
+    if summary.severity == .critical { return .red }
+    if summary.severity == .warning, !summary.routineOnly { return .orange }
+    return AppStyle.textTertiary
+}
+
+@MainActor
+private func doctorCountChip(title: String, value: String, color: Color) -> some View {
+    HStack(spacing: 4) {
+        Text(title)
+            .font(.system(size: 8.8, weight: .bold))
+            .foregroundStyle(AppStyle.textTertiary)
+        Text(value)
+            .font(.system(size: 10.5, weight: .bold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(color)
+    }
+    .padding(.horizontal, 8)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .frame(height: 26)
+    .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
+        .fill(AppStyle.hoverFill.opacity(0.50)))
+}
+
+private func doctorSeverityLabel(_ severity: SkillDoctorSeverity) -> String {
+    switch severity {
+    case .critical: return L("严重")
+    case .warning: return L("警告")
+    case .info: return L("提示")
+    }
+}
+
+private func doctorCategoryIcon(_ category: SkillDoctorCategory) -> String {
+    switch category {
+    case .source: return "link.badge.plus"
+    case .document: return "doc.text.magnifyingglass"
+    case .deploy: return "point.3.connected.trianglepath.dotted"
+    case .safety: return "shield.lefthalf.filled"
+    case .duplicate: return "square.on.square"
+    case .tool: return "cpu"
+    case .project: return "folder.badge.gearshape"
+    }
+}
+
+private func doctorCategoryLabel(_ category: SkillDoctorCategory) -> String {
+    switch category {
+    case .source: return L("来源")
+    case .document: return L("文档")
+    case .deploy: return L("分发")
+    case .safety: return L("安全")
+    case .duplicate: return L("重复")
+    case .tool: return L("工具")
+    case .project: return L("项目")
     }
 }
 

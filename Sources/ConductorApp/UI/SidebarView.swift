@@ -755,8 +755,10 @@ private struct WorkspaceRow: View {
                                 .font(.system(size: 13, weight: selected ? .semibold : .regular))
                                 .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
                                 .lineLimit(1)
+                                .minimumScaleFactor(0.72)
+                                .allowsTightening(true)
                                 .truncationMode(.middle)   // 目录名头尾都可能是区分信息，砍中间
-                                .layoutPriority(3)         // 窄侧栏里名字必须优先于状态徽标
+                                .layoutPriority(8)         // 窄侧栏里名字必须优先于状态徽标
                         }
                         if !isEditing, let collapsed = sessionsCollapsed {
                             Button(action: onToggleSessions) {

@@ -1274,6 +1274,156 @@ public final class SkillManagerEngine: @unchecked Sendable {
             groups: groupDiscovered(discovered))
     }
 
+    public func doctorReport() -> SkillDoctorReport {
+        let skills = store.skills()
+        let toolInfos = tools()
+        let availableToolCount = toolInfos.filter {
+            $0.enabled && ($0.installed || $0.isCustom || $0.hasPathOverride)
+        }.count
+        let skillByID = Dictionary(uniqueKeysWithValues: skills.map { ($0.id, $0) })
+        var findings: [SkillDoctorFinding] = []
+
+        if availableToolCount == 0 {
+            findings.append(SkillDoctorFinding(
+                severity: .critical,
+                category: .tool,
+                title: L("没有可用 Agent"),
+                detail: L("当前没有检测到可接收 Skills 的 Agent。添加自定义 Agent 或配置 Codex / Claude / Cursor 后才能分发。"),
+                action: "agents"))
+        }
+
+        for duplicate in duplicateSkillGroups(skills) {
+            findings.append(SkillDoctorFinding(
+                severity: .warning,
+                category: .duplicate,
+                title: L("可能重复的 Skill"),
+                detail: duplicate,
+                action: "review_duplicates"))
+        }
+
+        for skill in skills {
+            let centralURL = URL(fileURLWithPath: skill.centralPath)
+            let centralExists = fileManager.fileExists(atPath: centralURL.path)
+            let currentHash: String?
+            if centralExists {
+                currentHash = try? SkillFileUtilities.hashDirectory(centralURL, fileManager: fileManager)
+            } else {
+                currentHash = nil
+            }
+
+            if !centralExists {
+                findings.append(doctorFinding(
+                    .critical,
+                    .source,
+                    skill: skill,
+                    title: L("中央库文件丢失"),
+                    detail: L("Conductor 记录了这个 Skill，但中央库目录不存在。需要重新绑定来源、重新导入或删除记录。"),
+                    path: skill.centralPath,
+                    action: "relink_or_delete"))
+            } else if !fileManager.fileExists(atPath: centralURL.appendingPathComponent("SKILL.md").path) {
+                findings.append(doctorFinding(
+                    .critical,
+                    .document,
+                    skill: skill,
+                    title: L("缺少 SKILL.md"),
+                    detail: L("Agent Skills 必须包含 SKILL.md。当前目录可能不是有效 Skill，或导入时选错了层级。"),
+                    path: centralURL.path,
+                    action: "inspect_document"))
+            }
+
+            if skill.description?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+                findings.append(doctorFinding(
+                    .info,
+                    .document,
+                    skill: skill,
+                    title: L("缺少摘要"),
+                    detail: L("没有 description 的 Skill 在列表和搜索里很难判断用途，建议补齐 SKILL.md front matter。"),
+                    path: centralURL.appendingPathComponent("SKILL.md").path,
+                    action: "edit_metadata"))
+            }
+
+            if skill.tags.isEmpty {
+                findings.append(doctorFinding(
+                    .info,
+                    .document,
+                    skill: skill,
+                    title: L("未分类"),
+                    detail: L("给 Skill 加标签后，批量筛选、Preset 编组和项目分发会更清楚。"),
+                    action: "tag"))
+            }
+
+            switch skill.updateStatus {
+            case "update_available":
+                findings.append(doctorFinding(
+                    .warning,
+                    .source,
+                    skill: skill,
+                    title: L("来源有更新"),
+                    detail: L("来源内容和中央库不同。先查看差异，再决定是否刷新。"),
+                    path: skill.sourceRef,
+                    action: "review_diff"))
+            case "source_missing", "error":
+                findings.append(doctorFinding(
+                    .critical,
+                    .source,
+                    skill: skill,
+                    title: L("来源不可用"),
+                    detail: skill.lastCheckError?.isEmpty == false
+                        ? skill.lastCheckError!
+                        : L("更新检查无法访问原始来源。重新授权目录、重新绑定来源或解除来源绑定。"),
+                    path: skill.sourceRef,
+                    action: "relink_source"))
+            default:
+                break
+            }
+
+            if skill.targets.isEmpty {
+                findings.append(doctorFinding(
+                    .warning,
+                    .deploy,
+                    skill: skill,
+                    title: L("尚未分发"),
+                    detail: L("Skill 已在中央库，但没有同步到任何 Agent。新人会以为已经可用，实际 Agent 不会看到它。"),
+                    action: "sync"))
+            }
+
+            for target in skill.targets {
+                findings.append(contentsOf: doctorFindings(for: target, skill: skill, centralURL: centralURL, currentHash: currentHash))
+            }
+
+            if centralExists {
+                findings.append(contentsOf: doctorSafetyFindings(for: skill, centralURL: centralURL))
+            }
+        }
+
+        for project in listProjects() {
+            if !fileManager.fileExists(atPath: project.path) {
+                findings.append(SkillDoctorFinding(
+                    severity: .critical,
+                    category: .project,
+                    title: L("项目目录不可用"),
+                    detail: L("%@ 已不存在或当前没有访问权限。", project.name),
+                    path: project.path,
+                    action: "reauthorize_project"))
+            }
+            for target in listProjectTargets(projectID: project.id) {
+                guard let skill = skillByID[target.skillID] else { continue }
+                let centralURL = URL(fileURLWithPath: skill.centralPath)
+                let currentHash = try? SkillFileUtilities.hashDirectory(centralURL, fileManager: fileManager)
+                findings.append(contentsOf: doctorFindings(
+                    for: target,
+                    skill: skill,
+                    project: project,
+                    currentHash: currentHash))
+            }
+        }
+
+        return SkillDoctorReport(
+            skillCount: skills.count,
+            toolCount: availableToolCount,
+            findings: findings.sorted(by: doctorSort))
+    }
+
     @discardableResult
     public func syncSkill(id skillID: String,
                           toTool toolKey: String,
@@ -1452,6 +1602,222 @@ public final class SkillManagerEngine: @unchecked Sendable {
             category: category))
         try store.setCustomAdapters(state.customAdapters)
         audit("tool_custom_add", tool: safeKey, detail: skillsDirectory.path)
+    }
+
+    private func doctorFinding(_ severity: SkillDoctorSeverity,
+                               _ category: SkillDoctorCategory,
+                               skill: ManagedSkill,
+                               title: String,
+                               detail: String,
+                               path: String? = nil,
+                               action: String? = nil) -> SkillDoctorFinding {
+        SkillDoctorFinding(
+            severity: severity,
+            category: category,
+            skillID: skill.id,
+            skillName: skill.name,
+            title: title,
+            detail: detail,
+            path: path,
+            action: action)
+    }
+
+    private func doctorFindings(for target: SkillTargetRecord,
+                                skill: ManagedSkill,
+                                centralURL: URL,
+                                currentHash: String?) -> [SkillDoctorFinding] {
+        let targetURL = URL(fileURLWithPath: target.targetPath)
+        var findings: [SkillDoctorFinding] = []
+        if !fileManager.fileExists(atPath: targetURL.path) {
+            findings.append(doctorFinding(
+                .critical,
+                .deploy,
+                skill: skill,
+                title: L("同步目标丢失"),
+                detail: L("%@ 的同步目标不存在。重新同步即可修复。", target.tool),
+                path: target.targetPath,
+                action: "resync"))
+            return findings
+        }
+
+        if target.mode == .symlink &&
+            !SkillFileUtilities.symlink(at: targetURL, pointsTo: centralURL, fileManager: fileManager) {
+            findings.append(doctorFinding(
+                .critical,
+                .deploy,
+                skill: skill,
+                title: L("软链漂移"),
+                detail: L("%@ 的软链不再指向中央库。为了避免 Agent 读到旧内容，建议重新同步。", target.tool),
+                path: target.targetPath,
+                action: "resync"))
+        }
+
+        if target.mode == .copy,
+           let currentHash,
+           let sourceHash = target.sourceHash,
+           sourceHash != currentHash {
+            findings.append(doctorFinding(
+                .warning,
+                .deploy,
+                skill: skill,
+                title: L("复制目标已过期"),
+                detail: L("%@ 的副本不是中央库最新内容。重新同步会覆盖由 Conductor 管理的目标。", target.tool),
+                path: target.targetPath,
+                action: "resync"))
+        }
+
+        if target.status != "ok" {
+            findings.append(doctorFinding(
+                .warning,
+                .deploy,
+                skill: skill,
+                title: L("目标状态异常"),
+                detail: target.lastError?.isEmpty == false ? target.lastError! : target.status,
+                path: target.targetPath,
+                action: "inspect_target"))
+        }
+        return findings
+    }
+
+    private func doctorFindings(for target: SkillProjectTargetRecord,
+                                skill: ManagedSkill,
+                                project: SkillProject,
+                                currentHash: String?) -> [SkillDoctorFinding] {
+        let targetURL = URL(fileURLWithPath: target.targetPath)
+        var findings: [SkillDoctorFinding] = []
+        if !fileManager.fileExists(atPath: targetURL.path) {
+            findings.append(doctorFinding(
+                .warning,
+                .project,
+                skill: skill,
+                title: L("项目同步目标丢失"),
+                detail: L("%@ 项目里的 %@ 目标不存在。重新应用项目同步即可修复。", project.name, target.tool),
+                path: target.targetPath,
+                action: "project_resync"))
+            return findings
+        }
+        if target.mode == .copy,
+           let currentHash,
+           let sourceHash = target.sourceHash,
+           sourceHash != currentHash {
+            findings.append(doctorFinding(
+                .warning,
+                .project,
+                skill: skill,
+                title: L("项目副本已过期"),
+                detail: L("%@ 项目里的 %@ 副本不是中央库最新内容。", project.name, target.tool),
+                path: target.targetPath,
+                action: "project_resync"))
+        }
+        if target.status != "ok" {
+            findings.append(doctorFinding(
+                .warning,
+                .project,
+                skill: skill,
+                title: L("项目同步状态异常"),
+                detail: target.lastError?.isEmpty == false ? target.lastError! : target.status,
+                path: target.targetPath,
+                action: "inspect_project_target"))
+        }
+        return findings
+    }
+
+    private func duplicateSkillGroups(_ skills: [ManagedSkill]) -> [String] {
+        var notes: [String] = []
+        let byName = Dictionary(grouping: skills) { skill in
+            skill.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        for group in byName.values where group.count > 1 {
+            notes.append(group.map(\.name).joined(separator: ", "))
+        }
+        let byHash = Dictionary(grouping: skills.compactMap { skill -> (String, ManagedSkill)? in
+            guard let hash = skill.contentHash, !hash.isEmpty else { return nil }
+            return (hash, skill)
+        }, by: { $0.0 })
+        for group in byHash.values where group.count > 1 {
+            let names = group.map { $0.1.name }.joined(separator: ", ")
+            if !notes.contains(names) { notes.append(names) }
+        }
+        return notes.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private func doctorSafetyFindings(for skill: ManagedSkill, centralURL: URL) -> [SkillDoctorFinding] {
+        guard let files = try? SkillFileUtilities.contentFileMap(in: centralURL, fileManager: fileManager) else {
+            return []
+        }
+        var findings: [SkillDoctorFinding] = []
+        for (relativePath, url) in files.sorted(by: { $0.key < $1.key }) {
+            let attributes = try? fileManager.attributesOfItem(atPath: url.path)
+            let size = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+            guard isDoctorTextFile(relativePath),
+                  size <= 240_000,
+                  let text = try? String(contentsOf: url, encoding: .utf8) else {
+                continue
+            }
+            let lower = text.lowercased()
+            if (lower.contains("curl ") && lower.contains("| sh")) ||
+                (lower.contains("wget ") && lower.contains("| sh")) {
+                findings.append(doctorFinding(
+                    .warning,
+                    .safety,
+                    skill: skill,
+                    title: L("远程脚本执行痕迹"),
+                    detail: L("%@ 包含 curl/wget 管道执行。安装前需要人工复核来源可信度。", relativePath),
+                    path: url.path,
+                    action: "review_security"))
+            }
+            if lower.contains("rm -rf") || lower.contains("sudo rm") {
+                findings.append(doctorFinding(
+                    .warning,
+                    .safety,
+                    skill: skill,
+                    title: L("破坏性命令痕迹"),
+                    detail: L("%@ 包含删除类命令。确认它只在明确场景下执行。", relativePath),
+                    path: url.path,
+                    action: "review_security"))
+            }
+            if lower.contains("security find-generic-password") ||
+                lower.contains("security find-internet-password") ||
+                lower.contains("pbpaste") {
+                findings.append(doctorFinding(
+                    .warning,
+                    .safety,
+                    skill: skill,
+                    title: L("敏感数据访问痕迹"),
+                    detail: L("%@ 可能读取钥匙串或剪贴板。确认 Skill 不会泄露凭证。", relativePath),
+                    path: url.path,
+                    action: "review_security"))
+            }
+            if findings.filter({ $0.skillID == skill.id && $0.category == .safety }).count >= 4 {
+                break
+            }
+        }
+        return findings
+    }
+
+    private func isDoctorTextFile(_ path: String) -> Bool {
+        let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
+        if ext.isEmpty { return true }
+        return [
+            "md", "markdown", "txt", "json", "yaml", "yml", "toml",
+            "sh", "bash", "zsh", "fish", "py", "js", "ts", "tsx",
+            "jsx", "rb", "go", "rs", "swift"
+        ].contains(ext)
+    }
+
+    private func doctorSort(_ lhs: SkillDoctorFinding, _ rhs: SkillDoctorFinding) -> Bool {
+        if lhs.severity.weight != rhs.severity.weight {
+            return lhs.severity.weight > rhs.severity.weight
+        }
+        if lhs.category != rhs.category {
+            return lhs.category.rawValue < rhs.category.rawValue
+        }
+        let leftName = lhs.skillName ?? lhs.title
+        let rightName = rhs.skillName ?? rhs.title
+        if leftName != rightName {
+            return leftName.localizedCaseInsensitiveCompare(rightName) == .orderedAscending
+        }
+        return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
     }
 
     private struct GitCommandOutput {

@@ -13,17 +13,17 @@ final class PanelWidthStore: ObservableObject {
 
     static let sidebarRange: ClosedRange<CGFloat> = 160...340
     static let settingsRange: ClosedRange<CGFloat> = 480...760
-    static let toolsRange: ClosedRange<CGFloat> = 360...680
+    static let toolsRange: ClosedRange<CGFloat> = 340...680
     static let sessionRange: ClosedRange<CGFloat> = 320...600
 
     static let settingsDefault: CGFloat = 560
-    static let toolsDefault: CGFloat = 440
+    static let toolsDefault: CGFloat = 374
     static let sessionDefault: CGFloat = 400
 
     private init() {
         sidebar = Self.loadMigratedSidebar()
         settings = Self.load("panelWidth.settings", Self.settingsDefault, Self.settingsRange)
-        tools = Self.load("panelWidth.tools", Self.toolsDefault, Self.toolsRange)
+        tools = Self.loadMigratedTools()
         session = Self.load("panelWidth.session", Self.sessionDefault, Self.sessionRange)
     }
 
@@ -36,6 +36,20 @@ final class PanelWidthStore: ObservableObject {
             return min(max(CGFloat(raw), sidebarRange.lowerBound), sidebarRange.upperBound)
         }
         let compact = min(max(CGFloat(raw) * 0.85, sidebarRange.lowerBound), sidebarRange.upperBound)
+        UserDefaults.standard.set(Double(compact), forKey: key)
+        UserDefaults.standard.set(true, forKey: migrationKey)
+        return compact
+    }
+
+    private static func loadMigratedTools() -> CGFloat {
+        let key = "panelWidth.tools"
+        let migrationKey = "panelWidth.tools.compactV2Applied"
+        let raw = UserDefaults.standard.double(forKey: key)
+        guard raw > 0 else { return toolsDefault }
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else {
+            return min(max(CGFloat(raw), toolsRange.lowerBound), toolsRange.upperBound)
+        }
+        let compact = min(max(CGFloat(raw) * 0.85, toolsRange.lowerBound), toolsRange.upperBound)
         UserDefaults.standard.set(Double(compact), forKey: key)
         UserDefaults.standard.set(true, forKey: migrationKey)
         return compact

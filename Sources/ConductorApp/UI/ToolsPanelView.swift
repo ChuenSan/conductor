@@ -62,45 +62,51 @@ struct ToolsPanelView: View {
                 weight: .bold,
                 action: onClose)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 12)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
     }
 
     /// 分段控件：凹槽容器 + 选中片「抬起」（白片/亮片 + 柔阴影），对标系统分段而非彩色按钮。
     private var segmented: some View {
         let theme = AppStyle.theme
-        return HStack(spacing: 2) {
-            ForEach(ToolsTab.panelTabs) { tab in
-                let selected = coordinator.toolsTab == tab
-                Button {
-                    withAnimation(Motion.snappy) {
-                        coordinator.toolsTab = tab
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: tab.icon)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
-                        Text(tab.title)
-                            .font(.system(size: 11.5, weight: selected ? .semibold : .medium))
-                            .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
-                    }
-                    .padding(.horizontal, 10)
-                    .frame(height: 24)
-                    .background {
-                        if selected {
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(theme.elevated)
-                                .shadow(color: .black.opacity(theme.isDark ? 0.35 : 0.10), radius: 3, y: 1)
+        return ScrollView(.horizontal) {
+            HStack(spacing: 2) {
+                ForEach(ToolsTab.panelTabs) { tab in
+                    let selected = coordinator.toolsTab == tab
+                    Button {
+                        withAnimation(Motion.snappy) {
+                            coordinator.toolsTab = tab
                         }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+                            Text(tab.title)
+                                .font(.system(size: 11, weight: selected ? .semibold : .medium))
+                                .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
+                        }
+                        .padding(.horizontal, 7)
+                        .frame(height: 24)
+                        .background {
+                            if selected {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(theme.elevated)
+                                    .shadow(color: .black.opacity(theme.isDark ? 0.35 : 0.10), radius: 3, y: 1)
+                            }
+                        }
+                        .contentShape(RoundedRectangle(cornerRadius: 7))
                     }
-                    .contentShape(RoundedRectangle(cornerRadius: 7))
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .padding(3)
         }
-        .padding(3)
+        .scrollIndicators(.never)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(AppStyle.hoverFill))

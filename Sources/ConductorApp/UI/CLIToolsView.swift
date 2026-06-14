@@ -330,8 +330,8 @@ struct CLIToolsView: View {
 
     /// 未安装的工具收成一张紧凑卡片：一行一个，不再占满版面的空框。
     private var missingList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(missingTools.enumerated()), id: \.element.id) { index, tool in
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(missingTools) { tool in
                 HStack(spacing: 10) {
                     CLIToolLogoView(tool: tool)
                         .frame(width: 18, height: 18)
@@ -347,12 +347,11 @@ struct CLIToolsView: View {
                 }
                 .padding(.horizontal, Space.sm)
                 .frame(height: 36)
-                if index < missingTools.count - 1 {
-                    Divider().overlay(AppStyle.separator).padding(.leading, 40)
-                }
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(AppStyle.hoverFill.opacity(0.46)))
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
         .toolsCard()
     }
 
@@ -727,7 +726,6 @@ private struct CLIToolRow: View {
         VStack(alignment: .leading, spacing: 9) {
             headerRow
             if let path = tool.path {
-                Divider().overlay(AppStyle.separator.opacity(0.65))
                 HStack(spacing: 7) {
                     Image(systemName: "folder")
                         .font(.system(size: 9.5, weight: .semibold))
@@ -740,6 +738,10 @@ private struct CLIToolRow: View {
                         .textSelection(.enabled)
                     Spacer(minLength: 0)
                 }
+                .padding(.horizontal, 8)
+                .frame(height: 28)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(AppStyle.hoverFill.opacity(0.48)))
             }
         }
         .padding(10)
@@ -1080,7 +1082,6 @@ private struct ProviderUsageRow: View {
 
     private var quickActions: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Rectangle().fill(AppStyle.separator.opacity(0.72)).frame(height: 1).padding(.vertical, 4)
             HStack(spacing: 8) {
                 Button(action: onConfigure) {
                     Label(L("打开配置"), systemImage: "slider.horizontal.3")
@@ -1095,7 +1096,7 @@ private struct ProviderUsageRow: View {
                 Spacer(minLength: 0)
             }
         }
-        .padding(.top, 2)
+        .padding(.top, 4)
         .padding(.horizontal, 2)
     }
 }

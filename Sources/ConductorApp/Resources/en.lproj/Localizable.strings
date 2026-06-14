@@ -1132,3 +1132,24 @@
 "静态" = "Static";
 "项目实际存在的 Skills" = "Skills actually present in the project";
 "预算" = "Budget";
+
+/* ===== Skills Doctor ===== */
+"%ld 个问题需要处理" = "%ld issue(s) need attention";
+"Doctor" = "Doctor";
+"全部稳定" = "All Stable";
+"处理" = "Fix";
+"处理诊断问题" = "Fix diagnostic issues";
+"没有发现需要处理的问题" = "No issues need attention";
+"还有 %ld 个诊断项" = "%ld more diagnostic item(s)";
+"还有 %ld 个诊断项已按类别收起" = "%ld more diagnostic item(s) collapsed by category";
+"这个 Skill 没有诊断问题" = "This Skill has no diagnostic issues";
+"没有诊断问题" = "No diagnostic issues";
+"诊断" = "Doctor";
+"诊断 %ld" = "Doctor %ld";
+"诊断通过" = "Doctor Passed";
+"严重" = "Critical";
+"严重 %ld" = "%ld Critical";
+"警告" = "Warning";
+"提示" = "Info";
+"安全" = "Safety";
+"重复" = "Duplicate";
