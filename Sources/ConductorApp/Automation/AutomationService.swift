@@ -60,6 +60,21 @@ final class AutomationService {
                 "protocol": .int(AutomationProtocol.version),
                 "app": .string("Conductor"),
             ])
+        case "open-agent-tools", "open-agent-tools-management":
+            let rawModule = str("module") ?? AgentToolsManagementModule.overview.rawValue
+            guard let module = AgentToolsManagementModule(rawValue: rawModule) else {
+                let supported = AgentToolsManagementModule.railModules.map(\.rawValue).joined(separator: ", ")
+                throw AutomationError.badRequest("module 只支持：\(supported)")
+            }
+            c.openAgentToolsManagement(module)
+            return .object([
+                "module": .string(module.rawValue),
+                "window": .string("agent-tools"),
+            ])
+        #if DEBUG
+        case "debug-agent-tools-smoke-test":
+            return try debugAgentToolsSmokeTest()
+        #endif
 
         // —— 工作区 ——
         case "list-workspaces":
@@ -141,6 +156,23 @@ final class AutomationService {
             let text = try c.automationReadScreen(paneRef: str("pane"),
                                                   scrollback: params["scrollback"]?.boolValue ?? false)
             return .object(["text": .string(text)])
+        case "surface-resume-set", "resume-set":
+            let binding = try c.automationSetSurfaceResume(
+                paneRef: str("pane"),
+                kind: str("kind") ?? "shell",
+                checkpoint: str("checkpoint"),
+                command: try requireStr("command"),
+                autoResume: params["autoResume"]?.boolValue ?? false,
+                trusted: params["trusted"]?.boolValue ?? false)
+            return c.automationDescribe(binding: binding)
+        case "surface-resume-show", "resume-show":
+            guard let binding = try c.automationShowSurfaceResume(paneRef: str("pane")) else {
+                return .null
+            }
+            return c.automationDescribe(binding: binding)
+        case "surface-resume-clear", "resume-clear":
+            let removed = try c.automationClearSurfaceResume(paneRef: str("pane"))
+            return removed.map { c.automationDescribe(binding: $0) } ?? .null
 
         // —— 通知 ——
         case "notify":
@@ -211,4 +243,52 @@ final class AutomationService {
             throw AutomationError.unknownMethod(method)
         }
     }
+
+    #if DEBUG
+    private func debugAgentToolsSmokeTest() throws -> JSONValue {
+        func fail(_ message: String) throws -> Never {
+            throw AutomationError.internalError(message)
+        }
+
+        let mcpSteps = try AgentToolsMCPScanner.debugSmokeTest()
+
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("conductor-hooks-smoke-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let url = root.appendingPathComponent("settings.json")
+        let doc = HookConfigDocument(url: url, source: .claude)
+        let command = "printf smoke #conductor:smoke"
+        try doc.addCommand(event: HookEventName.stop, command: command, timeout: 3210)
+
+        var entries = doc.entries()
+        guard entries.count == 1,
+              entries[0].event == HookEventName.stop,
+              entries[0].command == command,
+              entries[0].timeout == 3210,
+              entries[0].managedByConductor else {
+            try fail("hook command was not written correctly")
+        }
+
+        try doc.addCommand(event: HookEventName.stop, command: command, timeout: 3210)
+        entries = doc.entries()
+        guard entries.count == 1 else {
+            try fail("duplicate hook command was written")
+        }
+
+        let removed = try doc.removeCommands(containing: "#conductor:smoke")
+        guard removed == 1, doc.entries().isEmpty else {
+            try fail("hook command was not removed")
+        }
+
+        return .object([
+            "mcp": .array(mcpSteps.map(JSONValue.string)),
+            "hooks": .array([
+                .string("wrote command hook"),
+                .string("deduplicated command hook"),
+                .string("removed command hook"),
+            ]),
+        ])
+    }
+    #endif
 }

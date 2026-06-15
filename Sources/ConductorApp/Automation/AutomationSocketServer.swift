@@ -53,6 +53,10 @@ final class AutomationSocketServer: @unchecked Sendable {
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }
+        guard Self.setNonBlocking(fd) else {
+            close(fd)
+            return false
+        }
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
@@ -112,10 +116,19 @@ final class AutomationSocketServer: @unchecked Sendable {
         return result == 0
     }
 
+    private static func setNonBlocking(_ fd: Int32) -> Bool {
+        let flags = fcntl(fd, F_GETFL, 0)
+        guard flags >= 0 else { return false }
+        return fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0
+    }
+
     private func acceptPending() {
         while true {
             let fd = accept(listenFD, nil, nil)
-            guard fd >= 0 else { return }
+            guard fd >= 0 else {
+                if errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR { return }
+                return
+            }
             var noSigpipe: Int32 = 1
             setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, socklen_t(MemoryLayout<Int32>.size))
             let connection = ClientConnection(fd: fd, queue: queue, handler: handler) { [weak self] fd in

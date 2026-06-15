@@ -57,9 +57,8 @@ enum AgentToolsManagementModule: String, CaseIterable, Identifiable {
         }
     }
 
-    /// 管理台左栏只展示已实现的模块。MCP/Hooks/片段/活动 走各自现成入口
-    /// （Hooks→HooksManagerView、片段→SnippetsManagerView、活动→活动中心），不在这里摆空占位。
-    static let railModules: [AgentToolsManagementModule] = [.overview, .cli, .usage, .agents, .skills]
+    /// 管理台左栏只展示已实现的模块。片段/活动仍走各自现成入口，不在这里摆空占位。
+    static let railModules: [AgentToolsManagementModule] = [.overview, .cli, .usage, .agents, .skills, .mcp, .hooks]
 }
 
 enum AgentToolsConsoleLayout {
@@ -325,6 +324,10 @@ struct AgentToolsManagementConsoleView: View {
                     initialSection: skillsInitialSection,
                     reloadID: skillsReloadID,
                     onOpenModule: openModule)
+            case .mcp:
+                AgentToolsMCPWorkbenchView(store: store)
+            case .hooks:
+                AgentToolsHooksWorkbenchView(store: store)
             default:
                 placeholderWorkspace
             }
@@ -397,6 +400,10 @@ struct AgentToolsManagementConsoleView: View {
                     store: store,
                     onOpenModule: openModule,
                     onOpenSection: openSkillsSection)
+            case .mcp:
+                AgentToolsMCPInspector(store: store)
+            case .hooks:
+                AgentToolsHooksInspector(store: store)
             default:
                 placeholderInspector
             }

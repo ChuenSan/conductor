@@ -383,6 +383,9 @@ private struct ProviderSettingsDetailView: View {
     @ObservedObject private var history = UsageHistoryStore.shared
 
     private var profile: UsageProviderProfile { UsageProviderProfile.catalog(for: provider) }
+    private var status: ProviderStatusPresentation {
+        ProviderStatusPresentation(state: state, enabled: enabled.wrappedValue)
+    }
     private var providerConfig: UsageProviderConfig {
         configStore.config.usage.providers[provider.id] ?? UsageProviderConfig()
     }
@@ -395,12 +398,9 @@ private struct ProviderSettingsDetailView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.md) {
+        VStack(alignment: .leading, spacing: 12) {
             header
-            infoSection
-            usageSection
-            settingsSection
-            optionsSection
+            compactDetailPanel
         }
     }
 
@@ -473,67 +473,105 @@ private struct ProviderSettingsDetailView: View {
         return ProviderStatusPill(label: status.label, color: status.color)
     }
 
-    private var infoSection: some View {
-        ProviderDetailSection(title: L("信息"), icon: "info.circle") {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                ProviderInfoCell(label: L("状态"), value: enabled.wrappedValue ? L("已启用") : L("已停用"))
-                ProviderInfoCell(label: L("来源"), value: sourceLabel)
-                ProviderInfoCell(label: L("认证"), value: authLabel)
-                ProviderInfoCell(label: L("版本"), value: tool?.version ?? L("未检测到"))
-                ProviderInfoCell(label: L("凭证"), value: profile.credentialKind)
-                ProviderInfoCell(label: L("更新"), value: updatedLabel)
-                if let account = loadedSnapshot?.accountLabel, !account.isEmpty {
-                    ProviderInfoCell(label: L("账号"), value: account)
-                }
-                if let plan = loadedSnapshot?.planName, !plan.isEmpty {
-                    ProviderInfoCell(label: L("套餐"), value: plan)
+    private var compactDetailPanel: some View {
+        VStack(spacing: 0) {
+            ProviderDetailSubsection(title: L("概览"), icon: "info.circle") {
+                VStack(spacing: 0) {
+                    ProviderKeyValueRow(label: L("状态"), value: enabled.wrappedValue ? L("已启用") : L("已停用"), valueColor: status.color)
+                    ProviderKeyValueRow(label: L("认证"), value: authLabel, valueColor: status.color)
+                    ProviderKeyValueRow(label: L("渠道 ID"), value: provider.id, monospaced: true)
+                    ProviderKeyValueRow(label: L("类别"), value: profile.category)
+                    ProviderKeyValueRow(label: L("凭证"), value: profile.credentialKind)
+                    ProviderKeyValueRow(label: L("来源"), value: sourceLabel)
+                    ProviderKeyValueRow(label: L("更新"), value: updatedLabel)
+                    ProviderKeyValueRow(label: L("历史样本"), value: "\(history.samples(for: provider.id).count)", monospaced: true)
+                    if let account = loadedSnapshot?.accountLabel, !account.isEmpty {
+                        ProviderKeyValueRow(label: L("账号"), value: account)
+                    }
+                    if let plan = loadedSnapshot?.planName, !plan.isEmpty {
+                        ProviderKeyValueRow(label: L("套餐"), value: plan)
+                    }
+                    ProviderKeyValueRow(label: L("CLI 版本"), value: tool?.version ?? L("未检测到"), monospaced: tool?.version != nil)
+                    ProviderKeyValueRow(label: L("CLI 路径"), value: tool?.path ?? L("未检测到位置"), monospaced: tool?.path != nil)
                 }
             }
+
             if shouldShowSetupHint {
-                ProviderSetupHintView(text: profile.setupHint)
-                    .padding(.top, 2)
-            }
-        }
-    }
-
-    private var usageSection: some View {
-        ProviderDetailSection(title: L("用量"), icon: "chart.bar.xaxis") {
-            switch state {
-            case .loading:
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text(L("正在刷新用量…"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(AppStyle.textSecondary)
+                ProviderPanelDivider()
+                ProviderDetailSubsection(title: L("处理"), icon: "exclamationmark.triangle") {
+                    ProviderInlineNotice(icon: "key.fill", text: profile.setupHint, color: status.color)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            case .manual:
-                ProviderCalloutView(
-                    icon: "hand.tap",
-                    title: L("手动刷新"),
-                    message: L("不会自动请求账号；点击右上角刷新获取用量。"),
-                    color: AppStyle.accent)
-            case .unconfigured:
-                ProviderCalloutView(
-                    icon: "key.fill",
-                    title: L("需要配置凭证"),
-                    message: profile.setupHint,
-                    color: AppStyle.waitAmber)
-            case let .error(message):
-                ProviderErrorView(message: message, onReload: onReload)
-            case let .loaded(snapshot):
-                ProviderUsageDetail(snapshot: snapshot, samples: history.samples(for: provider.id))
-            case .unsupported, .none:
-                Text(L("暂无用量数据"))
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppStyle.textTertiary)
             }
+
+            ProviderPanelDivider()
+            ProviderDetailSubsection(title: L("用量"), icon: "chart.bar.xaxis") {
+                usageSummary
+            }
+
+            ProviderPanelDivider()
+            ProviderDetailSubsection(title: L("配置"), icon: "slider.horizontal.3") {
+                VStack(alignment: .leading, spacing: 12) {
+                    ProviderKeyValueRow(label: L("说明"), value: profile.credentialHint)
+                    configurationControls
+                }
+            }
+
+            if !profile.toggles.isEmpty {
+                ProviderPanelDivider()
+                ProviderDetailSubsection(title: L("选项"), icon: "switch.2") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(profile.toggles) { toggle in
+                            ProviderToggleRow(toggle: toggle, isOn: flagBinding(toggle.key, defaultValue: toggle.defaultValue))
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .toolsCard(cornerRadius: 10)
+    }
+
+    @ViewBuilder
+    private var usageSummary: some View {
+        switch state {
+        case .loading:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(L("正在刷新用量…"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppStyle.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .manual:
+            ProviderInlineNotice(
+                icon: "hand.tap",
+                text: L("不会自动请求账号；点击右上角刷新获取用量。"),
+                color: AppStyle.accent)
+        case .unconfigured:
+            ProviderInlineNotice(icon: "key.fill", text: profile.setupHint, color: AppStyle.waitAmber)
+        case let .error(message):
+            VStack(alignment: .leading, spacing: 8) {
+                ProviderInlineNotice(icon: "exclamationmark.triangle.fill", text: message, color: AppStyle.errorRed)
+                ToolActionButton(
+                    title: L("重试"),
+                    systemImage: "arrow.clockwise",
+                    role: .secondary,
+                    height: 26,
+                    fontSize: 11,
+                    horizontalPadding: 10,
+                    action: onReload)
+            }
+        case let .loaded(snapshot):
+            ProviderUsageCompactDetail(snapshot: snapshot, samples: history.samples(for: provider.id))
+        case .unsupported, .none:
+            ProviderInlineNotice(icon: "chart.bar.xaxis", text: L("暂无用量数据"), color: AppStyle.textTertiary)
         }
     }
 
-    private var settingsSection: some View {
-        ProviderDetailSection(title: L("设置"), icon: "slider.horizontal.3") {
-            VStack(alignment: .leading, spacing: 12) {
+    @ViewBuilder
+    private var configurationControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
                 if !profile.sourceOptions.isEmpty {
                     ProviderPickerRow(
                         title: L("来源"),
@@ -576,17 +614,6 @@ private struct ProviderSettingsDetailView: View {
                     }
                 }
             }
-        }
-    }
-
-    private var optionsSection: some View {
-        ProviderDetailSection(title: L("选项"), icon: "switch.2") {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(profile.toggles) { toggle in
-                    ProviderToggleRow(toggle: toggle, isOn: flagBinding(toggle.key, defaultValue: toggle.defaultValue))
-                }
-            }
-        }
     }
 
     private var loadedSnapshot: UsageSnapshot? {
@@ -741,6 +768,243 @@ private struct ProviderMiniUsage: View {
             return CostLine.shortText(cost)
         }
         return nil
+    }
+}
+
+private struct ProviderDetailSubsection<Content: View>: View {
+    let title: String
+    let icon: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(AppStyle.accent)
+                    .frame(width: 14)
+                Text(title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppStyle.textPrimary)
+                Spacer(minLength: 0)
+            }
+            content
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct ProviderPanelDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(AppStyle.separator.opacity(0.55))
+            .frame(height: 1)
+            .padding(.horizontal, 12)
+    }
+}
+
+private struct ProviderKeyValueRow: View {
+    let label: String
+    let value: String
+    var monospaced = false
+    var valueColor: Color?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(label)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .frame(width: 76, alignment: .leading)
+                    .lineLimit(1)
+                Text(value)
+                    .font(.system(size: 11.2, weight: .semibold, design: monospaced ? .monospaced : .default))
+                    .foregroundStyle(valueColor ?? AppStyle.textSecondary)
+                    .lineLimit(3)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.vertical, 6)
+            Divider().opacity(0.42)
+        }
+    }
+}
+
+private struct ProviderInlineNotice: View {
+    let icon: String
+    let text: String
+    let color: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 16)
+            Text(text)
+                .font(.system(size: 10.8))
+                .foregroundStyle(AppStyle.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct ProviderUsageCompactDetail: View {
+    let snapshot: UsageSnapshot
+    let samples: [UsageSample]
+
+    var body: some View {
+        if snapshot.isEmpty {
+            ProviderInlineNotice(
+                icon: "chart.bar.xaxis",
+                text: L("已连接，但当前没有可展示的额度窗口。"),
+                color: AppStyle.textTertiary)
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(spacing: 0) {
+                    ProviderKeyValueRow(label: L("更新时间"), value: UsageFormatting.agoText(snapshot.updatedAt))
+                    if let account = snapshot.accountLabel, !account.isEmpty {
+                        ProviderKeyValueRow(label: L("账号"), value: account)
+                    }
+                    if let plan = snapshot.planName, !plan.isEmpty {
+                        ProviderKeyValueRow(label: L("套餐"), value: plan)
+                    }
+                    ProviderKeyValueRow(label: L("额度窗口"), value: "\(snapshot.allWindows.count)", monospaced: true)
+                    ProviderKeyValueRow(label: L("趋势样本"), value: "\(samples.count)", monospaced: true)
+                }
+
+                ForEach(Array(snapshot.allWindows.enumerated()), id: \.offset) { _, item in
+                    ProviderUsageInlineBar(title: item.title, window: item.window)
+                }
+
+                if let cost = snapshot.providerCost {
+                    ProviderCostInlineRow(cost: cost)
+                }
+
+                if samples.count >= 2 {
+                    UsageTrendChart(samples: samples, compact: false)
+                        .frame(height: 74)
+                        .padding(.top, 2)
+                }
+            }
+        }
+    }
+}
+
+private struct ProviderUsageInlineBar: View {
+    let title: String
+    let window: RateWindow
+
+    private var fraction: Double { max(0.02, min(1, window.usedPercent / 100.0)) }
+
+    private var barColor: Color {
+        switch window.usedPercent {
+        case ..<70: return AppStyle.accent
+        case 70..<90: return AppStyle.waitAmber
+        default: return AppStyle.errorRed
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppStyle.textPrimary)
+                        .lineLimit(1)
+                    Text(detailLine)
+                        .font(.system(size: 9.8))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Text(L("剩 %ld%% · 已用 %ld%%",
+                       Int(window.remainingPercent.rounded()),
+                       Int(window.usedPercent.rounded())))
+                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(AppStyle.textSecondary)
+                    .lineLimit(1)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(AppStyle.theme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07))
+                    Capsule()
+                        .fill(barColor)
+                        .frame(width: geo.size.width * fraction)
+                        .animation(Motion.snappy, value: fraction)
+                }
+            }
+            .frame(height: 5)
+        }
+    }
+
+    private var detailLine: String {
+        var parts: [String] = []
+        if let reset = window.resetsAt { parts.append(UsageFormatting.resetText(reset)) }
+        else if let description = window.resetDescription, !description.isEmpty { parts.append(description) }
+        else { parts.append(L("无固定重置")) }
+        if let durationText { parts.append(durationText) }
+        return parts.joined(separator: " · ")
+    }
+
+    private var durationText: String? {
+        guard let minutes = window.windowMinutes, minutes > 0 else { return nil }
+        if minutes % (60 * 24) == 0 { return L("窗口 %ld 天", minutes / (60 * 24)) }
+        if minutes % 60 == 0 { return L("窗口 %ld 小时", minutes / 60) }
+        return L("窗口 %ld 分钟", minutes)
+    }
+}
+
+private struct ProviderCostInlineRow: View {
+    let cost: ProviderCostSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "creditcard")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .frame(width: 14)
+                Text(text)
+                    .font(.system(size: 10.8, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(AppStyle.textPrimary)
+                if let period = cost.period, !period.isEmpty {
+                    Text(period)
+                        .font(.system(size: 10))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            if cost.hasLimit {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(AppStyle.theme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07))
+                        Capsule()
+                            .fill(cost.usedPercent >= 90 ? AppStyle.errorRed : cost.usedPercent >= 70 ? AppStyle.waitAmber : AppStyle.accent)
+                            .frame(width: geo.size.width * max(0.02, min(1, cost.usedPercent / 100)))
+                            .animation(Motion.snappy, value: cost.usedPercent)
+                    }
+                }
+                .frame(height: 5)
+            }
+        }
+    }
+
+    private var text: String {
+        if cost.hasLimit {
+            return "\(CostLine.money(cost.used, cost.currencyCode)) / \(CostLine.money(cost.limit, cost.currencyCode))"
+        }
+        return L("余额 %@", CostLine.money(cost.used, cost.currencyCode))
     }
 }
 

@@ -18,9 +18,6 @@ let package = Package(
         // 供 cookie 类用量 provider（cursor/grok/copilot…）读登录态。仅链 sqlite3 系统库。
         .target(
             name: "SweetCookieKit",
-            swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency"),
-            ],
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
             ]

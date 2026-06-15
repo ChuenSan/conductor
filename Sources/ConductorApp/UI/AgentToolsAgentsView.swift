@@ -491,13 +491,6 @@ struct AgentToolsAgentsView: View {
             .background(
                 RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(selected ? AppStyle.accent.opacity(0.12) : Color.clear))
-            .overlay(alignment: .leading) {
-                // 选中态签名：左侧一道 accent 键线（编辑式重点，非分隔硬线）。
-                if selected {
-                    Capsule().fill(AppStyle.accent).frame(width: 3, height: 18)
-                        .transition(.opacity.combined(with: .move(edge: .leading)))
-                }
-            }
             .contentShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
             .animation(AgentToolsMotion.selection, value: selected)
         }

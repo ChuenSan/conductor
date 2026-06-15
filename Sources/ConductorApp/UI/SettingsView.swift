@@ -168,6 +168,9 @@ struct SettingsView: View {
                 SettingsRow(label: L("有运行进程时关闭需确认")) {
                     ThemedToggle(isOn: bind(\.terminal.confirmCloseRunning))
                 }
+                SettingsRow(label: L("恢复时自动续聊 Agent")) {
+                    ThemedToggle(isOn: bind(\.terminal.autoResumeAgentSessions))
+                }
             }
             aiAgentsSection
         }

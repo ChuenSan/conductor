@@ -430,10 +430,6 @@ struct SkillsManagerView: View {
         Array(Set(skills.map { $0.sourceType.rawValue })).sorted()
     }
 
-    private var commandTools: [SkillToolInfo] {
-        Array(availableTools.prefix(3))
-    }
-
     private var inspectedSkill: ManagedSkill? {
         if let inspectedSkillID,
            let skill = skills.first(where: { $0.id == inspectedSkillID }) {
@@ -978,21 +974,6 @@ struct SkillsManagerView: View {
         }
     }
 
-    private func workbenchSection(for action: SkillCommandAction) -> SkillManagerSection {
-        switch action {
-        case .market:
-            return .discover
-        case .updateAvailable, .checkUpdates:
-            return .library
-        case .agents, .syncUnsynced:
-            return .workspace
-        case .library:
-            return .library
-        case .importLocal, .scan:
-            return .discover
-        }
-    }
-
     private var compactPrimaryActions: some View {
         VStack(alignment: .leading, spacing: 7) {
             compactPanelTitle(icon: "bolt.fill", title: L("快速动作"), value: nil)
@@ -1342,31 +1323,6 @@ struct SkillsManagerView: View {
         }
     }
 
-    private func compactMetric(title: String, value: String, icon: String, color: Color) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: icon)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(color)
-                .frame(width: 20, height: 20)
-                .skillIconSurface(color: color, shape: .circle)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: 8.8, weight: .semibold))
-                    .foregroundStyle(AppStyle.textTertiary)
-                    .lineLimit(1)
-                Text(value)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(color)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 40)
-        .skillSoftSurface()
-    }
-
     private func normalizeSelectedSection() {
         guard !visibleSections.contains(selectedSection),
               let fallback = visibleSections.first else { return }
@@ -1582,15 +1538,6 @@ struct SkillsManagerView: View {
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
         .skillPanelSurface()
-    }
-
-    @ViewBuilder
-    private var maintainContent: some View {
-        if !updatableSkills.isEmpty || sourceProblemSkillsCount > 0 {
-            maintenanceActionPanel
-        } else {
-            ToolStatusLine(icon: "checkmark.seal.fill", text: L("没有可更新或来源异常的 Skill"), color: AppStyle.accent)
-        }
     }
 
     @ViewBuilder
@@ -1814,67 +1761,6 @@ struct SkillsManagerView: View {
                 }
             }
         }
-    }
-
-    private func inspectorReadiness(_ skill: ManagedSkill) -> some View {
-        let items = readinessItems(for: skill)
-        let pendingItems = items.filter { !$0.ready }
-        let readyCount = items.filter(\.ready).count
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: pendingItems.isEmpty ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(pendingItems.isEmpty ? AppStyle.accent : AppStyle.waitAmber)
-                Text(L("就绪"))
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(AppStyle.textSecondary)
-                Spacer()
-                Text("\(readyCount)/\(items.count)")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(readyCount == items.count ? AppStyle.accent : AppStyle.waitAmber)
-            }
-
-            if !pendingItems.isEmpty {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 94), spacing: 6)], spacing: 6) {
-                    ForEach(Array(pendingItems.prefix(3))) { item in
-                        readinessTile(item)
-                    }
-                    if pendingItems.count > 3 {
-                        Text(L("+%ld", pendingItems.count - 3))
-                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                            .foregroundStyle(AppStyle.waitAmber)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 28)
-                            .skillSoftSurface()
-                    }
-                }
-                .transition(AgentToolsMotion.revealTransition)
-            }
-        }
-    }
-
-    private func readinessTile(_ item: SkillReadinessItem) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: item.ready ? "checkmark.circle.fill" : item.icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(item.ready ? AppStyle.accent : item.color)
-                .frame(width: 18)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.title)
-                    .font(.system(size: 9.5, weight: .bold))
-                    .foregroundStyle(AppStyle.textSecondary)
-                    .lineLimit(1)
-                Text(item.detail)
-                    .font(.system(size: 8.5))
-                    .foregroundStyle(AppStyle.textTertiary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 7)
-        .frame(height: 30)
-        .skillRowSurface(selected: item.ready, tint: item.ready ? AppStyle.accent : item.color)
-        .animation(AgentToolsMotion.selection, value: item.ready)
     }
 
     private func inspectorQuickDeployment(_ skill: ManagedSkill) -> some View {
@@ -3522,13 +3408,6 @@ struct SkillsManagerView: View {
         selectedDiscoveryGroupIDs.remove(group.id)
     }
 
-    private func importAllDiscovered() {
-        run(L("正在导入全部发现 Skills…"), scanAfter: true) { engine in
-            _ = try engine.importAllDiscoveredSkills()
-        }
-        selectedDiscoveryGroupIDs.removeAll()
-    }
-
     private func importFilteredDiscovered() {
         importDiscoveredGroups(importableFilteredGroups, loadingText: L("正在导入当前筛选 Skills…"))
     }
@@ -4134,20 +4013,6 @@ struct SkillsManagerView: View {
             action: action)
     }
 
-    private func metricChip(title: String, value: String) -> some View {
-        HStack(spacing: 4) {
-            Text(title)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(AppStyle.textTertiary)
-            Text(value)
-                .font(.system(size: 10.5, weight: .bold))
-                .foregroundStyle(AppStyle.textSecondary)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 22)
-        .skillControlSurface()
-    }
-
     private func filterChip(title: String,
                             active: Bool,
                             color: Color,
@@ -4166,241 +4031,6 @@ struct SkillsManagerView: View {
             .skillControlSurface(active: active, tint: color)
         }
         .buttonStyle(PressScaleStyle())
-    }
-
-    private func toolSort(_ lhs: SkillToolInfo, _ rhs: SkillToolInfo) -> Bool {
-        if lhs.installed != rhs.installed { return lhs.installed && !rhs.installed }
-        if lhs.category != rhs.category { return lhs.category.rawValue < rhs.category.rawValue }
-        return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-    }
-}
-
-struct SkillAgentsPanelView: View {
-    @ObservedObject private var configStore = ConfigStore.shared
-    @State private var engine: SkillManagerEngine?
-    @State private var tools: [SkillToolInfo] = []
-    @State private var skills: [ManagedSkill] = []
-    @State private var loading = false
-    @State private var loadingText = ""
-    @State private var error: String?
-
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    if let error {
-                        ToolStatusLine(icon: "exclamationmark.triangle.fill", text: error, color: AppStyle.errorRed)
-                    }
-                    summaryPanel
-                    if loading && tools.isEmpty {
-                        loadingRow
-                    } else if tools.isEmpty {
-                        ToolEmptyState(
-                            icon: "cpu",
-                            title: L("没有可用 Agent"),
-                            detail: L("添加一个自定义 Agent，或确认 Codex / Claude 等工具目录存在。"))
-                            .skillPanelSurface()
-                    } else {
-                        ForEach(tools.sorted(by: toolSort)) { tool in
-                            SkillToolRow(
-                                tool: tool,
-                                syncedCount: skills.filter { skill in
-                                    skill.targets.contains { $0.tool == tool.key }
-                                }.count,
-                                onToggleEnabled: { toggleToolEnabled(tool) },
-                                onReveal: { reveal(tool.skillsDirectory) })
-                        }
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-            }
-            .scrollIndicators(.never)
-        }
-        .onAppear {
-            if engine == nil { reload() }
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 10) {
-            SkillRailBrand(
-                icon: "cpu",
-                title: "Agents",
-                subtitle: L("可接收 Skill 的 Agent 工具"),
-                tint: AppStyle.accent)
-            Spacer(minLength: 8)
-            IconOnlyButton(
-                systemName: "plus.circle",
-                help: L("添加自定义 Agent"),
-                size: 28,
-                symbolSize: 11,
-                weight: .semibold,
-                action: addCustomAgent)
-            IconOnlyButton(
-                systemName: "arrow.clockwise",
-                help: L("刷新"),
-                size: 28,
-                symbolSize: 11,
-                weight: .semibold,
-                action: reload)
-                .disabled(loading)
-        }
-        .padding(.trailing, 12)
-    }
-
-    private var summaryPanel: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            SkillPanelTitle(icon: "cpu", title: L("Agent 管理"), value: "\(enabledToolsCount)/\(tools.count)")
-            HStack(spacing: 6) {
-                ToolBadge(text: L("%ld 已启用", enabledToolsCount), color: AppStyle.accent, style: .muted, height: 20)
-                ToolBadge(text: L("%ld 已检测", installedToolsCount), color: AppStyle.textTertiary, style: .muted, height: 20)
-                ToolBadge(text: L("%ld Skills", deployedSkillCount), color: AppStyle.textTertiary, style: .muted, height: 20)
-                if loading {
-                    ProgressView().controlSize(.small)
-                    Text(loadingText)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(AppStyle.textTertiary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-        }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 10)
-        .skillPanelSurface()
-    }
-
-    private var loadingRow: some View {
-        HStack(spacing: 8) {
-            ProgressView().controlSize(.small)
-            Text(loadingText.isEmpty ? L("正在刷新 Agent…") : loadingText)
-                .font(.system(size: 12))
-                .foregroundStyle(AppStyle.textSecondary)
-            Spacer()
-        }
-        .padding(.vertical, 20)
-    }
-
-    private var enabledToolsCount: Int {
-        tools.filter(\.enabled).count
-    }
-
-    private var installedToolsCount: Int {
-        tools.filter(\.installed).count
-    }
-
-    private var deployedSkillCount: Int {
-        skills.reduce(0) { $0 + $1.targets.count }
-    }
-
-    private func reload() {
-        do {
-            let engine = try ensureEngine()
-            loading = true
-            loadingText = L("正在刷新 Agent…")
-            error = nil
-            Task {
-                let payload = await Task.detached(priority: .userInitiated) {
-                    (tools: engine.tools(), skills: engine.listSkills())
-                }.value
-                await MainActor.run {
-                    tools = payload.tools
-                    skills = payload.skills
-                    loading = false
-                    loadingText = ""
-                }
-            }
-        } catch {
-            self.error = error.localizedDescription
-            loading = false
-            loadingText = ""
-        }
-    }
-
-    private func addCustomAgent() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = L("选择")
-        panel.message = L("选择这个 Agent 的 skills 目录")
-        guard panel.runModal() == .OK, let url = panel.urls.first else { return }
-
-        let alert = NSAlert()
-        alert.messageText = L("自定义 Agent")
-        alert.informativeText = L("给这个 skills 目录起一个显示名称。")
-        alert.addButton(withTitle: L("添加"))
-        alert.addButton(withTitle: L("取消"))
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-        input.stringValue = url.deletingLastPathComponent().lastPathComponent.isEmpty
-            ? url.lastPathComponent
-            : url.deletingLastPathComponent().lastPathComponent
-        alert.accessoryView = input
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
-        let name = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        let bookmarkData = SecurityScopedBookmarks.bookmarkData(for: url)
-        run(L("正在添加自定义 Agent…")) { engine in
-            try engine.addCustomTool(
-                key: name,
-                displayName: name,
-                skillsDirectory: url,
-                bookmarkData: bookmarkData)
-        }
-    }
-
-    private func toggleToolEnabled(_ tool: SkillToolInfo) {
-        run(tool.enabled ? L("正在停用 Agent…") : L("正在启用 Agent…")) { engine in
-            try engine.setToolEnabled(tool.key, enabled: !tool.enabled)
-        }
-    }
-
-    private func run(_ message: String,
-                     operation: @escaping @Sendable (SkillManagerEngine) throws -> Void) {
-        do {
-            let engine = try ensureEngine()
-            loading = true
-            loadingText = message
-            error = nil
-            Task {
-                do {
-                    let payload = try await Task.detached(priority: .userInitiated) {
-                        try operation(engine)
-                        return (tools: engine.tools(), skills: engine.listSkills())
-                    }.value
-                    await MainActor.run {
-                        tools = payload.tools
-                        skills = payload.skills
-                        loading = false
-                        loadingText = ""
-                    }
-                } catch {
-                    await MainActor.run {
-                        self.error = error.localizedDescription
-                        loading = false
-                        loadingText = ""
-                    }
-                }
-            }
-        } catch {
-            self.error = error.localizedDescription
-            loading = false
-            loadingText = ""
-        }
-    }
-
-    private func ensureEngine() throws -> SkillManagerEngine {
-        if let engine { return engine }
-        let created = try SkillManagerEngine()
-        engine = created
-        return created
-    }
-
-    private func reveal(_ path: String) {
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
     private func toolSort(_ lhs: SkillToolInfo, _ rhs: SkillToolInfo) -> Bool {
@@ -4918,15 +4548,6 @@ private struct SkillDetailCockpit: View {
         Dictionary(skill.targets.map { ($0.tool, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
-    private var readinessScore: Double {
-        guard !readinessItems.isEmpty else { return 0 }
-        return Double(readinessItems.filter(\.ready).count) / Double(readinessItems.count)
-    }
-
-    private var readinessLabel: String {
-        "\(Int((readinessScore * 100).rounded()))%"
-    }
-
     private var healthColor: Color {
         switch skill.updateStatus {
         case "update_available": return AppStyle.waitAmber
@@ -5207,27 +4828,6 @@ private struct SkillDetailCockpit: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func quietReadinessRow(_ item: SkillReadinessItem) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: item.ready ? "checkmark.circle.fill" : item.icon)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(item.ready ? AppStyle.accent : item.color)
-                .frame(width: 18)
-            Text(item.title)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(AppStyle.textSecondary)
-                .frame(width: 86, alignment: .leading)
-            Text(item.detail)
-                .font(.system(size: 10.5))
-                .foregroundStyle(AppStyle.textTertiary)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-        .skillRowSurface(selected: !item.ready, tint: item.color)
     }
 
     private var deployContent: some View {

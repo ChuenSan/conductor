@@ -181,7 +181,7 @@ final class GhosttySurface: TerminalSurface {
         // 内容恢复：有待回放快照时换 wrapper 启动（cat 快照 → rm → exec 真 shell），
         // 路径与 shell 走 env 传参，避开引号/转义问题。
         var command = shell
-        var envPairs = startupEnvironmentPairs()
+        var envPairs = startupEnvironmentPairs(shell: shell)
         if let restoreFile = restoreContentFile,
            FileManager.default.fileExists(atPath: restoreFile),
            let wrapper = ScrollbackStore.ensureWrapperScript() {
@@ -216,10 +216,19 @@ final class GhosttySurface: TerminalSurface {
         }
         retainedUserdata = userdata
         syncGeometry(force: true)
+        applyRuntimeColorScheme()
+        hostView.refreshThemeBackground()
         ghostty_surface_set_occlusion(surface, true)   // 可见（bool 实为 visible）
         ghostty_surface_set_focus(surface, false)
         ghostty_surface_refresh(surface)
         flushPendingCommandIfReady()
+    }
+
+    private func applyRuntimeColorScheme() {
+        guard let surface else { return }
+        ghostty_surface_set_color_scheme(
+            surface,
+            GhosttyRuntime.colorScheme(for: ConfigStore.shared.config))
     }
 
     func syncGeometry(force: Bool = false) {
@@ -247,15 +256,27 @@ final class GhosttySurface: TerminalSurface {
     func reloadConfig() {
         guard let surface, let config = GhosttyRuntime.shared.config else { return }
         ghostty_surface_update_config(surface, config)
+        applyRuntimeColorScheme()
+        hostView.refreshThemeBackground()
         ghostty_surface_refresh(surface)
+        ghostty_surface_render_now(surface)
     }
 
-    private func startupEnvironmentPairs() -> [(key: String, value: String)] {
+    private func startupEnvironmentPairs(shell: String) -> [(key: String, value: String)] {
         var env: [String: String] = [
             "TERM": GhosttyRuntime.managedTerminalType,
             "COLORTERM": GhosttyRuntime.managedColorTerm,
             "TERM_PROGRAM": GhosttyRuntime.managedTerminalProgram,
         ]
+        let processEnv = ProcessInfo.processInfo.environment
+        let loginPATH = LoginShellPathCache.shared.currentOrCapture(shell: shell)
+        let effectivePATH = PathBuilder.effectivePATH(
+            purposes: [.tty, .nodeTooling],
+            env: processEnv,
+            loginPATH: loginPATH)
+        if !effectivePATH.isEmpty {
+            env["PATH"] = effectivePATH
+        }
         for (key, value) in extraEnvironment where !key.isEmpty {
             env[key] = value
         }
@@ -461,9 +482,40 @@ final class GhosttySurface: TerminalSurface {
         readText(tag: GHOSTTY_POINT_SCREEN)
     }
 
+    /// 读取整个屏幕 + 回滚缓冲的 VT 回放流。用于 session restore，保留 SGR 颜色/粗体等 TUI 样式。
+    func readAllVTText() -> String? {
+        readVTExport(bindingAction: "write_screen_file:copy,vt")
+    }
+
     /// 只读当前可见视口的纯文本（Mission Control 卡片预览用，按需调用、开销小）。
     func readViewportText() -> String? {
         readText(tag: GHOSTTY_POINT_VIEWPORT)
+    }
+
+    private func readVTExport(bindingAction: String) -> String? {
+        guard surface != nil else { return nil }
+        let exportedPath = GhosttyClipboardBridge.shared.captureNextStandardClipboardWrite {
+            performAction(bindingAction)
+        }
+        guard let exportedPath = Self.normalizedExportedScreenPath(exportedPath) else {
+            return nil
+        }
+
+        let fileURL = URL(fileURLWithPath: exportedPath)
+        defer {
+            if Self.shouldRemoveExportedScreenFile(fileURL) {
+                try? FileManager.default.removeItem(at: fileURL)
+                if Self.shouldRemoveExportedScreenDirectory(fileURL) {
+                    try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent())
+                }
+            }
+        }
+
+        guard let data = try? Data(contentsOf: fileURL),
+              let raw = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return Self.normalizedVTExportText(raw)
     }
 
     private func readText(tag: ghostty_point_tag_e) -> String? {
@@ -481,6 +533,34 @@ final class GhosttySurface: TerminalSurface {
         return String(
             bytes: UnsafeRawBufferPointer(start: pointer, count: Int(text.text_len)),
             encoding: .utf8)
+    }
+
+    private nonisolated static func normalizedExportedScreenPath(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let url = URL(string: trimmed),
+           url.isFileURL,
+           !url.path.isEmpty {
+            return url.path
+        }
+        return trimmed.hasPrefix("/") ? trimmed : nil
+    }
+
+    private nonisolated static func normalizedVTExportText(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: "\n")
+    }
+
+    private nonisolated static func shouldRemoveExportedScreenFile(_ fileURL: URL) -> Bool {
+        let standardizedFile = fileURL.standardizedFileURL
+        let temporary = FileManager.default.temporaryDirectory.standardizedFileURL
+        return standardizedFile.path.hasPrefix(temporary.path + "/")
+    }
+
+    private nonisolated static func shouldRemoveExportedScreenDirectory(_ fileURL: URL) -> Bool {
+        let directory = fileURL.deletingLastPathComponent().standardizedFileURL
+        let temporary = FileManager.default.temporaryDirectory.standardizedFileURL
+        return directory.path.hasPrefix(temporary.path + "/")
     }
 
     /// 当前 pane 前台进程 PID（用于识别在跑哪个 Agent）。无则 nil。

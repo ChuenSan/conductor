@@ -189,29 +189,6 @@ struct ThemedTextField: View {
     }
 }
 
-/// 主题化密码输入框（API key 用，遮罩显示）。
-struct ThemedSecureField: View {
-    let placeholder: String
-    @Binding var text: String
-    var width: CGFloat = 200
-    var onSubmit: () -> Void = {}
-
-    var body: some View {
-        SecureField(placeholder, text: $text)
-            .textFieldStyle(.plain)
-            .font(.system(size: 12.5, design: .monospaced))
-            .foregroundStyle(AppStyle.textPrimary)
-            .multilineTextAlignment(.leading)
-            .frame(maxWidth: width)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                    .fill(AppStyle.theme.isDark ? Color.white.opacity(0.05) : Color.black.opacity(0.04)))
-            .onSubmit(onSubmit)
-    }
-}
-
 /// 按下轻微缩放反馈的按钮样式（通用微交互）。
 struct PressScaleStyle: ButtonStyle {
     var pressedScale: CGFloat = 0.94

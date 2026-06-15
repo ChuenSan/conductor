@@ -48,14 +48,23 @@ final class GhosttyRuntime {
             GhosttyRuntime.routeAction(target: target, action: action)
         }
         // 剪贴板回调：缺这两个，libghostty 在「选中→复制」时会调空指针而崩溃。
-        rc.write_clipboard_cb = { _, _, content, count, _ in
+        rc.write_clipboard_cb = { _, location, content, count, _ in
             guard let content, count > 0 else { return }
-            let items = UnsafeBufferPointer(start: content, count: count)
+            let items = UnsafeBufferPointer(start: content, count: Int(count))
+            var fallback: String?
             for item in items {
                 guard let data = item.data else { continue }
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(String(cString: data), forType: .string)
-                return
+                let value = String(cString: data)
+                if let mime = item.mime, String(cString: mime).hasPrefix("text/plain") {
+                    GhosttyClipboardBridge.shared.writeString(value, to: location)
+                    return
+                }
+                if fallback == nil {
+                    fallback = value
+                }
+            }
+            if let fallback {
+                GhosttyClipboardBridge.shared.writeString(fallback, to: location)
             }
         }
         rc.read_clipboard_cb = { userdata, _, state in
@@ -75,6 +84,7 @@ final class GhosttyRuntime {
         }
         self.app = created
         self.config = config
+        applyColorScheme(for: ConfigStore.shared.config)
         ghostty_app_set_focus(created, true)
         NSLog("[conductor] ghostty runtime started")
     }
@@ -110,9 +120,21 @@ final class GhosttyRuntime {
     func applyConfig(_ appConfig: AppConfig) {
         guard let app, let newConfig = Self.makeConfig(from: appConfig) else { return }
         ghostty_app_update_config(app, newConfig)
+        applyColorScheme(for: appConfig)
         let old = config
         config = newConfig
         if let old { ghostty_config_free(old) }
+    }
+
+    func applyColorScheme(for appConfig: AppConfig) {
+        guard let app else { return }
+        ghostty_app_set_color_scheme(app, Self.colorScheme(for: appConfig))
+    }
+
+    static func colorScheme(for appConfig: AppConfig) -> ghostty_color_scheme_e {
+        ThemePalette.resolve(appConfig.appearance).isDark
+            ? GHOSTTY_COLOR_SCHEME_DARK
+            : GHOSTTY_COLOR_SCHEME_LIGHT
     }
 
     /// 把 `AppConfig` 翻译成 libghostty 的 `key = value` 配置串(高扩展:数据驱动)。

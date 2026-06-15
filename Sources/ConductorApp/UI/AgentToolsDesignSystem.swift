@@ -278,6 +278,110 @@ struct AgentToolsLinkButton: View {
     }
 }
 
+struct AgentToolsWorkbenchBrand: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    var tint: Color = AppStyle.accent
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(RoundedRectangle(cornerRadius: Radius.sm + 1, style: .continuous).fill(tint.opacity(0.12)))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AppStyle.textPrimary)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+    }
+}
+
+struct AgentToolsWorkbenchRailSection<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 9.5, weight: .bold))
+                .foregroundStyle(AppStyle.textTertiary)
+                .padding(.horizontal, 9)
+                .textCase(.uppercase)
+            content
+        }
+    }
+}
+
+struct AgentToolsWorkbenchRailButton: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    var badge: String?
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+                    .frame(width: 18)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 11.5, weight: selected ? .bold : .semibold))
+                        .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.system(size: 8.8, weight: .medium))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                if let badge {
+                    Text(badge)
+                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 38)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                    .fill(selected ? AppStyle.accent.opacity(0.12) : Color.clear))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                    .stroke(selected ? AppStyle.accent.opacity(0.28) : Color.clear, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+        }
+        .buttonStyle(PressScaleStyle())
+        .help(subtitle)
+    }
+}
+
 private struct AgentToolsPageModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
@@ -291,15 +395,15 @@ extension View {
         modifier(AgentToolsPageModifier())
     }
 
-    /// 通透表面，替代不透明 toolsCard。
-    /// 深色：真·磨砂玻璃（`.ultraThinMaterial`）；浅色：磨砂会发白成"大白卡片"，
-    /// 改成几乎无填充 + 一条极淡描边，content 直接坐在底色上，保持通透不发白。
+    /// Agent Tools 内容面。这里不用系统 material：内容层叠 material 在深色主题下会压成黑块，
+    /// 看起来像另一个嵌入式应用。改为主题内的轻量 surface，让所有模块保持同一画布语言。
     func agentToolsGlass(cornerRadius: CGFloat = Radius.lg) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let theme = AppStyle.theme
         let fill: AnyShapeStyle = AppStyle.theme.isDark
-            ? AnyShapeStyle(.ultraThinMaterial)
+            ? AnyShapeStyle(theme.elevated.opacity(0.34))
             : AnyShapeStyle(Color.black.opacity(0.022))
         return background(shape.fill(fill))
-            .overlay(shape.strokeBorder(AppStyle.separator.opacity(0.5), lineWidth: 1))
+            .overlay(shape.strokeBorder(AppStyle.separator.opacity(theme.isDark ? 0.62 : 0.5), lineWidth: 1))
     }
 }

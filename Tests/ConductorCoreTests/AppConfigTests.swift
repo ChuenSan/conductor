@@ -14,6 +14,7 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.appearance.cursorStyle, "bar")
         XCTAssertEqual(c.terminal.scrollback, 60000)
         XCTAssertTrue(c.terminal.confirmCloseRunning)
+        XCTAssertTrue(c.terminal.autoResumeAgentSessions)
         XCTAssertTrue(c.terminal.aiAgents.isEmpty)
         XCTAssertEqual(c.behavior.newTabCwd, "workspace")
         XCTAssertTrue(c.keybindings.isEmpty)
@@ -27,6 +28,7 @@ final class AppConfigTests: XCTestCase {
                           "padding": { "x": 8, "y": 6 }, "cursorStyle": "block" },
           "terminal": { "shell": "/bin/bash", "scrollback": 5000, "copyOnSelect": true,
                         "confirmCloseRunning": false,
+                        "autoResumeAgentSessions": false,
                         "aiAgents": [
                           { "id": "codex", "title": "Codex", "command": "codex", "enabled": true },
                           { "id": "local", "title": "Local Agent", "command": "local-agent", "enabled": false }
@@ -44,6 +46,7 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.terminal.shell, "/bin/bash")
         XCTAssertEqual(c.terminal.scrollback, 5000)
         XCTAssertTrue(c.terminal.copyOnSelect)
+        XCTAssertFalse(c.terminal.autoResumeAgentSessions)
         XCTAssertEqual(c.terminal.aiAgents.map(\.id), ["codex", "local"])
         XCTAssertEqual(c.terminal.aiAgents[1].title, "Local Agent")
         XCTAssertEqual(c.terminal.aiAgents[1].command, "local-agent")

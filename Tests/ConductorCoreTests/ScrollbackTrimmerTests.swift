@@ -22,4 +22,21 @@ final class ScrollbackTrimmerTests: XCTestCase {
     func testShortTextUnchanged() {
         XCTAssertEqual(ScrollbackTrimmer.trim("hello\nworld"), "hello\nworld")
     }
+
+    func testDefaultsMatchSessionRestoreBudget() {
+        XCTAssertEqual(ScrollbackTrimmer.defaultMaxLines, 4000)
+        XCTAssertEqual(ScrollbackTrimmer.defaultMaxBytes, 400_000)
+    }
+
+    func testStripsTerminalColorOSC() {
+        let text = "a\u{1B}]10;#ffffff\u{07}b\u{1B}]104\u{1B}\\c"
+        XCTAssertEqual(ScrollbackTrimmer.trim(text), "abc")
+    }
+
+    func testWrapsANSIResetWhenReplayContainsEscapeState() {
+        let reset = "\u{1B}[0m"
+        let trimmed = ScrollbackTrimmer.trim("plain \u{1B}[31mred")
+        XCTAssertTrue(trimmed.hasPrefix(reset))
+        XCTAssertTrue(trimmed.hasSuffix(reset))
+    }
 }

@@ -83,12 +83,6 @@ enum BrowserEngine {
     case gecko
 }
 
-/// Defaults for browser selection.
-public enum BrowserCookieDefaults {
-    /// Preferred order to search for cookies when no user preference exists.
-    public static let importOrder: [Browser] = Browser.defaultImportOrder
-}
-
 /// Chromium profile root locations for supported browsers.
 public struct ChromiumProfileRoot: Sendable {
     public let browser: Browser

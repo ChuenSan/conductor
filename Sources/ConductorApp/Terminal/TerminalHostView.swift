@@ -36,6 +36,10 @@ final class TerminalHostView: NSView {
         return layer
     }
 
+    func refreshThemeBackground() {
+        layer?.backgroundColor = AppStyle.cardBackground.cgColor
+    }
+
     /// 禁用图层隐式动画：resize 时 Metal 层立即呈现，不被动画过渡。
     private func configureLayer(_ layer: CALayer?) {
         layer?.actions = [

@@ -36,6 +36,11 @@ enum HookInstaller {
         "[ -n \"$CONDUCTOR_PANE_ID\" ] && '\(scriptURL.path)' busy >/dev/null 2>&1 || true #conductor:\(recipeID)"
     }
 
+    /// 写入 SessionStart hook 的命令：尽早记录 agent 原生 session id（若该 CLI 在 stdin 里提供）。
+    static var sessionStartCommand: String {
+        "[ -n \"$CONDUCTOR_PANE_ID\" ] && '\(scriptURL.path)' session-start >/dev/null 2>&1 || true #conductor:\(recipeID)"
+    }
+
     // MARK: - 状态
 
     static func status() -> Status {
@@ -51,9 +56,10 @@ enum HookInstaller {
     private static func configHasNotify(_ source: HookSource) -> Bool {
         let managed = HookConfigDocument(source: source).entries()
             .filter { $0.command.contains("#conductor:\(recipeID)") }
-        // Stop（完成通知/熄灭）与 UserPromptSubmit（点亮思考）都在才算配置完整。
+        // Stop（完成通知/熄灭）、UserPromptSubmit（点亮思考）与 SessionStart（记录 session）都在才算配置完整。
         return managed.contains { $0.event == HookEventName.stop }
             && managed.contains { $0.event == HookEventName.userPromptSubmit }
+            && managed.contains { $0.event == HookEventName.sessionStart }
     }
 
     // MARK: - 安装
@@ -69,6 +75,7 @@ enum HookInstaller {
                 try doc.removeCommands(containing: "#cmux:")
                 try doc.addCommand(event: HookEventName.stop, command: stopCommand)
                 try doc.addCommand(event: HookEventName.userPromptSubmit, command: busyCommand)
+                try doc.addCommand(event: HookEventName.sessionStart, command: sessionStartCommand)
             }
         } catch {
             throw InstallError.write(L("写 hook 配置失败：%@", error.localizedDescription))
@@ -96,18 +103,59 @@ enum HookInstaller {
         # 用法：
         #   conductor-notify          Stop hook：完成通知 + 熄灭思考动效（点击通知跳回对应 pane）
         #   conductor-notify busy     UserPromptSubmit hook：点亮思考动效，不发通知
+        #   conductor-notify session-start  SessionStart hook：记录原生 session id，不发通知
         INBOX="$HOME/Library/Application Support/conductor/hooks-inbox"
         mkdir -p "$INBOX"
         PANE="${CONDUCTOR_PANE_ID:-}"
+        AGENT="${CONDUCTOR_AGENT_ID:-}"
+        PAYLOAD=""
+        if [ ! -t 0 ]; then
+          PAYLOAD="$(cat 2>/dev/null || true)"
+        fi
 
         esc() { printf '%s' "$1" | tr '\\n\\r\\t' '   ' | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g'; }
+        json_get() {
+          key="$1"
+          printf '%s' "$PAYLOAD" | sed -n "s/.*\\"$key\\"[[:space:]]*:[[:space:]]*\\"\\([^\\"]*\\)\\".*/\\1/p" | head -n 1
+        }
+        first_nonempty() {
+          for value in "$@"; do
+            if [ -n "$value" ]; then printf '%s' "$value"; return 0; fi
+          done
+          return 1
+        }
+
+        SESSION_ID="$(first_nonempty "${CONDUCTOR_SESSION_ID:-}" "${CLAUDE_SESSION_ID:-}" "${CODEX_SESSION_ID:-}" "${SESSION_ID:-}" "$(json_get session_id)" "$(json_get sessionId)" "$(json_get sessionID)")"
+        CWD="$(first_nonempty "$(json_get cwd)" "$(json_get working_directory)" "$(json_get workingDirectory)" "${PWD:-}")"
+        TRANSCRIPT_PATH="$(first_nonempty "$(json_get transcript_path)" "$(json_get transcriptPath)")"
+        LIFECYCLE="$(first_nonempty "$(json_get lifecycle)" "$(json_get state)")"
+
+        write_event() {
+          typ="$1"
+          title="$2"
+          message="$3"
+          {
+            printf '{"type":"%s","paneId":"%s"' "$(esc "$typ")" "$(esc "$PANE")"
+            [ -n "$AGENT" ] && printf ',"agent":"%s"' "$(esc "$AGENT")"
+            [ -n "$SESSION_ID" ] && printf ',"sessionId":"%s"' "$(esc "$SESSION_ID")"
+            [ -n "$CWD" ] && printf ',"cwd":"%s"' "$(esc "$CWD")"
+            [ -n "$TRANSCRIPT_PATH" ] && printf ',"transcriptPath":"%s"' "$(esc "$TRANSCRIPT_PATH")"
+            [ -n "$LIFECYCLE" ] && printf ',"lifecycle":"%s"' "$(esc "$LIFECYCLE")"
+            [ -n "$title" ] && printf ',"title":"%s"' "$(esc "$title")"
+            [ -n "$message" ] && printf ',"message":"%s"' "$(esc "$message")"
+            printf '}\\n'
+          } > "$F"
+        }
+
         F="$INBOX/$(date +%s)-$$.json"
         if [ "$1" = "busy" ]; then
-          printf '{"type":"busy","paneId":"%s"}\\n' "$(esc "$PANE")" > "$F"
+          write_event "busy" "" ""
+        elif [ "$1" = "session-start" ]; then
+          write_event "sessionStart" "" ""
         else
           TITLE="AI 已完成"
           MSG="可以查看结果了"
-          printf '{"type":"done","paneId":"%s","title":"%s","message":"%s"}\\n' "$(esc "$PANE")" "$(esc "$TITLE")" "$(esc "$MSG")" > "$F"
+          write_event "done" "$TITLE" "$MSG"
         fi
         exit 0
         """

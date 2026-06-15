@@ -207,6 +207,57 @@ extension AppCoordinator {
         return text ?? ""
     }
 
+    // MARK: - surface resume
+
+    func automationSetSurfaceResume(
+        paneRef: String?,
+        kind: String,
+        checkpoint: String?,
+        command: String,
+        autoResume: Bool,
+        trusted: Bool
+    ) throws -> SurfaceResumeBinding {
+        let pane = try automationFindPane(paneRef)
+        let binding = SurfaceResumeBinding(
+            paneID: pane.value,
+            kind: kind.isEmpty ? "shell" : kind,
+            checkpoint: checkpoint,
+            command: command,
+            cwd: paneCwds[pane],
+            autoResume: autoResume && trusted,
+            trusted: trusted)
+        guard binding.isUsable else {
+            throw AutomationError.badRequest("resume command 不能为空")
+        }
+        try surfaceResumeBindings.set(binding)
+        return binding
+    }
+
+    func automationShowSurfaceResume(paneRef: String?) throws -> SurfaceResumeBinding? {
+        let pane = try automationFindPane(paneRef)
+        return surfaceResumeBindings.binding(for: pane.value)
+    }
+
+    @discardableResult
+    func automationClearSurfaceResume(paneRef: String?) throws -> SurfaceResumeBinding? {
+        let pane = try automationFindPane(paneRef)
+        return try surfaceResumeBindings.clear(paneID: pane.value)
+    }
+
+    func automationDescribe(binding: SurfaceResumeBinding) -> JSONValue {
+        .object([
+            "pane": .string(binding.paneID),
+            "kind": .string(binding.kind),
+            "checkpoint": binding.checkpoint.map(JSONValue.string) ?? .null,
+            "command": .string(binding.command),
+            "restoreCommand": .string(binding.restoreCommand),
+            "cwd": binding.cwd.map(JSONValue.string) ?? .null,
+            "autoResume": .bool(binding.autoResume),
+            "trusted": .bool(binding.trusted),
+            "updatedAt": .double(binding.updatedAt.timeIntervalSince1970),
+        ])
+    }
+
     // MARK: - 通知
 
     func automationNotify(paneRef: String?, title: String, body: String) {
@@ -254,8 +305,28 @@ extension AppCoordinator {
         ]
         if let branch = paneBranches[pane] { fields["branch"] = .string(branch) }
         if let agent = paneAgents[pane] { fields["agent"] = .string(agent) }
+        if let session = agentSessionBindings.ref(for: pane.value) {
+            fields["restorableSession"] = automationDescribe(session: session)
+        }
+        if let binding = surfaceResumeBindings.binding(for: pane.value) {
+            fields["resumeBinding"] = automationDescribe(binding: binding)
+        }
         if let tab { fields["active"] = .bool(tab.activePane == pane) }
         return .object(fields)
+    }
+
+    func automationDescribe(session: AgentSessionRef) -> JSONValue {
+        .object([
+            "agent": .string(session.agent),
+            "sessionId": .string(session.sessionID),
+            "cwd": session.cwd.map(JSONValue.string) ?? .null,
+            "transcriptPath": session.transcriptPath.map(JSONValue.string) ?? .null,
+            "updatedAt": session.updatedAt.map { .double($0.timeIntervalSince1970) } ?? .null,
+            "wasRunning": session.wasRunning.map(JSONValue.bool) ?? .null,
+            "lifecycle": session.lifecycle.map { .string($0.rawValue) } ?? .null,
+            "resumeCommand": session.resumeCommand.map(JSONValue.string) ?? .null,
+            "launchCommand": session.launchCommand.map { .string($0.shellCommand) } ?? .null,
+        ])
     }
 
     func automationTree(workspaceRef: String?) throws -> JSONValue {

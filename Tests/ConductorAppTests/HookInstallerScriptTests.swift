@@ -25,7 +25,10 @@ final class HookInstallerScriptTests: XCTestCase {
         env["HOME"] = fakeHome.path
         env["CONDUCTOR_PANE_ID"] = "p-test-123"
         process.environment = env
+        let stdin = Pipe()
+        process.standardInput = stdin
         try process.run()
+        try stdin.fileHandleForWriting.close()
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0)
 
@@ -40,5 +43,52 @@ final class HookInstallerScriptTests: XCTestCase {
         let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         XCTAssertEqual(obj?["paneId"] as? String, "p-test-123")
         XCTAssertFalse((obj?["title"] as? String ?? "").isEmpty)
+    }
+
+    func testGeneratedScriptCapturesSessionBindingPayload() throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent("conductor-hook-test-\(UUID().uuidString)")
+        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: tmp) }
+
+        let scriptURL = tmp.appendingPathComponent("conductor-notify")
+        try HookInstaller.scriptBody.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+
+        let fakeHome = tmp.appendingPathComponent("home")
+        try fm.createDirectory(at: fakeHome, withIntermediateDirectories: true)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [scriptURL.path, "busy"]
+        var env = ProcessInfo.processInfo.environment
+        env["HOME"] = fakeHome.path
+        env["CONDUCTOR_PANE_ID"] = "p-test-456"
+        env["CONDUCTOR_AGENT_ID"] = "codex"
+        process.environment = env
+        let stdin = Pipe()
+        process.standardInput = stdin
+        try process.run()
+        let payload = #"{"session_id":"sess-456","cwd":"/tmp/project","transcript_path":"/tmp/project/rollout.jsonl","lifecycle":"running"}"#
+        try stdin.fileHandleForWriting.write(contentsOf: Data(payload.utf8))
+        try stdin.fileHandleForWriting.close()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+
+        let inbox = fakeHome
+            .appendingPathComponent("Library/Application Support/conductor/hooks-inbox")
+        let files = try fm.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" }
+        XCTAssertEqual(files.count, 1, "应恰好生成一个 JSON 文件")
+
+        let data = try Data(contentsOf: files[0])
+        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertEqual(obj?["type"] as? String, "busy")
+        XCTAssertEqual(obj?["paneId"] as? String, "p-test-456")
+        XCTAssertEqual(obj?["agent"] as? String, "codex")
+        XCTAssertEqual(obj?["sessionId"] as? String, "sess-456")
+        XCTAssertEqual(obj?["cwd"] as? String, "/tmp/project")
+        XCTAssertEqual(obj?["transcriptPath"] as? String, "/tmp/project/rollout.jsonl")
+        XCTAssertEqual(obj?["lifecycle"] as? String, "running")
     }
 }
