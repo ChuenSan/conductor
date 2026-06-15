@@ -262,6 +262,23 @@ final class GhosttySurface: TerminalSurface {
         ghostty_surface_render_now(surface)
     }
 
+    func handleConfigChange() {
+        applyRuntimeColorScheme()
+        hostView.refreshThemeBackground()
+        forceRedraw()
+    }
+
+    func handleColorChange(_ change: ghostty_action_color_change_s) {
+        guard change.kind == GHOSTTY_ACTION_COLOR_KIND_BACKGROUND else { return }
+        let color = GhosttyRuntime.color(from: change)
+        hostView.refreshThemeBackground(color)
+        if let surface {
+            ghostty_surface_set_color_scheme(surface, GhosttyRuntime.colorScheme(forBackground: color))
+            ghostty_surface_refresh(surface)
+            ghostty_surface_render_now(surface)
+        }
+    }
+
     private func startupEnvironmentPairs(shell: String) -> [(key: String, value: String)] {
         var env: [String: String] = [
             "TERM": GhosttyRuntime.managedTerminalType,

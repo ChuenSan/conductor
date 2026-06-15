@@ -28,7 +28,7 @@ final class TerminalHostView: NSView {
         let layer = CAMetalLayer()
         layer.framebufferOnly = false
         layer.isOpaque = true
-        layer.backgroundColor = AppStyle.cardBackground.cgColor
+        layer.backgroundColor = GhosttyRuntime.terminalBackgroundColor(for: ConfigStore.shared.config).cgColor
         layer.masksToBounds = true
         layer.cornerRadius = Radius.md       // 与卡片圆角一致
         layer.cornerCurve = .continuous
@@ -37,7 +37,11 @@ final class TerminalHostView: NSView {
     }
 
     func refreshThemeBackground() {
-        layer?.backgroundColor = AppStyle.cardBackground.cgColor
+        refreshThemeBackground(GhosttyRuntime.terminalBackgroundColor(for: ConfigStore.shared.config))
+    }
+
+    func refreshThemeBackground(_ color: NSColor) {
+        layer?.backgroundColor = color.cgColor
     }
 
     /// 禁用图层隐式动画：resize 时 Metal 层立即呈现，不被动画过渡。

@@ -161,6 +161,9 @@ final class GhosttyRuntime {
         set("cursor-color", theme.cursor)
         set("selection-background", theme.selection)
         set("selection-foreground", theme.selectionForeground)
+        // Match cmux: let Ghostty's macOS renderer use the host layer as the
+        // default backdrop so OSC background probes and AppKit chrome agree.
+        set("macos-background-from-layer", "true")
         for (index, color) in theme.ansi.enumerated() {
             append("palette", "\(index)=#\(color)")
         }
@@ -204,7 +207,28 @@ final class GhosttyRuntime {
         target: ghostty_target_s,
         action: ghostty_action_s
     ) -> Bool {
-        guard target.tag == GHOSTTY_TARGET_SURFACE else { return false }
+        guard target.tag == GHOSTTY_TARGET_SURFACE else {
+            switch action.tag {
+            case GHOSTTY_ACTION_COLOR_CHANGE:
+                let change = action.action.color_change
+                Task { @MainActor in
+                    GhosttyRuntime.shared.handleAppColorChange(change)
+                }
+                return true
+            case GHOSTTY_ACTION_CONFIG_CHANGE:
+                Task { @MainActor in
+                    GhosttyRuntime.shared.applyColorScheme(for: ConfigStore.shared.config)
+                }
+                return true
+            case GHOSTTY_ACTION_RELOAD_CONFIG:
+                Task { @MainActor in
+                    GhosttyRuntime.shared.applyConfig(ConfigStore.shared.config)
+                }
+                return true
+            default:
+                return false
+            }
+        }
         let surfaceHandle = target.target.surface
 
         switch action.tag {
@@ -297,9 +321,68 @@ final class GhosttyRuntime {
                     .handleProgressReport(state: state, percent: percent)
             }
             return true
+        case GHOSTTY_ACTION_COLOR_CHANGE:
+            let change = action.action.color_change
+            Task { @MainActor in
+                GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleColorChange(change)
+            }
+            return true
+        case GHOSTTY_ACTION_CONFIG_CHANGE:
+            Task { @MainActor in
+                GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleConfigChange()
+            }
+            return true
+        case GHOSTTY_ACTION_RELOAD_CONFIG:
+            Task { @MainActor in
+                GhosttySurface.fromGhosttySurface(surfaceHandle)?.reloadConfig()
+            }
+            return true
         default:
             return false
         }
+    }
+
+    @MainActor
+    private func handleAppColorChange(_ change: ghostty_action_color_change_s) {
+        if change.kind == GHOSTTY_ACTION_COLOR_KIND_BACKGROUND {
+            let color = Self.color(from: change)
+            ghostty_app_set_color_scheme(app, Self.colorScheme(forBackground: color))
+        }
+    }
+
+    @MainActor
+    static func terminalBackgroundColor(for appConfig: AppConfig) -> NSColor {
+        color(hex: ThemePalette.resolve(appConfig.appearance).background)
+    }
+
+    nonisolated static func color(from change: ghostty_action_color_change_s) -> NSColor {
+        NSColor(
+            red: CGFloat(change.r) / 255,
+            green: CGFloat(change.g) / 255,
+            blue: CGFloat(change.b) / 255,
+            alpha: 1)
+    }
+
+    private static func color(hex: String) -> NSColor {
+        let value = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard value.count >= 6,
+              let r = UInt8(value.prefix(2), radix: 16),
+              let g = UInt8(value.dropFirst(2).prefix(2), radix: 16),
+              let b = UInt8(value.dropFirst(4).prefix(2), radix: 16)
+        else { return .windowBackgroundColor }
+        return NSColor(
+            red: CGFloat(r) / 255,
+            green: CGFloat(g) / 255,
+            blue: CGFloat(b) / 255,
+            alpha: 1)
+    }
+
+    static func colorScheme(forBackground color: NSColor) -> ghostty_color_scheme_e {
+        let converted = color.usingColorSpace(.sRGB) ?? color
+        let luma = 0.299 * Double(converted.redComponent * 255)
+            + 0.587 * Double(converted.greenComponent * 255)
+            + 0.114 * Double(converted.blueComponent * 255)
+        return luma < 128 ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT
     }
 }
 
