@@ -108,10 +108,18 @@
 
 | # | 功能 | 现状（已核实） | 决策 | 验收要点 | 状态 |
 |---|---|---|---|---|---|
-| 1 | **Feed 内联审批** | **无内联审批**：agent 要权限/ExitPlan/提问时，目前只有"待处理提示"（`thinkingPanes`/`unseenDonePanes` 点），要批准还得跳进 pane 手敲。 | 新建 | agent 权限请求 / ExitPlan / AskUserQuestion 在 app 内用按钮直接处理（Once / Always / All tools / Deny）；带软超时与审计日志；**双接口**：socket 也能 list 待批项 + approve/deny。对标 cmux Feed（`~/Desktop/_research/cmux/docs/feed.md`）。 | ⬜ |
+| 1 | **Feed 内联审批** | **无内联审批**：agent 要权限/ExitPlan/提问时，目前只有"待处理提示"（`thinkingPanes`/`unseenDonePanes` 点），要批准还得跳进 pane 手敲。 | 新建 | agent 权限请求 / ExitPlan / AskUserQuestion 在 app 内用按钮直接处理（Once / Always / All tools / Deny）；带软超时与审计日志；**双接口**：socket 也能 list 待批项 + approve/deny。对标 cmux Feed（`~/Desktop/_research/cmux/docs/feed.md`）。 | 🔄 |
+
+**Feed 进度**（拆切片做，每片独立 commit）：
+- ✅ **底座**（commit `7b9ebe8`）：`ConductorCore/Feed` 纯逻辑——请求模型 + 策略/规则引擎（deny 压 allow、记忆规则、glob），12 测试。
+- ⬜ **socket 阻塞 gate**：`AutomationService` 加 `feed.request` 异步 handler——注册待批项后 `await` continuation 挂起连接（socket handler 本就是 async，可行），GUI/规则决策后回包放行/拒绝 agent；处理客户端断开→默认拒绝，软超时。
+- ⬜ **GUI 面板**：右侧 Feed 队列，看清要批什么（命令 X-ray/计划/选项）+ Once/Always/All/Deny 按钮。
+- ⬜ **hook 安装**：Claude `PreToolUse` / Codex 等价 hook 调阻塞 CLI（对标 cmux 多 agent hook 桥）。
+- ⬜ **双接口 + 审计**：`feed list/approve/deny` socket 命令；决策留痕。
+- ⬜ **UI 真验**：dev 构建跑通真实 agent 审批（独立 bundle，不碰用户实例）。
 | 2 | **内置浏览器 pane + 可脚本化浏览器 API** | **完全无**。可复用资产：`SweetCookieKit` 已能导入 Chrome/Safari/Gecko cookie（做开箱登录态）。 | 新建 | WKWebView 分屏 pane；地址栏/omnibar、前进后退/刷新/缩放/页内查找/DevTools；cookie 导入登录态；CLI 自动化（navigate/click/fill/type/eval/wait/screenshot/snapshot），对标 cmux `docs/agent-browser-port-spec.md`。**体量大，可拆多个 commit，但每个 commit 都要稳定可测。** | ⬜ |
 
-**P0 旁的快速清理（先做，省电）**：`WorkspaceMetadataCenter` 里 **lsof 端口扫描（每 15s）+ `gh` PR 扫描（每 180s 起 subprocess）的产出 `.ports`/`.pullRequests` 全 Sources 零消费**（GUI 没读、socket 也没读）——纯耗电空转，**删掉这两个扫描器及相关字段/Timer**。`status / progress / log` 是 `AutomationService` 的 socket 接口（agent 在用），**保留**。
+**P0 旁的快速清理（先做，省电）**：`WorkspaceMetadataCenter` 里 **lsof 端口扫描（每 15s）+ `gh` PR 扫描（每 180s 起 subprocess）的产出 `.ports`/`.pullRequests` 全 Sources 零消费**（GUI 没读、socket 也没读）——纯耗电空转，**删掉这两个扫描器及相关字段/Timer**。`status / progress / log` 是 `AutomationService` 的 socket 接口（agent 在用），**保留**。 ✅ **已完成**（commit `afa8263`；验证：grep 零引用 + `swift build` 通过 + 390 测试全绿，含新增 `WorkspaceMetadataCenterTests` 8 例）。
 
 #### P0 子功能树（从功能自身出发，不是套 Skills 的维度）
 
