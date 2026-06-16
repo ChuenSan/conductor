@@ -216,7 +216,10 @@ public final class SkillManagerEngine: @unchecked Sendable {
 
         let item = items.remove(at: index)
         items.insert(item, at: destination)
-        preset.skills = normalizePresetOrder(items)
+        // 按数组新位置重排 order。不能再走 normalizePresetOrder——它先按 order 排序，
+        // 而被移动的 item 还带着旧 order，会把刚做的移动又抵消掉（reorder 此前不生效的根因）。
+        for i in items.indices { items[i].order = i }
+        preset.skills = items
         preset.updatedAt = Date()
         try store.upsertPreset(preset)
         audit("preset_reorder", detail: preset.name)
