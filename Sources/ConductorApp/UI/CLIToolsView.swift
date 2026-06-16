@@ -217,6 +217,8 @@ struct CLIToolsView: View {
     /// 通知 hook 安装状态。
     @State private var hookStatus = HookInstaller.status()
     @State private var hookError: String?
+    @State private var feedHookStatus = FeedHookInstaller.status()
+    @State private var feedHookError: String?
     @State private var inspectorMode: CLIInspectorMode = .tools
     @State private var selectedProviderID: String?
 
@@ -254,6 +256,7 @@ struct CLIToolsView: View {
     private var cliToolsWorkbench: some View {
         cliInventoryStrip
         notificationCard
+        feedApprovalCard
         if results.isEmpty, detecting {
             loadingPlaceholder
         } else {
@@ -526,6 +529,75 @@ struct CLIToolsView: View {
             color: on ? AppStyle.doneGreen : AppStyle.textTertiary,
             style: on ? .soft : .muted,
             height: 22)
+    }
+
+    private var feedApprovalCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "shield.lefthalf.filled")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppStyle.accent)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                            .fill(AppStyle.accent.opacity(0.12)))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("工具审批"))
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(AppStyle.textPrimary)
+                    Text(L("Claude 执行命令/改文件前先在审批面板确认，拒绝即拦截；socket 不可用时自动放行不卡 agent。仅作用于 Conductor 启动的 Claude。"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(AppStyle.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 6) {
+                hookBadge(L("脚本"), feedHookStatus.scriptInstalled)
+                hookBadge("Claude", feedHookStatus.claudeConfigured)
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                if feedHookStatus.allDone {
+                    ToolActionButton(title: L("停用工具审批"), role: .secondary, action: uninstallFeedHook)
+                } else {
+                    ToolActionButton(title: L("启用工具审批"), role: .primary, action: installFeedHook)
+                }
+                Spacer()
+            }
+
+            if let feedHookError {
+                Text(feedHookError)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(AppStyle.errorRed)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Space.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .toolsCard()
+    }
+
+    private func installFeedHook() {
+        feedHookError = nil
+        do {
+            feedHookStatus = try FeedHookInstaller.installAll()
+        } catch {
+            feedHookError = error.localizedDescription
+            feedHookStatus = FeedHookInstaller.status()
+        }
+    }
+
+    private func uninstallFeedHook() {
+        feedHookError = nil
+        do {
+            try FeedHookInstaller.uninstall()
+        } catch {
+            feedHookError = error.localizedDescription
+        }
+        feedHookStatus = FeedHookInstaller.status()
     }
 
     private func installHooks() {
