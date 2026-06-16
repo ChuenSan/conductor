@@ -161,9 +161,10 @@ final class GhosttyRuntime {
         set("cursor-color", theme.cursor)
         set("selection-background", theme.selection)
         set("selection-foreground", theme.selectionForeground)
-        // Match cmux: let Ghostty's macOS renderer use the host layer as the
-        // default backdrop so OSC background probes and AppKit chrome agree.
-        set("macos-background-from-layer", "true")
+        // 不开 macos-background-from-layer：codex 这类「只用 default 前景/背景色」渲染的 TUI，
+        // 输入框背景就是终端 default bg。若 default bg 取自 NSView layer，切主题只改了 layer 颜色、
+        // ghostty 不会重绘已画好的 default-bg 单元格 → codex 输入框卡在旧色不跟随（暗色主题下显白看不清）。
+        // 让 default bg 直接由 config `background` 渲染：切主题 → update_config 改 background → 重绘即跟随。
         for (index, color) in theme.ansi.enumerated() {
             append("palette", "\(index)=#\(color)")
         }
