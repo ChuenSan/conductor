@@ -694,12 +694,12 @@ final class AppCoordinator: ObservableObject {
         }
         activityLog.record(paneID: pane, agentID: pane.flatMap { paneAgents[$0] },
                            title: title, message: event.message, duration: duration)
-        var body = event.message
-        if let duration {
-            let took = L("耗时 %@", AgentActivityEntry.durationText(duration))
-            body = body.isEmpty ? took : body + "\n" + took
-        }
-        NotificationManager.shared.notify(paneID: event.paneID, title: title, body: body)
+        let durationSuffix = duration.map { L("耗时 %@", AgentActivityEntry.durationText($0)) }
+        deliverDoneNotification(
+            paneID: event.paneID, title: title, fallback: event.message,
+            transcriptPath: event.transcriptPath,
+            agent: event.agent ?? pane.flatMap { paneAgents[$0] },
+            durationSuffix: durationSuffix)
         // 完成时不在屏上 → 记未读绿点；就在屏上 → 边框闪绿两下；app 在后台 → Dock 角标 +1
         if let pane {
             markUnseenDoneIfHidden(pane)
@@ -710,6 +710,42 @@ final class AppCoordinator: ObservableObject {
         bumpDockBadgeIfInactive()
         // 任务队列接力：这条干完了，队首的下一条自动发出
         if let pane { dispatchNextQueued(pane) }
+    }
+
+    /// 完成通知：尽量带上 agent 最后一句回复（读 transcript 末条 assistant，IO 放后台避免卡主线程）；
+    /// 读不到则回退到 hook 带来的文案。
+    private func deliverDoneNotification(
+        paneID: String?, title: String, fallback: String,
+        transcriptPath: String?, agent: String?, durationSuffix: String?
+    ) {
+        guard let transcriptPath, !transcriptPath.isEmpty, let agent else {
+            NotificationManager.shared.notify(
+                paneID: paneID, title: title,
+                body: Self.doneNotificationBody(lastAssistant: nil, fallback: fallback, durationSuffix: durationSuffix))
+            return
+        }
+        Task.detached(priority: .utility) {
+            let messages = AgentSessionPreview.load(agent: agent, filePath: transcriptPath, limit: 4)
+            let lastAssistant = messages.last { $0.role == .assistant }?.text
+            await MainActor.run {
+                NotificationManager.shared.notify(
+                    paneID: paneID, title: title,
+                    body: Self.doneNotificationBody(
+                        lastAssistant: lastAssistant, fallback: fallback, durationSuffix: durationSuffix))
+            }
+        }
+    }
+
+    /// 纯函数：组装完成通知 body——优先 agent 最后一句，否则回退文案；末尾附耗时。可单测。
+    nonisolated static func doneNotificationBody(
+        lastAssistant: String?, fallback: String, durationSuffix: String?
+    ) -> String {
+        let trimmed = lastAssistant?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var base = (trimmed?.isEmpty == false) ? trimmed! : fallback
+        if let durationSuffix, !durationSuffix.isEmpty {
+            base = base.isEmpty ? durationSuffix : base + "\n" + durationSuffix
+        }
+        return base
     }
 
     private func rememberAgentSession(from event: HookEvent, pane: PaneID?) {
