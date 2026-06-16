@@ -624,30 +624,6 @@ final class AppCoordinator: ObservableObject {
                 ?? AutomationCodec.encode(AutomationResponse(id: nil, error: .internalError("服务已停止")))
         }
         if server.start() { automationServer = server }
-
-        workspaceMetadata.workspacesProvider = { [weak self] in
-            guard let self else { return [] }
-            // 文件夹浏览上下文是隐藏工作区，不参与元数据扫描
-            return store.workspaces
-                .filter { $0.id != Self.folderContextID }
-                .map { ($0.id, $0.path) }
-        }
-        workspaceMetadata.branchProvider = { path in
-            Self.gitBranch(at: path)
-        }
-        workspaceMetadata.start()
-    }
-
-    /// 免 spawn 读当前分支：解析 `.git/HEAD` 的 `ref: refs/heads/<branch>`。
-    nonisolated static func gitBranch(at path: String) -> String? {
-        guard let head = try? String(contentsOfFile: path + "/.git/HEAD", encoding: .utf8) else {
-            return nil
-        }
-        let trimmed = head.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("ref: refs/heads/") else {
-            return trimmed.isEmpty ? nil : String(trimmed.prefix(8))   // detached HEAD → 短 SHA
-        }
-        return String(trimmed.dropFirst("ref: refs/heads/".count))
     }
 
     /// 启动后低优先级预扫一次 30 天用量并写缓存，让用量面板首次打开即有数据。
