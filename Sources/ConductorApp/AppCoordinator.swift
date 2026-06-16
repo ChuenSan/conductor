@@ -103,12 +103,6 @@ final class AppCoordinator: ObservableObject {
     /// 头条活计时的起点账本：pane 进入思考集合时记 busy 时刻为起点，离开即清。
     private var thinkingStartTimes: [PaneID: Date] = [:]
     private static let hookThinkingTimeout: TimeInterval = 600
-    /// 输出活动兜底：每个「思考中」pane 的可见视口文本哈希 + 上次变化时刻。
-    /// agent 答完停在 REPL 提示符时（进程还在、Stop hook 可能丢失），视口不再变化；
-    /// 静止超过 thinkingIdleWindow 即熄灭思考动效，不必死等 600s 超时。
-    private var thinkingViewportHash: [PaneID: Int] = [:]
-    private var thinkingLastOutputChange: [PaneID: Date] = [:]
-    private static let thinkingIdleWindow: TimeInterval = 6
     private var agentPollTimer: Timer?
     /// 命令面板（懒创建）。
     private lazy var commandPalette = CommandPaletteController(coordinator: self)
@@ -1024,39 +1018,24 @@ final class AppCoordinator: ObservableObject {
     }
 
     /// hook 思考状态的兜底回收（hook 事件可能丢：agent 崩溃/被 kill）：
-    /// agent 进程已不在的 pane、点亮超时的条目，随轮询清掉。
+    /// 只清掉「agent 进程已不在」或「点亮超过硬上限」的条目。
+    /// 注意：**不**靠「输出静止」判完成——agent 跑长工具/等模型时可长时间不刷屏，
+    /// 那样会把仍在运行的转圈误熄（曾经的 bug）。完成由 Stop hook 权威熄灭，这里只兜底崩溃/卡死。
     private func pruneHookThinking(agents: [PaneID: String]) {
         guard !hookThinkingSince.isEmpty else { return }
-        let now = Date()
-        let cutoff = now.addingTimeInterval(-Self.hookThinkingTimeout)
-        hookThinkingSince = hookThinkingSince.filter { pane, since in
-            // 1) agent 进程已不在（崩溃/被 kill）→ 熄灭
-            guard agents[pane] != nil else { return false }
-            // 2) 点亮超过硬上限 → 兜底熄灭
-            guard since > cutoff else { return false }
-            // 3) 输出活动兜底：可见视口持续静止超过窗口 → 这轮答完在等输入 → 熄灭
-            return !isThinkingOutputIdle(pane, now: now)
-        }
-        // 清掉已离开思考集合的辅助账
-        let live = Set(hookThinkingSince.keys)
-        thinkingViewportHash = thinkingViewportHash.filter { live.contains($0.key) }
-        thinkingLastOutputChange = thinkingLastOutputChange.filter { live.contains($0.key) }
+        let survivors = Self.prunedThinking(
+            hookThinkingSince, agents: agents, now: Date(), timeout: Self.hookThinkingTimeout)
+        guard survivors.count != hookThinkingSince.count else { return }
+        hookThinkingSince = survivors
         publishThinking()
     }
 
-    /// 读 pane 可见视口文本与上次比对：变了就刷新「上次变化时刻」并视为仍在动；
-    /// 自上次变化起静止超过 thinkingIdleWindow，判为输出空闲（agent 在等输入）。
-    /// 这是 hook 的 Stop 事件丢失时的兜底——agent 工作时会刷 spinner/输出，空闲时视口静止。
-    private func isThinkingOutputIdle(_ pane: PaneID, now: Date) -> Bool {
-        let text = (registry.surface(for: pane) as? GhosttySurface)?.readViewportText() ?? ""
-        let hash = text.hashValue
-        if thinkingViewportHash[pane] != hash {
-            thinkingViewportHash[pane] = hash
-            thinkingLastOutputChange[pane] = now
-            return false
-        }
-        let lastChange = thinkingLastOutputChange[pane] ?? hookThinkingSince[pane] ?? now
-        return now.timeIntervalSince(lastChange) >= Self.thinkingIdleWindow
+    /// 纯函数：保留「进程仍在 且 点亮未超时」的思考条目，其余回收。可单测。
+    nonisolated static func prunedThinking(
+        _ since: [PaneID: Date], agents: [PaneID: String], now: Date, timeout: TimeInterval
+    ) -> [PaneID: Date] {
+        let cutoff = now.addingTimeInterval(-timeout)
+        return since.filter { pane, start in agents[pane] != nil && start > cutoff }
     }
 
     /// 发布 hook 思考集合（仅在变化时触发 UI 更新）。
@@ -1083,13 +1062,8 @@ final class AppCoordinator: ObservableObject {
     private func setHookThinking(_ pane: PaneID, active: Bool) {
         if active {
             hookThinkingSince[pane] = Date()
-            // 重置输出活动基线：给这一轮一个 idle 窗口的宽限，等 agent 开始刷输出。
-            thinkingLastOutputChange[pane] = Date()
-            thinkingViewportHash.removeValue(forKey: pane)
         } else {
             hookThinkingSince.removeValue(forKey: pane)
-            thinkingViewportHash.removeValue(forKey: pane)
-            thinkingLastOutputChange.removeValue(forKey: pane)
         }
         publishThinking()
     }
