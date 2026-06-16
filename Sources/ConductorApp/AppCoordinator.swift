@@ -49,6 +49,8 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var cliToolsPresentation = SettingsPresentationState()
     /// Agent 会话管理面板展示状态（与设置 / 工具面板互斥）。
     @Published private(set) var sessionPresentation = SettingsPresentationState()
+    /// 审批面板展示状态（与设置 / 工具 / 会话面板互斥）。
+    @Published private(set) var feedPresentation = SettingsPresentationState()
     /// 会话面板筛选范围（工作区路径或 pane cwd）；nil 表示全部。
     @Published private(set) var sessionScopePath: String?
     /// 会话面板「当前面板续聊」的目标 pane。
@@ -198,6 +200,7 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "shortcutCheatSheet", title: L("键位速查"), defaultKeybinding: "cmd+/") { [weak self] in self?.openShortcutCheatSheet() },
             AppCommand(id: "missionControl", title: L("任务总览"), defaultKeybinding: "cmd+shift+m") { [weak self] in self?.openMissionControl() },
             AppCommand(id: "queuePrompt", title: L("任务队列（当前面板）"), defaultKeybinding: "cmd+shift+enter") { [weak self] in self?.openQueuePanel() },
+            AppCommand(id: "openFeed", title: L("审批面板"), defaultKeybinding: nil) { [weak self] in self?.openFeed() },
             AppCommand(id: "openSnippets", title: L("命令片段库"), defaultKeybinding: nil) { [weak self] in self?.openTools(.snippets) },
             AppCommand(id: "coCreate", title: L("共创计划"), defaultKeybinding: nil) { [weak self] in self?.openTools(.coCreate) },
             AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+ctrl+e") { [weak self] in self?.equalizeSplits() },
@@ -387,6 +390,7 @@ final class AppCoordinator: ObservableObject {
     func openSettings() {
         cliToolsPresentation.close()
         sessionPresentation.close()
+        feedPresentation.close()
         settingsPresentation.open()
     }
 
@@ -394,9 +398,22 @@ final class AppCoordinator: ObservableObject {
         settingsPresentation.close()
     }
 
-    /// 是否有右侧侧栏面板（设置 / CLI 工具 / 会话）正在展示。用于让快捷操作面板让位。
+    /// 打开审批面板（与其它右侧面板互斥）。agent 来新请求时由 feedCenter 回调自动调用。
+    func openFeed() {
+        settingsPresentation.close()
+        cliToolsPresentation.close()
+        sessionPresentation.close()
+        feedPresentation.open()
+    }
+
+    func closeFeed() {
+        feedPresentation.close()
+    }
+
+    /// 是否有右侧侧栏面板（设置 / CLI 工具 / 会话 / 审批）正在展示。用于让快捷操作面板让位。
     var isSidePanelPresented: Bool {
-        settingsPresentation.isPresented || cliToolsPresentation.isPresented || sessionPresentation.isPresented
+        settingsPresentation.isPresented || cliToolsPresentation.isPresented
+            || sessionPresentation.isPresented || feedPresentation.isPresented
     }
 
     func openCLITools() {
@@ -404,6 +421,7 @@ final class AppCoordinator: ObservableObject {
         if !ToolsTab.panelTabs.contains(toolsTab) { toolsTab = .cli }
         settingsPresentation.close()
         sessionPresentation.close()
+        feedPresentation.close()
         cliToolsPresentation.open()
     }
 
@@ -412,6 +430,7 @@ final class AppCoordinator: ObservableObject {
         if let module = tab.managementModule {
             settingsPresentation.close()
             sessionPresentation.close()
+            feedPresentation.close()
             cliToolsPresentation.close()
             openAgentToolsManagement(module)
             return
@@ -419,6 +438,7 @@ final class AppCoordinator: ObservableObject {
         toolsTab = tab
         settingsPresentation.close()
         sessionPresentation.close()
+        feedPresentation.close()
         cliToolsPresentation.open()
     }
 
@@ -447,6 +467,7 @@ final class AppCoordinator: ObservableObject {
         sessionTargetPane = targetPane ?? activePane()
         settingsPresentation.close()
         cliToolsPresentation.close()
+        feedPresentation.close()
         sessionPresentation.open()
         SessionManagerStore.shared.refresh()
     }
@@ -625,6 +646,7 @@ final class AppCoordinator: ObservableObject {
                 ?? AutomationCodec.encode(AutomationResponse(id: nil, error: .internalError("服务已停止")))
         }
         if server.start() { automationServer = server }
+        feedCenter.onPendingAdded = { [weak self] in self?.openFeed() }
         feedCenter.startExpiryTimer()
     }
 

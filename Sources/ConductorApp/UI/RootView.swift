@@ -74,6 +74,11 @@ struct RootView: View {
                     }
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
+            if coordinator.feedPresentation.isPresented {
+                FeedPanelView(feedCenter: coordinator.feedCenter, onClose: { coordinator.closeFeed() })
+                    .frame(width: 360)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
         }
         .id(localization.value)   // 语言切换 → 重建子树（TerminalAreaView 复用同一 NSView，终端不受影响）
         .background(AppStyle.windowBackground)
@@ -82,12 +87,14 @@ struct RootView: View {
         .animation(Motion.panel, value: coordinator.settingsPresentation.isPresented)
         .animation(Motion.panel, value: coordinator.cliToolsPresentation.isPresented)
         .animation(Motion.panel, value: coordinator.sessionPresentation.isPresented)
+        .animation(Motion.panel, value: coordinator.feedPresentation.isPresented)
         // Agent Tools 管理台改为独立 NSWindow（见 AppCoordinator+AgentToolsWindow），不再用模态 sheet。
         // 这些动画会逐帧改终端区宽度；冻结期间终端只随层拉伸，结束后一次性 resize。
         .onChange(of: coordinator.sidebarPresentation.isCollapsed) { freezeTerminalResizeForPanelAnimation() }
         .onChange(of: coordinator.settingsPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
         .onChange(of: coordinator.cliToolsPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
         .onChange(of: coordinator.sessionPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
+        .onChange(of: coordinator.feedPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
     }
 
     /// Motion.panel（spring response 0.28）视觉上约 0.4s 收敛；冻结到动画结束再统一 resize。
