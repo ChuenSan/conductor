@@ -4,6 +4,7 @@ import SwiftUI
 
 struct AgentToolsMCPInspector: View {
     @ObservedObject var store: AgentToolsConsoleStore
+    @State private var pendingDelete: AgentToolsMCPServerRecord?
 
     var body: some View {
         AgentToolsInspectorShell {
@@ -12,6 +13,22 @@ struct AgentToolsMCPInspector: View {
             } else {
                 defaultState
             }
+        }
+        .confirmationDialog(
+            L("移除 MCP server？"),
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingDelete
+        ) { server in
+            Button(L("移除 %@", server.name), role: .destructive) {
+                store.removeMCPServer(server)
+                pendingDelete = nil
+            }
+            Button(L("取消"), role: .cancel) { pendingDelete = nil }
+        } message: { server in
+            Text(L("将从 %@ 的配置文件删除该 server，不可撤销。如只想临时关闭，请改用「停用」。", server.client))
         }
     }
 
@@ -53,6 +70,7 @@ struct AgentToolsMCPInspector: View {
             }
 
             AgentToolsSection(L("基础信息")) {
+                AgentToolsInfoRow(label: L("状态"), value: server.enabled ? L("启用中") : L("已停用"))
                 AgentToolsInfoRow(label: L("传输"), value: server.transport.title)
                 AgentToolsInfoRow(label: L("命令"), value: server.command ?? "-", monospaced: true)
                 AgentToolsInfoRow(label: "URL", value: server.url ?? "-", monospaced: true)
@@ -75,8 +93,14 @@ struct AgentToolsMCPInspector: View {
                 AgentToolsLinkButton(title: L("复制诊断信息"), icon: "doc.on.doc") {
                     store.copyText(diagnostics(for: server))
                 }
+                AgentToolsLinkButton(
+                    title: server.enabled ? L("停用该 server") : L("启用该 server"),
+                    icon: server.enabled ? "pause.circle" : "play.circle",
+                    tint: server.enabled ? AppStyle.waitAmber : AppStyle.doneGreen) {
+                        store.setMCPServerEnabled(server, enabled: !server.enabled)
+                    }
                 AgentToolsLinkButton(title: L("移除 MCP server"), icon: "trash", tint: AppStyle.errorRed) {
-                    store.removeMCPServer(server)
+                    pendingDelete = server
                 }
             }
         }
@@ -100,6 +124,7 @@ struct AgentToolsMCPInspector: View {
 
 struct AgentToolsHooksInspector: View {
     @ObservedObject var store: AgentToolsConsoleStore
+    @State private var pendingDelete: HookEntry?
 
     var body: some View {
         AgentToolsInspectorShell {
@@ -108,6 +133,23 @@ struct AgentToolsHooksInspector: View {
             } else {
                 defaultState
             }
+        }
+        .confirmationDialog(
+            L("移除 hook？"),
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingDelete
+        ) { entry in
+            Button(L("移除"), role: .destructive) {
+                store.removeHookEntry(entry)
+                pendingDelete = nil
+            }
+            Button(L("取消"), role: .cancel) { pendingDelete = nil }
+        } message: { entry in
+            Text(L("将从 %@ 的 %@ 事件删除该 hook，不可撤销。如只想临时关闭，请改用「停用」。",
+                   entry.source.displayName, entry.event))
         }
     }
 
@@ -152,6 +194,7 @@ struct AgentToolsHooksInspector: View {
             }
 
             AgentToolsSection(L("基础信息")) {
+                AgentToolsInfoRow(label: L("状态"), value: entry.enabled ? L("启用中") : L("已停用"))
                 AgentToolsInfoRow(label: L("来源"), value: entry.source.displayName)
                 AgentToolsInfoRow(label: L("事件"), value: entry.event, monospaced: true)
                 AgentToolsInfoRow(label: L("超时"), value: entry.timeout.map { L("%ld ms", $0) } ?? "-")
@@ -177,10 +220,14 @@ struct AgentToolsHooksInspector: View {
                 AgentToolsLinkButton(title: L("复制诊断信息"), icon: "doc.on.doc") {
                     store.copyText(diagnostics(for: entry))
                 }
-                if entry.managedByConductor {
-                    AgentToolsLinkButton(title: L("移除该 conductor hook"), icon: "trash", tint: AppStyle.errorRed) {
-                        store.removeHookEntry(entry)
+                AgentToolsLinkButton(
+                    title: entry.enabled ? L("停用该 hook") : L("启用该 hook"),
+                    icon: entry.enabled ? "pause.circle" : "play.circle",
+                    tint: entry.enabled ? AppStyle.waitAmber : AppStyle.doneGreen) {
+                        store.setHookEntryEnabled(entry, enabled: !entry.enabled)
                     }
+                AgentToolsLinkButton(title: L("移除该 hook"), icon: "trash", tint: AppStyle.errorRed) {
+                    pendingDelete = entry
                 }
             }
         }

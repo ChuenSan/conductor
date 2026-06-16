@@ -28,7 +28,7 @@ private enum AgentToolsHooksWorkbenchSection: String, CaseIterable, Identifiable
         case .overview: return L("Hook 状态、入口和覆盖情况")
         case .recipes: return L("Conductor 推荐自动化配方")
         case .builder: return L("自定义事件、命令和 timeout")
-        case .clients: return L("选择 Hooks 要安装到哪些应用")
+        case .clients: return L("直接编辑各应用 hooks / 选择安装目标")
         case .configured: return L("审计和清理已写入的 hooks")
         case .diagnostics: return L("配置文件、错误和导出")
         }
@@ -80,13 +80,26 @@ private enum AgentToolsHooksWorkbenchFilter: String, CaseIterable, Identifiable 
 struct AgentToolsHooksWorkbenchView: View {
     @ObservedObject var store: AgentToolsConsoleStore
 
-    @State private var selectedSection: AgentToolsHooksWorkbenchSection = .recipes
+    @State private var selectedSection: AgentToolsHooksWorkbenchSection = {
+        #if DEBUG
+        if let forced = AgentToolsDebugUI.hooksSection,
+           let section = AgentToolsHooksWorkbenchSection(rawValue: forced) { return section }
+        #endif
+        return .clients   // 编辑器优先：进来先看到各应用 hooks，而不是 recipe
+    }()
     @State private var query = ""
     @State private var filter: AgentToolsHooksWorkbenchFilter = .all
-    @State private var selectedSources = Set(HookSource.allCases)
+    // 默认不预选——安装必须显式选目标，不一键群发。
+    @State private var selectedSources = Set<HookSource>()
+    /// 非 nil＝正在用原生 JSON 编辑器编辑该 source 的 hooks。
+    @State private var editingHookSource: HookSource?
     @State private var customEvent = HookEventName.stop
     @State private var customCommand = ""
     @State private var customTimeout = "5000"
+    /// 非 nil＝编辑模式，builder 回填该 hook 并改为「保存修改」。
+    @State private var editingEntry: HookEntry?
+    /// 待确认删除的 hook（驱动 confirmationDialog）。
+    @State private var entryPendingDelete: HookEntry?
 
     private var rows: [HookEntry] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -128,6 +141,16 @@ struct AgentToolsHooksWorkbenchView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .agentToolsPage()
+        .overlay(alignment: .top) { AgentToolsNoticeBanner(text: store.hookNotice) { store.hookNotice = nil } }
+        .sheet(item: $editingHookSource) { source in
+            AgentToolsJSONEditorSheet(
+                title: L("编辑 %@ 的 Hooks", source.displayName),
+                subtitle: source.configURL.path,
+                hint: L("直接编辑 hooks：形如 { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"…\" } ] } ] }。保存即写入，文件里其它键保留。"),
+                initialText: store.hooksJSON(for: source),
+                onSave: { store.saveHooksJSON($0, for: source) },
+                onClose: { editingHookSource = nil })
+        }
         .onAppear {
             if store.hookEntries.isEmpty { store.refreshHooks() }
         }
@@ -399,15 +422,23 @@ struct AgentToolsHooksWorkbenchView: View {
 
             HStack(spacing: 5) {
                 ForEach(HookSource.allCases, id: \.self) { source in
-                    ToolBadge(
-                        text: source.displayName,
-                        color: sources.contains(source) ? hookWorkbenchSourceColor(source) : AppStyle.textTertiary,
-                        style: sources.contains(source) ? .soft : .muted,
-                        height: 18)
+                    let on = sources.contains(source)
+                    Button {
+                        if on { store.uninstallHookRecipe(recipe, from: [source]) }
+                        else { store.installHookRecipe(recipe, to: [source]) }
+                    } label: {
+                        ToolBadge(
+                            text: source.displayName,
+                            color: on ? hookWorkbenchSourceColor(source) : AppStyle.textTertiary,
+                            style: on ? .soft : .muted,
+                            height: 18)
+                    }
+                    .buttonStyle(.plain)
+                    .help(on ? L("从 %@ 移除", source.displayName) : L("装到 %@", source.displayName))
                 }
                 Spacer(minLength: 0)
                 ToolActionButton(
-                    title: installed ? L("移除") : selectedSources.isEmpty ? L("选择应用") : L("安装到 %ld 个应用", selectedSources.count),
+                    title: installed ? L("全部移除") : selectedSources.isEmpty ? L("选择应用") : L("安装到 %ld 个应用", selectedSources.count),
                     role: installed ? .secondary : .primary,
                     height: 25,
                     fontSize: 11,
@@ -423,7 +454,7 @@ struct AgentToolsHooksWorkbenchView: View {
 
     @ViewBuilder
     private var builderContent: some View {
-        targetSummaryBar
+        if editingEntry == nil { targetSummaryBar }
         customComposer
     }
 
@@ -510,6 +541,13 @@ struct AgentToolsHooksWorkbenchView: View {
             Spacer(minLength: 0)
 
             if !compact {
+                ToolActionButton(
+                    title: L("编辑 hooks"),
+                    systemImage: "curlybraces",
+                    role: .primary,
+                    height: 26, fontSize: 11, horizontalPadding: 11) {
+                        editingHookSource = source
+                    }
                 IconOnlyButton(systemName: "doc.text", help: L("打开配置文件"), size: 24, symbolSize: 10.5) {
                     NSWorkspace.shared.open(source.configURL)
                 }
@@ -571,8 +609,13 @@ struct AgentToolsHooksWorkbenchView: View {
     }
 
     private var customComposer: some View {
-        AgentToolsSection(L("自定义 hook")) {
+        let editing = editingEntry != nil
+        return AgentToolsSection(editing ? L("编辑 hook") : L("自定义 hook")) {
             VStack(alignment: .leading, spacing: 9) {
+                if let editingEntry {
+                    ToolBadge(text: L("正在编辑 %@ · %@", editingEntry.source.displayName, editingEntry.event),
+                              color: AppStyle.accent, style: .muted, height: 20)
+                }
                 AgentToolsMenuButton(title: customEvent, icon: "bolt") {
                     ForEach(commonEvents, id: \.self) { event in
                         Button(event) { customEvent = event }
@@ -582,26 +625,75 @@ struct AgentToolsHooksWorkbenchView: View {
                 textInput(L("命令"), text: $customCommand)
                 textInput(L("Timeout ms"), text: $customTimeout)
                 HStack(spacing: 8) {
-                    ToolBadge(text: L("%ld 个应用", selectedSources.count), color: selectedSources.isEmpty ? AppStyle.waitAmber : AppStyle.accent, style: .muted, height: 20)
+                    if !editing {
+                        ToolBadge(text: L("%ld 个应用", selectedSources.count), color: selectedSources.isEmpty ? AppStyle.waitAmber : AppStyle.accent, style: .muted, height: 20)
+                    }
                     Spacer(minLength: 0)
-                    ToolActionButton(
-                        title: L("安装到选中应用"),
-                        systemImage: "plus",
-                        height: 28,
-                        fontSize: 11,
-                        horizontalPadding: 10) {
-                            store.installCustomHook(
-                                sources: selectedSources,
-                                event: customEvent,
-                                command: customCommand,
-                                timeout: Int(customTimeout) ?? 5000)
-                        }
-                        .disabled(selectedSources.isEmpty || customCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if editing {
+                        ToolActionButton(
+                            title: L("取消"), systemImage: "xmark",
+                            height: 28, fontSize: 11, horizontalPadding: 10) {
+                                cancelEditing()
+                            }
+                        ToolActionButton(
+                            title: L("保存修改"), systemImage: "checkmark",
+                            height: 28, fontSize: 11, horizontalPadding: 10) {
+                                saveEdit()
+                            }
+                            .disabled(!canSaveCustom)
+                    } else {
+                        ToolActionButton(
+                            title: L("安装到选中应用"), systemImage: "plus",
+                            height: 28, fontSize: 11, horizontalPadding: 10) {
+                                store.installCustomHook(
+                                    sources: selectedSources,
+                                    event: customEvent,
+                                    command: customCommand,
+                                    timeout: Int(customTimeout) ?? 5000)
+                                resetComposer()
+                            }
+                            .disabled(selectedSources.isEmpty || customCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                 }
             }
             .padding(10)
             .agentToolsGlass(cornerRadius: Radius.sm)
         }
+    }
+
+    private var canSaveCustom: Bool {
+        !customCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !customEvent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// 进入编辑：回填 builder，切到「自定义」分段。
+    private func beginEditing(_ entry: HookEntry) {
+        customEvent = entry.event
+        customCommand = entry.command
+        customTimeout = entry.timeout.map(String.init) ?? "5000"
+        editingEntry = entry
+        withAnimation(AgentToolsMotion.route) { selectedSection = .builder }
+    }
+
+    private func saveEdit() {
+        guard let editingEntry else { return }
+        store.updateHookEntry(
+            editingEntry,
+            newEvent: customEvent,
+            newCommand: customCommand,
+            newTimeout: Int(customTimeout) ?? 5000)
+        cancelEditing()
+    }
+
+    private func cancelEditing() {
+        editingEntry = nil
+        resetComposer()
+    }
+
+    private func resetComposer() {
+        customEvent = HookEventName.stop
+        customCommand = ""
+        customTimeout = "5000"
     }
 
     private func textInput(_ placeholder: String, text: Binding<String>) -> some View {
@@ -648,14 +740,32 @@ struct AgentToolsHooksWorkbenchView: View {
                 ToolBadge(text: error, color: AppStyle.errorRed, style: .muted, height: 22)
             }
         }
+        .confirmationDialog(
+            L("移除 hook？"),
+            isPresented: Binding(
+                get: { entryPendingDelete != nil },
+                set: { if !$0 { entryPendingDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: entryPendingDelete
+        ) { entry in
+            Button(L("移除"), role: .destructive) {
+                if editingEntry?.id == entry.id { cancelEditing() }
+                store.removeHookEntry(entry)
+                entryPendingDelete = nil
+            }
+            Button(L("取消"), role: .cancel) { entryPendingDelete = nil }
+        } message: { entry in
+            Text(L("将从 %@ 的 %@ 事件删除该 hook，不可撤销。如只想临时关闭，请改用「停用」。",
+                   entry.source.displayName, entry.event))
+        }
     }
 
     private var tableHeader: some View {
         HStack(spacing: 8) {
             Text(L("事件")).frame(width: 104, alignment: .leading)
             Text(L("来源")).frame(width: 70, alignment: .leading)
-            Text(L("命令")).frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
-            Text(L("操作")).frame(width: 54, alignment: .trailing)
+            Text(L("命令")).frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
+            Text(L("操作")).frame(width: 96, alignment: .trailing)
         }
         .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(AppStyle.textTertiary)
@@ -693,6 +803,9 @@ struct AgentToolsHooksWorkbenchView: View {
                         if entry.managedByConductor {
                             ToolBadge(text: "Conductor", color: AppStyle.accent, height: 16)
                         }
+                        if !entry.enabled {
+                            ToolBadge(text: L("已停用"), color: AppStyle.textTertiary, style: .muted, height: 16)
+                        }
                     }
                     Text(entry.command)
                         .font(.system(size: 9.5, weight: .medium, design: .monospaced))
@@ -700,24 +813,39 @@ struct AgentToolsHooksWorkbenchView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
+                .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
 
-                HStack(spacing: 4) {
-                    if entry.managedByConductor {
-                        IconOnlyButton(
-                            systemName: "trash",
-                            help: L("移除该 conductor hook"),
-                            size: 24,
-                            symbolSize: 10.5,
-                            tint: AppStyle.errorRed) {
-                                store.removeHookEntry(entry)
-                            }
-                    }
+                HStack(spacing: 2) {
+                    IconOnlyButton(
+                        systemName: entry.enabled ? "pause.circle" : "play.circle",
+                        help: entry.enabled ? L("停用") : L("启用"),
+                        size: 24,
+                        symbolSize: 11.5,
+                        tint: entry.enabled ? AppStyle.waitAmber : AppStyle.doneGreen) {
+                            store.setHookEntryEnabled(entry, enabled: !entry.enabled)
+                        }
+                    IconOnlyButton(
+                        systemName: "square.and.pencil",
+                        help: L("编辑"),
+                        size: 24,
+                        symbolSize: 10.5) {
+                            beginEditing(entry)
+                        }
+                        .disabled(!entry.enabled)
+                    IconOnlyButton(
+                        systemName: "trash",
+                        help: L("移除 hook"),
+                        size: 24,
+                        symbolSize: 10.5,
+                        tint: AppStyle.errorRed) {
+                            entryPendingDelete = entry
+                        }
                 }
-                .frame(width: 54, alignment: .trailing)
+                .frame(width: 96, alignment: .trailing)
             }
             .padding(.horizontal, 9)
             .frame(height: AgentToolsChrome.rowHeight)
+            .opacity(entry.enabled ? 1 : 0.55)
             .background(
                 RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(selected ? AppStyle.accent.opacity(0.12) : Color.clear))

@@ -18,10 +18,13 @@ final class AgentToolsConsoleStore: ObservableObject {
     @Published private(set) var mcpServers: [AgentToolsMCPServerRecord] = []
     @Published private(set) var isScanningMCP = false
     @Published private(set) var mcpScanError: String?
+    /// 写操作成功后的瞬时确认（安装/编辑/停用/删除），UI 显示为横幅。
+    @Published var mcpNotice: String?
     @Published private(set) var hookEntries: [HookEntry] = []
     @Published private(set) var hookRecipeStates: [String: Set<HookSource>] = [:]
     @Published private(set) var isLoadingHooks = false
     @Published private(set) var hookError: String?
+    @Published var hookNotice: String?
     @Published var selectedOverviewRowID: String?
     @Published var selectedCLIToolID: String?
     @Published var selectedUsageProviderID: String?
@@ -299,9 +302,11 @@ final class AgentToolsConsoleStore: ObservableObject {
 
     func installMCPTemplate(_ template: AgentToolsMCPTemplate, to clientIDs: Set<String>) {
         mcpScanError = nil
+        guard !clientIDs.isEmpty else { mcpScanError = L("请先选择要安装到的应用"); return }
         do {
             try AgentToolsMCPScanner.installTemplate(template, to: clientIDs)
             refreshMCP()
+            mcpNotice = L("已安装 %@ 到 %ld 个应用", template.name, clientIDs.count)
         } catch {
             mcpScanError = L("写入 MCP 配置失败：%@", error.localizedDescription)
         }
@@ -315,6 +320,7 @@ final class AgentToolsConsoleStore: ObservableObject {
                                 env: [String: String],
                                 to clientIDs: Set<String>) {
         mcpScanError = nil
+        guard !clientIDs.isEmpty else { mcpScanError = L("请先选择要安装到的应用"); return }
         do {
             try AgentToolsMCPScanner.installCustomServer(
                 name: name,
@@ -325,6 +331,7 @@ final class AgentToolsConsoleStore: ObservableObject {
                 env: env,
                 to: clientIDs)
             refreshMCP()
+            mcpNotice = L("已写入 %@ 到 %ld 个应用", name, clientIDs.count)
         } catch {
             mcpScanError = L("写入 MCP 配置失败：%@", error.localizedDescription)
         }
@@ -333,10 +340,80 @@ final class AgentToolsConsoleStore: ObservableObject {
     func removeMCPServer(_ server: AgentToolsMCPServerRecord) {
         mcpScanError = nil
         do {
-            try AgentToolsMCPScanner.removeServer(server)
+            if server.enabled {
+                try AgentToolsMCPScanner.removeServer(server)
+            } else {
+                // 已停用的 server 只在停用仓里，删它＝清出停用仓。
+                try AgentToolsMCPParkingStore().remove(
+                    configPath: server.configPath, keyPath: server.sourceKeyPath, name: server.name)
+            }
             refreshMCP()
+            mcpNotice = L("已移除 %@", server.name)
         } catch {
             mcpScanError = L("移除 MCP server 失败：%@", error.localizedDescription)
+        }
+    }
+
+    /// 读回某 server 的原始配置（含 env 值），供编辑表单回填。
+    func mcpRawConfig(for server: AgentToolsMCPServerRecord) -> [String: Any]? {
+        AgentToolsMCPScanner.rawConfig(for: server)
+    }
+
+    /// 编辑一台已有 server（改名 / transport / 命令 / URL / env），原地写回。
+    func updateMCPServer(_ original: AgentToolsMCPServerRecord,
+                         newName: String,
+                         transport: AgentToolsMCPTransport,
+                         command: String?,
+                         args: [String],
+                         url: String?,
+                         env: [String: String]) {
+        mcpScanError = nil
+        do {
+            try AgentToolsMCPScanner.updateServer(
+                original: original, newName: newName, transport: transport,
+                command: command, args: args, url: url, env: env)
+            refreshMCP()
+            mcpNotice = L("已保存 %@", newName)
+        } catch {
+            mcpScanError = L("写入 MCP 配置失败：%@", error.localizedDescription)
+        }
+    }
+
+    /// 启用 / 停用一台 server（软开关，可逆，不删配置）。
+    func setMCPServerEnabled(_ server: AgentToolsMCPServerRecord, enabled: Bool) {
+        mcpScanError = nil
+        do {
+            if enabled {
+                try AgentToolsMCPScanner.enableServer(server)
+            } else {
+                try AgentToolsMCPScanner.disableServer(server)
+            }
+            refreshMCP()
+            mcpNotice = enabled ? L("已启用 %@", server.name) : L("已停用 %@", server.name)
+        } catch {
+            mcpScanError = enabled ? L("启用失败：%@", error.localizedDescription)
+                                   : L("停用失败：%@", error.localizedDescription)
+        }
+    }
+
+    // MARK: - MCP 原生 JSON 编辑
+
+    /// 读出某 client 配置文件的 mcpServers JSON 文本（编辑器回填）。
+    func mcpClientJSON(for adapter: AgentToolsMCPClientAdapter) -> String {
+        AgentToolsMCPScanner.currentServersJSON(for: adapter)
+    }
+
+    /// 保存用户编辑的 JSON 到某 client。成功返回 nil；失败返回错误文本（编辑器行内展示）。
+    @discardableResult
+    func saveMCPClientJSON(_ text: String, for adapter: AgentToolsMCPClientAdapter) -> String? {
+        mcpScanError = nil
+        do {
+            try AgentToolsMCPScanner.saveServersJSON(text, for: adapter)
+            refreshMCP()
+            mcpNotice = L("已写入 %@ 的配置", adapter.displayName)
+            return nil
+        } catch {
+            return error.localizedDescription
         }
     }
 
@@ -346,7 +423,14 @@ final class AgentToolsConsoleStore: ObservableObject {
         hookError = nil
         Task {
             let result = await Task.detached(priority: .utility) { () -> ([HookEntry], [String: Set<HookSource>]) in
-                let entries = HookSource.allCases.flatMap { HookConfigDocument(source: $0).entries() }
+                var entries = HookSource.allCases.flatMap { HookConfigDocument(source: $0).entries() }
+                // 合入停用仓里的 hook（enabled = false），供重新启用。
+                let parking = HookParkingStore()
+                entries += parking.load().map {
+                    HookEntry(source: $0.source, event: $0.event, command: $0.command,
+                              timeout: $0.timeout, enabled: false)
+                }
+                entries.sort { ($0.event, $0.command, $0.enabled ? 0 : 1) < ($1.event, $1.command, $1.enabled ? 0 : 1) }
                 var states: [String: Set<HookSource>] = [:]
                 for recipe in HookRecipes.all {
                     states[recipe.id] = HookRecipes.installedSources(recipe)
@@ -375,7 +459,7 @@ final class AgentToolsConsoleStore: ObservableObject {
 
     func installHookRecipe(_ recipe: HookRecipe, to sources: Set<HookSource>) {
         hookError = nil
-        guard !sources.isEmpty else { return }
+        guard !sources.isEmpty else { hookError = L("请先选择要安装到的应用"); return }
         do {
             try recipe.ensureScript?()
             for source in sources {
@@ -384,6 +468,7 @@ final class AgentToolsConsoleStore: ObservableObject {
                     command: recipe.command)
             }
             refreshHooks()
+            hookNotice = L("已安装 %@ 到 %ld 个应用", recipe.title, sources.count)
         } catch {
             hookError = L("安装失败：%@", error.localizedDescription)
         }
@@ -394,6 +479,7 @@ final class AgentToolsConsoleStore: ObservableObject {
         do {
             _ = try HookRecipes.uninstall(recipe)
             refreshHooks()
+            hookNotice = L("已移除 %@", recipe.title)
         } catch {
             hookError = L("移除失败：%@", error.localizedDescription)
         }
@@ -402,10 +488,96 @@ final class AgentToolsConsoleStore: ObservableObject {
     func removeHookEntry(_ entry: HookEntry) {
         hookError = nil
         do {
-            try HookConfigDocument(source: entry.source).removeCommands(containing: entry.command)
+            if entry.enabled {
+                // 精确删除该条（不是子串匹配，避免误删共享标记串的其它 hook）。
+                try HookConfigDocument(source: entry.source).removeExact(event: entry.event, command: entry.command)
+            } else {
+                // 已停用的条目只存在于停用仓，删它＝清出停用仓。
+                try HookParkingStore().remove(source: entry.source, event: entry.event, command: entry.command)
+            }
             refreshHooks()
+            hookNotice = L("已移除 hook（%@）", entry.event)
         } catch {
             hookError = L("移除失败：%@", error.localizedDescription)
+        }
+    }
+
+    /// 编辑一条已有 hook（事件 / 命令 / 超时）。仅对启用中的条目生效。
+    func updateHookEntry(_ entry: HookEntry, newEvent: String, newCommand: String, newTimeout: Int) {
+        hookError = nil
+        let event = newEvent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let command = newCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !event.isEmpty, !command.isEmpty else { return }
+        do {
+            try HookConfigDocument(source: entry.source).update(
+                event: entry.event, command: entry.command,
+                newEvent: event, newCommand: command, newTimeout: newTimeout)
+            refreshHooks()
+            hookNotice = L("已保存 hook（%@）", event)
+        } catch {
+            hookError = L("写入 Hook 配置失败：%@", error.localizedDescription)
+        }
+    }
+
+    /// 启用 / 停用一条 hook。停用＝从 settings.json 移走、原样存入停用仓；启用＝写回、清出停用仓。
+    func setHookEntryEnabled(_ entry: HookEntry, enabled: Bool) {
+        hookError = nil
+        let parking = HookParkingStore()
+        do {
+            if enabled {
+                guard !entry.enabled else { return }
+                try HookConfigDocument(source: entry.source).addCommand(
+                    event: entry.event, command: entry.command, timeout: entry.timeout ?? 5000)
+                try parking.remove(source: entry.source, event: entry.event, command: entry.command)
+            } else {
+                guard entry.enabled else { return }
+                try parking.add(ParkedHook(
+                    source: entry.source, event: entry.event,
+                    command: entry.command, timeout: entry.timeout))
+                try HookConfigDocument(source: entry.source).removeExact(event: entry.event, command: entry.command)
+            }
+            refreshHooks()
+            hookNotice = enabled ? L("已启用 hook（%@）", entry.event) : L("已停用 hook（%@）", entry.event)
+        } catch {
+            hookError = enabled ? L("启用失败：%@", error.localizedDescription)
+                                : L("停用失败：%@", error.localizedDescription)
+        }
+    }
+
+    /// 从指定 source 卸载 recipe（不是全卸）。
+    func uninstallHookRecipe(_ recipe: HookRecipe, from sources: Set<HookSource>) {
+        hookError = nil
+        guard !sources.isEmpty else { return }
+        do {
+            for source in sources {
+                // 按唯一哨兵 #conductor:<id> 移除（子串匹配在此安全）。
+                try HookConfigDocument(source: source).removeCommands(containing: "#conductor:\(recipe.id)")
+            }
+            refreshHooks()
+            hookNotice = sources.count == 1
+                ? L("已从 %@ 移除 %@", sources.first!.displayName, recipe.title)
+                : L("已移除 %@", recipe.title)
+        } catch {
+            hookError = L("移除失败：%@", error.localizedDescription)
+        }
+    }
+
+    // MARK: - Hooks 原生 JSON 编辑
+
+    func hooksJSON(for source: HookSource) -> String {
+        HookConfigDocument(source: source).rawHooksJSON()
+    }
+
+    @discardableResult
+    func saveHooksJSON(_ text: String, for source: HookSource) -> String? {
+        hookError = nil
+        do {
+            try HookConfigDocument(source: source).saveHooksJSON(text)
+            refreshHooks()
+            hookNotice = L("已写入 %@ 的 hooks", source.displayName)
+            return nil
+        } catch {
+            return error.localizedDescription
         }
     }
 
@@ -413,7 +585,8 @@ final class AgentToolsConsoleStore: ObservableObject {
         hookError = nil
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         let eventName = event.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !sources.isEmpty, !trimmed.isEmpty, !eventName.isEmpty else { return }
+        guard !trimmed.isEmpty, !eventName.isEmpty else { hookError = L("命令和事件名不能为空"); return }
+        guard !sources.isEmpty else { hookError = L("请先选择要安装到的应用"); return }
         do {
             for source in sources {
                 try HookConfigDocument(source: source).addCommand(
@@ -422,6 +595,7 @@ final class AgentToolsConsoleStore: ObservableObject {
                     timeout: timeout)
             }
             refreshHooks()
+            hookNotice = L("已写入 hook（%@）到 %ld 个应用", eventName, sources.count)
         } catch {
             hookError = L("写入 Hook 配置失败：%@", error.localizedDescription)
         }

@@ -27,7 +27,7 @@ private enum AgentToolsMCPWorkbenchSection: String, CaseIterable, Identifiable {
         case .overview: return L("MCP 状态、入口和待处理项")
         case .library: return L("精选 MCP server 模板")
         case .install: return L("自定义 stdio / HTTP / SSE")
-        case .clients: return L("选择 MCP 要安装到哪些应用")
+        case .clients: return L("直接编辑各应用配置 / 选择安装目标")
         case .servers: return L("本机配置里已存在的 servers")
         case .diagnostics: return L("配置文件、错误和导出")
         }
@@ -77,16 +77,29 @@ private enum AgentToolsMCPWorkbenchFilter: String, CaseIterable, Identifiable {
 struct AgentToolsMCPWorkbenchView: View {
     @ObservedObject var store: AgentToolsConsoleStore
 
-    @State private var selectedSection: AgentToolsMCPWorkbenchSection = .library
+    @State private var selectedSection: AgentToolsMCPWorkbenchSection = {
+        #if DEBUG
+        if let forced = AgentToolsDebugUI.mcpSection,
+           let section = AgentToolsMCPWorkbenchSection(rawValue: forced) { return section }
+        #endif
+        return .clients   // 编辑器优先：进来先看到各应用配置，而不是模板
+    }()
     @State private var query = ""
     @State private var serverFilter: AgentToolsMCPWorkbenchFilter = .all
-    @State private var selectedTargetIDs = Set(AgentToolsMCPScanner.writableClients.map(\.id))
+    // 默认不预选任何应用——安装必须由用户显式选目标，绝不一键群发。
+    @State private var selectedTargetIDs = Set<String>()
+    /// 非 nil＝正在用原生 JSON 编辑器编辑该 client 的配置文件。
+    @State private var editingClientJSON: AgentToolsMCPClientAdapter?
     @State private var customName = ""
     @State private var customTransport: AgentToolsMCPTransport = .stdio
     @State private var customCommand = ""
     @State private var customArgs = ""
     @State private var customURL = ""
     @State private var customEnv = ""
+    /// 非 nil＝编辑模式，composer 回填该 server 并改为「保存修改」。
+    @State private var editingServer: AgentToolsMCPServerRecord?
+    /// 待确认删除的 server（驱动 confirmationDialog）。
+    @State private var serverPendingDelete: AgentToolsMCPServerRecord?
 
     private var filteredServers: [AgentToolsMCPServerRecord] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -128,6 +141,16 @@ struct AgentToolsMCPWorkbenchView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .agentToolsPage()
+        .overlay(alignment: .top) { AgentToolsNoticeBanner(text: store.mcpNotice) { store.mcpNotice = nil } }
+        .sheet(item: $editingClientJSON) { adapter in
+            AgentToolsJSONEditorSheet(
+                title: L("编辑 %@ 的 MCP 配置", adapter.displayName),
+                subtitle: adapter.path,
+                hint: L("直接编辑该应用的 mcpServers：形如 { \"my-server\": { \"command\": \"npx\", \"args\": [...] } }。保存即写入文件。"),
+                initialText: store.mcpClientJSON(for: adapter),
+                onSave: { store.saveMCPClientJSON($0, for: adapter) },
+                onClose: { editingClientJSON = nil })
+        }
         .onAppear {
             if store.mcpServers.isEmpty { store.refreshMCP() }
         }
@@ -502,6 +525,13 @@ struct AgentToolsMCPWorkbenchView: View {
             Spacer(minLength: 0)
 
             if !compact {
+                ToolActionButton(
+                    title: L("编辑配置"),
+                    systemImage: "curlybraces",
+                    role: .primary,
+                    height: 26, fontSize: 11, horizontalPadding: 11) {
+                        editingClientJSON = client
+                    }
                 IconOnlyButton(systemName: "doc.text", help: L("打开配置文件"), size: 24, symbolSize: 10.5) {
                     NSWorkspace.shared.open(URL(fileURLWithPath: client.expandedPath))
                 }
@@ -563,8 +593,13 @@ struct AgentToolsMCPWorkbenchView: View {
     }
 
     private var customComposer: some View {
-        AgentToolsSection(L("自定义 server")) {
+        let editing = editingServer != nil
+        return AgentToolsSection(editing ? L("编辑 server") : L("自定义 server")) {
             VStack(alignment: .leading, spacing: 9) {
+                if let editingServer {
+                    ToolBadge(text: L("正在编辑 %@ · %@", editingServer.name, editingServer.client),
+                              color: AppStyle.accent, style: .muted, height: 20)
+                }
                 textInput(L("名称"), text: $customName)
                 Picker("", selection: $customTransport) {
                     Text("stdio").tag(AgentToolsMCPTransport.stdio)
@@ -580,28 +615,96 @@ struct AgentToolsMCPWorkbenchView: View {
                 }
                 textInput("Env KEY=value, KEY2=value2", text: $customEnv)
                 HStack(spacing: 8) {
-                    ToolBadge(text: L("%ld 个应用", selectedTargetIDs.count), color: selectedTargetIDs.isEmpty ? AppStyle.waitAmber : AppStyle.accent, style: .muted, height: 20)
+                    if !editing {
+                        ToolBadge(text: L("%ld 个应用", selectedTargetIDs.count), color: selectedTargetIDs.isEmpty ? AppStyle.waitAmber : AppStyle.accent, style: .muted, height: 20)
+                    }
                     Spacer(minLength: 0)
-                    ToolActionButton(
-                        title: L("安装到选中应用"),
-                        systemImage: "plus",
-                        height: 28,
-                        fontSize: 11,
-                        horizontalPadding: 10) {
-                            store.installCustomMCPServer(
-                                name: customName,
-                                transport: customTransport,
-                                command: customCommand,
-                                args: mcpWorkbenchSplitArgs(customArgs),
-                                url: customURL,
-                                env: mcpWorkbenchParseEnv(customEnv),
-                                to: selectedTargetIDs)
-                        }
-                        .disabled(!canInstallCustom)
+                    if editing {
+                        ToolActionButton(
+                            title: L("取消"),
+                            systemImage: "xmark",
+                            height: 28, fontSize: 11, horizontalPadding: 10) {
+                                cancelEditing()
+                            }
+                        ToolActionButton(
+                            title: L("保存修改"),
+                            systemImage: "checkmark",
+                            height: 28, fontSize: 11, horizontalPadding: 10) {
+                                saveEdit()
+                            }
+                            .disabled(!canSaveCustom)
+                    } else {
+                        ToolActionButton(
+                            title: L("安装到选中应用"),
+                            systemImage: "plus",
+                            height: 28, fontSize: 11, horizontalPadding: 10) {
+                                store.installCustomMCPServer(
+                                    name: customName,
+                                    transport: customTransport,
+                                    command: customCommand,
+                                    args: mcpWorkbenchSplitArgs(customArgs),
+                                    url: customURL,
+                                    env: mcpWorkbenchParseEnv(customEnv),
+                                    to: selectedTargetIDs)
+                                resetComposer()
+                            }
+                            .disabled(!canInstallCustom)
+                    }
                 }
             }
             .padding(10)
             .agentToolsGlass(cornerRadius: Radius.sm)
+        }
+    }
+
+    /// 进入编辑：从磁盘读回原文回填，切到「导入」分段展示 composer。
+    private func beginEditing(_ server: AgentToolsMCPServerRecord) {
+        let raw = store.mcpRawConfig(for: server) ?? [:]
+        customName = server.name
+        customTransport = server.transport == .unknown ? .stdio : server.transport
+        customCommand = (raw["command"] as? String) ?? server.command ?? ""
+        let args = (raw["args"] as? [String]) ?? (raw["args"] as? [Any])?.compactMap { $0 as? String } ?? server.args
+        customArgs = args.joined(separator: " ")
+        customURL = (raw["url"] as? String) ?? server.url ?? ""
+        customEnv = mcpWorkbenchFormatEnv(raw["env"] as? [String: Any] ?? [:])
+        editingServer = server
+        withAnimation(AgentToolsMotion.route) { selectedSection = .install }
+    }
+
+    private func saveEdit() {
+        guard let editingServer else { return }
+        store.updateMCPServer(
+            editingServer,
+            newName: customName,
+            transport: customTransport,
+            command: customCommand,
+            args: mcpWorkbenchSplitArgs(customArgs),
+            url: customURL,
+            env: mcpWorkbenchParseEnv(customEnv))
+        cancelEditing()
+    }
+
+    private func cancelEditing() {
+        editingServer = nil
+        resetComposer()
+    }
+
+    private func resetComposer() {
+        customName = ""
+        customCommand = ""
+        customArgs = ""
+        customURL = ""
+        customEnv = ""
+        customTransport = .stdio
+    }
+
+    /// 编辑模式下的保存有效性（不要求选中目标，server 就地编辑在自己的 client）。
+    private var canSaveCustom: Bool {
+        guard !customName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        switch customTransport {
+        case .stdio: return !customCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .http, .sse: return !customURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .unknown: return false
         }
     }
 
@@ -662,6 +765,23 @@ struct AgentToolsMCPWorkbenchView: View {
                 ToolBadge(text: error, color: AppStyle.errorRed, style: .muted, height: 22)
             }
         }
+        .confirmationDialog(
+            L("移除 MCP server？"),
+            isPresented: Binding(
+                get: { serverPendingDelete != nil },
+                set: { if !$0 { serverPendingDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: serverPendingDelete
+        ) { server in
+            Button(L("移除 %@", server.name), role: .destructive) {
+                if editingServer?.id == server.id { cancelEditing() }
+                store.removeMCPServer(server)
+                serverPendingDelete = nil
+            }
+            Button(L("取消"), role: .cancel) { serverPendingDelete = nil }
+        } message: { server in
+            Text(L("将从 %@ 的配置文件删除该 server，不可撤销。如只想临时关闭，请改用「停用」。", server.client))
+        }
     }
 
     private var tableHeader: some View {
@@ -669,8 +789,8 @@ struct AgentToolsMCPWorkbenchView: View {
             Text("Server").frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
             Text(L("客户端")).frame(width: 112, alignment: .leading)
             Text(L("传输")).frame(width: 70, alignment: .leading)
-            Text(L("入口")).frame(width: 180, alignment: .leading)
-            Text(L("操作")).frame(width: 36, alignment: .trailing)
+            Text(L("入口")).frame(width: 150, alignment: .leading)
+            Text(L("操作")).frame(width: 96, alignment: .trailing)
         }
         .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(AppStyle.textTertiary)
@@ -691,10 +811,15 @@ struct AgentToolsMCPWorkbenchView: View {
                         .frame(width: 24, height: 24)
                         .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(mcpWorkbenchTransportColor(server.transport).opacity(0.12)))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(server.name)
-                            .font(.system(size: 12.5, weight: .bold))
-                            .foregroundStyle(AppStyle.textPrimary)
-                            .lineLimit(1)
+                        HStack(spacing: 5) {
+                            Text(server.name)
+                                .font(.system(size: 12.5, weight: .bold))
+                                .foregroundStyle(AppStyle.textPrimary)
+                                .lineLimit(1)
+                            if !server.enabled {
+                                ToolBadge(text: L("已停用"), color: AppStyle.textTertiary, style: .muted, height: 15)
+                            }
+                        }
                         Text(server.sourceKeyPath)
                             .font(.system(size: 9.5, weight: .medium, design: .monospaced))
                             .foregroundStyle(AppStyle.textTertiary)
@@ -717,20 +842,39 @@ struct AgentToolsMCPWorkbenchView: View {
                     .foregroundStyle(AppStyle.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .frame(width: 180, alignment: .leading)
+                    .frame(width: 150, alignment: .leading)
 
-                IconOnlyButton(
-                    systemName: "trash",
-                    help: L("移除 MCP server"),
-                    size: 24,
-                    symbolSize: 10.5,
-                    tint: AppStyle.errorRed) {
-                        store.removeMCPServer(server)
-                    }
-                    .frame(width: 36, alignment: .trailing)
+                HStack(spacing: 2) {
+                    IconOnlyButton(
+                        systemName: server.enabled ? "pause.circle" : "play.circle",
+                        help: server.enabled ? L("停用") : L("启用"),
+                        size: 24,
+                        symbolSize: 11.5,
+                        tint: server.enabled ? AppStyle.waitAmber : AppStyle.doneGreen) {
+                            store.setMCPServerEnabled(server, enabled: !server.enabled)
+                        }
+                    IconOnlyButton(
+                        systemName: "square.and.pencil",
+                        help: L("编辑"),
+                        size: 24,
+                        symbolSize: 10.5) {
+                            beginEditing(server)
+                        }
+                        .disabled(!server.enabled)
+                    IconOnlyButton(
+                        systemName: "trash",
+                        help: L("移除 MCP server"),
+                        size: 24,
+                        symbolSize: 10.5,
+                        tint: AppStyle.errorRed) {
+                            serverPendingDelete = server
+                        }
+                }
+                .frame(width: 96, alignment: .trailing)
             }
             .padding(.horizontal, 9)
             .frame(height: AgentToolsChrome.rowHeight)
+            .opacity(server.enabled ? 1 : 0.55)
             .background(
                 RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(selected ? AppStyle.accent.opacity(0.12) : Color.clear))
@@ -873,11 +1017,19 @@ private extension AgentToolsMCPTemplate {
     }
 }
 
-private func mcpWorkbenchSplitArgs(_ text: String) -> [String] {
+func mcpWorkbenchSplitArgs(_ text: String) -> [String] {
     text.split(whereSeparator: \.isWhitespace).map(String.init)
 }
 
-private func mcpWorkbenchParseEnv(_ text: String) -> [String: String] {
+/// 把原始 env 字典格式化回 "KEY=value, KEY2=value2"（编辑回填用）。
+func mcpWorkbenchFormatEnv(_ env: [String: Any]) -> String {
+    env.keys.sorted().map { key in
+        let value = env[key]
+        return "\(key)=\(value.map { "\($0)" } ?? "")"
+    }.joined(separator: ", ")
+}
+
+func mcpWorkbenchParseEnv(_ text: String) -> [String: String] {
     var result: [String: String] = [:]
     for raw in text.split(separator: ",") {
         let pair = raw.trimmingCharacters(in: .whitespacesAndNewlines)

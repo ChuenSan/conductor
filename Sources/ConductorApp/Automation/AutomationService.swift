@@ -74,6 +74,15 @@ final class AutomationService {
         #if DEBUG
         case "debug-agent-tools-smoke-test":
             return try debugAgentToolsSmokeTest()
+        case "debug-snapshot-window":
+            return try debugSnapshotWindow(coordinator: c, params: params)
+        case "debug-set-ui-section":
+            if let s = str("mcp") { AgentToolsDebugUI.mcpSection = s }
+            if let s = str("hooks") { AgentToolsDebugUI.hooksSection = s }
+            return .object([
+                "mcp": AgentToolsDebugUI.mcpSection.map(JSONValue.string) ?? .null,
+                "hooks": AgentToolsDebugUI.hooksSection.map(JSONValue.string) ?? .null,
+            ])
         #endif
 
         // —— 工作区 ——
@@ -245,6 +254,37 @@ final class AutomationService {
     }
 
     #if DEBUG
+    /// 把已打开的 AgentTools 窗口内容渲染成 PNG（NSView 自快照，不需要屏幕录制权限）。
+    /// 需先用 open-agent-tools 打开窗口并留出一帧布局时间。返回写出的文件路径。
+    private func debugSnapshotWindow(coordinator c: AppCoordinator,
+                                     params: [String: JSONValue]) throws -> JSONValue {
+        guard let window = c.agentToolsWindowController?.window,
+              let view = window.contentView else {
+            throw AutomationError.internalError("AgentTools 窗口未打开（先调用 open-agent-tools）")
+        }
+        let bounds = view.bounds
+        guard bounds.width > 1, bounds.height > 1,
+              let rep = view.bitmapImageRepForCachingDisplay(in: bounds) else {
+            throw AutomationError.internalError("无法为窗口建立位图（bounds=\(bounds)）")
+        }
+        view.cacheDisplay(in: bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else {
+            throw AutomationError.internalError("PNG 编码失败")
+        }
+        let name = (params["name"]?.stringValue ?? "agent-tools")
+            .replacingOccurrences(of: "/", with: "_")
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("conductor-ui", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("\(name).png")
+        try png.write(to: url)
+        return .object([
+            "path": .string(url.path),
+            "width": .int(Int(rep.pixelsWide)),
+            "height": .int(Int(rep.pixelsHigh)),
+        ])
+    }
+
     private func debugAgentToolsSmokeTest() throws -> JSONValue {
         func fail(_ message: String) throws -> Never {
             throw AutomationError.internalError(message)
@@ -281,12 +321,60 @@ final class AutomationService {
             try fail("hook command was not removed")
         }
 
+        // removeExact 精确删除：不误伤共享子串的兄弟 hook。
+        try doc.addCommand(event: HookEventName.stop, command: "echo hi")
+        try doc.addCommand(event: HookEventName.stop, command: "echo hi there")
+        let removedExact = try doc.removeExact(event: HookEventName.stop, command: "echo hi")
+        guard removedExact == 1,
+              doc.entries().count == 1,
+              doc.entries().first?.command == "echo hi there" else {
+            try fail("removeExact deleted the wrong hook(s)")
+        }
+
+        // update：精确替换命令与事件。
+        try doc.update(event: HookEventName.stop, command: "echo hi there",
+                       newEvent: HookEventName.sessionStart, newCommand: "echo edited", newTimeout: 1234)
+        let updated = doc.entries()
+        guard updated.count == 1,
+              updated.first?.event == HookEventName.sessionStart,
+              updated.first?.command == "echo edited",
+              updated.first?.timeout == 1234 else {
+            try fail("update did not replace hook correctly")
+        }
+
+        // removeExact 限定事件：同命令在不同事件下，只删指定事件的那条。
+        try doc.addCommand(event: HookEventName.stop, command: "same-cmd")
+        try doc.addCommand(event: HookEventName.sessionStart, command: "same-cmd")
+        let removedScoped = try doc.removeExact(event: HookEventName.stop, command: "same-cmd")
+        let scoped = doc.entries()
+        guard removedScoped == 1,
+              !scoped.contains(where: { $0.event == HookEventName.stop && $0.command == "same-cmd" }),
+              scoped.contains(where: { $0.event == HookEventName.sessionStart && $0.command == "same-cmd" }) else {
+            try fail("removeExact was not event-scoped")
+        }
+        _ = try doc.removeExact(event: HookEventName.sessionStart, command: "same-cmd")
+
+        // 停用仓（HookParkingStore）往返。
+        let parkURL = root.appendingPathComponent("hooks-disabled.json")
+        let parking = HookParkingStore(url: parkURL)
+        try parking.add(ParkedHook(source: .claude, event: "Stop", command: "parked", timeout: 7))
+        guard parking.parked(for: .claude).count == 1,
+              parking.find(source: .claude, event: "Stop", command: "parked")?.timeout == 7,
+              try parking.remove(source: .claude, event: "Stop", command: "parked"),
+              parking.load().isEmpty else {
+            try fail("hook parking store round-trip failed")
+        }
+
         return .object([
             "mcp": .array(mcpSteps.map(JSONValue.string)),
             "hooks": .array([
                 .string("wrote command hook"),
                 .string("deduplicated command hook"),
                 .string("removed command hook"),
+                .string("removeExact spared substring sibling"),
+                .string("update replaced command + event"),
+                .string("removeExact is event-scoped"),
+                .string("parking store round-trip"),
             ]),
         ])
     }
