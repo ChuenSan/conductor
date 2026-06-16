@@ -239,6 +239,9 @@
 "收起命令" = "Hide Command";
 "用默认编辑器打开配置文件" = "Open the config file in the default editor";
 "由 Conductor 管理，可一键移除。" = "Managed by Conductor and removable in one click.";
+"只能打开 .command 文件" = "Only .command files can be opened";
+"文件不存在：%@" = "File not found: %@";
+"已打开 %@" = "Opened %@";
 "自定义命令" = "Custom Command";
 "来自现有 Agent 配置。" = "From existing Agent configuration.";
 "安装失败：%@" = "Install failed: %@";

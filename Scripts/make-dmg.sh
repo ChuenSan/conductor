@@ -83,6 +83,25 @@ assemble_app() {
   <string>6.0</string>
   <key>LSMinimumSystemVersion</key>
   <string>14.0</string>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>Shell Command Script</string>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+      <key>LSHandlerRank</key>
+      <string>Alternate</string>
+      <key>CFBundleTypeExtensions</key>
+      <array>
+        <string>command</string>
+      </array>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>com.apple.terminal.shell-script</string>
+      </array>
+    </dict>
+  </array>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
   <key>NSHighResolutionCapable</key>

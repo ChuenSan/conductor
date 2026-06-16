@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: NSWindow!
     var coordinator: AppCoordinator!
     private var keyMonitor: Any?
+    private var pendingOpenFiles: [String] = []
     /// 关窗时已确认过中断思考，applicationShouldTerminate 不再问第二遍。
     private var closeConfirmed = false
 
@@ -35,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         installKeyMonitor()
+        openPendingFiles()
     }
 
     private func installMainMenu() {
@@ -74,6 +76,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func application(_ sender: NSApplication, openFiles filenames: [String]) {
+        guard coordinator != nil else {
+            pendingOpenFiles.append(contentsOf: filenames)
+            sender.reply(toOpenOrPrint: .success)
+            return
+        }
+        let opened = openFiles(filenames)
+        sender.reply(toOpenOrPrint: opened ? .success : .failure)
+    }
+
+    private func openPendingFiles() {
+        guard !pendingOpenFiles.isEmpty else { return }
+        _ = openFiles(pendingOpenFiles)
+        pendingOpenFiles.removeAll()
+    }
+
+    private func openFiles(_ filenames: [String]) -> Bool {
+        var openedAny = false
+        for filename in filenames {
+            let url = URL(fileURLWithPath: filename)
+            openedAny = coordinator.openCommandFile(url) || openedAny
+        }
+        return openedAny
+    }
 
     /// 误关保护：红绿灯关窗时有 agent 正在思考 → 先确认（窗口没了 app 也就退出了）。
     func windowShouldClose(_ sender: NSWindow) -> Bool {

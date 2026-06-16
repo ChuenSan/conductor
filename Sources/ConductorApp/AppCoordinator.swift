@@ -1370,6 +1370,38 @@ final class AppCoordinator: ObservableObject {
         run(.newTab(newTabID: TabID(nextID("t")), newPaneID: PaneID(nextID("p")), cwd: path))
     }
 
+    /// Finder / `open -a Conductor file.command`：新建 tab 并执行 .command 脚本。
+    @discardableResult
+    func openCommandFile(_ url: URL) -> Bool {
+        let fileURL = url.standardizedFileURL
+        guard fileURL.pathExtension.lowercased() == "command" else {
+            ToastHUD.shared.show(L("只能打开 .command 文件"),
+                                 icon: "exclamationmark.circle.fill", over: window)
+            return false
+        }
+        let path = fileURL.path
+        guard FileManager.default.fileExists(atPath: path) else {
+            ToastHUD.shared.show(L("文件不存在：%@", fileURL.lastPathComponent),
+                                 icon: "exclamationmark.circle.fill", over: window)
+            return false
+        }
+
+        let paneID = PaneID(nextID("p"))
+        let cwd = fileURL.deletingLastPathComponent().path
+        run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID, cwd: cwd))
+        paneCwds[paneID] = cwd
+
+        let quotedPath = ShellQuoting.quote(path)
+        let command = FileManager.default.isExecutableFile(atPath: path)
+            ? quotedPath
+            : "/bin/zsh \(quotedPath)"
+        (registry.surface(for: paneID) as? GhosttySurface)?
+            .enqueueCommand(command)
+        ToastHUD.shared.show(L("已打开 %@", fileURL.lastPathComponent),
+                             icon: "terminal.fill", over: window)
+        return true
+    }
+
     // MARK: - 命令入口（键位调用）
 
     /// ⌘T：新标签的 shell 在当前 pane 的目录启动（Terminal.app 惯例）；拿不到则回退工作区根。
