@@ -387,8 +387,8 @@ private struct TabPill: View {
             Color.clear.frame(width: 15, height: 15)   // 预留 X 位
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.62), value: tab.paneCount)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                 .fill(selected ? AnyShapeStyle(AppStyle.elevated)

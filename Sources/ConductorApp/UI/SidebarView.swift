@@ -109,7 +109,7 @@ struct SidebarView: View {
     }
 
     private var workspaceList: some View {
-        VStack(alignment: isCollapsed ? .center : .leading, spacing: 3) {
+        VStack(alignment: isCollapsed ? .center : .leading, spacing: 5) {
             let workspaces = coordinator.visibleWorkspaces
             ForEach(Array(workspaces.enumerated()), id: \.element.id) { index, ws in
                 let selected = ws.id == coordinator.store.activeWorkspace
@@ -251,6 +251,7 @@ struct SidebarView: View {
                 if !isCollapsed {
                     Text("Conductor")
                         .font(.system(size: 16, weight: .bold))
+                        .tracking(0.2)
                         .foregroundStyle(AppStyle.textPrimary)
                     Spacer()
                 }
