@@ -70,6 +70,7 @@ final class AppCoordinator: ObservableObject {
     private let hooksInbox = HooksInbox()
     /// 工作区侧栏元数据（自动化状态/进度/日志 + 端口 + PR）。
     let workspaceMetadata = WorkspaceMetadataCenter()
+    let feedCenter = FeedCenter()
     /// 自动化 socket 服务（conductor CLI 的对端）。
     private var automationServer: AutomationSocketServer?
     private var automationService: AutomationService?
@@ -624,6 +625,7 @@ final class AppCoordinator: ObservableObject {
                 ?? AutomationCodec.encode(AutomationResponse(id: nil, error: .internalError("服务已停止")))
         }
         if server.start() { automationServer = server }
+        feedCenter.startExpiryTimer()
     }
 
     /// 启动后低优先级预扫一次 30 天用量并写缓存，让用量面板首次打开即有数据。

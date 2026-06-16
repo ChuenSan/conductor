@@ -7,6 +7,16 @@ public enum FeedActionCategory: String, Codable, Sendable, CaseIterable {
     case executeCommand   // 执行 shell 命令
     case network          // 网络访问
     case other
+
+    public var label: String {
+        switch self {
+        case .readFile: return "读文件"
+        case .writeFile: return "写文件"
+        case .executeCommand: return "执行命令"
+        case .network: return "网络访问"
+        case .other: return "其它"
+        }
+    }
 }
 
 /// 一条待审批请求的内容。运行时类型，不持久化。
@@ -55,6 +65,19 @@ public struct FeedRequest: Identifiable, Equatable, Sendable {
         if case let .permission(_, _, detail) = kind { return detail }
         return nil
     }
+
+    /// 人读摘要（审计 / 日志用）。
+    public var summary: String {
+        switch kind {
+        case let .permission(tool, category, detail):
+            if let d = detail, !d.isEmpty { return "\(tool) · \(category.label) · \(d)" }
+            return "\(tool) · \(category.label)"
+        case let .exitPlan(plan):
+            return "退出计划模式：\(plan.prefix(80))"
+        case let .question(prompt, _):
+            return "提问：\(prompt.prefix(80))"
+        }
+    }
 }
 
 /// 审批粒度。
@@ -72,4 +95,43 @@ public enum FeedDecision: Equatable, Sendable {
 
     public var isAllow: Bool { if case .allow = self { return true }; return false }
     public var isDeny: Bool { if case .deny = self { return true }; return false }
+
+    /// 审计字符串。
+    public var auditString: String {
+        switch self {
+        case let .allow(scope): return "allow(\(scope.rawValue))"
+        case let .deny(scope): return "deny(\(scope.rawValue))"
+        case let .answer(index): return "answer:\(index)"
+        }
+    }
+}
+
+/// 一条审批审计记录（运行时环形缓冲，不持久化）。
+public struct FeedAuditEntry: Identifiable, Equatable, Sendable {
+    public var id: String
+    public var time: Date
+    public var summary: String       // 请求摘要
+    public var agent: String?
+    public var paneID: String?
+    public var decision: String      // 决策的 auditString
+    public var auto: Bool            // 是否规则/默认自动处置（非人工）
+    public var note: String?         // timeout / disconnect 等附注
+
+    public init(id: String = UUID().uuidString,
+                time: Date = Date(),
+                summary: String,
+                agent: String? = nil,
+                paneID: String? = nil,
+                decision: String,
+                auto: Bool,
+                note: String? = nil) {
+        self.id = id
+        self.time = time
+        self.summary = summary
+        self.agent = agent
+        self.paneID = paneID
+        self.decision = decision
+        self.auto = auto
+        self.note = note
+    }
 }

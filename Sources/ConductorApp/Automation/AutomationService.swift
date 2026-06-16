@@ -30,8 +30,8 @@ final class AutomationService {
             return AutomationResponse(id: request.id, error: .internalError("应用尚未就绪"))
         }
         do {
-            let result = try handle(method: request.method, params: request.parameters,
-                                    coordinator: coordinator)
+            let result = try await handle(method: request.method, params: request.parameters,
+                                          coordinator: coordinator)
             return AutomationResponse(id: request.id, result: result)
         } catch let error as AutomationError {
             return AutomationResponse(id: request.id, error: error)
@@ -43,7 +43,7 @@ final class AutomationService {
     // MARK: - 方法表
 
     private func handle(method: String, params: [String: JSONValue],
-                        coordinator c: AppCoordinator) throws -> JSONValue {
+                        coordinator c: AppCoordinator) async throws -> JSONValue {
         func str(_ key: String) -> String? { params[key]?.stringValue }
         func requireStr(_ key: String) throws -> String {
             guard let value = str(key), !value.isEmpty else {
@@ -248,9 +248,86 @@ final class AutomationService {
             c.workspaceMetadata.clearLog(workspace: workspace.id)
             return .bool(true)
 
+        // —— Feed 审批 ——
+        // 阻塞式：命中规则/默认即刻返回，否则挂起等 GUI/CLI 决策（agent 的 hook 等这条回包）。
+        case "feed-request", "feed.request":
+            let request = try Self.parseFeedRequest(params: params, requireStr: requireStr, str: str)
+            let decision = await c.feedCenter.submit(request)
+            return Self.feedDecisionJSON(decision)
+        case "feed-list", "feed.list":
+            return .array(c.feedCenter.pendingRequests().map(Self.feedRequestJSON))
+        case "feed-approve", "feed.approve":
+            let scope = FeedScope(rawValue: str("scope") ?? "once") ?? .once
+            return .bool(c.feedCenter.resolve(id: try requireStr("id"), decision: .allow(scope)))
+        case "feed-deny", "feed.deny":
+            let scope = FeedScope(rawValue: str("scope") ?? "once") ?? .once
+            return .bool(c.feedCenter.resolve(id: try requireStr("id"), decision: .deny(scope)))
+        case "feed-answer", "feed.answer":
+            guard let option = params["option"]?.intValue else {
+                throw AutomationError.badRequest("缺少参数：option")
+            }
+            return .bool(c.feedCenter.resolve(id: try requireStr("id"),
+                                              decision: .answer(optionIndex: option)))
+
         default:
             throw AutomationError.unknownMethod(method)
         }
+    }
+
+    // MARK: - Feed 编解码
+
+    private static func parseFeedRequest(
+        params: [String: JSONValue],
+        requireStr: (String) throws -> String,
+        str: (String) -> String?
+    ) throws -> FeedRequest {
+        let kind: FeedRequestKind
+        switch str("kind") ?? "permission" {
+        case "permission":
+            let category = FeedActionCategory(rawValue: str("category") ?? "other") ?? .other
+            kind = .permission(tool: try requireStr("tool"), category: category, detail: str("detail"))
+        case "exitPlan", "exit-plan":
+            kind = .exitPlan(plan: try requireStr("plan"))
+        case "question":
+            let options = (params["options"]?.arrayValue ?? []).compactMap(\.stringValue)
+            kind = .question(prompt: try requireStr("prompt"), options: options)
+        default:
+            throw AutomationError.badRequest("kind 只支持 permission / exitPlan / question")
+        }
+        return FeedRequest(paneID: str("pane"), agent: str("agent"), cwd: str("cwd"), kind: kind)
+    }
+
+    private static func feedDecisionJSON(_ decision: FeedDecision) -> JSONValue {
+        switch decision {
+        case .allow: return .object(["decision": .string("allow")])
+        case .deny: return .object(["decision": .string("deny")])
+        case let .answer(index): return .object(["decision": .string("answer"), "option": .int(index)])
+        }
+    }
+
+    private static func feedRequestJSON(_ request: FeedRequest) -> JSONValue {
+        var obj: [String: JSONValue] = [
+            "id": .string(request.id),
+            "summary": .string(request.summary),
+            "createdAt": .double(request.createdAt.timeIntervalSince1970),
+            "pane": request.paneID.map(JSONValue.string) ?? .null,
+            "agent": request.agent.map(JSONValue.string) ?? .null,
+        ]
+        switch request.kind {
+        case let .permission(tool, category, detail):
+            obj["kind"] = .string("permission")
+            obj["tool"] = .string(tool)
+            obj["category"] = .string(category.rawValue)
+            obj["detail"] = detail.map(JSONValue.string) ?? .null
+        case let .exitPlan(plan):
+            obj["kind"] = .string("exitPlan")
+            obj["plan"] = .string(plan)
+        case let .question(prompt, options):
+            obj["kind"] = .string("question")
+            obj["prompt"] = .string(prompt)
+            obj["options"] = .array(options.map(JSONValue.string))
+        }
+        return .object(obj)
     }
 
     #if DEBUG
