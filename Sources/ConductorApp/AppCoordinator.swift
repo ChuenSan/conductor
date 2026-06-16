@@ -655,6 +655,8 @@ final class AppCoordinator: ObservableObject {
     // MARK: - 通知（agent 完成）
 
     private func startNotifications() {
+        // 自动迁移旧版残留 hook（含 Notification 事件上把"等待"误判成"完成"的 "blocked" 条）+ 刷新脚本。
+        HookInstaller.migrateIfInstalled()
         NotificationManager.shared.configure()
         NotificationManager.shared.onActivatePane = { [weak self] paneID in
             self?.revealPane(PaneID(paneID))
