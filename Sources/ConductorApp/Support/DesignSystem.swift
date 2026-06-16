@@ -250,7 +250,6 @@ struct ToolActionButton: View {
             .background(Capsule().fill(background))
             .overlay(Capsule().strokeBorder(border, lineWidth: 1))
             .contentShape(Capsule())
-            .offset(y: hovering ? -0.5 : 0)
         }
         .buttonStyle(PressScaleStyle())
         .help(help ?? title)
@@ -388,8 +387,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .background(shape.fill(theme.primarySolid))
             .contentShape(shape)
             .opacity(configuration.isPressed ? 0.82 : 1)
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(Motion.snappy, value: configuration.isPressed)
+            .animation(Motion.hover, value: configuration.isPressed)
     }
 }
 
@@ -412,7 +410,6 @@ struct SecondaryButtonStyle: ButtonStyle {
             .overlay(shape.strokeBorder(theme.isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.07), lineWidth: 1))
             .contentShape(shape)
             .opacity(configuration.isPressed ? 0.72 : 1)
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(Motion.snappy, value: configuration.isPressed)
+            .animation(Motion.hover, value: configuration.isPressed)
     }
 }

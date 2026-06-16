@@ -22,6 +22,9 @@ final class GhosttySurface: TerminalSurface {
     var extraEnvironment: [(key: String, value: String)] = []
     private var lastScale: CGFloat = 0
     private var lastSize: CGSize = .zero
+    private var lastCellSize: CGSize?
+    private var appliedColorScheme: ghostty_color_scheme_e?
+    private var paletteRefreshGeneration = 0
 
     // ConductorCore.TerminalSurface 回调（由 SessionRegistry 注入；运行时 action 路由触发）
     var onTitleChange: ((String) -> Void)?
@@ -215,20 +218,29 @@ final class GhosttySurface: TerminalSurface {
             return
         }
         retainedUserdata = userdata
+        reassertDisplayID()
         syncGeometry(force: true)
-        applyRuntimeColorScheme()
         hostView.refreshThemeBackground()
+        applyRuntimeColorScheme(force: true)
+        if let runtimeConfig = GhosttyRuntime.shared.config {
+            ghostty_surface_update_config(surface, runtimeConfig)
+        }
         ghostty_surface_set_occlusion(surface, true)   // 可见（bool 实为 visible）
         ghostty_surface_set_focus(surface, false)
         ghostty_surface_refresh(surface)
         flushPendingCommandIfReady()
     }
 
-    private func applyRuntimeColorScheme() {
+    private func applyRuntimeColorScheme(force: Bool = false) {
+        applyRuntimeColorScheme(for: ConfigStore.shared.config, force: force)
+    }
+
+    private func applyRuntimeColorScheme(for config: AppConfig, force: Bool = false) {
         guard let surface else { return }
-        ghostty_surface_set_color_scheme(
-            surface,
-            GhosttyRuntime.colorScheme(for: ConfigStore.shared.config))
+        let scheme = GhosttyRuntime.colorScheme(for: config)
+        guard force || appliedColorScheme != scheme else { return }
+        ghostty_surface_set_color_scheme(surface, scheme)
+        appliedColorScheme = scheme
     }
 
     func syncGeometry(force: Bool = false) {
@@ -254,16 +266,26 @@ final class GhosttySurface: TerminalSurface {
 
     /// 配置热更新：把最新 ghostty 配置应用到本 surface（字体/配色/padding 即时生效，不重建、不丢 scrollback）。
     func reloadConfig() {
+        reloadConfig(for: ConfigStore.shared.config)
+    }
+
+    func refreshThemeBackground(for appConfig: AppConfig) {
+        hostView.refreshThemeBackground(GhosttyRuntime.terminalBackgroundColor(for: appConfig))
+    }
+
+    /// 配置热更新：把指定配置应用到本 surface，确保调用方和 runtime 使用同一份快照。
+    func reloadConfig(for appConfig: AppConfig) {
         guard let surface, let config = GhosttyRuntime.shared.config else { return }
+        // macos-background-from-layer makes Ghostty sample this layer as the
+        // terminal backdrop, so it must be current before update_config runs.
+        refreshThemeBackground(for: appConfig)
+        applyRuntimeColorScheme(for: appConfig, force: true)
         ghostty_surface_update_config(surface, config)
-        applyRuntimeColorScheme()
-        hostView.refreshThemeBackground()
-        ghostty_surface_refresh(surface)
-        ghostty_surface_render_now(surface)
+        forceRedraw()
     }
 
     func handleConfigChange() {
-        applyRuntimeColorScheme()
+        applyRuntimeColorScheme(force: true)
         hostView.refreshThemeBackground()
         forceRedraw()
     }
@@ -273,10 +295,17 @@ final class GhosttySurface: TerminalSurface {
         let color = GhosttyRuntime.color(from: change)
         hostView.refreshThemeBackground(color)
         if let surface {
-            ghostty_surface_set_color_scheme(surface, GhosttyRuntime.colorScheme(forBackground: color))
+            let scheme = GhosttyRuntime.colorScheme(forBackground: color)
+            ghostty_surface_set_color_scheme(surface, scheme)
+            appliedColorScheme = scheme
             ghostty_surface_refresh(surface)
             ghostty_surface_render_now(surface)
         }
+    }
+
+    func handleCellSize(width: UInt32, height: UInt32) {
+        guard width > 0, height > 0 else { return }
+        lastCellSize = CGSize(width: CGFloat(width), height: CGFloat(height))
     }
 
     private func startupEnvironmentPairs(shell: String) -> [(key: String, value: String)] {
@@ -303,9 +332,11 @@ final class GhosttySurface: TerminalSurface {
     /// 重挂视图层级后强制重画（避免变白）。
     func forceRedraw() {
         guard let surface else { return }
+        reassertDisplayID()
         ghostty_surface_set_occlusion(surface, true)   // true = 可见
         syncGeometry(force: true)
         ghostty_surface_refresh(surface)
+        ghostty_surface_render_now(surface)
     }
 
     /// 可见性同步：false 让 core 的渲染线程休眠（光标/动画停画），省 GPU/CPU。
@@ -320,6 +351,61 @@ final class GhosttySurface: TerminalSurface {
     func setFocused(_ focused: Bool) {
         guard let surface else { return }
         ghostty_surface_set_focus(surface, focused)
+        if focused { reassertDisplayID() }
+    }
+
+    /// Some TUIs re-query OSC 10/11 default colors on terminal focus gained,
+    /// but only repaint their transcript on resize. After a live theme change,
+    /// pulse both paths so cached palette-dependent UI refreshes without restart.
+    func pulseForPaletteRefresh() {
+        guard let surface else { return }
+        paletteRefreshGeneration &+= 1
+        let generation = paletteRefreshGeneration
+        ghostty_surface_set_focus(surface, false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            guard let self, let surface = self.surface else { return }
+            guard self.paletteRefreshGeneration == generation else { return }
+            self.reassertDisplayID()
+            ghostty_surface_set_focus(surface, true)
+            ghostty_surface_refresh(surface)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+                self?.pulseResizeForPaletteRefresh(generation: generation)
+            }
+        }
+    }
+
+    private func pulseResizeForPaletteRefresh(generation: Int) {
+        guard let surface else { return }
+        guard paletteRefreshGeneration == generation else { return }
+        let original = lastSize
+        guard original.width > 1, original.height > 48 else { return }
+        let rowHeight = max(lastCellSize?.height ?? 28, 18)
+        let shrink = min(max(rowHeight * 3, 96), max(1, original.height - rowHeight))
+        let temporaryHeight = max(CGFloat(1), original.height - shrink)
+        ghostty_surface_set_occlusion(surface, false)
+        ghostty_surface_set_size(
+            surface,
+            UInt32(original.width.rounded(.toNearestOrAwayFromZero)),
+            UInt32(temporaryHeight.rounded(.toNearestOrAwayFromZero)))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            guard let self, let surface = self.surface else { return }
+            guard self.paletteRefreshGeneration == generation else { return }
+            ghostty_surface_set_size(
+                surface,
+                UInt32(original.width.rounded(.toNearestOrAwayFromZero)),
+                UInt32(original.height.rounded(.toNearestOrAwayFromZero)))
+            self.lastSize = original
+            ghostty_surface_set_occlusion(surface, true)
+            ghostty_surface_refresh(surface)
+            ghostty_surface_render_now(surface)
+        }
+    }
+
+    private func reassertDisplayID() {
+        guard let surface,
+              let displayID = (hostView.window?.screen ?? NSScreen.main)?.displayID,
+              displayID != 0 else { return }
+        ghostty_surface_set_display_id(surface, displayID)
     }
 
     func sendMouseButton(_ button: ghostty_input_mouse_button_e, state: ghostty_input_mouse_state_e, event: NSEvent) {
@@ -501,7 +587,9 @@ final class GhosttySurface: TerminalSurface {
 
     /// 读取整个屏幕 + 回滚缓冲的 VT 回放流。用于 session restore，保留 SGR 颜色/粗体等 TUI 样式。
     func readAllVTText() -> String? {
-        readVTExport(bindingAction: "write_screen_file:copy,vt")
+        let scrollback = readVTExport(bindingAction: "write_scrollback_file:copy,vt")
+        let screen = readVTExport(bindingAction: "write_screen_file:copy,vt")
+        return Self.combinedVTExport(scrollback: scrollback, screen: screen)
     }
 
     /// 只读当前可见视口的纯文本（Mission Control 卡片预览用，按需调用、开销小）。
@@ -568,6 +656,23 @@ final class GhosttySurface: TerminalSurface {
         text.replacingOccurrences(of: "\r\n", with: "\n")
     }
 
+    private nonisolated static func combinedVTExport(scrollback: String?, screen: String?) -> String? {
+        let scrollback = scrollback?.trimmingCharacters(in: .newlines)
+        let screen = screen?.trimmingCharacters(in: .newlines)
+        switch (scrollback?.isEmpty == false ? scrollback : nil,
+                screen?.isEmpty == false ? screen : nil) {
+        case let (history?, current?):
+            if history.hasSuffix(current) { return history }
+            return history + "\n" + current
+        case let (history?, nil):
+            return history
+        case let (nil, current?):
+            return current
+        case (nil, nil):
+            return nil
+        }
+    }
+
     private nonisolated static func shouldRemoveExportedScreenFile(_ fileURL: URL) -> Bool {
         let standardizedFile = fileURL.standardizedFileURL
         let temporary = FileManager.default.temporaryDirectory.standardizedFileURL
@@ -594,5 +699,15 @@ extension GhosttySurface: TerminalResizeFreezeParticipant {
     /// 解冻：按动画结束后的最终 frame 补一次真实 resize + 重画（恢复清晰内容）。
     func resizeFreezeDidEnd() {
         syncGeometry(force: true)
+    }
+}
+
+private extension NSScreen {
+    var displayID: UInt32? {
+        let key = NSDeviceDescriptionKey("NSScreenNumber")
+        if let value = deviceDescription[key] as? UInt32 { return value }
+        if let value = deviceDescription[key] as? Int { return UInt32(value) }
+        if let value = deviceDescription[key] as? NSNumber { return value.uint32Value }
+        return nil
     }
 }

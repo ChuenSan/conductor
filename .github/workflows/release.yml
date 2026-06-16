@@ -47,10 +47,10 @@ jobs:
           {
             echo "## Highlights"
             echo
-            echo "- Refined the Skills manager into a denser right-panel experience."
-            echo "- Added Skills Doctor diagnostics for library, source, sync target, and deploy issues."
-            echo "- Tightened CLI/provider surfaces, i18n coverage, sidebar sizing, and panel width defaults."
-            echo "- Added stable local signing support so development builds keep macOS permissions after rebuilds."
+            echo "- Reworked terminal theme refresh and scrollback restore so live Codex panes repaint more reliably after theme changes."
+            echo "- Reduced Agent Tools management animations and removed the MCP/Hook management modules from the console."
+            echo "- Kept CLI notification hooks available while tightening usage credential handling and diagnostics."
+            echo "- Improved restored terminal content cleanup and added focused regression coverage."
             echo
             echo "## Assets"
             echo

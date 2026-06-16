@@ -669,11 +669,24 @@ final class AppCoordinator: ObservableObject {
         let pane = event.paneID.map { PaneID($0) }
         rememberAgentSession(from: event, pane: pane)
 
+        let eventType = event.type?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
         // busy（UserPromptSubmit）：纯状态事件，点亮思考动效即返回，不发通知
-        if event.type == "busy" {
+        if eventType == "busy" {
             if let pane {
                 setHookThinking(pane, active: true)
             }
+            return
+        }
+
+        // sessionStart 只用于尽早记录原生 session id，不代表任务完成。
+        // 这类事件常发生在启动/加载 MCP 阶段，不能弹完成通知。
+        if eventType == "sessionstart" {
+            return
+        }
+
+        // 只允许 Stop 对应的 done（以及旧脚本无 type）进入完成通知路径。
+        guard eventType == nil || eventType == "" || eventType == "done" || eventType == "stop" else {
             return
         }
 
@@ -1272,13 +1285,19 @@ final class AppCoordinator: ObservableObject {
 
     /// 把一份配置的终端外观应用到所有 surface（不重建、不丢 scrollback）。热更新与字号缩放共用。
     private func applyTerminalAppearance(_ config: AppConfig) {
-        GhosttyRuntime.shared.applyConfig(config)
-        for ws in store.workspaces {
-            for tab in ws.tabs {
-                for pane in tab.rootSplit.leaves() {
-                    (registry.surface(for: pane) as? GhosttySurface)?.reloadConfig()
+        let surfaces = store.workspaces.flatMap { ws in
+            ws.tabs.flatMap { tab in
+                tab.rootSplit.leaves().compactMap { pane in
+                    registry.surface(for: pane) as? GhosttySurface
                 }
             }
+        }
+        surfaces.forEach { $0.refreshThemeBackground(for: config) }
+        GhosttyRuntime.shared.applyConfig(config)
+        surfaces.forEach { $0.reloadConfig(for: config) }
+        if let pane = activePane(),
+           let surface = registry.surface(for: pane) as? GhosttySurface {
+            surface.pulseForPaletteRefresh()
         }
     }
 

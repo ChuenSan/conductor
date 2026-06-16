@@ -8,7 +8,6 @@ private enum AgentToolsCLIFilter: String, CaseIterable, Identifiable {
     case credentials
     case usage
     case skills
-    case hooks
 
     var id: String { rawValue }
 
@@ -20,7 +19,6 @@ private enum AgentToolsCLIFilter: String, CaseIterable, Identifiable {
         case .credentials: return L("已配置")
         case .usage: return "Usage"
         case .skills: return "Skills"
-        case .hooks: return "Hooks"
         }
     }
 }
@@ -86,9 +84,6 @@ struct AgentToolsCLIView: View {
                 return true
             case .skills:
                 if case .unavailable = row.skillSignal { return false }
-                return true
-            case .hooks:
-                if case .unavailable = row.hookSignal { return false }
                 return true
             }
         }
@@ -366,7 +361,6 @@ struct AgentToolsCLIView: View {
             HStack(spacing: 5) {
                 capabilityChip("Usage", overview?.usageSignal)
                 capabilityChip("Skills", overview?.skillSignal)
-                capabilityChip("Hooks", overview?.hookSignal)
             }
             .frame(width: capabilityWidth, alignment: .leading)
         }
@@ -387,7 +381,7 @@ struct AgentToolsCLIView: View {
 
     private func capabilityScore(_ tool: CLIToolStatus) -> Int {
         guard let row = store.overviewRow(for: tool) else { return 0 }
-        return [row.usageSignal, row.skillSignal, row.hookSignal, row.mcpSignal].reduce(0) { partial, signal in
+        return [row.usageSignal, row.skillSignal].reduce(0) { partial, signal in
             if case .unavailable = signal { return partial }
             if case .unknown = signal { return partial }
             return partial + 1
@@ -485,8 +479,6 @@ struct AgentToolsCLIInspector: View {
             AgentToolsSection(L("能力")) {
                 signalRow("Usage", row?.usageSignal ?? .unknown(L("未知")))
                 signalRow("Skills", row?.skillSignal ?? .unknown(L("未知")))
-                signalRow("Hooks", row?.hookSignal ?? .unknown(L("未知")))
-                signalRow("MCP", row?.mcpSignal ?? .unknown(L("未知")))
             }
 
             VStack(alignment: .leading, spacing: 8) {

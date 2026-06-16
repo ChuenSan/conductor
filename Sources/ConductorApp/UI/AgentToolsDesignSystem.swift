@@ -14,18 +14,16 @@ enum AgentToolsChrome {
 }
 
 enum AgentToolsMotion {
-    // 语义档位转发到统一 Motion token，保留符号名供调用方编译。
-    static let route = Motion.panel
-    static let selection = Motion.snappy
-    static let reveal = Motion.expand
-    static let hover = Motion.hover
+    // 管理台是高密度文字界面，动画要短、轻，避免文本进入缩放合成层后发糊。
+    static let route = Animation.easeOut(duration: 0.12)
+    static let selection = Animation.easeOut(duration: 0.08)
+    static let reveal = Animation.easeOut(duration: 0.10)
+    static let hover = Animation.easeOut(duration: 0.08)
     static let loading = Animation.linear(duration: 0.85).repeatForever(autoreverses: false)
 
     static let contentTransition = AnyTransition.opacity
-        .combined(with: .scale(scale: 0.985, anchor: .center))
 
     static let revealTransition = AnyTransition.opacity
-        .combined(with: .scale(scale: 0.98, anchor: .top))
 }
 
 struct AgentToolsModuleHeader<Actions: View>: View {

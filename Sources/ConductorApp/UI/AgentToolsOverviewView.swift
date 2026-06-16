@@ -15,20 +15,11 @@ final class AgentToolsConsoleStore: ObservableObject {
     @Published private(set) var managedSkills: [ManagedSkill] = []
     @Published private(set) var isLoadingAgentRegistry = false
     @Published private(set) var agentRegistryError: String?
-    @Published private(set) var mcpServers: [AgentToolsMCPServerRecord] = []
-    @Published private(set) var isScanningMCP = false
-    @Published private(set) var mcpScanError: String?
-    @Published private(set) var hookEntries: [HookEntry] = []
-    @Published private(set) var hookRecipeStates: [String: Set<HookSource>] = [:]
-    @Published private(set) var isLoadingHooks = false
-    @Published private(set) var hookError: String?
     @Published private(set) var overviewRows: [AgentToolsOverviewRow] = []
     @Published var selectedOverviewRowID: String?
     @Published var selectedCLIToolID: String?
     @Published var selectedUsageProviderID: String?
     @Published var selectedAgentID: String?
-    @Published var selectedMCPServerID: String?
-    @Published var selectedHookEntryID: String?
 
     private var started = false
 
@@ -120,16 +111,6 @@ final class AgentToolsConsoleStore: ObservableObject {
     var selectedUsageProvider: UsageProviderEntry? {
         guard let selectedUsageProviderID else { return nil }
         return UsageProviderCatalog.all.first { $0.id == selectedUsageProviderID }
-    }
-
-    var selectedMCPServer: AgentToolsMCPServerRecord? {
-        guard let selectedMCPServerID else { return nil }
-        return mcpServers.first { $0.id == selectedMCPServerID }
-    }
-
-    var selectedHookEntry: HookEntry? {
-        guard let selectedHookEntryID else { return nil }
-        return hookEntries.first { $0.id == selectedHookEntryID }
     }
 
     func overviewRow(for tool: CLIToolStatus) -> AgentToolsOverviewRow? {
@@ -282,160 +263,6 @@ final class AgentToolsConsoleStore: ObservableObject {
         }
     }
 
-    func refreshMCP() {
-        guard !isScanningMCP else { return }
-        isScanningMCP = true
-        mcpScanError = nil
-        Task {
-            let snapshot = await Task.detached(priority: .utility) {
-                AgentToolsMCPScanner.scan()
-            }.value
-            await MainActor.run {
-                withAnimation(AgentToolsMotion.reveal) {
-                    self.mcpServers = snapshot.servers
-                    self.mcpScanError = snapshot.error
-                    self.isScanningMCP = false
-                    if let selected = self.selectedMCPServerID,
-                       !snapshot.servers.contains(where: { $0.id == selected }) {
-                        self.selectedMCPServerID = snapshot.servers.first?.id
-                    } else if self.selectedMCPServerID == nil {
-                        self.selectedMCPServerID = snapshot.servers.first?.id
-                    }
-                }
-            }
-        }
-    }
-
-    func installMCPTemplate(_ template: AgentToolsMCPTemplate, to clientIDs: Set<String>) {
-        mcpScanError = nil
-        do {
-            try AgentToolsMCPScanner.installTemplate(template, to: clientIDs)
-            refreshMCP()
-        } catch {
-            mcpScanError = L("写入 MCP 配置失败：%@", error.localizedDescription)
-        }
-    }
-
-    func installCustomMCPServer(name: String,
-                                transport: AgentToolsMCPTransport,
-                                command: String?,
-                                args: [String],
-                                url: String?,
-                                env: [String: String],
-                                to clientIDs: Set<String>) {
-        mcpScanError = nil
-        do {
-            try AgentToolsMCPScanner.installCustomServer(
-                name: name,
-                transport: transport,
-                command: command,
-                args: args,
-                url: url,
-                env: env,
-                to: clientIDs)
-            refreshMCP()
-        } catch {
-            mcpScanError = L("写入 MCP 配置失败：%@", error.localizedDescription)
-        }
-    }
-
-    func removeMCPServer(_ server: AgentToolsMCPServerRecord) {
-        mcpScanError = nil
-        do {
-            try AgentToolsMCPScanner.removeServer(server)
-            refreshMCP()
-        } catch {
-            mcpScanError = L("移除 MCP server 失败：%@", error.localizedDescription)
-        }
-    }
-
-    func refreshHooks() {
-        guard !isLoadingHooks else { return }
-        isLoadingHooks = true
-        hookError = nil
-        Task {
-            let result = await Task.detached(priority: .utility) { () -> ([HookEntry], [String: Set<HookSource>]) in
-                let entries = HookSource.allCases.flatMap { HookConfigDocument(source: $0).entries() }
-                var states: [String: Set<HookSource>] = [:]
-                for recipe in HookRecipes.all {
-                    states[recipe.id] = HookRecipes.installedSources(recipe)
-                }
-                return (entries, states)
-            }.value
-            await MainActor.run {
-                withAnimation(AgentToolsMotion.reveal) {
-                    self.hookEntries = result.0
-                    self.hookRecipeStates = result.1
-                    self.isLoadingHooks = false
-                    if let selected = self.selectedHookEntryID,
-                       !result.0.contains(where: { $0.id == selected }) {
-                        self.selectedHookEntryID = result.0.first?.id
-                    } else if self.selectedHookEntryID == nil {
-                        self.selectedHookEntryID = result.0.first?.id
-                    }
-                }
-            }
-        }
-    }
-
-    func installHookRecipe(_ recipe: HookRecipe) {
-        installHookRecipe(recipe, to: Set(HookSource.allCases))
-    }
-
-    func installHookRecipe(_ recipe: HookRecipe, to sources: Set<HookSource>) {
-        hookError = nil
-        guard !sources.isEmpty else { return }
-        do {
-            try recipe.ensureScript?()
-            for source in sources {
-                try HookConfigDocument(source: source).addCommand(
-                    event: HookEventName.stop,
-                    command: recipe.command)
-            }
-            refreshHooks()
-        } catch {
-            hookError = L("安装失败：%@", error.localizedDescription)
-        }
-    }
-
-    func uninstallHookRecipe(_ recipe: HookRecipe) {
-        hookError = nil
-        do {
-            _ = try HookRecipes.uninstall(recipe)
-            refreshHooks()
-        } catch {
-            hookError = L("移除失败：%@", error.localizedDescription)
-        }
-    }
-
-    func removeHookEntry(_ entry: HookEntry) {
-        hookError = nil
-        do {
-            try HookConfigDocument(source: entry.source).removeCommands(containing: entry.command)
-            refreshHooks()
-        } catch {
-            hookError = L("移除失败：%@", error.localizedDescription)
-        }
-    }
-
-    func installCustomHook(sources: Set<HookSource>, event: String, command: String, timeout: Int) {
-        hookError = nil
-        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        let eventName = event.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !sources.isEmpty, !trimmed.isEmpty, !eventName.isEmpty else { return }
-        do {
-            for source in sources {
-                try HookConfigDocument(source: source).addCommand(
-                    event: eventName,
-                    command: trimmed,
-                    timeout: timeout)
-            }
-            refreshHooks()
-        } catch {
-            hookError = L("写入 Hook 配置失败：%@", error.localizedDescription)
-        }
-    }
-
     func copyDiagnostics(for row: AgentToolsOverviewRow) {
         copyText(diagnostics(for: row))
     }
@@ -452,21 +279,28 @@ final class AgentToolsConsoleStore: ObservableObject {
 
     private func prepareProviders() async {
         let cfg = ConfigStore.shared.config
-        let resolved = await Task.detached(priority: .utility) { () -> [(UsageProviderEntry, Bool)] in
+        let resolved = await Task.detached(priority: .utility) { () -> [(UsageProviderEntry, Bool, Bool)] in
             UsageCredentials.apply(cfg)
             return UsageProviderCatalog.all
                 .filter { UsageCredentials.isVisible($0, config: cfg) }
-                .map { ($0, $0.isConfigured()) }
+                .map {
+                    let deferred = UsageCredentials.shouldDeferBrowserCredentialProbe($0, config: cfg)
+                    let configured = UsageCredentials.isConfiguredWithoutBrowserPrompt($0, config: cfg)
+                    return ($0, configured, deferred)
+                }
         }.value
 
         let visible = resolved.map(\.0)
         let configuredIDs = Set(resolved.filter(\.1).map { $0.0.id })
+        let deferredIDs = Set(resolved.filter(\.2).map { $0.0.id })
         await MainActor.run {
             providers = visible
             providerStates = providerStates.filter { id, _ in visible.contains { $0.id == id } }
             for provider in visible {
                 guard providerStates[provider.id] == nil else { continue }
-                providerStates[provider.id] = configuredIDs.contains(provider.id) ? .manual : .unconfigured
+                providerStates[provider.id] = (configuredIDs.contains(provider.id) || deferredIDs.contains(provider.id))
+                    ? .manual
+                    : .unconfigured
             }
             rebuildOverviewRows()
         }
@@ -499,8 +333,6 @@ final class AgentToolsConsoleStore: ObservableObject {
         }
         lines.append("capability.usage: \(row.usageSignal.shortLabel)")
         lines.append("capability.skills: \(row.skillSignal.shortLabel)")
-        lines.append("capability.hooks: \(row.hookSignal.shortLabel)")
-        lines.append("capability.mcp: \(row.mcpSignal.shortLabel)")
         return lines.joined(separator: "\n")
     }
 
@@ -556,51 +388,19 @@ final class AgentToolsConsoleStore: ObservableObject {
 
     private static let usageProviderIDs = Set(UsageProviderCatalog.all.map(\.id))
     private static let skillToolKeys = Set(SkillToolCatalog.defaultAdapters.map(\.key))
-    private static let hookAgentIDs: Set<String> = [
-        "codex",
-        "claude",
-        "gemini",
-        "cursor",
-        "copilot",
-        "grok",
-        "opencode",
-        "amp",
-        "auggie",
-        "augment",
-        "qwen",
-    ]
-    private static let mcpAgentIDs: Set<String> = [
-        "codex",
-        "claude",
-        "gemini",
-        "cursor",
-        "copilot",
-        "grok",
-        "opencode",
-        "amp",
-        "auggie",
-        "augment",
-        "qwen",
-        "windsurf",
-    ]
-
     private static func capability(for id: String, hasUsageProvider: Bool) -> AgentToolCapability {
         let skillKey = skillKeyByAgentID[id] ?? id
         return AgentToolCapability(
             usage: hasUsageProvider || usageProviderIDs.contains(id),
-            skills: skillToolKeys.contains(skillKey),
-            hooks: hookAgentIDs.contains(id),
-            mcp: mcpAgentIDs.contains(id))
+            skills: skillToolKeys.contains(skillKey))
     }
 }
 
 struct AgentToolCapability {
     var usage: Bool
     var skills: Bool
-    var hooks: Bool
-    var mcp: Bool
 
-    static let providerOnly = AgentToolCapability(usage: true, skills: false, hooks: false, mcp: false)
+    static let providerOnly = AgentToolCapability(usage: true, skills: false)
 }
 
 struct AgentToolsOverviewRow: Identifiable {
@@ -634,8 +434,6 @@ struct AgentToolsOverviewRow: Identifiable {
     }
 
     var skillSignal: AgentToolsSignal { capability.skills ? .ready(L("支持")) : .unavailable("-") }
-    var hookSignal: AgentToolsSignal { capability.hooks ? .ready(L("支持")) : .unavailable("-") }
-    var mcpSignal: AgentToolsSignal { capability.mcp ? .ready(L("支持")) : .unavailable("-") }
 
     private static func providerSignal(_ state: ToolUsageState?) -> AgentToolsSignal {
         switch state {
@@ -868,8 +666,6 @@ struct AgentToolsOverviewView: View {
             matrixHeaderCell(L("凭证"))
             matrixHeaderCell("Usage")
             matrixHeaderCell("Skills")
-            matrixHeaderCell("Hooks")
-            matrixHeaderCell("MCP")
         }
         .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(AppStyle.textTertiary)
@@ -910,8 +706,6 @@ struct AgentToolsOverviewView: View {
                 AgentToolsSignalPill(signal: row.credentialSignal)
                 AgentToolsSignalPill(signal: row.usageSignal)
                 AgentToolsSignalPill(signal: row.skillSignal)
-                AgentToolsSignalPill(signal: row.hookSignal)
-                AgentToolsSignalPill(signal: row.mcpSignal)
             }
             .padding(.horizontal, 9)
             .frame(height: 44)
@@ -1044,8 +838,6 @@ struct AgentToolsOverviewInspector: View {
                 signalRow(L("凭证"), row.credentialSignal)
                 signalRow("Usage", row.usageSignal)
                 signalRow("Skills", row.skillSignal)
-                signalRow("Hooks", row.hookSignal)
-                signalRow("MCP", row.mcpSignal)
             }
 
             VStack(alignment: .leading, spacing: 8) {

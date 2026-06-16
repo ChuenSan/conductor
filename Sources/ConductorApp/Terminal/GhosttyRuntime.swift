@@ -14,6 +14,8 @@ final class GhosttyRuntime {
 
     private(set) var app: ghostty_app_t?
     private(set) var config: ghostty_config_t?
+    private var appliedColorScheme: ghostty_color_scheme_e?
+    private var colorSchemeSyncDepth = 0
     private var tickScheduled = false
 
     private init() {}
@@ -119,16 +121,26 @@ final class GhosttyRuntime {
     /// 热更新:用新配置重建 ghostty 配置并应用到 app(各 surface 由 GhosttySurface.reloadConfig 各自更新)。
     func applyConfig(_ appConfig: AppConfig) {
         guard let app, let newConfig = Self.makeConfig(from: appConfig) else { return }
+        applyColorScheme(for: appConfig, force: true)
         ghostty_app_update_config(app, newConfig)
-        applyColorScheme(for: appConfig)
+        applyColorScheme(for: appConfig, force: true)
         let old = config
         config = newConfig
         if let old { ghostty_config_free(old) }
     }
 
-    func applyColorScheme(for appConfig: AppConfig) {
+    func applyColorScheme(for appConfig: AppConfig, force: Bool = false) {
+        applyColorScheme(Self.colorScheme(for: appConfig), force: force)
+    }
+
+    func applyColorScheme(_ scheme: ghostty_color_scheme_e, force: Bool = false) {
         guard let app else { return }
-        ghostty_app_set_color_scheme(app, Self.colorScheme(for: appConfig))
+        guard colorSchemeSyncDepth == 0 else { return }
+        guard force || appliedColorScheme != scheme else { return }
+        appliedColorScheme = scheme
+        colorSchemeSyncDepth += 1
+        defer { colorSchemeSyncDepth -= 1 }
+        ghostty_app_set_color_scheme(app, scheme)
     }
 
     static func colorScheme(for appConfig: AppConfig) -> ghostty_color_scheme_e {
@@ -217,7 +229,7 @@ final class GhosttyRuntime {
                 return true
             case GHOSTTY_ACTION_CONFIG_CHANGE:
                 Task { @MainActor in
-                    GhosttyRuntime.shared.applyColorScheme(for: ConfigStore.shared.config)
+                    GhosttyRuntime.shared.applyColorScheme(for: ConfigStore.shared.config, force: true)
                 }
                 return true
             case GHOSTTY_ACTION_RELOAD_CONFIG:
@@ -244,6 +256,13 @@ final class GhosttyRuntime {
             Task { @MainActor in
                 GhosttySurface.fromGhosttySurface(surfaceHandle)?
                     .handleScrollbar(total: sb.total, offset: sb.offset, len: sb.len)
+            }
+            return true
+        case GHOSTTY_ACTION_CELL_SIZE:
+            let cell = action.action.cell_size
+            Task { @MainActor in
+                GhosttySurface.fromGhosttySurface(surfaceHandle)?
+                    .handleCellSize(width: cell.width, height: cell.height)
             }
             return true
         case GHOSTTY_ACTION_PWD:
@@ -346,7 +365,7 @@ final class GhosttyRuntime {
     private func handleAppColorChange(_ change: ghostty_action_color_change_s) {
         if change.kind == GHOSTTY_ACTION_COLOR_KIND_BACKGROUND {
             let color = Self.color(from: change)
-            ghostty_app_set_color_scheme(app, Self.colorScheme(forBackground: color))
+            applyColorScheme(Self.colorScheme(forBackground: color), force: true)
         }
     }
 

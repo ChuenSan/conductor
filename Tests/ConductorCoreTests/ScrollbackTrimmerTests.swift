@@ -39,4 +39,14 @@ final class ScrollbackTrimmerTests: XCTestCase {
         XCTAssertTrue(trimmed.hasPrefix(reset))
         XCTAssertTrue(trimmed.hasSuffix(reset))
     }
+
+    func testDropsDecorativeHorizontalRules() {
+        let rule = "\u{1B}[0m\u{1B}[2m" + String(repeating: "─", count: 40) + "\u{1B}[0m"
+        XCTAssertEqual(ScrollbackTrimmer.trim("before\n\(rule)\nafter"), "before\nafter")
+    }
+
+    func testKeepsReplaySeparatorWithText() {
+        let separator = "\u{1B}[2m── 以上为上次会话回放（进程未恢复）──\u{1B}[0m"
+        XCTAssertEqual(ScrollbackTrimmer.trim(separator), "\u{1B}[0m\(separator)\u{1B}[0m")
+    }
 }

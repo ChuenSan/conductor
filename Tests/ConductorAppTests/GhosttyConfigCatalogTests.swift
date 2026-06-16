@@ -110,6 +110,22 @@ final class GhosttyConfigCatalogTests: XCTestCase {
     }
 
     @MainActor
+    func testGhosttyRuntimeColorSchemeFollowsResolvedTerminalBackground() {
+        var dark = AppConfig.default
+        dark.appearance.theme = "dark"
+        XCTAssertEqual(GhosttyRuntime.colorScheme(for: dark), GHOSTTY_COLOR_SCHEME_DARK)
+
+        var light = AppConfig.default
+        light.appearance.theme = "light"
+        XCTAssertEqual(GhosttyRuntime.colorScheme(for: light), GHOSTTY_COLOR_SCHEME_LIGHT)
+
+        var customLight = AppConfig.default
+        customLight.appearance.theme = "custom"
+        customLight.appearance.colors = Colors(background: "#fefefe")
+        XCTAssertEqual(GhosttyRuntime.colorScheme(for: customLight), GHOSTTY_COLOR_SCHEME_LIGHT)
+    }
+
+    @MainActor
     func testGhosttyConfigTextUsesCustomAnsiPaletteWhenProvided() {
         var config = AppConfig.default
         config.appearance.theme = "custom"

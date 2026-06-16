@@ -6,7 +6,6 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     case usage
     case skills
     case agents
-    case hooks
     case snippets
     case coCreate
 
@@ -18,7 +17,6 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         switch self {
         case .skills: return .skills
         case .agents: return .agents
-        case .hooks: return .hooks
         default: return nil
         }
     }
@@ -29,7 +27,6 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .usage: return L("用量")
         case .skills: return "Skills"
         case .agents: return "Agents"
-        case .hooks: return "Hooks"
         case .snippets: return L("片段")
         case .coCreate: return L("共创")
         }
@@ -40,14 +37,13 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .usage: return "chart.bar.xaxis"
         case .skills: return "wand.and.stars"
         case .agents: return "cpu"
-        case .hooks: return "link"
         case .snippets: return "text.badge.star"
         case .coCreate: return "text.bubble"
         }
     }
 }
 
-/// 右侧快速工具面板：只放 CLI、用量和片段；Skills / Agents / Hooks 走完整管理台。
+/// 右侧快速工具面板：只放 CLI、用量和片段；Skills / Agents 走完整管理台。
 struct ToolsPanelView: View {
     let coordinator: AppCoordinator
     var onClose: () -> Void = {}
@@ -134,7 +130,7 @@ struct ToolsPanelView: View {
             UsageStatsView {
                 coordinator.openAgentToolsManagement(.usage)
             }
-        case .skills, .agents, .hooks:
+        case .skills, .agents:
             Color.clear
                 .onAppear {
                     if let module = coordinator.toolsTab.managementModule {

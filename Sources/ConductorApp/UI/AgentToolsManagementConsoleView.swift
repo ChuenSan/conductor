@@ -8,8 +8,6 @@ enum AgentToolsManagementModule: String, CaseIterable, Identifiable {
     case usage
     case agents
     case skills
-    case mcp
-    case hooks
     case snippets
     case activity
 
@@ -22,8 +20,6 @@ enum AgentToolsManagementModule: String, CaseIterable, Identifiable {
         case .usage: return L("用量")
         case .agents: return "Agents"
         case .skills: return "Skills"
-        case .mcp: return "MCP"
-        case .hooks: return "Hooks"
         case .snippets: return L("片段")
         case .activity: return L("活动")
         }
@@ -36,8 +32,6 @@ enum AgentToolsManagementModule: String, CaseIterable, Identifiable {
         case .usage: return L("账号用量、成本和趋势")
         case .agents: return L("Agent 档案、会话和能力")
         case .skills: return L("中央库、安装和分发")
-        case .mcp: return L("服务器、工具和授权")
-        case .hooks: return L("事件、通知和自动化")
         case .snippets: return L("片段、模板和快捷动作")
         case .activity: return L("日志、变更和任务轨迹")
         }
@@ -50,15 +44,13 @@ enum AgentToolsManagementModule: String, CaseIterable, Identifiable {
         case .usage: return "chart.bar.xaxis"
         case .agents: return "cpu"
         case .skills: return "wand.and.stars"
-        case .mcp: return "point.3.connected.trianglepath.dotted"
-        case .hooks: return "link"
         case .snippets: return "text.badge.star"
         case .activity: return "waveform.path.ecg"
         }
     }
 
     /// 管理台左栏只展示已实现的模块。片段/活动仍走各自现成入口，不在这里摆空占位。
-    static let railModules: [AgentToolsManagementModule] = [.overview, .cli, .usage, .agents, .skills, .mcp, .hooks]
+    static let railModules: [AgentToolsManagementModule] = [.overview, .cli, .usage, .agents, .skills]
 }
 
 enum AgentToolsConsoleLayout {
@@ -222,7 +214,7 @@ struct AgentToolsManagementConsoleView: View {
                 Text(L("Agent Tools 管理台"))
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(AppStyle.textPrimary)
-                Text(L("统一管理 CLI、用量、Agents、Skills、MCP、Hooks 和自动化能力"))
+                Text(L("统一管理 CLI、用量、Agents 和 Skills 能力"))
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(AppStyle.textTertiary)
             }
@@ -324,10 +316,6 @@ struct AgentToolsManagementConsoleView: View {
                     initialSection: skillsInitialSection,
                     reloadID: skillsReloadID,
                     onOpenModule: openModule)
-            case .mcp:
-                AgentToolsMCPWorkbenchView(store: store)
-            case .hooks:
-                AgentToolsHooksWorkbenchView(store: store)
             default:
                 placeholderWorkspace
             }
@@ -400,10 +388,6 @@ struct AgentToolsManagementConsoleView: View {
                     store: store,
                     onOpenModule: openModule,
                     onOpenSection: openSkillsSection)
-            case .mcp:
-                AgentToolsMCPInspector(store: store)
-            case .hooks:
-                AgentToolsHooksInspector(store: store)
             default:
                 placeholderInspector
             }

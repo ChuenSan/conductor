@@ -11,6 +11,26 @@ enum UsageCredentials {
     private static var activeManagedEnvNames: Set<String> = []
     private static var originalEnvValues: [String: String] = [:]
     private static var originallyMissingEnvNames: Set<String> = []
+    private static let browserCredentialProviderIDs: Set<String> = [
+        "abacus",
+        "alibabatokenplan",
+        "augment",
+        "commandcode",
+        "copilot",
+        "cursor",
+        "devin",
+        "factory",
+        "grok",
+        "manus",
+        "mimo",
+        "mistral",
+        "ollama",
+        "opencode",
+        "opencodego",
+        "perplexity",
+        "t3chat",
+        "windsurf",
+    ]
 
     /// provider id → 主环境变量名（仅 API-key / token 型 provider）。
     /// cookie / OAuth / 本地登录文件型不在此（它们另有检测路径，不靠 env key）。
@@ -154,6 +174,30 @@ enum UsageCredentials {
         config.usage.providers[entry.id]?.enabled ?? true
     }
 
+    /// Opening a usage drawer should not touch browser cookie stores, because Chromium
+    /// cookie decryption can raise the system "Chrome Safe Storage" Keychain prompt.
+    static func shouldDeferBrowserCredentialProbe(
+        _ entry: UsageProviderEntry,
+        config: AppConfig,
+        env: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        let id = entry.id
+        guard browserCredentialProviderIDs.contains(id) else { return false }
+        guard shouldReadBrowserCredentials(providerID: id, config: config, env: env) else { return false }
+        return !hasManualCredential(providerID: id, config: config, env: env)
+    }
+
+    static func isConfiguredWithoutBrowserPrompt(
+        _ entry: UsageProviderEntry,
+        config: AppConfig,
+        env: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        guard !shouldDeferBrowserCredentialProbe(entry, config: config, env: env) else {
+            return false
+        }
+        return entry.isConfigured()
+    }
+
     private static func applyProviderConfig(
         id: String,
         config: UsageProviderConfig,
@@ -228,6 +272,58 @@ enum UsageCredentials {
     private static func normalized(_ raw: String?) -> String? {
         let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    private static func hasManualCredential(
+        providerID id: String,
+        config: AppConfig,
+        env: [String: String]
+    ) -> Bool {
+        let providerConfig = config.usage.providers[id]
+        if normalized(providerConfig?.apiKey) != nil { return true }
+        if normalized(providerConfig?.cookieHeader) != nil { return true }
+
+        var names: [String] = []
+        if let primary = envVar[id] { names.append(primary) }
+        names += apiKeyAliases[id] ?? []
+        names += cookieHeaderEnvVars[id] ?? conductorCookieEnvNames(id)
+
+        return names.contains { envValue($0, env: env) != nil }
+    }
+
+    private static func shouldReadBrowserCredentials(
+        providerID id: String,
+        config: AppConfig,
+        env: [String: String]
+    ) -> Bool {
+        let providerConfig = config.usage.providers[id]
+        if let cookieSource = normalized(providerConfig?.cookieSource)
+            ?? envValue("CONDUCTOR_USAGE_\(envSafe(id))_COOKIE_SOURCE", env: env)
+        {
+            switch cookieSource.lowercased() {
+            case "manual", "off":
+                return false
+            default:
+                return true
+            }
+        }
+
+        let sourceMode = normalized(providerConfig?.sourceMode)
+            ?? envValue("CONDUCTOR_USAGE_\(envSafe(id))_SOURCE", env: env)
+        switch sourceMode?.lowercased() {
+        case "api", "cli", "file", "keychain", "manual", "oauth", "off", "token":
+            return false
+        case "browser":
+            return true
+        default:
+            return true
+        }
+    }
+
+    private static func envValue(_ name: String, env: [String: String]) -> String? {
+        if let value = normalized(env[name]) { return value }
+        guard let raw = getenv(name) else { return nil }
+        return normalized(String(cString: raw))
     }
 
     private static func conductorCookieEnvNames(_ id: String) -> [String] {

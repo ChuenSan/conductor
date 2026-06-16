@@ -4,7 +4,7 @@
 set -euo pipefail
 
 CONFIG="${1:-release}"
-VERSION="${VERSION:-0.0.3}"
+VERSION="${VERSION:-0.0.4}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 

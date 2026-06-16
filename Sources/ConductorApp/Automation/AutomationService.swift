@@ -310,47 +310,13 @@ final class AutomationService {
 
     #if DEBUG
     private func debugAgentToolsSmokeTest() throws -> JSONValue {
-        func fail(_ message: String) throws -> Never {
-            throw AutomationError.internalError(message)
-        }
-
-        let mcpSteps = try AgentToolsMCPScanner.debugSmokeTest()
-
-        let root = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("conductor-hooks-smoke-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let url = root.appendingPathComponent("settings.json")
-        let doc = HookConfigDocument(url: url, source: .claude)
-        let command = "printf smoke #conductor:smoke"
-        try doc.addCommand(event: HookEventName.stop, command: command, timeout: 3210)
-
-        var entries = doc.entries()
-        guard entries.count == 1,
-              entries[0].event == HookEventName.stop,
-              entries[0].command == command,
-              entries[0].timeout == 3210,
-              entries[0].managedByConductor else {
-            try fail("hook command was not written correctly")
-        }
-
-        try doc.addCommand(event: HookEventName.stop, command: command, timeout: 3210)
-        entries = doc.entries()
-        guard entries.count == 1 else {
-            try fail("duplicate hook command was written")
-        }
-
-        let removed = try doc.removeCommands(containing: "#conductor:smoke")
-        guard removed == 1, doc.entries().isEmpty else {
-            try fail("hook command was not removed")
-        }
-
         return .object([
-            "mcp": .array(mcpSteps.map(JSONValue.string)),
-            "hooks": .array([
-                .string("wrote command hook"),
-                .string("deduplicated command hook"),
-                .string("removed command hook"),
+            "modules": .array([
+                .string("overview"),
+                .string("cli"),
+                .string("usage"),
+                .string("agents"),
+                .string("skills"),
             ]),
         ])
     }

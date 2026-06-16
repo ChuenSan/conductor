@@ -11,7 +11,10 @@ public enum ScrollbackTrimmer {
         maxLines: Int = defaultMaxLines,
         maxBytes: Int = defaultMaxBytes
     ) -> String {
-        var lines = stripTerminalColorOSC(text).split(separator: "\n", omittingEmptySubsequences: false)
+        var lines = stripTerminalColorOSC(text)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+        lines.removeAll(where: isDecorativeHorizontalRule)
         // 屏幕底部（提示符以下）是成片空行：全部收掉，回放时不顶出一大段空白。
         while let last = lines.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
             lines.removeLast()
@@ -89,6 +92,51 @@ public enum ScrollbackTrimmer {
             || value == 105
             || (10...19).contains(value)
             || (110...119).contains(value)
+    }
+
+    private static func isDecorativeHorizontalRule(_ line: String) -> Bool {
+        let plain = stripSGR(line).trimmingCharacters(in: .whitespaces)
+        guard plain.count >= 16 else { return false }
+        return plain.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 0x2500, 0x2501, 0x2550: // ─, ━, ═
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
+    private static func stripSGR(_ text: String) -> String {
+        let scalars = text.unicodeScalars
+        var output = String.UnicodeScalarView()
+        var index = scalars.startIndex
+        let esc: UnicodeScalar = "\u{1B}"
+        let csi: UnicodeScalar = "["
+        let sgr: UnicodeScalar = "m"
+
+        while index < scalars.endIndex {
+            if scalars[index] == esc {
+                let next = scalars.index(after: index)
+                if next < scalars.endIndex, scalars[next] == csi {
+                    var cursor = scalars.index(after: next)
+                    while cursor < scalars.endIndex {
+                        let scalar = scalars[cursor]
+                        cursor = scalars.index(after: cursor)
+                        if scalar == sgr {
+                            index = cursor
+                            continue
+                        }
+                        if scalar.value >= 0x40, scalar.value <= 0x7E {
+                            break
+                        }
+                    }
+                }
+            }
+            output.append(scalars[index])
+            index = scalars.index(after: index)
+        }
+        return String(output)
     }
 
     private static func wrapWithANSIResetIfNeeded(_ text: String) -> String {

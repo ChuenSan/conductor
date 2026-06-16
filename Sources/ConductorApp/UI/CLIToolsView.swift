@@ -670,21 +670,26 @@ struct CLIToolsView: View {
     /// 只有用户点刷新时才请求用量，避免打开面板就触发 CLI/账号访问。
     private func prepareProviderUsage() async {
         let cfg = ConfigStore.shared.config
-        let resolved = await Task.detached(priority: .utility) { () -> [(UsageProviderEntry, Bool)] in
+        let resolved = await Task.detached(priority: .utility) { () -> [(UsageProviderEntry, Bool, Bool)] in
             UsageCredentials.apply(cfg)   // 注入 key 后 isConfigured() 才反映应用内配置
             return UsageProviderCatalog.all
                 .filter { UsageCredentials.isVisible($0, config: cfg) }
-                .map { ($0, $0.isConfigured()) }
+                .map {
+                    let deferred = UsageCredentials.shouldDeferBrowserCredentialProbe($0, config: cfg)
+                    let configured = UsageCredentials.isConfiguredWithoutBrowserPrompt($0, config: cfg)
+                    return ($0, configured, deferred)
+                }
         }.value
         // 已配置的排前面，组内保持目录顺序。
         let providers = resolved.filter { $0.1 }.map { $0.0 } + resolved.filter { !$0.1 }.map { $0.0 }
         let configuredIDs = Set(resolved.filter { $0.1 }.map { $0.0.id })
+        let deferredIDs = Set(resolved.filter { $0.2 }.map { $0.0.id })
         let visibleIDs = Set(providers.map(\.id))
         await MainActor.run {
             configuredProviders = providers
             providerUsage = providerUsage.filter { visibleIDs.contains($0.key) }
             for provider in providers {
-                if configuredIDs.contains(provider.id) {
+                if configuredIDs.contains(provider.id) || deferredIDs.contains(provider.id) {
                     switch providerUsage[provider.id] {
                     case .loaded, .loading, .error:
                         break

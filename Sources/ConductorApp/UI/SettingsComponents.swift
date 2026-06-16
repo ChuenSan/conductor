@@ -189,15 +189,18 @@ struct ThemedTextField: View {
     }
 }
 
-/// 按下轻微缩放反馈的按钮样式（通用微交互）。
+/// 按下反馈的按钮样式。
+///
+/// 早期默认做 0.94 缩放，但管理台/Skills 列表里大量文字按钮会在点击时进入缩放合成层，
+/// macOS 上小字号文本容易发糊。默认改成不缩放，只用透明度做反馈；需要缩放的少数场景可显式传值。
 struct PressScaleStyle: ButtonStyle {
-    var pressedScale: CGFloat = 0.94
-    var pressedOpacity: Double = 0.72
+    var pressedScale: CGFloat = 1
+    var pressedOpacity: Double = 0.82
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? pressedScale : 1)
             .opacity(configuration.isPressed ? pressedOpacity : 1)
-            .animation(Motion.snappy, value: configuration.isPressed)
+            .animation(Motion.hover, value: configuration.isPressed)
     }
 }
