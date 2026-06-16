@@ -108,15 +108,16 @@
 
 | # | 功能 | 现状（已核实） | 决策 | 验收要点 | 状态 |
 |---|---|---|---|---|---|
-| 1 | **Feed 内联审批** | **无内联审批**：agent 要权限/ExitPlan/提问时，目前只有"待处理提示"（`thinkingPanes`/`unseenDonePanes` 点），要批准还得跳进 pane 手敲。 | 新建 | agent 权限请求 / ExitPlan / AskUserQuestion 在 app 内用按钮直接处理（Once / Always / All tools / Deny）；带软超时与审计日志；**双接口**：socket 也能 list 待批项 + approve/deny。对标 cmux Feed（`~/Desktop/_research/cmux/docs/feed.md`）。 | 🔄 |
+| 1 | **Feed 内联审批** | **无内联审批**：agent 要权限/ExitPlan/提问时，目前只有"待处理提示"（`thinkingPanes`/`unseenDonePanes` 点），要批准还得跳进 pane 手敲。 | 新建 | agent 权限请求 / ExitPlan / AskUserQuestion 在 app 内用按钮直接处理（Once / Always / All tools / Deny）；带软超时与审计日志；**双接口**：socket 也能 list 待批项 + approve/deny。对标 cmux Feed（`~/Desktop/_research/cmux/docs/feed.md`）。 | 🟡 机制全通+全测，差真 claude 端到端手验 |
 
 **Feed 进度**（拆切片做，每片独立 commit）：
 - ✅ **底座**（`7b9ebe8`）：`ConductorCore/Feed` 纯逻辑——请求模型 + 策略/规则引擎（deny 压 allow、记忆规则、glob），12 测试。
 - ✅ **socket 阻塞 gate**（`6ab061d`）：`FeedCenter`（submit 挂起 continuation / resolve / cancel / 超时 / 审计 / 策略持久化）+ `AutomationService` `feed-request` 异步阻塞 + `AppCoordinator` 接线，6 测试。
 - ✅ **GUI 面板**（`6aab228` + 截图验证 `006fe05`）：右侧审批面板，命令/计划 monospace 展示、allow 实心/deny 红描边分级按钮、自动弹出、命令面板可开；离屏渲染回归测试 + 截图肉眼核对。
 - ✅ **双接口 + 审计**（含于 gate）：socket `feed-list / feed-approve / feed-deny / feed-answer`；审计环形缓冲。
-- ⬜ **hook 安装（下一刀）**：Claude `PreToolUse` / Codex 等价 hook 经 socket 调 `feed-request` 阻塞、按返回决策放行/拦截真 agent（需 socket 客户端机制 + 各 agent hook I/O 契约 + 工具名→类别推断）。对标 cmux 多 agent hook 桥。
-- ⬜ **端到端 UI 真验**：dev 构建（独立 bundle，不碰用户实例）跑真实 agent 审批闭环。
+- ✅ **hook 安装**（`86eea49`）：`conductor-approve`（python3）读 Claude PreToolUse、经 `$CONDUCTOR_SOCKET` 调 `feed-request` 阻塞拿决策、按 hook 契约 allow/deny；fail-open；`FeedActionCategory.infer` 服务端推断类别。类别推断 3 测 + 脚本端到端 4 测（真 socket server + 真跑脚本）。
+- ✅ **UI 开关**（`58915e6`）：CLI 工具面板「工具审批」卡，启用/停用 hook。
+- 🟡 **真 claude 端到端**：脚本↔socket↔决策、submit↔resolve 两半都已稳定测过（28 个 Feed 测试），GUI 已截图验证。**整条链路的真 claude 闭环受环境限制未跑**——用户实例占着自动化 socket（双开保护），不碰它；需手动在无其它实例时启用「工具审批」+ 跑 claude 验证。（曾写脚本→真 FeedCenter 的全链路集成测试，因 process+socket+continuation 时序易挂、违背"稳定"原则已撤。）
 | 2 | **内置浏览器 pane + 可脚本化浏览器 API** | **完全无**。可复用资产：`SweetCookieKit` 已能导入 Chrome/Safari/Gecko cookie（做开箱登录态）。 | 新建 | WKWebView 分屏 pane；地址栏/omnibar、前进后退/刷新/缩放/页内查找/DevTools；cookie 导入登录态；CLI 自动化（navigate/click/fill/type/eval/wait/screenshot/snapshot），对标 cmux `docs/agent-browser-port-spec.md`。**体量大，可拆多个 commit，但每个 commit 都要稳定可测。** | ⬜ |
 
 **P0 旁的快速清理（先做，省电）**：`WorkspaceMetadataCenter` 里 **lsof 端口扫描（每 15s）+ `gh` PR 扫描（每 180s 起 subprocess）的产出 `.ports`/`.pullRequests` 全 Sources 零消费**（GUI 没读、socket 也没读）——纯耗电空转，**删掉这两个扫描器及相关字段/Timer**。`status / progress / log` 是 `AutomationService` 的 socket 接口（agent 在用），**保留**。 ✅ **已完成**（commit `afa8263`；验证：grep 零引用 + `swift build` 通过 + 390 测试全绿，含新增 `WorkspaceMetadataCenterTests` 8 例）。
