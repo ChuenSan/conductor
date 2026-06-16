@@ -201,7 +201,7 @@ struct AgentToolsManagementConsoleView: View {
                 .frame(width: proxy.size.width, height: contentHeight, alignment: .topLeading)
                 .padding(.bottom, AgentToolsConsoleLayout.bottomPadding)
                 .clipped()
-                .animation(AgentToolsMotion.route, value: selectedModule)
+                .animation(AgentToolsMotion.selection, value: selectedModule)
             }
         }
         .frame(
@@ -212,7 +212,7 @@ struct AgentToolsManagementConsoleView: View {
         .background(AppStyle.windowBackground)   // 工作台用纯色底，不透出桌面；半透明只留给卡片本身
         .onAppear { store.start() }
         .onChange(of: initialModule) { _, module in
-            withAnimation(AgentToolsMotion.route) { selectedModule = module }
+            withAnimation(AgentToolsMotion.selection) { selectedModule = module }
         }
     }
 
@@ -266,7 +266,7 @@ struct AgentToolsManagementConsoleView: View {
     private func moduleButton(_ module: AgentToolsManagementModule) -> some View {
         let selected = selectedModule == module
         return Button {
-            withAnimation(AgentToolsMotion.route) { selectedModule = module }
+            withAnimation(AgentToolsMotion.selection) { selectedModule = module }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: module.icon)
@@ -444,11 +444,11 @@ struct AgentToolsManagementConsoleView: View {
     }
 
     private func openModule(_ module: AgentToolsManagementModule) {
-        withAnimation(AgentToolsMotion.route) { selectedModule = module }
+        withAnimation(AgentToolsMotion.selection) { selectedModule = module }
     }
 
     private func openSkillsSection(_ section: String) {
-        withAnimation(AgentToolsMotion.route) {
+        withAnimation(AgentToolsMotion.selection) {
             selectedModule = .skills
             skillsInitialSection = section
             skillsReloadID = UUID()
