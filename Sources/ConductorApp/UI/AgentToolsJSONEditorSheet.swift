@@ -24,7 +24,7 @@ struct AgentToolsNoticeBanner: View {
                         .shadow(color: .black.opacity(0.18), radius: 10, y: 4))
                 .overlay(Capsule().strokeBorder(AppStyle.doneGreen.opacity(0.35), lineWidth: 1))
                 .padding(.top, 12)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(AgentToolsMotion.revealTransition)
                 .task(id: text) {
                     try? await Task.sleep(nanoseconds: 2_600_000_000)
                     onDismiss()
