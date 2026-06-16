@@ -667,16 +667,31 @@ final class AppCoordinator: ObservableObject {
         hooksInbox.start()
     }
 
+    /// hook 事件分类：决定走「点亮思考 / 仅记会话不通知 / 完成通知」哪条路。可单测。
+    enum HookEventKind: Equatable { case busy, sessionStart, done }
+    nonisolated static func classifyHookEvent(type: String?) -> HookEventKind {
+        switch type {
+        case "busy": return .busy
+        case "sessionStart", "session-start", "sessionstart": return .sessionStart
+        default: return .done   // nil（旧脚本无 type = Stop）或 "done"
+        }
+    }
+
     private func handleHookEvent(_ event: HookEvent) {
         let pane = event.paneID.map { PaneID($0) }
         rememberAgentSession(from: event, pane: pane)
 
-        // busy（UserPromptSubmit）：纯状态事件，点亮思考动效即返回，不发通知
-        if event.type == "busy" {
-            if let pane {
-                setHookThinking(pane, active: true)
-            }
+        switch Self.classifyHookEvent(type: event.type) {
+        case .busy:
+            // UserPromptSubmit：纯状态事件，点亮思考动效即返回，不发通知
+            if let pane { setHookThinking(pane, active: true) }
             return
+        case .sessionStart:
+            // SessionStart（含「恢复会话」）：上面已记原生 session id，到此为止——
+            // 不发通知、不当成完成（曾经的 bug：sessionStart 落进完成分支，一恢复会话就弹通知）。
+            return
+        case .done:
+            break   // 继续走下面的完成流程
         }
 
         // done / 旧脚本无 type（Stop）：熄灭思考动效 + 发完成通知 + 记入活动账本
