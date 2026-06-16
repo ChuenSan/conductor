@@ -184,6 +184,7 @@ private struct UpdatePopover: View {
     }
 
     private static func sizeText(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        guard bytes > 0 else { return L("未知大小") }
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }

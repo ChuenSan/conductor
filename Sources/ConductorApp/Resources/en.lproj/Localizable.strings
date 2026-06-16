@@ -620,6 +620,10 @@
 "重试" = "Retry";
 "发现新版 v%@" = "New version v%@ available";
 "下载更新（%@）" = "Download Update (%@)";
+"未知大小" = "Unknown size";
+"GitHub 更新检查返回 HTTP %ld，请稍后重试。" = "GitHub update check returned HTTP %ld. Please try again later.";
+"未能解析 GitHub 最新版本，请打开 Releases 页面手动下载。" = "Could not resolve the latest GitHub version. Please open the Releases page to download manually.";
+"更新安装包暂不可用（HTTP %ld），请稍后重试。" = "The update installer is temporarily unavailable (HTTP %ld). Please try again later.";
 "正在下载 v%@" = "Downloading v%@";
 "取消下载" = "Cancel Download";
 "v%@ 已下载完成" = "v%@ downloaded";

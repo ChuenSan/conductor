@@ -75,17 +75,7 @@ final class UpdateManager: ObservableObject {
         }
         phase = .checking
         do {
-            var request = URLRequest(
-                url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!)
-            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                throw URLError(.badServerResponse)
-            }
-            let payload = try JSONDecoder().decode(GitHubRelease.self, from: data)
-            guard let release = Self.makeRelease(from: payload) else {
-                throw URLError(.cannotParseResponse)
-            }
+            let release = try await Self.fetchLatestRelease()
             if Self.isNewer(release.version, than: currentVersion) {
                 phase = .available(release)
             } else {
@@ -170,41 +160,95 @@ final class UpdateManager: ObservableObject {
         return downloads.appendingPathComponent(assetName)
     }
 
-    // MARK: - GitHub payload
+    // MARK: - GitHub release discovery
 
-    private struct GitHubRelease: Decodable {
-        struct Asset: Decodable {
-            let name: String
-            let browser_download_url: String
-            let size: Int64
+    private enum UpdateCheckError: LocalizedError {
+        case badLatestResponse(Int)
+        case cannotResolveLatestTag
+        case assetUnavailable(Int)
+
+        var errorDescription: String? {
+            switch self {
+            case .badLatestResponse(let status):
+                return L("GitHub 更新检查返回 HTTP %ld，请稍后重试。", status)
+            case .cannotResolveLatestTag:
+                return L("未能解析 GitHub 最新版本，请打开 Releases 页面手动下载。")
+            case .assetUnavailable(let status):
+                return L("更新安装包暂不可用（HTTP %ld），请稍后重试。", status)
+            }
         }
-        let tag_name: String
-        let body: String?
-        let html_url: String
-        let assets: [Asset]
     }
 
-    private static func makeRelease(from payload: GitHubRelease) -> Release? {
-        guard let htmlURL = URL(string: payload.html_url) else { return nil }
+    /// 不走 GitHub REST API，避免公共出口 IP 被 60 次/小时的未认证 API 限额卡住。
+    /// `/releases/latest` 会 302 到 `/releases/tag/<tag>`；URLSession 跟随跳转后直接从最终 URL 取 tag。
+    private static func fetchLatestRelease() async throws -> Release {
+        let latestURL = URL(string: "https://github.com/\(Self.repo)/releases/latest")!
+        var latestRequest = URLRequest(url: latestURL)
+        latestRequest.httpMethod = "HEAD"
+        latestRequest.cachePolicy = .reloadIgnoringLocalCacheData
+        latestRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+
+        let (_, latestResponse) = try await URLSession.shared.data(for: latestRequest)
+        guard let latestHTTP = latestResponse as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        guard (200..<400).contains(latestHTTP.statusCode) else {
+            throw UpdateCheckError.badLatestResponse(latestHTTP.statusCode)
+        }
+        guard let tag = latestTag(from: latestHTTP.url ?? latestURL) else {
+            throw UpdateCheckError.cannotResolveLatestTag
+        }
+        let version = displayVersion(from: tag)
         #if arch(arm64)
             let archSuffix = "arm64.dmg"
         #else
             let archSuffix = "x86_64.dmg"
         #endif
-        // 优先匹配本机芯片的 DMG，没有就退而求其次拿任意 DMG。
-        let asset =
-            payload.assets.first { $0.name.hasSuffix(archSuffix) }
-            ?? payload.assets.first { $0.name.hasSuffix(".dmg") }
-        guard let asset, let assetURL = URL(string: asset.browser_download_url) else { return nil }
-        var version = payload.tag_name
-        if version.hasPrefix("v") { version.removeFirst() }
+        let assetName = "Conductor-\(version)-\(archSuffix)"
+        guard let assetURL = URL(string: "https://github.com/\(Self.repo)/releases/download/\(tag)/\(assetName)") else {
+            throw URLError(.badURL)
+        }
+        let assetSize = try await fetchAssetSize(assetURL)
         return Release(
             version: version,
-            notes: payload.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-            htmlURL: htmlURL,
-            assetName: asset.name,
+            notes: "",
+            htmlURL: URL(string: "https://github.com/\(Self.repo)/releases/tag/\(tag)")!,
+            assetName: assetName,
             assetURL: assetURL,
-            assetSize: asset.size)
+            assetSize: assetSize)
+    }
+
+    private static var userAgent: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+        return "Conductor/\(version)"
+    }
+
+    private static func latestTag(from url: URL) -> String? {
+        let parts = url.pathComponents
+        guard let tagIndex = parts.lastIndex(of: "tag") else { return nil }
+        let valueIndex = parts.index(after: tagIndex)
+        guard parts.indices.contains(valueIndex) else { return nil }
+        let tag = parts[valueIndex]
+        return tag.isEmpty ? nil : tag
+    }
+
+    private static func displayVersion(from tag: String) -> String {
+        tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+    }
+
+    private static func fetchAssetSize(_ url: URL) async throws -> Int64 {
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        guard (200..<400).contains(http.statusCode) else {
+            throw UpdateCheckError.assetUnavailable(http.statusCode)
+        }
+        return max(0, response.expectedContentLength)
     }
 
     /// 语义化版本比较：按 . 分段数字比较，段数不齐补 0。

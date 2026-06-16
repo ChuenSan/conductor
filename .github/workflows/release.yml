@@ -47,10 +47,10 @@ jobs:
           {
             echo "## Highlights"
             echo
+            echo "- Fixed update checks to avoid GitHub REST API rate limits by resolving the latest release through the public redirect URL."
+            echo "- Improved update error messages so HTTP/rate-limit failures are no longer shown as opaque NSURLErrorDomain codes."
             echo "- Reworked terminal theme refresh and scrollback restore so live Codex panes repaint more reliably after theme changes."
             echo "- Reduced Agent Tools management animations and removed the MCP/Hook management modules from the console."
-            echo "- Kept CLI notification hooks available while tightening usage credential handling and diagnostics."
-            echo "- Improved restored terminal content cleanup and added focused regression coverage."
             echo
             echo "## Assets"
             echo
