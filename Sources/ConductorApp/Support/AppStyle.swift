@@ -15,6 +15,11 @@ enum AppStyle {
     @MainActor static var activeFill: Color { theme.activeFill }
     @MainActor static var separator: Color { theme.separator }
     @MainActor static var hoverFill: Color { theme.hoverFill }
+    /// 淡填充：胶囊/分段/计数等次级元素的底（主题感知）。此前各处裸写
+    /// `isDark ? white.opacity(0.08) : black.opacity(0.07)`，收口到这里。
+    @MainActor static var subtleFill: Color {
+        theme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07)
+    }
 
     // 文字
     @MainActor static var textPrimary: Color { theme.textPrimary }

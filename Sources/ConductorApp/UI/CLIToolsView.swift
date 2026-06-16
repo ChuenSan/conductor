@@ -1256,7 +1256,7 @@ private struct UsageBar: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(AppStyle.theme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07))
+                        .fill(AppStyle.subtleFill)
                     Capsule()
                         .fill(barColor)
                         .frame(width: max(3, geo.size.width * fraction))
@@ -1299,7 +1299,7 @@ struct CostLine: View {
             if cost.hasLimit {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(AppStyle.theme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07))
+                        Capsule().fill(AppStyle.subtleFill)
                         Capsule()
                             .fill(cost.usedPercent >= 90 ? AppStyle.errorRed : cost.usedPercent >= 70 ? AppStyle.waitAmber : AppStyle.accent)
                             .frame(width: geo.size.width * max(0.02, min(1, cost.usedPercent / 100)))

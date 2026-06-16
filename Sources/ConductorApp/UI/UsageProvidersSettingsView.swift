@@ -935,7 +935,7 @@ private struct ProviderUsageInlineBar: View {
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(AppStyle.theme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07))
+                    Capsule().fill(AppStyle.subtleFill)
                     Capsule()
                         .fill(barColor)
                         .frame(width: geo.size.width * fraction)
@@ -988,7 +988,7 @@ private struct ProviderCostInlineRow: View {
             if cost.hasLimit {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(AppStyle.theme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07))
+                        Capsule().fill(AppStyle.subtleFill)
                         Capsule()
                             .fill(cost.usedPercent >= 90 ? AppStyle.errorRed : cost.usedPercent >= 70 ? AppStyle.waitAmber : AppStyle.accent)
                             .frame(width: geo.size.width * max(0.02, min(1, cost.usedPercent / 100)))
@@ -1221,7 +1221,7 @@ private struct ProviderUsageBar: View {
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(AppStyle.theme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07))
+                    Capsule().fill(AppStyle.subtleFill)
                     Capsule()
                         .fill(barColor)
                         .frame(width: geo.size.width * fraction)
@@ -1274,7 +1274,7 @@ private struct ProviderCostRow: View {
             if cost.hasLimit {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(AppStyle.theme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07))
+                        Capsule().fill(AppStyle.subtleFill)
                         Capsule()
                             .fill(cost.usedPercent >= 90 ? AppStyle.errorRed : cost.usedPercent >= 70 ? AppStyle.waitAmber : AppStyle.accent)
                             .frame(width: geo.size.width * max(0.02, min(1, cost.usedPercent / 100)))
