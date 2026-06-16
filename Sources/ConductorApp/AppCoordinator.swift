@@ -2177,11 +2177,7 @@ final class AppCoordinator: ObservableObject {
         return nil
     }
 
-    static func shortName(_ path: String) -> String {
-        if path == NSHomeDirectory() { return "~" }
-        let base = (path as NSString).lastPathComponent
-        return base.isEmpty ? path : base
-    }
+    static func shortName(_ path: String) -> String { PathDisplay.lastComponent(path) }
 
     private func refreshActiveRings() {
         let active = activePane()

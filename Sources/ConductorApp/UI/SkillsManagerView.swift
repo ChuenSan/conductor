@@ -7240,14 +7240,7 @@ private func skillAuditActionLabel(_ action: String) -> String {
     }
 }
 
-private func collapsedPath(_ path: String) -> String {
-    let home = FileManager.default.homeDirectoryForCurrentUser.path
-    if path == home { return "~" }
-    if path.hasPrefix(home + "/") {
-        return "~" + path.dropFirst(home.count)
-    }
-    return path
-}
+private func collapsedPath(_ path: String) -> String { PathDisplay.tilde(path) }
 
 private func byteCount(_ bytes: Int64) -> String {
     ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)

@@ -15,7 +15,7 @@ struct SessionManagerView: View {
     private var scopePath: String? { coordinator.sessionScopePath }
     private var scopeLabel: String {
         if let path = scopePath {
-            return (path as NSString).abbreviatingWithTildeInPath
+            return PathDisplay.tilde(path)
         }
         return L("全部目录")
     }
@@ -205,7 +205,7 @@ private struct SessionRow: View {
                             .lineLimit(1)
                             .multilineTextAlignment(.leading)
                         if let cwd = record.cwd {
-                            Text((cwd as NSString).abbreviatingWithTildeInPath)
+                            Text(PathDisplay.tilde(cwd))
                                 .font(.system(size: 10.5))
                                 .foregroundStyle(AppStyle.textTertiary)
                                 .lineLimit(1)
