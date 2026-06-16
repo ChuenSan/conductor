@@ -60,6 +60,51 @@ open ./Conductor.app
 
 快速调试也可以用 `swift run ConductorApp`，但裸可执行不具备稳定 App 签名身份，macOS 权限授权不如打包后的 `Conductor.app` 稳定。
 
+### CLI / Socket 控制
+
+Conductor 启动后会监听本机 Unix socket：`~/Library/Application Support/conductor/automation.sock`。开发环境可直接运行：
+
+```bash
+swift run conductorctl ping
+swift run conductorctl pane list
+swift run conductorctl workspace tree --json
+swift run conductorctl pane split --direction down --cwd "$PWD"
+swift run conductorctl screen --scrollback
+swift run conductorctl run codex --cwd "$PWD" --prompt "检查当前改动" --wait
+printf '检查当前改动\n重点看测试缺口\n' | swift run conductorctl run codex --stdin --wait
+swift run conductorctl agent wait p123 --json
+swift run conductorctl events --jsonl
+```
+
+workspace / tab / pane / status / progress / log 都有正式子命令；完整列表见 `swift run conductorctl --help`。
+
+打包后的 CLI 位于 `Conductor.app/Contents/MacOS/conductorctl`，例如：
+
+```bash
+/Applications/Conductor.app/Contents/MacOS/conductorctl activity --limit 10
+```
+
+批量自动化可走 NDJSON，每行一个 `{"id":1,"method":"app.status","params":{...}}` 请求：
+
+```bash
+printf '{"id":1,"method":"app.ping"}\n{"id":2,"method":"pane.list"}\n' \
+  | swift run conductorctl batch
+```
+
+需要给非 Unix-socket 客户端接入时，可以启动本机 HTTP/WebSocket bridge：
+
+```bash
+swift run conductorctl bridge --host 127.0.0.1 --port 17373
+```
+
+bridge 提供 `POST /rpc`、`POST /batch`、`GET /methods`、`GET /openapi.json`、`WS /rpc`、`WS /events` 和 `GET /events` SSE。HTTP 接口支持 CORS/OPTIONS；`/events` 支持 `limit` 与 `interval` 查询参数。
+
+CLI / socket / bridge 的脚本化回归测试：
+
+```bash
+./Scripts/test-conductorctl.sh
+```
+
 ### 打包成 .app
 
 系统通知、bundle id 和部分 macOS 集成需要用打包后的 `Conductor.app` 运行，而不是 `swift run`：

@@ -70,9 +70,6 @@ enum HookInstaller {
         do {
             for source in [HookSource.claude, .codex] {
                 let doc = HookConfigDocument(source: source)
-                // 改名迁移：清掉 cmux 时代的哨兵条目（指向已废弃的 ~/.cmux/bin/cmux-notify，
-                // 网关变量也改了名，留着只会让用户的 hook 列表越积越乱）。
-                try doc.removeCommands(containing: "#cmux:")
                 try doc.addCommand(event: HookEventName.stop, command: stopCommand)
                 try doc.addCommand(event: HookEventName.userPromptSubmit, command: busyCommand)
                 try doc.addCommand(event: HookEventName.sessionStart, command: sessionStartCommand)
@@ -129,6 +126,7 @@ enum HookInstaller {
         CWD="$(first_nonempty "$(json_get cwd)" "$(json_get working_directory)" "$(json_get workingDirectory)" "${PWD:-}")"
         TRANSCRIPT_PATH="$(first_nonempty "$(json_get transcript_path)" "$(json_get transcriptPath)")"
         LIFECYCLE="$(first_nonempty "$(json_get lifecycle)" "$(json_get state)")"
+        MESSAGE="$(first_nonempty "$(json_get message)" "$(json_get response)" "$(json_get output)" "$(json_get summary)")"
 
         write_event() {
           typ="$1"
@@ -154,7 +152,7 @@ enum HookInstaller {
           write_event "sessionStart" "" ""
         else
           TITLE="AI 已完成"
-          MSG="可以查看结果了"
+          MSG="$MESSAGE"
           write_event "done" "$TITLE" "$MSG"
         fi
         exit 0

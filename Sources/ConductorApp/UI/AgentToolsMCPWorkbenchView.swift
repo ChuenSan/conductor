@@ -634,11 +634,12 @@ struct AgentToolsMCPWorkbenchView: View {
     }
 
     private var serversContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let servers = filteredServers
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 ToolsSectionLabel("MCP Servers")
                 Spacer()
-                Text(L("%ld 个 server", filteredServers.count))
+                Text(L("%ld 个 server", servers.count))
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(AppStyle.textTertiary)
             }
@@ -646,10 +647,10 @@ struct AgentToolsMCPWorkbenchView: View {
             VStack(spacing: 0) {
                 tableHeader
                 LazyVStack(spacing: 1) {
-                    ForEach(filteredServers) { server in
+                    ForEach(servers) { server in
                         serverRow(server)
                     }
-                    if filteredServers.isEmpty {
+                    if servers.isEmpty {
                         emptyState
                     }
                 }

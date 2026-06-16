@@ -207,57 +207,6 @@ extension AppCoordinator {
         return text ?? ""
     }
 
-    // MARK: - surface resume
-
-    func automationSetSurfaceResume(
-        paneRef: String?,
-        kind: String,
-        checkpoint: String?,
-        command: String,
-        autoResume: Bool,
-        trusted: Bool
-    ) throws -> SurfaceResumeBinding {
-        let pane = try automationFindPane(paneRef)
-        let binding = SurfaceResumeBinding(
-            paneID: pane.value,
-            kind: kind.isEmpty ? "shell" : kind,
-            checkpoint: checkpoint,
-            command: command,
-            cwd: paneCwds[pane],
-            autoResume: autoResume && trusted,
-            trusted: trusted)
-        guard binding.isUsable else {
-            throw AutomationError.badRequest("resume command 不能为空")
-        }
-        try surfaceResumeBindings.set(binding)
-        return binding
-    }
-
-    func automationShowSurfaceResume(paneRef: String?) throws -> SurfaceResumeBinding? {
-        let pane = try automationFindPane(paneRef)
-        return surfaceResumeBindings.binding(for: pane.value)
-    }
-
-    @discardableResult
-    func automationClearSurfaceResume(paneRef: String?) throws -> SurfaceResumeBinding? {
-        let pane = try automationFindPane(paneRef)
-        return try surfaceResumeBindings.clear(paneID: pane.value)
-    }
-
-    func automationDescribe(binding: SurfaceResumeBinding) -> JSONValue {
-        .object([
-            "pane": .string(binding.paneID),
-            "kind": .string(binding.kind),
-            "checkpoint": binding.checkpoint.map(JSONValue.string) ?? .null,
-            "command": .string(binding.command),
-            "restoreCommand": .string(binding.restoreCommand),
-            "cwd": binding.cwd.map(JSONValue.string) ?? .null,
-            "autoResume": .bool(binding.autoResume),
-            "trusted": .bool(binding.trusted),
-            "updatedAt": .double(binding.updatedAt.timeIntervalSince1970),
-        ])
-    }
-
     // MARK: - 通知
 
     func automationNotify(paneRef: String?, title: String, body: String) {
@@ -271,6 +220,97 @@ extension AppCoordinator {
                                               title: title.isEmpty ? "Conductor" : title,
                                               body: body)
         }
+    }
+
+    func automationListActivity(limit: Int) -> JSONValue {
+        .array(activityLog.entries.prefix(max(1, limit)).map(automationDescribe(activity:)))
+    }
+
+    func automationRecentEvents(limit: Int) -> JSONValue {
+        .array(activityLog.entries.prefix(max(1, limit)).map(automationEvent(activity:)))
+    }
+
+    func automationStatus(methods: [String]) -> JSONValue {
+        let panes = store.workspaces.flatMap { workspace in
+            workspace.tabs.flatMap { tab in
+                tab.rootSplit.leaves().map { pane in
+                    automationDescribe(pane: pane, in: tab)
+                }
+            }
+        }
+        let activeWorkspace = automationActiveWorkspace
+        let activeTab = activeWorkspace.flatMap { workspace in
+            workspace.tabs.first { $0.id == workspace.activeTab }
+        }
+        return .object([
+            "app": .string("Conductor"),
+            "version": .string(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"),
+            "bundleIdentifier": .string(Bundle.main.bundleIdentifier ?? ""),
+            "pid": .int(Int(ProcessInfo.processInfo.processIdentifier)),
+            "protocol": .int(AutomationProtocol.version),
+            "socket": .string(AutomationProtocol.defaultSocketURL.path),
+            "methods": .array(methods.map(JSONValue.string)),
+            "features": .array([
+                .string("unix-socket"),
+                .string("json-rpc-ndjson"),
+                .string("agent-jobs"),
+                .string("agent-results"),
+                .string("event-log"),
+                .string("websocket-bridge"),
+            ]),
+            "active": .object([
+                "workspace": activeWorkspace.map { .string($0.id.value) } ?? .null,
+                "tab": activeTab.map { .string($0.id.value) } ?? .null,
+                "pane": activeTab.map { .string($0.activePane.value) } ?? .null,
+            ]),
+            "counts": .object([
+                "workspaces": .int(store.workspaces.count),
+                "tabs": .int(store.workspaces.reduce(0) { $0 + $1.tabs.count }),
+                "panes": .int(panes.count),
+                "runningAgents": .int(thinkingPanes.count),
+                "activities": .int(activityLog.entries.count),
+            ]),
+        ])
+    }
+
+    func automationAgentStatus(jobRef: String?) throws -> JSONValue {
+        let pane = try automationFindJobPane(jobRef)
+        return automationAgentStatus(pane: pane)
+    }
+
+    func automationAgentResult(jobRef: String?) throws -> JSONValue {
+        let pane = try automationFindJobPane(jobRef)
+        var fields = automationAgentStatusFields(pane: pane)
+        let activity = activityLog.entries.first { $0.paneID == pane }
+        let agent = fields["agent"]?.stringValue
+        let cwd = fields["cwd"]?.stringValue
+        let transcriptPath = automationTranscriptPath(pane: pane, agent: agent, cwd: cwd)
+        var source = "none"
+        var markdown = ""
+
+        if let text = AgentCompletionSummary.transcriptText(path: transcriptPath) {
+            markdown = text
+            source = "transcript"
+        } else if let message = activity?.message,
+                  AgentCompletionSummary.directMessage(message) != nil {
+            markdown = message
+            source = "activity"
+        } else if paneExists(pane),
+                  let surface = registry.surface(for: pane) as? GhosttySurface,
+                  let raw = surface.readAllText(),
+                  let text = AgentCompletionSummary.terminalText(raw) {
+            markdown = text
+            source = "terminal"
+        }
+
+        let summary = AgentCompletionSummary.directMessage(markdown) ?? ""
+        fields["summary"] = .string(summary)
+        fields["markdown"] = .string(markdown)
+        fields["source"] = .string(source)
+        fields["transcriptPath"] = transcriptPath.map(JSONValue.string) ?? .null
+        fields["completedAt"] = activity.map { .double($0.date.timeIntervalSince1970) } ?? .null
+        fields["duration"] = activity?.duration.map(JSONValue.double) ?? .null
+        return .object(fields)
     }
 
     // MARK: - 描述（list-* / tree 的数据源）
@@ -308,11 +348,91 @@ extension AppCoordinator {
         if let session = agentSessionBindings.ref(for: pane.value) {
             fields["restorableSession"] = automationDescribe(session: session)
         }
-        if let binding = surfaceResumeBindings.binding(for: pane.value) {
-            fields["resumeBinding"] = automationDescribe(binding: binding)
-        }
         if let tab { fields["active"] = .bool(tab.activePane == pane) }
         return .object(fields)
+    }
+
+    func automationDescribe(activity entry: AgentActivityEntry) -> JSONValue {
+        .object([
+            "id": .string(entry.id.uuidString),
+            "time": .double(entry.date.timeIntervalSince1970),
+            "pane": entry.paneID.map { .string($0.value) } ?? .null,
+            "jobId": entry.paneID.map { .string($0.value) } ?? .null,
+            "agent": entry.agentID.map(JSONValue.string) ?? .null,
+            "title": .string(entry.title),
+            "message": .string(entry.message),
+            "duration": entry.duration.map(JSONValue.double) ?? .null,
+            "status": .string("completed"),
+        ])
+    }
+
+    func automationEvent(activity entry: AgentActivityEntry) -> JSONValue {
+        let type = entry.agentID == nil ? "activity.added" : "agent.completed"
+        return .object([
+            "id": .string(entry.id.uuidString),
+            "type": .string(type),
+            "topic": .string(type),
+            "time": .double(entry.date.timeIntervalSince1970),
+            "streamID": entry.paneID.map { .string($0.value) } ?? .null,
+            "payload": automationDescribe(activity: entry),
+        ])
+    }
+
+    private func automationFindJobPane(_ ref: String?) throws -> PaneID {
+        guard let ref, !ref.isEmpty else {
+            return try automationFindPane(nil)
+        }
+        let pane = PaneID(ref)
+        if paneExists(pane)
+            || activityLog.entries.contains(where: { $0.paneID == pane })
+            || agentSessionBindings.ref(for: pane.value) != nil {
+            return pane
+        }
+        throw AutomationError.notFound("找不到 job/pane：\(ref)")
+    }
+
+    private func automationAgentStatus(pane: PaneID) -> JSONValue {
+        .object(automationAgentStatusFields(pane: pane))
+    }
+
+    private func automationAgentStatusFields(pane: PaneID) -> [String: JSONValue] {
+        let activity = activityLog.entries.first { $0.paneID == pane }
+        let agent = paneAgents[pane] ?? activity?.agentID ?? agentSessionBindings.ref(for: pane.value)?.agent
+        let alive = paneExists(pane)
+        let status: String
+        if thinkingPanes.contains(pane) {
+            status = "running"
+        } else if activity != nil {
+            status = "completed"
+        } else if alive, agent != nil {
+            status = "idle"
+        } else if alive {
+            status = "open"
+        } else {
+            status = "unknown"
+        }
+        return [
+            "jobId": .string(pane.value),
+            "pane": .string(pane.value),
+            "agent": agent.map(JSONValue.string) ?? .null,
+            "status": .string(status),
+            "alive": .bool(alive),
+            "thinking": .bool(thinkingPanes.contains(pane)),
+            "title": .string(paneTitles[pane] ?? activity?.title ?? ""),
+            "cwd": paneCwds[pane].map(JSONValue.string) ?? .null,
+            "activityId": activity.map { .string($0.id.uuidString) } ?? .null,
+            "updatedAt": activity.map { .double($0.date.timeIntervalSince1970) } ?? .null,
+        ]
+    }
+
+    private func automationTranscriptPath(pane: PaneID, agent: String?, cwd: String?) -> String? {
+        if let direct = agentSessionBindings.ref(for: pane.value)?.transcriptPath {
+            return direct
+        }
+        guard let agent, let cwd else { return nil }
+        return AgentSessionCatalog.scanForDirectory(cwd, limit: 8)
+            .first(where: { $0.agent == agent })?
+            .filePath
     }
 
     func automationDescribe(session: AgentSessionRef) -> JSONValue {

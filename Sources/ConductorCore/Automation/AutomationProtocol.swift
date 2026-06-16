@@ -1,12 +1,26 @@
 import Foundation
 
 /// conductor 自动化协议：Unix socket 上的 NDJSON（一行一个 JSON）。
-/// 请求 `{"id":1,"method":"list-workspaces","params":{...}}`；
+/// 请求 `{"id":1,"method":"workspace.list","params":{...}}`；
 /// 响应 `{"id":1,"ok":true,"result":...}` 或 `{"id":1,"ok":false,"error":{"code":...,"message":...}}`。
 /// CLI 与 app 内服务共用这套类型，确保两端永远同构。
 public enum AutomationProtocol {
     /// 协议版本：破坏性改动时 +1，CLI 据此提示升级。
     public static let version = 1
+    public static let socketPathEnvKey = "CONDUCTOR_SOCKET_PATH"
+
+    /// Conductor app and CLI share one local automation socket.
+    public static var defaultSocketURL: URL {
+        if let override = ProcessInfo.processInfo.environment[socketPathEnvKey]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return URL(fileURLWithPath: (override as NSString).expandingTildeInPath)
+        }
+        return FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("conductor", isDirectory: true)
+            .appendingPathComponent("automation.sock", isDirectory: false)
+    }
 }
 
 public struct AutomationRequest: Codable, Sendable {

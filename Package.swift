@@ -8,6 +8,7 @@ let package = Package(
     products: [
         .library(name: "ConductorCore", targets: ["ConductorCore"]),
         .executable(name: "ConductorApp", targets: ["ConductorApp"]),
+        .executable(name: "conductorctl", targets: ["ConductorCLI"]),
     ],
     dependencies: [
         // YAML 解析（用户配置 config.yaml）。Swift 事实标准，支持 Codable。仅 App 层用。
@@ -32,6 +33,15 @@ let package = Package(
         ),
         .testTarget(name: "ConductorCoreTests", dependencies: ["ConductorCore"]),
         .testTarget(name: "ConductorAppTests", dependencies: ["ConductorApp", "GhosttyKit"]),
+        .executableTarget(
+            name: "ConductorCLI",
+            dependencies: [
+                "ConductorCore",
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v5),
+            ]
+        ),
 
         // 预编译的 libghostty（来自 manaflow-ai/ghostty release，与 Conductor 同款）。
         .binaryTarget(

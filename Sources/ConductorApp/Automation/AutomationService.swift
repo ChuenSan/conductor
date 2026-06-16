@@ -54,13 +54,18 @@ final class AutomationService {
 
         switch method {
         // —— 系统 ——
-        case "ping":
+        case "app.ping":
             return .object([
                 "pong": .bool(true),
                 "protocol": .int(AutomationProtocol.version),
                 "app": .string("Conductor"),
+                "socket": .string(AutomationProtocol.defaultSocketURL.path),
             ])
-        case "open-agent-tools", "open-agent-tools-management":
+        case "app.status":
+            return c.automationStatus(methods: Self.methodNames)
+        case "app.methods":
+            return .array(Self.methodNames.map(JSONValue.string))
+        case "tools.open":
             let rawModule = str("module") ?? AgentToolsManagementModule.overview.rawValue
             guard let module = AgentToolsManagementModule(rawValue: rawModule) else {
                 let supported = AgentToolsManagementModule.railModules.map(\.rawValue).joined(separator: ", ")
@@ -72,57 +77,57 @@ final class AutomationService {
                 "window": .string("agent-tools"),
             ])
         #if DEBUG
-        case "debug-agent-tools-smoke-test":
+        case "debug.agentToolsSmokeTest":
             return try debugAgentToolsSmokeTest()
         #endif
 
         // —— 工作区 ——
-        case "list-workspaces":
+        case "workspace.list":
             return .array(c.store.workspaces.map { c.automationDescribe(workspace: $0) })
-        case "current-workspace":
+        case "workspace.current":
             return c.automationDescribe(workspace: try c.automationFindWorkspace(nil))
-        case "select-workspace":
+        case "workspace.select":
             try c.automationSelectWorkspace(try requireStr("workspace"))
             return .bool(true)
-        case "new-workspace":
+        case "workspace.create":
             let workspace = try c.automationNewWorkspace(path: try requireStr("path"),
                                                          name: str("name"))
             return c.automationDescribe(workspace: workspace)
-        case "rename-workspace":
+        case "workspace.rename":
             let workspace = try c.automationFindWorkspace(try requireStr("workspace"))
             c.renameWorkspace(workspace.id, to: try requireStr("name"))
             return .bool(true)
-        case "close-workspace":
+        case "workspace.close":
             let workspace = try c.automationFindWorkspace(try requireStr("workspace"))
             c.removeWorkspace(workspace.id)
             return .bool(true)
 
         // —— 标签 ——
-        case "list-tabs":
+        case "tab.list":
             let workspace = try c.automationFindWorkspace(str("workspace"))
             return .array(workspace.tabs.map { c.automationDescribe(tab: $0, in: workspace) })
-        case "new-tab":
+        case "pane.create":
             let (tab, pane) = try c.automationNewTab(workspaceRef: str("workspace"),
                                                      cwd: str("cwd"))
             return .object(["tab": .string(tab.value), "pane": .string(pane.value)])
-        case "select-tab":
+        case "tab.select":
             try c.automationSelectTab(try requireStr("tab"), workspaceRef: str("workspace"))
             return .bool(true)
-        case "rename-tab":
+        case "tab.rename":
             let workspace = try c.automationFindWorkspace(str("workspace"))
             let tab = try c.automationFindTab(try requireStr("tab"), in: workspace)
             c.renameTab(tab.id, to: try requireStr("title"))
             return .bool(true)
-        case "close-tab":
+        case "tab.close":
             try c.automationCloseTab(try requireStr("tab"), workspaceRef: str("workspace"))
             return .bool(true)
 
         // —— pane ——
-        case "list-panes":
+        case "pane.list":
             let workspace = try c.automationFindWorkspace(str("workspace"))
             let tab = try c.automationFindTab(str("tab"), in: workspace)
             return .array(tab.rootSplit.leaves().map { c.automationDescribe(pane: $0, in: tab) })
-        case "split":
+        case "pane.split":
             let direction = str("direction") ?? "right"
             let axis: SplitAxis
             switch direction {
@@ -132,57 +137,76 @@ final class AutomationService {
             }
             let pane = try c.automationSplit(paneRef: str("pane"), axis: axis, cwd: str("cwd"))
             return .object(["pane": .string(pane.value)])
-        case "focus-pane":
+        case "pane.focus":
             try c.automationFocusPane(try requireStr("pane"))
             return .bool(true)
-        case "close-pane":
+        case "pane.close":
             try c.automationClosePane(str("pane"))
             return .bool(true)
-        case "tree":
+        case "workspace.tree":
             return try c.automationTree(workspaceRef: str("workspace"))
 
         // —— 终端 I/O ——
-        case "send-text":
+        case "agent.run":
+            let requestedAgent = str("agent") ?? str("command")
+            guard let requestedAgent, !requestedAgent.isEmpty else {
+                throw AutomationError.badRequest("缺少参数：agent")
+            }
+            let descriptor = AgentCatalog.all.first {
+                $0.id == requestedAgent || $0.command == requestedAgent
+            }
+            let command = str("command") ?? descriptor?.command ?? requestedAgent
+            let agentID = str("agent").flatMap { raw in
+                descriptor?.id ?? AgentCatalog.all.first(where: { $0.id == raw || $0.command == raw })?.id
+            } ?? descriptor?.id
+            let cwd = str("cwd").map { ($0 as NSString).expandingTildeInPath }
+            let pane = c.launchAutomationAgent(
+                command: command,
+                agentID: agentID,
+                cwd: cwd,
+                prompt: str("prompt"),
+                submit: params["submit"]?.boolValue ?? true)
+            let located = c.automationLocate(pane)
+            return .object([
+                "pane": .string(pane.value),
+                "jobId": .string(pane.value),
+                "tab": located.map { .string($0.1.id.value) } ?? .null,
+                "workspace": located.map { .string($0.0.id.value) } ?? .null,
+                "agent": agentID.map(JSONValue.string) ?? .null,
+                "command": .string(command),
+                "promptSent": .bool(str("prompt")?.isEmpty == false),
+            ])
+        case "agent.status":
+            return try c.automationAgentStatus(jobRef: str("job") ?? str("jobId") ?? str("pane"))
+        case "agent.result":
+            return try c.automationAgentResult(jobRef: str("job") ?? str("jobId") ?? str("pane"))
+        case "agent.send":
             try c.automationSendText(paneRef: str("pane"),
                                      text: try requireStr("text"),
                                      submit: params["submit"]?.boolValue ?? true)
             return .bool(true)
-        case "send-keys":
+        case "terminal.keys":
             let keys = (params["keys"]?.arrayValue ?? []).compactMap(\.stringValue)
             guard !keys.isEmpty else { throw AutomationError.badRequest("缺少参数：keys") }
             try c.automationSendKeys(paneRef: str("pane"), keys: keys)
             return .bool(true)
-        case "read-screen", "capture-pane":
+        case "pane.read":
             let text = try c.automationReadScreen(paneRef: str("pane"),
                                                   scrollback: params["scrollback"]?.boolValue ?? false)
             return .object(["text": .string(text)])
-        case "surface-resume-set", "resume-set":
-            let binding = try c.automationSetSurfaceResume(
-                paneRef: str("pane"),
-                kind: str("kind") ?? "shell",
-                checkpoint: str("checkpoint"),
-                command: try requireStr("command"),
-                autoResume: params["autoResume"]?.boolValue ?? false,
-                trusted: params["trusted"]?.boolValue ?? false)
-            return c.automationDescribe(binding: binding)
-        case "surface-resume-show", "resume-show":
-            guard let binding = try c.automationShowSurfaceResume(paneRef: str("pane")) else {
-                return .null
-            }
-            return c.automationDescribe(binding: binding)
-        case "surface-resume-clear", "resume-clear":
-            let removed = try c.automationClearSurfaceResume(paneRef: str("pane"))
-            return removed.map { c.automationDescribe(binding: $0) } ?? .null
-
         // —— 通知 ——
-        case "notify":
+        case "notification.send":
             c.automationNotify(paneRef: str("pane"),
                                title: str("title") ?? "",
                                body: try requireStr("message"))
             return .bool(true)
+        case "activity.list":
+            return c.automationListActivity(limit: params["limit"]?.intValue ?? 20)
+        case "events.recent":
+            return c.automationRecentEvents(limit: params["limit"]?.intValue ?? 20)
 
         // —— 侧栏元数据（状态 / 进度 / 日志）——
-        case "set-status":
+        case "workspace.status.set":
             let workspace = try c.automationFindWorkspace(str("workspace"))
             c.workspaceMetadata.setStatus(workspace: workspace.id,
                                           key: try requireStr("key"),
@@ -190,11 +214,11 @@ final class AutomationService {
                                           color: str("color"),
                                           icon: str("icon"))
             return .bool(true)
-        case "clear-status":
+        case "workspace.status.clear":
             let workspace = try c.automationFindWorkspace(str("workspace"))
             c.workspaceMetadata.clearStatus(workspace: workspace.id, key: str("key"))
             return .bool(true)
-        case "list-status":
+        case "workspace.status.list":
             let workspace = try c.automationFindWorkspace(str("workspace"))
             return .array(c.workspaceMetadata.statuses(for: workspace.id).map { status in
                 .object([
@@ -204,7 +228,7 @@ final class AutomationService {
                     "icon": status.icon.map(JSONValue.string) ?? .null,
                 ])
             })
-        case "set-progress":
+        case "workspace.progress.set":
             let workspace = try c.automationFindWorkspace(str("workspace"))
             guard let value = params["value"]?.doubleValue, (0...1).contains(value) else {
                 throw AutomationError.badRequest("value 需在 0–1 之间")
@@ -212,18 +236,18 @@ final class AutomationService {
             c.workspaceMetadata.setProgress(workspace: workspace.id, value: value,
                                             label: str("label"))
             return .bool(true)
-        case "clear-progress":
+        case "workspace.progress.clear":
             let workspace = try c.automationFindWorkspace(str("workspace"))
             c.workspaceMetadata.clearProgress(workspace: workspace.id)
             return .bool(true)
-        case "log":
+        case "workspace.log.append":
             let workspace = try c.automationFindWorkspace(str("workspace"))
             c.workspaceMetadata.appendLog(workspace: workspace.id,
                                           text: try requireStr("text"),
                                           level: str("level") ?? "info",
                                           source: str("source"))
             return .bool(true)
-        case "list-log":
+        case "workspace.log.list":
             let workspace = try c.automationFindWorkspace(str("workspace"))
             let limit = params["limit"]?.intValue ?? 50
             return .array(c.workspaceMetadata.logs(for: workspace.id, limit: limit).map { entry in
@@ -234,7 +258,7 @@ final class AutomationService {
                     "text": .string(entry.text),
                 ])
             })
-        case "clear-log":
+        case "workspace.log.clear":
             let workspace = try c.automationFindWorkspace(str("workspace"))
             c.workspaceMetadata.clearLog(workspace: workspace.id)
             return .bool(true)
@@ -243,6 +267,46 @@ final class AutomationService {
             throw AutomationError.unknownMethod(method)
         }
     }
+
+    private static let methodNames: [String] = [
+        "app.ping",
+        "app.status",
+        "app.methods",
+        "tools.open",
+        "workspace.list",
+        "workspace.current",
+        "workspace.select",
+        "workspace.create",
+        "workspace.rename",
+        "workspace.close",
+        "workspace.tree",
+        "tab.list",
+        "tab.select",
+        "tab.rename",
+        "tab.close",
+        "pane.list",
+        "pane.create",
+        "pane.split",
+        "pane.focus",
+        "pane.close",
+        "pane.read",
+        "agent.run",
+        "agent.status",
+        "agent.result",
+        "agent.send",
+        "activity.list",
+        "events.recent",
+        "terminal.keys",
+        "notification.send",
+        "workspace.status.set",
+        "workspace.status.clear",
+        "workspace.status.list",
+        "workspace.progress.set",
+        "workspace.progress.clear",
+        "workspace.log.append",
+        "workspace.log.list",
+        "workspace.log.clear",
+    ]
 
     #if DEBUG
     private func debugAgentToolsSmokeTest() throws -> JSONValue {

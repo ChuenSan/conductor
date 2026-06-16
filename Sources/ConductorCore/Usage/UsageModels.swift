@@ -1,7 +1,7 @@
 import Foundation
 
 /// 富用量模型，移植自 CodexBar `UsageFetcher.swift` 的 RateWindow / NamedRateWindow /
-/// ProviderCostSnapshot / UsageSnapshot。相比旧的 `CodexUsageSnapshot`（仅 session/weekly 双窗），
+/// ProviderCostSnapshot / UsageSnapshot。相比基础 `CodexUsageSnapshot`（仅 session/weekly 双窗），
 /// 这里有三窗 + 额外命名窗 + 额度/美元(credits/cost)，能完整承载各 provider 的用量。
 ///
 /// 与 CodexBar 的差异：`RateWindow` 自带可选 `title`（显示标签），省得把 ProviderMetadata 的
@@ -134,8 +134,8 @@ public struct UsageSnapshot: Sendable, Equatable {
 }
 
 public extension UsageSnapshot {
-    /// 从旧的 `CodexUsageSnapshot` 升级（兼容：session→primary、weekly→secondary）。
-    init(legacy: CodexUsageSnapshot) {
+    /// 从 `CodexUsageSnapshot` 适配到通用 provider 用量模型。
+    init(codexSnapshot snapshot: CodexUsageSnapshot) {
         func window(_ w: CodexUsageSnapshot.Window?, _ title: String) -> RateWindow? {
             guard let w else { return nil }
             return RateWindow(
@@ -145,8 +145,8 @@ public extension UsageSnapshot {
                 resetsAt: w.resetAt)
         }
         self.init(
-            primary: window(legacy.session, L("会话")),
-            secondary: window(legacy.weekly, L("本周")),
-            planName: legacy.planType)
+            primary: window(snapshot.session, L("会话")),
+            secondary: window(snapshot.weekly, L("本周")),
+            planName: snapshot.planType)
     }
 }

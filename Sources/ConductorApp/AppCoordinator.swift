@@ -129,8 +129,6 @@ final class AppCoordinator: ObservableObject {
     private var capturedPaneSessions: [String: AgentSessionRef] = [:]
     /// hook 写入的 pane → 原生 agent session token 账本，优先于目录扫描启发式。
     let agentSessionBindings: AgentSessionBindingStore
-    /// 通用 surface resume binding（tmux/自定义 shell 恢复），低于 agent session 优先级。
-    let surfaceResumeBindings: SurfaceResumeBindingStore
     /// 本轮启动时记录的净化后 agent 启动命令，hook 上报 session 后合并进账本。
     private var paneLaunchCommands: [PaneID: AgentLaunchCommandSnapshot] = [:]
 
@@ -147,8 +145,6 @@ final class AppCoordinator: ObservableObject {
         stateStore = StateStore(fileURL: appSupport.appendingPathComponent("state.json"))
         agentSessionBindings = AgentSessionBindingStore(
             fileURL: appSupport.appendingPathComponent("agent-sessions.json"))
-        surfaceResumeBindings = SurfaceResumeBindingStore(
-            fileURL: appSupport.appendingPathComponent("surface-resume-bindings.json"))
         LoginShellPathCache.shared.captureOnce(
             shell: ConfigStore.shared.config.terminal.shell ?? ProcessInfo.processInfo.environment["SHELL"])
 
@@ -158,7 +154,7 @@ final class AppCoordinator: ObservableObject {
                 // 每个 pane 注入自动化身份：hook 与 conductor CLI 都靠它们定位 pane / 连 socket。
                 surface.extraEnvironment = [
                     ("CONDUCTOR_PANE_ID", pane.value),
-                    ("CONDUCTOR_SOCKET", AutomationSocketServer.defaultSocketURL.path),
+                    (AutomationProtocol.socketPathEnvKey, AutomationSocketServer.defaultSocketURL.path),
                 ]
                 // 内容恢复：这个 pane 有待回放快照 → 带上，attach 时回放。
                 if let file = self?.pendingRestoreFiles.removeValue(forKey: pane) {
@@ -538,9 +534,7 @@ final class AppCoordinator: ObservableObject {
                     // 上次这里跑着 agent → 按配置自动续聊，或把 resume 命令预输入到提示符。
                     let session = agentSessionBindings.ref(for: pane.value)
                         ?? result.state.paneSessions[pane.value]
-                    if !stageSessionRestore(session, for: pane) {
-                        stageSurfaceResumeRestore(surfaceResumeBindings.binding(for: pane.value), for: pane)
-                    }
+                    _ = stageSessionRestore(session, for: pane)
                 }
             }
         }
@@ -696,9 +690,11 @@ final class AppCoordinator: ObservableObject {
         if let pane, let paneTitle = paneTitles[pane] {
             title = "\(event.title) · \(paneTitle)"
         }
-        activityLog.record(paneID: pane, agentID: pane.flatMap { paneAgents[$0] },
-                           title: title, message: event.message, duration: duration)
-        var body = event.message
+        let agentID = event.agent ?? pane.flatMap { paneAgents[$0] }
+        let message = completionMessage(for: event, pane: pane, agentID: agentID)
+        activityLog.record(paneID: pane, agentID: agentID,
+                           title: title, message: message, duration: duration)
+        var body = message
         if let duration {
             let took = L("耗时 %@", AgentActivityEntry.durationText(duration))
             body = body.isEmpty ? took : body + "\n" + took
@@ -714,6 +710,29 @@ final class AppCoordinator: ObservableObject {
         bumpDockBadgeIfInactive()
         // 任务队列接力：这条干完了，队首的下一条自动发出
         if let pane { dispatchNextQueued(pane) }
+    }
+
+    private func completionMessage(for event: HookEvent, pane: PaneID?, agentID: String?) -> String {
+        if let direct = AgentCompletionSummary.directMessage(event.message) {
+            return direct
+        }
+        if let summary = AgentCompletionSummary.transcriptSummary(path: event.transcriptPath) {
+            return summary
+        }
+        if let agentID,
+           let cwd = event.cwd ?? pane.flatMap({ paneCwds[$0] }),
+           let record = AgentSessionCatalog.scanForDirectory(cwd, limit: 8)
+            .first(where: { $0.agent == agentID }),
+           let summary = AgentCompletionSummary.transcriptSummary(path: record.filePath) {
+            return summary
+        }
+        if let pane,
+           let surface = registry.surface(for: pane) as? GhosttySurface,
+           let raw = surface.readAllText(),
+           let summary = AgentCompletionSummary.terminalSummary(raw) {
+            return summary
+        }
+        return ""
     }
 
     private func rememberAgentSession(from event: HookEvent, pane: PaneID?) {
@@ -1384,6 +1403,43 @@ final class AppCoordinator: ObservableObject {
         tagPaneAgent(paneID, agentID: agent.id)
     }
 
+    @discardableResult
+    func launchAutomationAgent(
+        command rawCommand: String,
+        agentID explicitAgentID: String? = nil,
+        cwd: String? = nil,
+        prompt: String? = nil,
+        submit: Bool = true
+    ) -> PaneID {
+        let command = rawCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        let agentID = explicitAgentID ?? agentID(forCommand: command)
+        let paneID = PaneID(nextID("p"))
+        let tabID = TabID(nextID("t"))
+        run(.newTab(newTabID: tabID, newPaneID: paneID, cwd: cwd))
+        if let cwd { paneCwds[paneID] = cwd }
+        if let agentID { rememberAgentLaunch(paneID, agentID: agentID, command: command) }
+        guard let surface = registry.surface(for: paneID) as? GhosttySurface else {
+            return paneID
+        }
+        surface.enqueueCommand(launchCommand(command, pane: paneID, agentID: agentID))
+        if let agentID {
+            tagPaneAgent(paneID, agentID: agentID)
+        } else {
+            tagPaneAgentOptimistically(paneID, command: command)
+        }
+        if let prompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak surface] in
+                surface?.sendTextInput(prompt)
+                if submit {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        surface?.sendEnterKey()
+                    }
+                }
+            }
+        }
+        return paneID
+    }
+
     /// 在当前 tab 内分屏启动 Agent。`agentTag` 用于带参数命令（如二次意见）的 logo 即时识别。
     func launchAgentInSplit(command: String, axis: SplitAxis, agentTag: String? = nil) {
         let paneID = PaneID(nextID("p"))
@@ -1631,19 +1687,6 @@ final class AppCoordinator: ObservableObject {
         return true
     }
 
-    @discardableResult
-    private func stageSurfaceResumeRestore(_ binding: SurfaceResumeBinding?, for pane: PaneID) -> Bool {
-        guard let binding, binding.isUsable,
-              let surface = registry.surface(for: pane) as? GhosttySurface
-        else { return false }
-        if binding.autoResume && binding.trusted {
-            surface.enqueueCommand(binding.restoreCommand)
-        } else {
-            surface.enqueueTypedText(binding.restoreCommand)
-        }
-        return true
-    }
-
     /// 找 pane 在树里的父分屏方向（恢复时按原方向接回去）。
     static func parentAxis(of pane: PaneID, in node: SplitNode) -> SplitAxis? {
         guard case let .split(_, axis, _, first, second) = node else { return nil }
@@ -1664,9 +1707,7 @@ final class AppCoordinator: ObservableObject {
             stageContentRestore(for: tab.rootSplit.leaves())
             run(.restoreTab(tab: tab, workspaceID: target, paneCwds: cwds))
             for pane in tab.rootSplit.leaves() {
-                if !stageSessionRestore(sessions[pane.value], for: pane) {
-                    stageSurfaceResumeRestore(surfaceResumeBindings.binding(for: pane.value), for: pane)
-                }
+                _ = stageSessionRestore(sessions[pane.value], for: pane)
             }
         case let .pane(workspaceID, tabID, pane, cwd, axis, session):
             if let cwd { paneCwds[pane] = cwd }
@@ -1685,9 +1726,7 @@ final class AppCoordinator: ObservableObject {
                 run(.restoreTab(tab: tab, workspaceID: target,
                                 paneCwds: cwd.map { [pane.value: $0] } ?? [:]))
             }
-            if !stageSessionRestore(session, for: pane) {
-                stageSurfaceResumeRestore(surfaceResumeBindings.binding(for: pane.value), for: pane)
-            }
+            _ = stageSessionRestore(session, for: pane)
         }
     }
 
@@ -1726,7 +1765,6 @@ final class AppCoordinator: ObservableObject {
         }
         ScrollbackStore.cleanup(keeping: keep)
         try? agentSessionBindings.cleanup(keeping: Set(keep.map(\.value)))
-        try? surfaceResumeBindings.cleanup(keeping: Set(keep.map(\.value)))
     }
 
     /// 拖动重排 tab。

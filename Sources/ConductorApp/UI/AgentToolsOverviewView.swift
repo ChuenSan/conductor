@@ -22,6 +22,7 @@ final class AgentToolsConsoleStore: ObservableObject {
     @Published private(set) var hookRecipeStates: [String: Set<HookSource>] = [:]
     @Published private(set) var isLoadingHooks = false
     @Published private(set) var hookError: String?
+    @Published private(set) var overviewRows: [AgentToolsOverviewRow] = []
     @Published var selectedOverviewRowID: String?
     @Published var selectedCLIToolID: String?
     @Published var selectedUsageProviderID: String?
@@ -61,7 +62,7 @@ final class AgentToolsConsoleStore: ObservableObject {
         skillTools.filter { $0.enabled && ($0.installed || $0.isCustom || $0.hasPathOverride) }.count
     }
 
-    var overviewRows: [AgentToolsOverviewRow] {
+    private func rebuildOverviewRows() {
         let providerMap = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0) })
         let toolRows = AgentCatalog.all.map { descriptor -> AgentToolsOverviewRow in
             let tool = cliTools.first { $0.id == descriptor.id }
@@ -103,7 +104,7 @@ final class AgentToolsConsoleStore: ObservableObject {
                     capability: Self.capability(for: provider.id, hasUsageProvider: true))
             }
 
-        return toolRows + providerOnlyRows
+        overviewRows = toolRows + providerOnlyRows
     }
 
     var selectedOverviewRow: AgentToolsOverviewRow? {
@@ -157,6 +158,7 @@ final class AgentToolsConsoleStore: ObservableObject {
             }
             scanCLI()
         }
+        rebuildOverviewRows()
         usageReport = UsageReportStore.load(daysBack: 30)
         Task { await prepareProviders() }
         refreshAgentRegistry()
@@ -174,6 +176,7 @@ final class AgentToolsConsoleStore: ObservableObject {
                 withAnimation(AgentToolsMotion.reveal) {
                     self.cliTools = detected
                     self.cliDetectedAt = cache.detectedAt
+                    self.rebuildOverviewRows()
                     self.isScanningCLI = false
                 }
             }
@@ -201,13 +204,17 @@ final class AgentToolsConsoleStore: ObservableObject {
         guard !isProviderLoading(provider.id) else { return }
         let cfg = ConfigStore.shared.config
         providerStates[provider.id] = .loading
+        rebuildOverviewRows()
         Task {
             let configured = await Task.detached(priority: .utility) {
                 UsageCredentials.apply(cfg)
                 return provider.isConfigured()
             }.value
             guard configured else {
-                await MainActor.run { providerStates[provider.id] = .unconfigured }
+                await MainActor.run {
+                    providerStates[provider.id] = .unconfigured
+                    rebuildOverviewRows()
+                }
                 return
             }
             do {
@@ -215,6 +222,7 @@ final class AgentToolsConsoleStore: ObservableObject {
                 await MainActor.run {
                     withAnimation(AgentToolsMotion.selection) {
                         providerStates[provider.id] = .loaded(snapshot)
+                        rebuildOverviewRows()
                     }
                     UsageHistoryStore.shared.record(id: provider.id, snapshot: snapshot)
                     UsageHistoryStore.shared.persist()
@@ -222,6 +230,7 @@ final class AgentToolsConsoleStore: ObservableObject {
             } catch {
                 await MainActor.run {
                     providerStates[provider.id] = .error(error.localizedDescription)
+                    rebuildOverviewRows()
                 }
             }
         }
@@ -459,6 +468,7 @@ final class AgentToolsConsoleStore: ObservableObject {
                 guard providerStates[provider.id] == nil else { continue }
                 providerStates[provider.id] = configuredIDs.contains(provider.id) ? .manual : .unconfigured
             }
+            rebuildOverviewRows()
         }
     }
 
@@ -815,7 +825,8 @@ struct AgentToolsOverviewView: View {
     }
 
     private var capabilityMatrix: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let visibleRows = filteredRows
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 ToolsSectionLabel(L("能力矩阵"))
                 Spacer()
@@ -827,10 +838,10 @@ struct AgentToolsOverviewView: View {
                 matrixHeader
                 ScrollView {
                     LazyVStack(spacing: 1) {
-                        ForEach(filteredRows) { row in
+                        ForEach(visibleRows) { row in
                             matrixRow(row)
                         }
-                        if filteredRows.isEmpty {
+                        if visibleRows.isEmpty {
                             Text(L("无匹配结果"))
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(AppStyle.textTertiary)

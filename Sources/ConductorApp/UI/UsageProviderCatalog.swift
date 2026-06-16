@@ -24,7 +24,7 @@ enum UsageProviderCatalog {
             id: "codex", name: "Codex", logo: "codex",
             fallbackSystemImage: "chevron.left.forwardslash.chevron.right",
             isConfigured: { CodexUsageFetcher.hasCredentials() },
-            fetch: { UsageSnapshot(legacy: try await CodexUsageFetcher.fetch()) }),
+            fetch: { UsageSnapshot(codexSnapshot: try await CodexUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "claude", name: "Claude", logo: "claude",
             fallbackSystemImage: "sparkles",
@@ -34,12 +34,12 @@ enum UsageProviderCatalog {
             id: "gemini", name: "Gemini", logo: "gemini",
             fallbackSystemImage: "diamond",
             isConfigured: { GeminiUsageFetcher.hasCredentials() },
-            fetch: { UsageSnapshot(legacy: try await GeminiUsageFetcher.fetch()) }),
+            fetch: { UsageSnapshot(codexSnapshot: try await GeminiUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "glm", name: "GLM (Z.ai)", logo: "glm",
             fallbackSystemImage: "g.square",
             isConfigured: { GLMUsageFetcher.hasToken() },
-            fetch: { UsageSnapshot(legacy: try await GLMUsageFetcher.fetch()) }),
+            fetch: { UsageSnapshot(codexSnapshot: try await GLMUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "minimax", name: "MiniMax", logo: "minimax",
             fallbackSystemImage: "m.square",
@@ -49,7 +49,7 @@ enum UsageProviderCatalog {
             id: "qwen", name: "Qwen (通义)", logo: "qwen",
             fallbackSystemImage: "q.square",
             isConfigured: { QwenUsageFetcher.hasToken() },
-            fetch: { UsageSnapshot(legacy: try await QwenUsageFetcher.fetch()) }),
+            fetch: { UsageSnapshot(codexSnapshot: try await QwenUsageFetcher.fetch()) }),
         // Cursor 是 cookie 类（从浏览器读 cursor.com 登录态）。isConfigured 会触发一次浏览器 cookie 读取。
         UsageProviderEntry(
             id: "cursor", name: "Cursor", logo: "cursor",
@@ -59,10 +59,10 @@ enum UsageProviderCatalog {
         // —— 第一批转写（cookie/token 混合）——
         UsageProviderEntry(
             id: "grok", name: "Grok", logo: "grok", fallbackSystemImage: "bolt.fill",
-            isConfigured: { GrokUsageFetcher.hasSession() }, fetch: { UsageSnapshot(legacy: try await GrokUsageFetcher.fetch()) }),
+            isConfigured: { GrokUsageFetcher.hasSession() }, fetch: { UsageSnapshot(codexSnapshot: try await GrokUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "copilot", name: "GitHub Copilot", logo: "copilot", fallbackSystemImage: "command",
-            isConfigured: { CopilotUsageFetcher.hasSession() }, fetch: { UsageSnapshot(legacy: try await CopilotUsageFetcher.fetch()) }),
+            isConfigured: { CopilotUsageFetcher.hasSession() }, fetch: { UsageSnapshot(codexSnapshot: try await CopilotUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "openrouter", name: "OpenRouter", logo: "openrouter", fallbackSystemImage: "arrow.triangle.swap",
             isConfigured: { OpenRouterUsageFetcher.hasToken() }, fetch: { try await OpenRouterUsageFetcher.fetch() }),
@@ -80,14 +80,14 @@ enum UsageProviderCatalog {
             isConfigured: { MoonshotUsageFetcher.hasToken() }, fetch: { try await MoonshotUsageFetcher.fetch() }),
         UsageProviderEntry(
             id: "groq", name: "Groq", logo: "groq", fallbackSystemImage: "cpu",
-            isConfigured: { GroqUsageFetcher.hasToken() }, fetch: { UsageSnapshot(legacy: try await GroqUsageFetcher.fetch()) }),
+            isConfigured: { GroqUsageFetcher.hasToken() }, fetch: { UsageSnapshot(codexSnapshot: try await GroqUsageFetcher.fetch()) }),
         // —— 第二批转写 ——
         UsageProviderEntry(
             id: "opencode", name: "opencode", logo: "opencode", fallbackSystemImage: "curlybraces",
             isConfigured: { OpenCodeUsageFetcher.hasSession() }, fetch: { try await OpenCodeUsageFetcher.fetch() }),
         UsageProviderEntry(
             id: "ollama", name: "Ollama", logo: "ollama", fallbackSystemImage: "shippingbox",
-            isConfigured: { OllamaUsageFetcher.hasSession() }, fetch: { UsageSnapshot(legacy: try await OllamaUsageFetcher.fetch()) }),
+            isConfigured: { OllamaUsageFetcher.hasSession() }, fetch: { UsageSnapshot(codexSnapshot: try await OllamaUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "openai", name: "OpenAI", logo: "openai", fallbackSystemImage: "brain",
             isConfigured: { OpenAIUsageFetcher.hasToken() }, fetch: { try await OpenAIUsageFetcher.fetch() }),
@@ -96,34 +96,34 @@ enum UsageProviderCatalog {
             isConfigured: { PerplexityUsageFetcher.hasSession() }, fetch: { try await PerplexityUsageFetcher.fetch() }),
         UsageProviderEntry(
             id: "warp", name: "Warp", logo: "warp", fallbackSystemImage: "terminal",
-            isConfigured: { WarpUsageFetcher.hasToken() }, fetch: { UsageSnapshot(legacy: try await WarpUsageFetcher.fetch()) }),
+            isConfigured: { WarpUsageFetcher.hasToken() }, fetch: { UsageSnapshot(codexSnapshot: try await WarpUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "augment", name: "Augment", logo: "augment", fallbackSystemImage: "puzzlepiece.extension",
-            isConfigured: { AugmentUsageFetcher.hasSession() }, fetch: { UsageSnapshot(legacy: try await AugmentUsageFetcher.fetch()) }),
+            isConfigured: { AugmentUsageFetcher.hasSession() }, fetch: { UsageSnapshot(codexSnapshot: try await AugmentUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "amp", name: "Amp", logo: "amp", fallbackSystemImage: "bolt.horizontal.circle",
-            isConfigured: { AmpUsageFetcher.hasToken() }, fetch: { UsageSnapshot(legacy: try await AmpUsageFetcher.fetch()) }),
+            isConfigured: { AmpUsageFetcher.hasToken() }, fetch: { UsageSnapshot(codexSnapshot: try await AmpUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "antigravity", name: "Antigravity", logo: "antigravity", fallbackSystemImage: "arrow.up",
             isConfigured: { AntigravityUsageFetcher.hasToken() }, fetch: { try await AntigravityUsageFetcher.fetch() }),
         UsageProviderEntry(
             id: "vertexai", name: "Vertex AI", logo: "vertexai", fallbackSystemImage: "triangle",
-            isConfigured: { VertexAIUsageFetcher.hasCredentials() }, fetch: { UsageSnapshot(legacy: try await VertexAIUsageFetcher.fetch()) }),
+            isConfigured: { VertexAIUsageFetcher.hasCredentials() }, fetch: { UsageSnapshot(codexSnapshot: try await VertexAIUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "windsurf", name: "Windsurf", logo: "windsurf", fallbackSystemImage: "wind.snow",
             isConfigured: { WindsurfUsageFetcher.hasCredentials() || WindsurfUsageFetcher.hasSession() },
-            fetch: { UsageSnapshot(legacy: try await WindsurfUsageFetcher.fetch()) }),
+            fetch: { UsageSnapshot(codexSnapshot: try await WindsurfUsageFetcher.fetch()) }),
         // —— 第三批转写 ——
         UsageProviderEntry(
             id: "azureopenai", name: "Azure OpenAI", logo: "azureopenai", fallbackSystemImage: "a.square",
-            isConfigured: { AzureOpenAIUsageFetcher.hasToken() }, fetch: { UsageSnapshot(legacy: try await AzureOpenAIUsageFetcher.fetch()) }),
+            isConfigured: { AzureOpenAIUsageFetcher.hasToken() }, fetch: { UsageSnapshot(codexSnapshot: try await AzureOpenAIUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "factory", name: "Factory", logo: "factory", fallbackSystemImage: "gearshape.2",
             isConfigured: { FactoryUsageFetcher.hasSession() }, fetch: { try await FactoryUsageFetcher.fetch() }),
         UsageProviderEntry(
             id: "devin", name: "Devin", logo: "devin", fallbackSystemImage: "ant",
             isConfigured: { DevinUsageFetcher.hasToken() || DevinUsageFetcher.hasSession() },
-            fetch: { UsageSnapshot(legacy: try await DevinUsageFetcher.fetch()) }),
+            fetch: { UsageSnapshot(codexSnapshot: try await DevinUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "manus", name: "Manus", logo: "manus", fallbackSystemImage: "hand.raised",
             isConfigured: { ManusUsageFetcher.hasToken() || ManusUsageFetcher.hasSession() },
@@ -136,13 +136,13 @@ enum UsageProviderCatalog {
             isConfigured: { KiroUsageFetcher.hasCredentials() }, fetch: { try await KiroUsageFetcher.fetch() }),
         UsageProviderEntry(
             id: "jetbrains", name: "JetBrains AI", logo: "jetbrains", fallbackSystemImage: "j.square",
-            isConfigured: { JetBrainsUsageFetcher.hasCredentials() }, fetch: { UsageSnapshot(legacy: try await JetBrainsUsageFetcher.fetch()) }),
+            isConfigured: { JetBrainsUsageFetcher.hasCredentials() }, fetch: { UsageSnapshot(codexSnapshot: try await JetBrainsUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "kimik2", name: "Kimi K2", logo: "kimik2", fallbackSystemImage: "k.circle.fill",
             isConfigured: { KimiK2UsageFetcher.hasToken() }, fetch: { try await KimiK2UsageFetcher.fetch() }),
         UsageProviderEntry(
             id: "t3chat", name: "T3 Chat", logo: "t3chat", fallbackSystemImage: "t.square",
-            isConfigured: { T3ChatUsageFetcher.hasSession() }, fetch: { UsageSnapshot(legacy: try await T3ChatUsageFetcher.fetch()) }),
+            isConfigured: { T3ChatUsageFetcher.hasSession() }, fetch: { UsageSnapshot(codexSnapshot: try await T3ChatUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "codebuff", name: "Codebuff", logo: "codebuff", fallbackSystemImage: "hammer",
             isConfigured: { CodebuffUsageFetcher.hasToken() }, fetch: { try await CodebuffUsageFetcher.fetch() }),
@@ -153,7 +153,7 @@ enum UsageProviderCatalog {
         UsageProviderEntry(
             id: "alibabatokenplan", name: "通义 Token Plan", logo: "alibabatokenplan", fallbackSystemImage: "a.circle",
             isConfigured: { AlibabaTokenPlanUsageFetcher.hasToken() || AlibabaTokenPlanUsageFetcher.hasSession() },
-            fetch: { UsageSnapshot(legacy: try await AlibabaTokenPlanUsageFetcher.fetch()) }),
+            fetch: { UsageSnapshot(codexSnapshot: try await AlibabaTokenPlanUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "synthetic", name: "Synthetic", logo: "synthetic", fallbackSystemImage: "s.circle",
             isConfigured: { SyntheticUsageFetcher.hasToken() }, fetch: { try await SyntheticUsageFetcher.fetch() }),
@@ -162,13 +162,13 @@ enum UsageProviderCatalog {
             isConfigured: { ElevenLabsUsageFetcher.hasToken() }, fetch: { try await ElevenLabsUsageFetcher.fetch() }),
         UsageProviderEntry(
             id: "mimo", name: "MiMo", logo: "mimo", fallbackSystemImage: "m.circle",
-            isConfigured: { MiMoUsageFetcher.hasSession() }, fetch: { UsageSnapshot(legacy: try await MiMoUsageFetcher.fetch()) }),
+            isConfigured: { MiMoUsageFetcher.hasSession() }, fetch: { UsageSnapshot(codexSnapshot: try await MiMoUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "doubao", name: "Doubao", logo: "doubao", fallbackSystemImage: "d.circle",
-            isConfigured: { DoubaoUsageFetcher.hasToken() }, fetch: { UsageSnapshot(legacy: try await DoubaoUsageFetcher.fetch()) }),
+            isConfigured: { DoubaoUsageFetcher.hasToken() }, fetch: { UsageSnapshot(codexSnapshot: try await DoubaoUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "abacus", name: "Abacus", logo: "abacus", fallbackSystemImage: "function",
-            isConfigured: { AbacusUsageFetcher.hasSession() }, fetch: { UsageSnapshot(legacy: try await AbacusUsageFetcher.fetch()) }),
+            isConfigured: { AbacusUsageFetcher.hasSession() }, fetch: { UsageSnapshot(codexSnapshot: try await AbacusUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "crof", name: "Crof", logo: "crof", fallbackSystemImage: "c.circle",
             isConfigured: { CrofUsageFetcher.hasToken() }, fetch: { try await CrofUsageFetcher.fetch() }),
@@ -181,7 +181,7 @@ enum UsageProviderCatalog {
             fetch: { try await CommandCodeUsageFetcher.fetch() }),
         UsageProviderEntry(
             id: "stepfun", name: "StepFun", logo: "stepfun", fallbackSystemImage: "s.square",
-            isConfigured: { StepFunUsageFetcher.hasToken() }, fetch: { UsageSnapshot(legacy: try await StepFunUsageFetcher.fetch()) }),
+            isConfigured: { StepFunUsageFetcher.hasToken() }, fetch: { UsageSnapshot(codexSnapshot: try await StepFunUsageFetcher.fetch()) }),
         UsageProviderEntry(
             id: "bedrock", name: "AWS Bedrock", logo: "bedrock", fallbackSystemImage: "cloud",
             isConfigured: { BedrockUsageFetcher.hasCredentials() }, fetch: { try await BedrockUsageFetcher.fetch() }),

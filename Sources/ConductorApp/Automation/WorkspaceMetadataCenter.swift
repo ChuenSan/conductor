@@ -4,7 +4,7 @@ import Darwin
 import Foundation
 
 /// 工作区侧栏元数据中枢：
-/// - 自动化写入的状态指示 / 进度条 / 日志流（socket `set-status` / `set-progress` / `log`）
+/// - 自动化写入的状态指示 / 进度条 / 日志流（`workspace.status.*` / `workspace.progress.*` / `workspace.log.*`）
 /// - 周期扫描的监听端口（lsof + 进程 cwd 归属）
 /// - git 分支对应的 GitHub PR 状态（gh CLI，装了才启用）
 /// 全部按 WorkspaceID 组织，侧栏行直接订阅渲染。

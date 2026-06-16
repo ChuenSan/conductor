@@ -10,6 +10,8 @@ cd "$ROOT"
 
 echo "==> swift build -c $CONFIG --product ConductorApp"
 swift build -c "$CONFIG" --product ConductorApp
+echo "==> swift build -c $CONFIG --product conductorctl"
+swift build -c "$CONFIG" --product conductorctl
 
 BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
 APP="$ROOT/Conductor.app"
@@ -20,6 +22,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN_DIR/ConductorApp" "$APP/Contents/MacOS/ConductorApp"
+cp "$BIN_DIR/conductorctl" "$APP/Contents/MacOS/conductorctl"
 
 # SwiftPM 资源 bundle（logo、本地化文案等）放到 Resources/，Bundle.module 会在 main bundle
 # 资源路径里找到，且不会像放在 MacOS/ 那样破坏 codesign。
@@ -77,6 +80,7 @@ SIGN_IDENTITY="${CONDUCTOR_SIGN_IDENTITY:-Conductor Dev}"
 
 if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$SIGN_IDENTITY"; then
   echo "==> 用稳定签名身份「${SIGN_IDENTITY}」签名"
+  codesign --force --sign "$SIGN_IDENTITY" "$APP/Contents/MacOS/conductorctl"
   if [ -f "$ROOT/Conductor.entitlements" ]; then
     codesign --force --sign "$SIGN_IDENTITY" --entitlements "$ROOT/Conductor.entitlements" "$APP"
   else
@@ -86,6 +90,8 @@ else
   echo "==> 未找到稳定身份「${SIGN_IDENTITY}」，退回 ad-hoc 签名"
   echo "    ⚠️  ad-hoc 下每次重编译都会丢失 TCC 授权（桌面/文稿/下载、完全磁盘访问会反复弹框）。"
   echo "    根治：先运行一次  Scripts/make-dev-cert.sh  再重新打包。"
+  codesign --force --sign - "$APP/Contents/MacOS/conductorctl" >/dev/null 2>&1 || \
+    echo "    (conductorctl codesign 失败，可忽略)"
   codesign --force --sign - "$APP" >/dev/null 2>&1 || \
     echo "    (codesign 失败，可忽略)"
 fi

@@ -620,11 +620,12 @@ struct AgentToolsHooksWorkbenchView: View {
     }
 
     private var configuredContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let visibleRows = rows
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 ToolsSectionLabel(L("已配置 hooks"))
                 Spacer()
-                Text(L("%ld 条", rows.count))
+                Text(L("%ld 条", visibleRows.count))
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(AppStyle.textTertiary)
             }
@@ -632,10 +633,10 @@ struct AgentToolsHooksWorkbenchView: View {
             VStack(spacing: 0) {
                 tableHeader
                 LazyVStack(spacing: 1) {
-                    ForEach(rows) { entry in
+                    ForEach(visibleRows) { entry in
                         hookRow(entry)
                     }
-                    if rows.isEmpty {
+                    if visibleRows.isEmpty {
                         emptyState
                     }
                 }

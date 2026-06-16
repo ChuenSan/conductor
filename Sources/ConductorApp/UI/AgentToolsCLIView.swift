@@ -41,6 +41,12 @@ private enum AgentToolsCLISort: String, CaseIterable, Identifiable {
     }
 }
 
+private struct AgentToolsCLITableLayout {
+    let showVersion: Bool
+    let capabilityWidth: CGFloat
+    let minToolWidth: CGFloat
+}
+
 struct AgentToolsCLIView: View {
     @ObservedObject var store: AgentToolsConsoleStore
     @ObservedObject private var configStore = ConfigStore.shared
@@ -50,6 +56,7 @@ struct AgentToolsCLIView: View {
     @State private var query = ""
     @State private var filter: AgentToolsCLIFilter = .all
     @State private var sort: AgentToolsCLISort = .status
+    @State private var tableWidth: CGFloat = 0
 
     private var rows: [CLIToolStatus] {
         var tools = store.cliTools
@@ -105,11 +112,12 @@ struct AgentToolsCLIView: View {
     }
 
     var body: some View {
+        let visibleRows = rows
         VStack(alignment: .leading, spacing: 14) {
             header
             toolbar
-            inventoryStrip
-            table
+            inventoryStrip(visibleRows)
+            table(visibleRows)
         }
         .agentToolsPage()
         .onAppear {
@@ -167,12 +175,12 @@ struct AgentToolsCLIView: View {
         }
     }
 
-    private var inventoryStrip: some View {
+    private func inventoryStrip(_ visibleRows: [CLIToolStatus]) -> some View {
         HStack(alignment: .top, spacing: 30) {
             AgentToolsStat(value: "\(store.installedCLICount)", title: L("已安装"))
             AgentToolsStat(value: "\(store.missingCLICount)", title: L("未检测"))
             AgentToolsStat(value: "\(store.installedCLICount)", title: L("可启动"))
-            AgentToolsStat(value: "\(rows.reduce(0) { $0 + capabilityScore($1) })", title: L("支持能力"))
+            AgentToolsStat(value: "\(visibleRows.reduce(0) { $0 + capabilityScore($1) })", title: L("支持能力"))
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Space.md)
@@ -180,23 +188,25 @@ struct AgentToolsCLIView: View {
         .agentToolsGlass()
     }
 
-    private var table: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func table(_ visibleRows: [CLIToolStatus]) -> some View {
+        let layout = tableLayout
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 ToolsSectionLabel(L("工具表"))
                 Spacer()
-                Text(L("%ld 个工具", rows.count))
+                Text(L("%ld 个工具", visibleRows.count))
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(AppStyle.textTertiary)
             }
             VStack(spacing: 0) {
-                tableHeader
+                tableWidthReader
+                tableHeader(layout)
                 ScrollView {
                     LazyVStack(spacing: 1) {
-                        ForEach(rows) { tool in
-                            toolRow(tool)
+                        ForEach(visibleRows) { tool in
+                            toolRow(tool, layout: layout)
                         }
-                        if rows.isEmpty {
+                        if visibleRows.isEmpty {
                             Text(L("无匹配结果"))
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(AppStyle.textTertiary)
@@ -214,11 +224,37 @@ struct AgentToolsCLIView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private var tableHeader: some View {
-        ViewThatFits(in: .horizontal) {
-            tableHeaderRow(showVersion: true, capabilityWidth: 180, minToolWidth: 210)
-            tableHeaderRow(showVersion: false, capabilityWidth: 146, minToolWidth: 170)
+    private var tableWidthReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear {
+                    updateTableWidth(proxy.size.width)
+                }
+                .onChange(of: proxy.size.width) { _, newWidth in
+                    updateTableWidth(newWidth)
+                }
         }
+        .frame(height: 0)
+    }
+
+    private func updateTableWidth(_ width: CGFloat) {
+        let roundedWidth = width.rounded()
+        guard roundedWidth > 0,
+              abs(roundedWidth - tableWidth) >= 1 else { return }
+        tableWidth = roundedWidth
+    }
+
+    private var tableLayout: AgentToolsCLITableLayout {
+        tableWidth >= 620
+            ? AgentToolsCLITableLayout(showVersion: true, capabilityWidth: 180, minToolWidth: 210)
+            : AgentToolsCLITableLayout(showVersion: false, capabilityWidth: 146, minToolWidth: 170)
+    }
+
+    private func tableHeader(_ layout: AgentToolsCLITableLayout) -> some View {
+        tableHeaderRow(
+            showVersion: layout.showVersion,
+            capabilityWidth: layout.capabilityWidth,
+            minToolWidth: layout.minToolWidth)
         .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(AppStyle.textTertiary)
         .padding(.horizontal, 9)
@@ -239,16 +275,18 @@ struct AgentToolsCLIView: View {
         }
     }
 
-    private func toolRow(_ tool: CLIToolStatus) -> some View {
+    private func toolRow(_ tool: CLIToolStatus, layout: AgentToolsCLITableLayout) -> some View {
         let selected = store.selectedCLIToolID == tool.id
         let overview = store.overviewRow(for: tool)
         return Button {
             withAnimation(AgentToolsMotion.selection) { store.selectedCLIToolID = tool.id }
         } label: {
-            ViewThatFits(in: .horizontal) {
-                toolRowContent(tool, overview: overview, showVersion: true, capabilityWidth: 180, minToolWidth: 210)
-                toolRowContent(tool, overview: overview, showVersion: false, capabilityWidth: 146, minToolWidth: 170)
-            }
+            toolRowContent(
+                tool,
+                overview: overview,
+                showVersion: layout.showVersion,
+                capabilityWidth: layout.capabilityWidth,
+                minToolWidth: layout.minToolWidth)
             .padding(.horizontal, 9)
             .frame(height: AgentToolsChrome.rowHeight)
             .background(

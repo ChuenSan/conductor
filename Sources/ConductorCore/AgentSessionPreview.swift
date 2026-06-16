@@ -60,7 +60,7 @@ public enum AgentSessionPreview {
         return texts.enumerated().map { AgentSessionMessage(id: $0.offset, role: $0.element.0, text: $0.element.1) }
     }
 
-    /// 读尾部最近几条（兼容旧调用 / 单测）。
+    /// 读尾部最近几条（列表预览用）。
     public static func load(
         agent: String, filePath: String,
         limit: Int = 8, tailBytes: Int = defaultTailBytes
@@ -68,7 +68,7 @@ public enum AgentSessionPreview {
         guard let lines = tailLines(filePath: filePath, tailBytes: tailBytes) else { return [] }
         var opts = AgentSessionLoadOptions.snippet
         opts.maxFileBytes = tailBytes
-        let texts: [(Role, String)]
+        let texts: [(AgentSessionMessage.Role, String)]
         switch agent {
         case "claude": texts = parseClaude(lines, options: opts)
         case "codex": texts = parseCodex(lines, options: opts)
@@ -79,13 +79,11 @@ public enum AgentSessionPreview {
         }
     }
 
-    public typealias Role = AgentSessionMessage.Role
-
     // MARK: - File IO
 
     private static func parseFile(
         agent: String, filePath: String, maxBytes: Int, options: AgentSessionLoadOptions
-    ) -> [(Role, String)] {
+    ) -> [(AgentSessionMessage.Role, String)] {
         var lines: [Data] = []
         forEachLine(filePath: filePath, maxBytes: maxBytes) { lines.append($0) }
         switch agent {
@@ -118,8 +116,10 @@ public enum AgentSessionPreview {
 
     // MARK: - Claude
 
-    static func parseClaude(_ lines: [Data], options: AgentSessionLoadOptions) -> [(Role, String)] {
-        var out: [(Role, String)] = []
+    static func parseClaude(
+        _ lines: [Data], options: AgentSessionLoadOptions
+    ) -> [(AgentSessionMessage.Role, String)] {
+        var out: [(AgentSessionMessage.Role, String)] = []
         for line in lines {
             guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
                   let type = obj["type"] as? String,
@@ -127,7 +127,7 @@ public enum AgentSessionPreview {
                   let message = obj["message"] as? [String: Any]
             else { continue }
             if obj["isSidechain"] as? Bool == true { continue }
-            let role: Role = type == "user" ? .user : .assistant
+            let role: AgentSessionMessage.Role = type == "user" ? .user : .assistant
             guard let text = extractClaudeText(message["content"], options: options) else { continue }
             appendMessage(&out, role: role, text: text, options: options)
         }
@@ -151,15 +151,17 @@ public enum AgentSessionPreview {
 
     // MARK: - Codex
 
-    static func parseCodex(_ lines: [Data], options: AgentSessionLoadOptions) -> [(Role, String)] {
-        var out: [(Role, String)] = []
+    static func parseCodex(
+        _ lines: [Data], options: AgentSessionLoadOptions
+    ) -> [(AgentSessionMessage.Role, String)] {
+        var out: [(AgentSessionMessage.Role, String)] = []
         for line in lines {
             guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
                   obj["type"] as? String == "event_msg",
                   let payload = obj["payload"] as? [String: Any],
                   let kind = payload["type"] as? String
             else { continue }
-            let role: Role
+            let role: AgentSessionMessage.Role
             switch kind {
             case "user_message": role = .user
             case "agent_message": role = .assistant
@@ -174,7 +176,10 @@ public enum AgentSessionPreview {
     // MARK: - Helpers
 
     private static func appendMessage(
-        _ out: inout [(Role, String)], role: Role, text: String, options: AgentSessionLoadOptions
+        _ out: inout [(AgentSessionMessage.Role, String)],
+        role: AgentSessionMessage.Role,
+        text: String,
+        options: AgentSessionLoadOptions
     ) {
         if options.mergeAdjacentSameRole, let last = out.last, last.0 == role {
             let sep = options.preserveNewlines ? "\n" : " "

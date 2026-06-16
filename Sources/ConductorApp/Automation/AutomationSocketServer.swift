@@ -1,4 +1,5 @@
 import Darwin
+import ConductorCore
 import Foundation
 
 /// 自动化入口：Unix domain socket 上的 NDJSON 服务器。
@@ -8,12 +9,9 @@ final class AutomationSocketServer: @unchecked Sendable {
     /// 一行请求（不含换行）→ 一行响应（不含换行）。
     typealias LineHandler = @Sendable (Data) async -> Data
 
-    /// 约定的 socket 路径（pane 环境变量 `CONDUCTOR_SOCKET` 同源）。
+    /// 约定的 socket 路径（pane 环境变量 `CONDUCTOR_SOCKET_PATH` 同源）。
     static var defaultSocketURL: URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
-            .appendingPathComponent("automation.sock", isDirectory: false)
+        AutomationProtocol.defaultSocketURL
     }
 
     private let socketURL: URL
@@ -42,7 +40,7 @@ final class AutomationSocketServer: @unchecked Sendable {
         try? FileManager.default.createDirectory(
             at: socketURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
-        // 旧 socket 文件处理：能连通说明另一实例在跑 → 放弃；连不通是残留 → 清掉。
+        // 残留 socket 文件处理：能连通说明另一实例在跑 → 放弃；连不通则清掉。
         if FileManager.default.fileExists(atPath: path) {
             if Self.canConnect(path: path) {
                 NSLog("[conductor] 另一个 Conductor 实例已在监听自动化 socket，跳过启动")
