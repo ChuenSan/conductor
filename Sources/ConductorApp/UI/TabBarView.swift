@@ -391,14 +391,12 @@ private struct TabPill: View {
         .padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .fill(selected ? AnyShapeStyle(AppStyle.elevated)
+                .fill(selected ? AnyShapeStyle(AppStyle.accent.opacity(0.14))
                                : (hovering ? AnyShapeStyle(AppStyle.hoverFill) : AnyShapeStyle(Color.clear)))
-                .shadow(color: (selected && !AppStyle.theme.isDark) ? Color(nsColor: AppStyle.theme.cardShadowColor).opacity(0.05) : .clear,
-                        radius: 1.5, y: 0.5)
         )
         .overlay(
             RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .strokeBorder(selected ? AppStyle.separator : Color.clear, lineWidth: 1)
+                .strokeBorder(selected ? AppStyle.accent.opacity(0.38) : Color.clear, lineWidth: 1)
         )
         .contentShape(Rectangle())
     }

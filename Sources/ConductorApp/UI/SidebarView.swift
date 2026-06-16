@@ -720,7 +720,7 @@ private struct WorkspaceRow: View {
         .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .fill(selected ? AppStyle.activeFill : (hovering ? AppStyle.hoverFill : Color.clear))
+                .fill(selected ? AppStyle.accent.opacity(0.12) : (hovering ? AppStyle.hoverFill : Color.clear))
         )
         .contentShape(Rectangle())
         .animation(Motion.hover, value: hovering)
@@ -830,9 +830,9 @@ private struct WorkspaceRow: View {
 
     private var workspaceGlyph: some View {
         ZStack(alignment: .topTrailing) {
-            Image(systemName: "folder")
+            Image(systemName: selected ? "folder.fill" : "folder")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+                .foregroundStyle(selected ? AppStyle.accent : AppStyle.textSecondary)
                 .frame(width: isCollapsed ? 22 : 18, height: 20)
             // 收起态没有名字行，思考动效挂在图标右下角（右上角留给 pane 数角标）
             if isCollapsed, isThinking {
