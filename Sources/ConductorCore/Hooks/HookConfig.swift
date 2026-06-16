@@ -55,6 +55,8 @@ public enum HookEventName {
     public static let subagentStop = "SubagentStop"
     /// agent 需要用户确认/输入时触发（Claude Code：权限请求、空闲等输入）。
     public static let notification = "Notification"
+    /// 工具调用前触发（Claude Code：可返回决策放行/拦截，用于 Feed 内联审批）。
+    public static let preToolUse = "PreToolUse"
 }
 
 /// 对 `hooks.<Event>[].hooks[]{type,command,timeout}` 这种 schema 的读写器。

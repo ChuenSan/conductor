@@ -284,8 +284,10 @@ final class AutomationService {
         let kind: FeedRequestKind
         switch str("kind") ?? "permission" {
         case "permission":
-            let category = FeedActionCategory(rawValue: str("category") ?? "other") ?? .other
-            kind = .permission(tool: try requireStr("tool"), category: category, detail: str("detail"))
+            let tool = try requireStr("tool")
+            let category = str("category").flatMap(FeedActionCategory.init(rawValue:))
+                ?? FeedActionCategory.infer(toolName: tool)
+            kind = .permission(tool: tool, category: category, detail: str("detail"))
         case "exitPlan", "exit-plan":
             kind = .exitPlan(plan: try requireStr("plan"))
         case "question":

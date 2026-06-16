@@ -17,6 +17,37 @@ public enum FeedActionCategory: String, Codable, Sendable, CaseIterable {
         case .other: return "其它"
         }
     }
+
+    /// 由 agent 的工具名推断动作类别（hook 只传工具名，类别在服务端推断，便于统一测试）。
+    /// 先匹配已知工具名（Claude Code / Codex），再退化到小写关键字启发。
+    public static func infer(toolName raw: String) -> FeedActionCategory {
+        let name = raw.lowercased()
+        switch raw {
+        case "Bash", "Shell", "Terminal", "Execute": return .executeCommand
+        case "Read", "Glob", "Grep", "LS", "NotebookRead": return .readFile
+        case "Write", "Edit", "MultiEdit", "NotebookEdit", "ApplyPatch": return .writeFile
+        case "WebFetch", "WebSearch": return .network
+        default: break
+        }
+        // 注意：只用够长、低碰撞的关键字（"cat"/"rm"/"net" 这类短串会误伤 Frobni·cat·e、pe·rm·ission 等）。
+        if name.contains("bash") || name.contains("shell") || name.contains("exec")
+            || name.contains("command") {
+            return .executeCommand
+        }
+        if name.contains("write") || name.contains("edit") || name.contains("patch")
+            || name.contains("create") || name.contains("delete") {
+            return .writeFile
+        }
+        if name.contains("read") || name.contains("grep") || name.contains("glob")
+            || name.contains("search") || name.contains("list") {
+            return .readFile
+        }
+        if name.contains("web") || name.contains("fetch") || name.contains("http")
+            || name.contains("browser") {
+            return .network
+        }
+        return .other
+    }
 }
 
 /// 一条待审批请求的内容。运行时类型，不持久化。
