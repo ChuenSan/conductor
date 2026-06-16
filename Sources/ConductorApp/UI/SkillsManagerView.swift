@@ -2451,9 +2451,7 @@ struct SkillsManagerView: View {
                     skills: skills,
                     expanded: expandedPresetID == preset.id,
                     onExpand: {
-                        withAnimation(AgentToolsMotion.reveal) {
-                            expandedPresetID = expandedPresetID == preset.id ? nil : preset.id
-                        }
+                        expandedPresetID = expandedPresetID == preset.id ? nil : preset.id
                     },
                     onApply: { applyPreset(preset) },
                     onRemove: { removePreset(preset) },
@@ -2530,9 +2528,7 @@ struct SkillsManagerView: View {
                     targets: projectTargets.filter { $0.projectID == project.id },
                     expanded: expandedProjectID == project.id,
                     onExpand: {
-                        withAnimation(AgentToolsMotion.reveal) {
-                            expandedProjectID = expandedProjectID == project.id ? nil : project.id
-                        }
+                        expandedProjectID = expandedProjectID == project.id ? nil : project.id
                     },
                     onReveal: { reveal(project.path) },
                     onDelete: { pendingProjectDelete = project },
@@ -3553,9 +3549,8 @@ struct SkillsManagerView: View {
 
     private func toggleSkillExpansion(_ skill: ManagedSkill) {
         let opening = expandedSkillID != skill.id
-        withAnimation(AgentToolsMotion.reveal) {
-            expandedSkillID = opening ? skill.id : nil
-        }
+        // 瞬时展开：不做高度生长动画（那种"撑开"和工作台其它处的淡入不是一种动作）。
+        expandedSkillID = opening ? skill.id : nil
         if opening {
             inspectedSkillID = skill.id
             loadSkillDetails(skill)
