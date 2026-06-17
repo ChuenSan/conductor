@@ -2,47 +2,39 @@
 import ConductorCore
 import XCTest
 
-/// 思考状态兜底回收：只在「agent 进程没了」或「超过硬上限」时熄灭，
-/// 绝不因「输出静止/安静」熄灭（那是曾经误杀仍在运行转圈的 bug）。
+/// 思考状态兜底回收：**只**在「agent 进程已不在前台」时熄灭（崩溃/被 kill/已退出）。
+/// 绝不因「输出静止/安静」或「跑太久」熄灭——那会误杀仍在运行转圈的长任务（用户实测 bug）。
+/// 完成由 Stop hook 权威熄灭；这里只按进程 liveness 兜底。
 final class ThinkingPruneTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_000_000)
-    private let timeout: TimeInterval = 600
-
     private func at(_ secondsAgo: TimeInterval) -> Date { now.addingTimeInterval(-secondsAgo) }
 
     func testKeepsAliveAndRecent() {
         let p = PaneID("p1")
-        let out = AppCoordinator.prunedThinking([p: at(5)], agents: [p: "claude"], now: now, timeout: timeout)
+        let out = AppCoordinator.prunedThinking([p: at(5)], agents: [p: "claude"])
         XCTAssertEqual(Set(out.keys), [p])
     }
 
     func testDropsWhenAgentProcessGone() {
         let p = PaneID("p1")
-        // 思考点亮中，但 agent 进程已不在（崩溃/被 kill）→ 熄灭
-        let out = AppCoordinator.prunedThinking([p: at(5)], agents: [:], now: now, timeout: timeout)
+        // 思考点亮中，但 agent 进程已不在前台（崩溃/被 kill/退出）→ 熄灭
+        let out = AppCoordinator.prunedThinking([p: at(5)], agents: [:])
         XCTAssertTrue(out.isEmpty)
     }
 
-    func testDropsWhenPastHardTimeout() {
+    /// 回归核心：agent 单轮跑很久（远超过去的 600s 硬上限），期间没刷屏、Stop hook 还没来，
+    /// 但进程仍在前台 → **必须保留转圈**（旧的时长 cutoff 会在这里误杀长任务）。
+    func testKeepsAliveRegardlessOfDuration() {
         let p = PaneID("p1")
-        let out = AppCoordinator.prunedThinking([p: at(timeout + 10)], agents: [p: "claude"], now: now, timeout: timeout)
-        XCTAssertTrue(out.isEmpty)
-    }
-
-    /// 回归核心：agent 跑了 2 分钟、期间一直没刷屏（跑长工具/等模型），
-    /// 但进程还在、未超硬上限 → **必须保留转圈**（旧的 6s 输出空闲启发会在这里误杀）。
-    func testKeepsLongQuietButRunningAgent() {
-        let p = PaneID("p1")
-        let out = AppCoordinator.prunedThinking([p: at(120)], agents: [p: "claude"], now: now, timeout: timeout)
-        XCTAssertEqual(Set(out.keys), [p], "安静但仍在运行的 agent 不应被熄灭")
+        let out = AppCoordinator.prunedThinking([p: at(3600)], agents: [p: "claude"])
+        XCTAssertEqual(Set(out.keys), [p], "进程还活着就一直转，不按时长强熄")
     }
 
     func testMixedFleet() {
-        let alive = PaneID("alive"), gone = PaneID("gone"), stale = PaneID("stale")
+        let alive = PaneID("alive"), gone = PaneID("gone"), longRun = PaneID("longRun")
         let out = AppCoordinator.prunedThinking(
-            [alive: at(30), gone: at(30), stale: at(timeout + 1)],
-            agents: [alive: "claude", stale: "codex"],   // gone 不在 agents 里
-            now: now, timeout: timeout)
-        XCTAssertEqual(Set(out.keys), [alive])
+            [alive: at(30), gone: at(30), longRun: at(7200)],
+            agents: [alive: "claude", longRun: "codex"])   // gone 不在 agents 里（进程没了）
+        XCTAssertEqual(Set(out.keys), [alive, longRun], "活着的都留（含跑了 2 小时的），只熄进程没了的")
     }
 }

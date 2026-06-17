@@ -30,26 +30,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         WindowChromePolicy.applyMainWindowChrome(to: window)
         // 真毛玻璃背衬：透出模糊桌面。外壳（侧栏/Tab/状态栏）半透明压在其上 → 朦胧；
         // 终端区的 AppKit 容器画实色盖住这层 → 不受影响、保持可读。
+        // 用 autoresizing 而非 Auto Layout 包 NSHostingView：用 Auto Layout 边缘约束时 NSHostingView 会按
+        // SwiftUI 内容(maxWidth/.infinity)生成内在尺寸约束、常数爆表，在 Intel/macOS 14 上被算成无穷大几何
+        //（日志 "Invalid view geometry: x/y is infinity"）→ 窗口内容空白、ghostty 表面坏尺寸 → app 不可用退出。
+        // autoresizing 不依赖内在尺寸，稳（等价 0.0.5 直挂 hostingView 的行为，且保留毛玻璃背衬）。
+        let contentRect = NSRect(x: 0, y: 0, width: 1180, height: 760)
         let host = NSHostingView(rootView: RootView(coordinator: coordinator))
-        host.translatesAutoresizingMaskIntoConstraints = false
-        let blur = NSVisualEffectView()
+        host.sizingOptions = []                       // 不按 SwiftUI 内容尺寸生成约束（双保险）
+        host.frame = contentRect
+        host.autoresizingMask = [.width, .height]
+        let blur = NSVisualEffectView(frame: contentRect)
         blur.material = .underWindowBackground
         blur.blendingMode = .behindWindow
         blur.state = .active
-        blur.translatesAutoresizingMaskIntoConstraints = false
-        let container = NSView()
+        blur.autoresizingMask = [.width, .height]
+        let container = NSView(frame: contentRect)
         container.addSubview(blur)
         container.addSubview(host)
-        NSLayoutConstraint.activate([
-            blur.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            blur.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            blur.topAnchor.constraint(equalTo: container.topAnchor),
-            blur.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            host.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            host.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            host.topAnchor.constraint(equalTo: container.topAnchor),
-            host.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
         window.contentView = container
         window.delegate = self   // 误关保护：windowShouldClose 守门
         coordinator.attach(to: window)

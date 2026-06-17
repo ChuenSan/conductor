@@ -102,7 +102,6 @@ final class AppCoordinator: ObservableObject {
     private var hookThinkingSince: [PaneID: Date] = [:]
     /// 头条活计时的起点账本：pane 进入思考集合时记 busy 时刻为起点，离开即清。
     private var thinkingStartTimes: [PaneID: Date] = [:]
-    private static let hookThinkingTimeout: TimeInterval = 600
     private var agentPollTimer: Timer?
     /// 命令面板（懒创建）。
     private lazy var commandPalette = CommandPaletteController(coordinator: self)
@@ -1074,24 +1073,24 @@ final class AppCoordinator: ObservableObject {
     }
 
     /// hook 思考状态的兜底回收（hook 事件可能丢：agent 崩溃/被 kill）：
-    /// 只清掉「agent 进程已不在」或「点亮超过硬上限」的条目。
-    /// 注意：**不**靠「输出静止」判完成——agent 跑长工具/等模型时可长时间不刷屏，
-    /// 那样会把仍在运行的转圈误熄（曾经的 bug）。完成由 Stop hook 权威熄灭，这里只兜底崩溃/卡死。
+    /// 只清掉「agent 进程已不在前台」的思考条目（崩溃/被 kill/已退出）。
+    /// 注意：**不**靠时长 cutoff、也**不**靠「输出静止」判完成——agent 跑长工具/等模型时
+    /// 可长时间不刷屏甚至单轮跑很久，按时长强熄会把仍在运行的转圈误杀（用户实测：长任务不转了）。
+    /// 完成由 Stop hook 权威熄灭；进程真没了由前台 agent 检测(`agents`)自然回收。
     private func pruneHookThinking(agents: [PaneID: String]) {
         guard !hookThinkingSince.isEmpty else { return }
-        let survivors = Self.prunedThinking(
-            hookThinkingSince, agents: agents, now: Date(), timeout: Self.hookThinkingTimeout)
+        let survivors = Self.prunedThinking(hookThinkingSince, agents: agents)
         guard survivors.count != hookThinkingSince.count else { return }
         hookThinkingSince = survivors
         publishThinking()
     }
 
-    /// 纯函数：保留「进程仍在 且 点亮未超时」的思考条目，其余回收。可单测。
+    /// 纯函数：只保留「agent 进程仍在前台」的思考条目，其余回收。可单测。
+    /// 无时长上限——只要进程活着就一直转（liveness 即真相），不会因任务跑太久被误熄。
     nonisolated static func prunedThinking(
-        _ since: [PaneID: Date], agents: [PaneID: String], now: Date, timeout: TimeInterval
+        _ since: [PaneID: Date], agents: [PaneID: String]
     ) -> [PaneID: Date] {
-        let cutoff = now.addingTimeInterval(-timeout)
-        return since.filter { pane, start in agents[pane] != nil && start > cutoff }
+        since.filter { pane, _ in agents[pane] != nil }
     }
 
     /// 发布 hook 思考集合（仅在变化时触发 UI 更新）。
