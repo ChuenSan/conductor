@@ -655,8 +655,9 @@ final class AppCoordinator: ObservableObject {
     // MARK: - 通知（agent 完成）
 
     private func startNotifications() {
-        // 自动迁移旧版残留 hook（含 Notification 事件上把"等待"误判成"完成"的 "blocked" 条）+ 刷新脚本。
-        HookInstaller.migrateIfInstalled()
+        // 完成通知 hook 默认就装好：**仅在未装全/脚本过期时**才安装。
+        // 不再每次启动都"删→加"——那会和正在跑的会话抢配置、出现思考 hook 短暂消失（转圈丢）。
+        if !HookInstaller.status().allDone { _ = try? HookInstaller.installAll() }
         NotificationManager.shared.configure()
         NotificationManager.shared.onActivatePane = { [weak self] paneID in
             self?.revealPane(PaneID(paneID))
@@ -733,14 +734,16 @@ final class AppCoordinator: ObservableObject {
         paneID: String?, title: String, fallback: String,
         transcriptPath: String?, agent: String?, durationSuffix: String?
     ) {
-        guard let transcriptPath, !transcriptPath.isEmpty, let agent else {
+        // 只要有 transcript 就试着读 agent 最后一句——agent 没识别（手动起的会话）也读：
+        // AgentSessionPreview 对未知 agent 会自动探测格式。读不到才回退到 hook 兜底文案。
+        guard let transcriptPath, !transcriptPath.isEmpty else {
             NotificationManager.shared.notify(
                 paneID: paneID, title: title,
                 body: Self.doneNotificationBody(lastAssistant: nil, fallback: fallback, durationSuffix: durationSuffix))
             return
         }
         Task.detached(priority: .utility) {
-            let messages = AgentSessionPreview.load(agent: agent, filePath: transcriptPath, limit: 4)
+            let messages = AgentSessionPreview.load(agent: agent ?? "", filePath: transcriptPath, limit: 4)
             let lastAssistant = messages.last { $0.role == .assistant }?.text
             await MainActor.run {
                 NotificationManager.shared.notify(
@@ -1298,7 +1301,8 @@ final class AppCoordinator: ObservableObject {
 
     private func restyleChrome() {
         syncNativeAppearance()
-        window?.backgroundColor = NSColor(AppStyle.windowBackground)
+        window?.backgroundColor = .clear   // 外壳毛玻璃：窗口保持透明（背衬 NSVisualEffectView）
+        window?.isOpaque = false
         paneContainers.values.forEach { $0.restyle() }
         func walk(_ v: NSView) {
             if let split = v as? RatioSplitView { split.restyleForCurrentTheme() }

@@ -4,23 +4,10 @@ import XCTest
 
 @MainActor
 final class SplitContainerViewTests: XCTestCase {
-    func testRatioSplitViewRestyleUsesCurrentThemeBackground() {
-        let original = ConfigStore.shared.config
-        defer { ConfigStore.shared.set(original) }
-
-        var light = original
-        light.appearance.theme = "light"
-        ConfigStore.shared.set(light)
+    func testRatioSplitViewRestyleUsesClearBackground() {
+        // 终端画布透明：split 背景恒为 clear（露出窗口毛玻璃，pane 卡片自带实色保可读），与主题无关。
         let split = RatioSplitView()
         split.restyleForCurrentTheme()
-        let lightBackground = split.layer?.backgroundColor
-
-        var dark = original
-        dark.appearance.theme = "dark"
-        ConfigStore.shared.set(dark)
-        split.restyleForCurrentTheme()
-
-        XCTAssertNotEqual(split.layer?.backgroundColor, lightBackground)
-        XCTAssertEqual(split.layer?.backgroundColor, NSColor(AppStyle.windowBackground).cgColor)
+        XCTAssertEqual(split.layer?.backgroundColor?.alpha, 0)
     }
 }

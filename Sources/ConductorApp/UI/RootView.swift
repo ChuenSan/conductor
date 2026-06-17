@@ -81,7 +81,10 @@ struct RootView: View {
             }
         }
         .id(localization.value)   // 语言切换 → 重建子树（TerminalAreaView 复用同一 NSView，终端不受影响）
-        .background(AppStyle.windowBackground)
+        .background {
+            // 光晕主题 → 暗底 + 彩色 radial 光晕（不透桌面）；纯色/玻璃主题 → 统一磨砂基底（露出背衬模糊）。
+            ThemeBackdrop(theme: AppStyle.theme)
+        }
         .ignoresSafeArea()
         .animation(Motion.panel, value: coordinator.sidebarPresentation.isCollapsed)
         .animation(Motion.panel, value: coordinator.settingsPresentation.isPresented)
@@ -154,4 +157,33 @@ struct TerminalAreaView: NSViewRepresentable {
     let container: NSView
     func makeNSView(context: Context) -> NSView { container }
     func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+/// 主题背景：暗底 + 若干彩色 radial 光晕（screen 叠加，像有光打进来）。
+/// 比线性渐变更有空间感——深→深的线性扫光跨整窗几乎看不出，等于一块闷死的纯色。
+/// 无光晕的主题（纯色/玻璃）回落到统一磨砂基底，露出窗口背衬模糊。
+struct ThemeBackdrop: View {
+    let theme: Theme
+
+    var body: some View {
+        if let glows = theme.backgroundGlows {
+            GeometryReader { geo in
+                let maxDim = max(geo.size.width, geo.size.height)
+                ZStack {
+                    theme.windowBackground
+                    ForEach(Array(glows.enumerated()), id: \.offset) { _, g in
+                        RadialGradient(
+                            gradient: Gradient(colors: [g.color.opacity(g.intensity), g.color.opacity(0)]),
+                            center: g.center,
+                            startRadius: 0,
+                            endRadius: maxDim * g.radius)
+                        .blendMode(.screen)
+                    }
+                }
+                .compositingGroup()   // 隔离 screen 叠加：只在暗底 + 光晕之间合成，不影响背衬
+            }
+        } else {
+            AppStyle.chromeFill
+        }
+    }
 }

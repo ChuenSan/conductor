@@ -82,7 +82,11 @@ struct SidebarView: View {
             Spacer(minLength: 0)
         }
         .frame(maxHeight: .infinity)
-        .background(AppStyle.sidebarBackground)
+        // 侧栏 = 下沉的一层：在根渐变/磨砂之上叠一层极淡暗色，与正文画布拉开层级（不再一片同色）。
+        .background(Color.black.opacity(AppStyle.theme.isDark ? 0.18 : 0.045))
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(AppStyle.separator).frame(width: 1)   // 右缘 hairline：层与层的接缝
+        }
         // 从 Finder 拖文件夹进来 → 新建工作区（同路径已存在则直接切过去）
         .dropDestination(for: URL.self) { urls, _ in
             handleFolderDrop(urls)

@@ -140,7 +140,7 @@ struct TabBarView: View {
         .padding(.top, 4)
         .padding(.bottom, 4)
         .frame(maxWidth: .infinity)
-        .background(AppStyle.windowBackground)   // 与终端区同底，无分隔条
+        .background(.clear)   // 透明：用根底统一磨砂
         .onChange(of: renameFocused) { _, focused in
             if !focused, editingTab != nil { commitRename() }
         }

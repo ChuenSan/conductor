@@ -47,7 +47,7 @@ struct SessionManagerView: View {
             content
         }
         .frame(maxHeight: .infinity)
-        .background(AppStyle.windowBackground)
+        .background(.clear)   // 透明：用根底统一磨砂
         .onAppear { store.refresh() }
     }
 

@@ -157,6 +157,9 @@ final class GhosttyRuntime {
         // （用户仍可在 ghosttyOverrides 里改回 xterm-ghostty。）
         set("term", managedTerminalType)
         set("background", theme.background)
+        // 终端透明仅限光晕主题（透出后方光晕暗底，黑不至于太死）；纯色主题保持实底，
+        // 否则透出的是半透磨砂 + 模糊桌面，终端文字对比度会掉。用户仍可在 ghosttyOverrides 覆盖。
+        set("background-opacity", Theme.resolve(a).terminalTranslucent ? "0.8" : "1")
         set("foreground", theme.foreground)
         set("cursor-color", theme.cursor)
         set("selection-background", theme.selection)

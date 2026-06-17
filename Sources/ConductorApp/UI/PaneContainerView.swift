@@ -188,7 +188,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         self.hostView = hostView
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor(AppStyle.windowBackground).cgColor   // 间隙露出的画布
+        layer?.backgroundColor = .clear   // 间隙/画布透明：露出窗口毛玻璃（pane 卡片自带实色）
 
         // 柔阴影层（最底）
         shadowView.wantsLayer = true
@@ -198,16 +198,15 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         applyCardShadow()
 
         frameView.wantsLayer = true
-        frameView.layer?.backgroundColor = AppStyle.cardBackground.cgColor
         frameView.layer?.cornerRadius = cornerRadius
         frameView.layer?.cornerCurve = .continuous
         frameView.layer?.masksToBounds = true
 
         card.wantsLayer = true
-        card.layer?.backgroundColor = AppStyle.cardBackground.cgColor
         card.addSubview(hostView)
 
         header.title = title
+        applyCardFills()   // 卡片/正文/标题栏的底色：按主题是否「终端透明」分两条路径
         header.onDragStart = { [weak self] event in self?.beginPaneDrag(event) }
         header.onClick = { [weak self] in if let id = self?.paneID { self?.onFocus?(id) } }
         header.onAction = { [weak self] action in self?.onContextAction?(action) }
@@ -515,10 +514,31 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         scrollbar.setMetrics(total: total, offset: offset, len: len)
     }
 
+    /// 卡片三层底色：按主题是否「终端透明」分两条路径。
+    /// - 光晕主题（透明）：frame/card 清空，正文 ghostty 0.8 透出后方光晕；磨砂底单独给 header（标题栏仍清晰）。
+    /// - 纯色主题（实底）：frame/card 铺 cardBackground 微玻璃，header **不**独立铺底（靠 frameView，
+    ///   避免在「整窗一色」变体上重新造出异色标题条）。
+    private func applyCardFills() {
+        let theme = AppStyle.theme
+        if theme.terminalTranslucent {
+            frameView.layer?.backgroundColor = .clear
+            card.layer?.backgroundColor = .clear
+            header.layer?.backgroundColor = theme.cardBackground.withAlphaComponent(0.7).cgColor
+        } else {
+            let fill = theme.cardBackground.withAlphaComponent(0.62).cgColor
+            frameView.layer?.backgroundColor = fill
+            card.layer?.backgroundColor = fill
+            header.layer?.backgroundColor = .clear
+        }
+    }
+
     private func applyCardShadow() {
         let theme = AppStyle.theme
         let layer = shadowView.layer
-        layer?.backgroundColor = theme.cardBackground.cgColor   // 给阴影一个实体来源（被 frameView 盖住）
+        // 透明主题：阴影靠 shadowPath，shadowView 不铺底（否则挡住终端透出）；
+        // 纯色主题：shadowView 铺卡底，既是卡体也是阴影源。
+        layer?.backgroundColor = theme.terminalTranslucent ? .clear
+            : theme.cardBackground.withAlphaComponent(0.62).cgColor
         layer?.shadowColor = theme.cardShadowColor.cgColor
         layer?.shadowOpacity = theme.cardShadowOpacity
         layer?.shadowRadius = theme.cardShadowRadius
@@ -527,9 +547,8 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
 
     /// 主题热更新：重新套用当前主题色到各层。
     func restyle() {
-        layer?.backgroundColor = NSColor(AppStyle.windowBackground).cgColor
-        frameView.layer?.backgroundColor = AppStyle.cardBackground.cgColor
-        card.layer?.backgroundColor = AppStyle.cardBackground.cgColor
+        layer?.backgroundColor = .clear   // 间隙/画布透明：露出窗口毛玻璃
+        applyCardFills()
         dropOverlay.layer?.backgroundColor = NSColor(AppStyle.accent).withAlphaComponent(0.15).cgColor
         dropOverlay.layer?.borderColor = NSColor(AppStyle.accent).withAlphaComponent(0.6).cgColor
         applyCardShadow()

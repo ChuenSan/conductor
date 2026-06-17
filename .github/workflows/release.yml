@@ -47,10 +47,11 @@ jobs:
           {
             echo "## Highlights"
             echo
-            echo "- Refined the Skills manager into a denser right-panel experience."
-            echo "- Added Skills Doctor diagnostics for library, source, sync target, and deploy issues."
-            echo "- Tightened CLI/provider surfaces, i18n coverage, sidebar sizing, and panel width defaults."
-            echo "- Added stable local signing support so development builds keep macOS permissions after rebuilds."
+            echo "- Added a desktop Companion pet that ambiently reflects agent state — thinking, done, needs-approval, error — in the screen corner."
+            echo "- Inline approve/deny right from the pet's bubble, sharing the same Feed approval engine as the side panel."
+            echo "- Companion settings: enable, nickname, dock corner, speech bubbles, and separate Companion / System notification toggles (config-driven, no hook install needed)."
+            echo "- Codex Pets sprite-sheet support: drop an 8x9 pet bundle into ~/.config/conductor/pets/ (openpets-compatible), plus built-in pets."
+            echo "- Full English/Chinese localization for the Companion surface."
             echo
             echo "## Assets"
             echo

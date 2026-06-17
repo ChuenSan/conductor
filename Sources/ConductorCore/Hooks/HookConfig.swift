@@ -103,7 +103,8 @@ public struct HookConfigDocument: Sendable {
     }
 
     /// 往某事件加一条 command hook（已存在完全相同命令则跳过）。写回，保留其它键。
-    public func addCommand(event: String, command: String, timeout: Int = 5000) throws {
+    /// `timeout == nil` → **不写** timeout 字段（原本没设 timeout 的 hook 重启用时不该被强塞默认值）。
+    public func addCommand(event: String, command: String, timeout: Int? = 5000) throws {
         var root = load()
         var hooks = root["hooks"] as? [String: Any] ?? [:]
         var groups = hooks[event] as? [[String: Any]] ?? []
@@ -113,7 +114,9 @@ public struct HookConfigDocument: Sendable {
             return inner.contains { ($0["command"] as? String) == command }
         }
         if !exists {
-            groups.append(["hooks": [["type": "command", "command": command, "timeout": timeout]]])
+            var entry: [String: Any] = ["type": "command", "command": command]
+            if let timeout { entry["timeout"] = timeout }
+            groups.append(["hooks": [entry]])
             hooks[event] = groups
             root["hooks"] = hooks
             try write(root)

@@ -403,7 +403,13 @@ extension View {
         let fill: AnyShapeStyle = AppStyle.theme.isDark
             ? AnyShapeStyle(theme.elevated.opacity(0.34))
             : AnyShapeStyle(Color.black.opacity(0.022))
+        // 边缘高光 rim：顶亮→底暗的 1px 渐变描边，比平描边更像玻璃（调研结论：玻璃质感主要来自 rim）。
+        let rim = LinearGradient(
+            colors: theme.isDark
+                ? [Color.white.opacity(0.22), Color.white.opacity(0.05)]
+                : [Color.white.opacity(0.7), Color.black.opacity(0.06)],
+            startPoint: .top, endPoint: .bottom)
         return background(shape.fill(fill))
-            .overlay(shape.strokeBorder(AppStyle.separator.opacity(theme.isDark ? 0.62 : 0.5), lineWidth: 1))
+            .overlay(shape.strokeBorder(rim, lineWidth: 1))
     }
 }

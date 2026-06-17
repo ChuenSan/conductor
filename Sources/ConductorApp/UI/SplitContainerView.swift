@@ -52,7 +52,7 @@ final class RatioSplitView: NSSplitView, NSSplitViewDelegate {
 
     func restyleForCurrentTheme() {
         wantsLayer = true
-        layer?.backgroundColor = NSColor(AppStyle.windowBackground).cgColor
+        layer?.backgroundColor = .clear   // 终端画布透明：露出窗口毛玻璃；pane 卡片自带实色保可读
         needsDisplay = true
         setNeedsDisplay(bounds)
     }

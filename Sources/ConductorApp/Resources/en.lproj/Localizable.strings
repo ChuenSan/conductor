@@ -1418,3 +1418,54 @@
 "目标分布" = "Target Distribution";
 "覆盖率 %@%%" = "Coverage %@%%";
 "还没有同步目标" = "No Synced Targets Yet";
+
+/* ===== 伙伴 / Companion ===== */
+"伙伴" = "Companion";
+"桌面通知宠物" = "Desktop notification pet";
+"桌面伙伴" = "Desktop Companion";
+"显示桌面伙伴" = "Show Desktop Companion";
+"伙伴通知" = "Companion Notifications";
+"系统通知" = "System Notifications";
+"昵称" = "Nickname";
+"停靠角落" = "Dock Corner";
+"左上" = "Top Left";
+"右上" = "Top Right";
+"左下" = "Bottom Left";
+"右下" = "Bottom Right";
+"说话气泡" = "Speech Bubbles";
+"待审批时气泡内联允许/拒绝" = "Inline Allow/Deny in Bubble";
+"模版" = "Template";
+"换宠物" = "Change Pet";
+"伙伴设置…" = "Companion Settings…";
+"隐藏伙伴" = "Hide Companion";
+"回复" = "Reply";
+"去会话 →" = "Go to session →";
+"更多" = "More";
+/* 宠物模版名 */
+"团子" = "Dumpling";
+"圆豆" = "Bean";
+"方头" = "Boxy";
+"麻薯" = "Mochi";
+"抹茶" = "Matcha";
+"像素仔" = "Pixel";
+"喵喵" = "Kitty";
+"噗噗" = "Ghosty";
+"冻冻" = "Slime";
+"波波" = "Bot";
+/* 宠物气泡 */
+"需要你批准" = "Needs your approval";
+"有 %ld 个待批准" = "%ld pending approvals";
+"%@ 干活中…" = "%@ is working…";
+"干活中…" = "Working…";
+"%@ 跑完了" = "%@ is done";
+"跑完了" = "Done";
+"出错了" = "Something went wrong";
+"在呢" = "Here!";
+"嗯?" = "Hm?";
+"喵~" = "Meow~";
+"戳啥" = "Quit poking~";
+/* 审批卡（复用 Feed 文案的静态项） */
+"允许一次" = "Allow once";
+"拒绝" = "Deny";
+"批准计划" = "Approve plan";
+"Agent 有个问题" = "Agent has a question";

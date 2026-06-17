@@ -42,6 +42,27 @@ final class HookConfigTests: XCTestCase {
         XCTAssertEqual((doc.load()["env"] as? [String: Any])?["SECRET"] as? String, "keep-me")
     }
 
+    /// timeout == nil → **不写** timeout 字段；给了值才写。
+    /// （回归：重启用一个原本没 timeout 的 hook 不该被静默塞进 5000ms。）
+    func testAddCommandNilTimeoutOmitsField() throws {
+        let url = tempFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let doc = HookConfigDocument(url: url, source: .claude)
+        try doc.addCommand(event: "Stop", command: "no-timeout-hook", timeout: nil)
+        try doc.addCommand(event: "Stop", command: "with-timeout-hook", timeout: 5000)
+
+        func raw(_ cmd: String) -> [String: Any]? {
+            guard let hooks = doc.load()["hooks"] as? [String: Any],
+                  let groups = hooks["Stop"] as? [[String: Any]] else { return nil }
+            for g in groups {
+                for h in (g["hooks"] as? [[String: Any]] ?? []) where (h["command"] as? String) == cmd { return h }
+            }
+            return nil
+        }
+        XCTAssertNil(raw("no-timeout-hook")?["timeout"])               // 没写 timeout
+        XCTAssertEqual(raw("with-timeout-hook")?["timeout"] as? Int, 5000)
+    }
+
     func testAddToFreshFile() throws {
         let url = tempFile()
         defer { try? FileManager.default.removeItem(at: url) }

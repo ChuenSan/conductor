@@ -215,8 +215,6 @@ struct CLIToolsView: View {
     @State private var configuredProviders: [UsageProviderEntry] = []
     @State private var providerUsage: [String: ToolUsageState] = [:]
     /// 通知 hook 安装状态。
-    @State private var hookStatus = HookInstaller.status()
-    @State private var hookError: String?
     @State private var feedHookStatus = FeedHookInstaller.status()
     @State private var feedHookError: String?
     @State private var inspectorMode: CLIInspectorMode = .tools
@@ -244,7 +242,7 @@ struct CLIToolsView: View {
             .scrollIndicators(.visible)
         }
         .frame(maxHeight: .infinity)
-        .background(AppStyle.windowBackground)
+        .background(.clear)   // 内层透明：露出 ToolsPanel 的微玻璃
         .onAppear { loadOrDetect() }
         .onChange(of: inspectorMode) { _, mode in
             guard mode == .providers, providerUsage.isEmpty else { return }
@@ -255,7 +253,6 @@ struct CLIToolsView: View {
     @ViewBuilder
     private var cliToolsWorkbench: some View {
         cliInventoryStrip
-        notificationCard
         feedApprovalCard
         if results.isEmpty, detecting {
             loadingPlaceholder
@@ -457,71 +454,6 @@ struct CLIToolsView: View {
                 .fill(AppStyle.hoverFill))
     }
 
-    /// 「完成通知」卡片：安装 hook + 显示通知权限状态。
-    private var notificationCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "bell.badge.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppStyle.accent)
-                    .frame(width: 30, height: 30)
-                    .background(
-                        RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                            .fill(AppStyle.accent.opacity(0.12)))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(L("完成通知"))
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(AppStyle.textPrimary)
-                    Text(L("Agent 答完后发 macOS 通知，点击跳回对应 pane。"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(AppStyle.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-            }
-
-            HStack(spacing: 6) {
-                hookBadge(L("脚本"), hookStatus.scriptInstalled)
-                hookBadge("Codex", hookStatus.codexConfigured)
-                hookBadge("Claude", hookStatus.claudeConfigured)
-                Spacer()
-            }
-
-            HStack(spacing: 8) {
-                ToolActionButton(
-                    title: hookStatus.allDone ? L("重新安装 hook") : L("安装通知 hook"),
-                    role: .primary,
-                    action: installHooks)
-
-                if !NotificationManager.shared.canDeliverRich {
-                    ToolActionButton(
-                        title: L("去系统设置授权"),
-                        role: .secondary,
-                        help: L("打开 macOS 通知设置，允许 Conductor 发送可点击通知。")) {
-                            NotificationManager.shared.openSystemNotificationSettings()
-                        }
-                }
-                Spacer()
-            }
-
-            if !NotificationManager.shared.canDeliverRich {
-                Text(L("当前无法发送可点击通知，已自动回退为普通横幅（看得到、点了不跳转）。"))
-                    .font(.system(size: 10))
-                    .foregroundStyle(AppStyle.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let hookError {
-                Text(hookError)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(AppStyle.errorRed)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(Space.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .toolsCard()
-    }
-
     private func hookBadge(_ label: String, _ on: Bool) -> some View {
         ToolBadge(
             text: label,
@@ -600,16 +532,6 @@ struct CLIToolsView: View {
         feedHookStatus = FeedHookInstaller.status()
     }
 
-    private func installHooks() {
-        hookError = nil
-        do {
-            hookStatus = try HookInstaller.installAll()
-        } catch {
-            hookError = error.localizedDescription
-            hookStatus = HookInstaller.status()
-        }
-        NotificationManager.shared.refreshAuthStatus()
-    }
 
     private var loadingPlaceholder: some View {
         HStack(spacing: 8) {

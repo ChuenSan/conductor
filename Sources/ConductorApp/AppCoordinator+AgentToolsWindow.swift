@@ -12,18 +12,11 @@ extension AppCoordinator {
     func makeAgentToolsConsoleView() -> AgentToolsManagementConsoleView {
         AgentToolsManagementConsoleView(
             initialModule: agentToolsManagementModule,
-            runtime: AgentToolsRuntimeSnapshot(
-                launchableAgents: launchableAgents,
-                paneAgentsByPaneID: Dictionary(uniqueKeysWithValues: paneAgents.map { ($0.key.value, $0.value) }),
-                thinkingPaneIDs: Set(thinkingPanes.map(\.value)),
-                unseenDonePaneIDs: Set(unseenDonePanes.map(\.value)),
-                queuedPaneIDs: Set(paneQueues.filter { !$0.value.isEmpty }.map { $0.key.value })),
             onLaunchCLI: { [weak self] command in
                 self?.launchAgent(command: command)
                 self?.closeAgentToolsManagement()
             },
             onApplyConfig: { [weak self] in self?.applyConfig($0) },
-            onScanAgentsIntoConfig: { [weak self] in self?.scanAIAgentsIntoConfig() },
             onClose: { [weak self] in self?.closeAgentToolsManagement() })
     }
 

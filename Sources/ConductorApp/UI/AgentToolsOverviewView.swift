@@ -527,7 +527,7 @@ final class AgentToolsConsoleStore: ObservableObject {
             if enabled {
                 guard !entry.enabled else { return }
                 try HookConfigDocument(source: entry.source).addCommand(
-                    event: entry.event, command: entry.command, timeout: entry.timeout ?? 5000)
+                    event: entry.event, command: entry.command, timeout: entry.timeout)
                 try parking.remove(source: entry.source, event: entry.event, command: entry.command)
             } else {
                 guard entry.enabled else { return }
@@ -1105,7 +1105,6 @@ struct AgentToolsOverviewView: View {
                 .foregroundStyle(AppStyle.textTertiary)
             quickAction(L("CLI"), icon: "terminal", module: .cli)
             quickAction(L("用量"), icon: "chart.bar.xaxis", module: .usage)
-            quickAction("Agents", icon: "cpu", module: .agents)
             quickAction("Skills", icon: "wand.and.stars", module: .skills)
             Spacer(minLength: 0)
         }

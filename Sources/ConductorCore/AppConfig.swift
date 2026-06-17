@@ -13,6 +13,7 @@ public struct AppConfig: Codable, Equatable, Sendable {
     public var ghosttyOverrides: [String: String]
     public var workspaceDefaults: WorkspaceDefaults
     public var usage: UsageConfig
+    public var companion: CompanionConfig
 
     public init(appearance: Appearance = .init(),
                 terminal: TerminalConfig = .init(),
@@ -20,7 +21,8 @@ public struct AppConfig: Codable, Equatable, Sendable {
                 keybindings: [String: String] = [:],
                 ghosttyOverrides: [String: String] = [:],
                 workspaceDefaults: WorkspaceDefaults = .init(),
-                usage: UsageConfig = .init()) {
+                usage: UsageConfig = .init(),
+                companion: CompanionConfig = .init()) {
         self.appearance = appearance
         self.terminal = terminal
         self.behavior = behavior
@@ -28,6 +30,7 @@ public struct AppConfig: Codable, Equatable, Sendable {
         self.ghosttyOverrides = ghosttyOverrides
         self.workspaceDefaults = workspaceDefaults
         self.usage = usage
+        self.companion = companion
     }
 
     public static let `default` = AppConfig()
@@ -41,6 +44,7 @@ public struct AppConfig: Codable, Equatable, Sendable {
         ghosttyOverrides = c.value(.ghosttyOverrides, [:])
         workspaceDefaults = c.value(.workspaceDefaults, .init())
         usage = c.value(.usage, .init())
+        companion = c.value(.companion, AppConfig.default.companion)
     }
 
     /// 夹紧非法值，返回修正后的副本。
@@ -50,6 +54,7 @@ public struct AppConfig: Codable, Equatable, Sendable {
         copy.terminal = terminal.validated()
         copy.behavior = behavior.validated()
         copy.usage = usage.validated()
+        copy.companion = companion.validated()
         copy.ghosttyOverrides = ghosttyOverrides.compactMapValues { value in
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed

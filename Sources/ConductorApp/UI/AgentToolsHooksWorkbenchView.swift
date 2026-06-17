@@ -3,7 +3,6 @@ import ConductorCore
 import SwiftUI
 
 private enum AgentToolsHooksWorkbenchSection: String, CaseIterable, Identifiable {
-    case overview
     case recipes
     case builder
     case clients
@@ -14,7 +13,6 @@ private enum AgentToolsHooksWorkbenchSection: String, CaseIterable, Identifiable
 
     var title: String {
         switch self {
-        case .overview: return L("总览")
         case .recipes: return L("配方库")
         case .builder: return L("构建器")
         case .clients: return L("应用")
@@ -25,7 +23,6 @@ private enum AgentToolsHooksWorkbenchSection: String, CaseIterable, Identifiable
 
     var subtitle: String {
         switch self {
-        case .overview: return L("Hook 状态、入口和覆盖情况")
         case .recipes: return L("Conductor 推荐自动化配方")
         case .builder: return L("自定义事件、命令和 timeout")
         case .clients: return L("直接编辑各应用 hooks / 选择安装目标")
@@ -36,7 +33,6 @@ private enum AgentToolsHooksWorkbenchSection: String, CaseIterable, Identifiable
 
     var sidebarHint: String {
         switch self {
-        case .overview: return L("状态")
         case .recipes: return L("市场")
         case .builder: return L("写入")
         case .clients: return L("安装到")
@@ -47,7 +43,6 @@ private enum AgentToolsHooksWorkbenchSection: String, CaseIterable, Identifiable
 
     var icon: String {
         switch self {
-        case .overview: return "gauge.with.dots.needle.50percent"
         case .recipes: return "sparkles"
         case .builder: return "hammer"
         case .clients: return "cpu"
@@ -77,6 +72,12 @@ private enum AgentToolsHooksWorkbenchFilter: String, CaseIterable, Identifiable 
     }
 }
 
+private enum AgentToolsHooksAddTab: String, CaseIterable, Identifiable {
+    case recipe, custom
+    var id: String { rawValue }
+    var title: String { self == .recipe ? L("配方库") : L("自定义") }
+}
+
 struct AgentToolsHooksWorkbenchView: View {
     @ObservedObject var store: AgentToolsConsoleStore
 
@@ -85,7 +86,7 @@ struct AgentToolsHooksWorkbenchView: View {
         if let forced = AgentToolsDebugUI.hooksSection,
            let section = AgentToolsHooksWorkbenchSection(rawValue: forced) { return section }
         #endif
-        return .clients   // 编辑器优先：进来先看到各应用 hooks，而不是 recipe
+        return .configured   // 列表优先：进来先看到已配置的 hooks，而不是 dashboard
     }()
     @State private var query = ""
     @State private var filter: AgentToolsHooksWorkbenchFilter = .all
@@ -100,6 +101,9 @@ struct AgentToolsHooksWorkbenchView: View {
     @State private var editingEntry: HookEntry?
     /// 待确认删除的 hook（驱动 confirmationDialog）。
     @State private var entryPendingDelete: HookEntry?
+    /// 添加 hook 的 sheet——把 配方库 / 自定义 / 选应用 合进一个流程，取代分散的分区。
+    @State private var showAddSheet = false
+    @State private var addTab: AgentToolsHooksAddTab = .recipe
 
     private var rows: [HookEntry] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -142,6 +146,7 @@ struct AgentToolsHooksWorkbenchView: View {
         }
         .agentToolsPage()
         .overlay(alignment: .top) { AgentToolsNoticeBanner(text: store.hookNotice) { store.hookNotice = nil } }
+        .sheet(isPresented: $showAddSheet) { addSheet }
         .sheet(item: $editingHookSource) { source in
             AgentToolsJSONEditorSheet(
                 title: L("编辑 %@ 的 Hooks", source.displayName),
@@ -165,15 +170,9 @@ struct AgentToolsHooksWorkbenchView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    AgentToolsWorkbenchRailSection(L("工作台")) {
-                        railButton(.overview)
-                        railButton(.recipes)
-                        railButton(.builder)
-                    }
-
-                    AgentToolsWorkbenchRailSection(L("应用")) {
-                        railButton(.clients)
+                    AgentToolsWorkbenchRailSection("Hooks") {
                         railButton(.configured)
+                        railButton(.clients)
                     }
 
                     AgentToolsWorkbenchRailSection(L("维护")) {
@@ -216,7 +215,6 @@ struct AgentToolsHooksWorkbenchView: View {
 
     private func badge(for section: AgentToolsHooksWorkbenchSection) -> String? {
         switch section {
-        case .overview: return nil
         case .recipes: return "\(HookRecipes.all.count)"
         case .builder: return nil
         case .clients: return "\(HookSource.allCases.count)"
@@ -236,20 +234,18 @@ struct AgentToolsHooksWorkbenchView: View {
                             .frame(minWidth: 240, idealWidth: 320, maxWidth: 420)
                     }
 
-                    Menu {
-                        Button(L("配方库")) { selectedSection = .recipes }
-                        Button(L("自定义 hook")) { selectedSection = .builder }
-                        Button(L("选择应用")) { selectedSection = .clients }
-                    } label: {
-                        Label(L("添加"), systemImage: "plus")
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(AppStyle.textSecondary)
-                            .padding(.horizontal, 10)
-                            .frame(height: 34)
-                            .background(Capsule().fill(AppStyle.hoverFill.opacity(0.92)))
-                            .overlay(Capsule().strokeBorder(AppStyle.separator.opacity(0.18), lineWidth: 1))
-                    }
-                    .menuStyle(.borderlessButton)
+                    ToolActionButton(
+                        title: L("添加"),
+                        systemImage: "plus",
+                        role: .primary,
+                        height: 34,
+                        fontSize: 11.5,
+                        horizontalPadding: 12) {
+                            editingEntry = nil
+                            resetComposer()
+                            addTab = .recipe
+                            showAddSheet = true
+                        }
 
                     if selectedSection == .configured {
                         AgentToolsMenuButton(title: filter.title, icon: "line.3.horizontal.decrease.circle") {
@@ -282,8 +278,6 @@ struct AgentToolsHooksWorkbenchView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
                 switch selectedSection {
-                case .overview:
-                    overviewContent
                 case .recipes:
                     recipesContent
                 case .builder:
@@ -300,76 +294,6 @@ struct AgentToolsHooksWorkbenchView: View {
             .padding(.bottom, 12)
         }
         .scrollIndicators(.never)
-    }
-
-    @ViewBuilder
-    private var overviewContent: some View {
-        metricStrip
-        quickActions
-        sourceSummary
-        if let error = store.hookError {
-            ToolStatusLine(icon: "exclamationmark.triangle.fill", text: error, color: AppStyle.errorRed)
-        }
-    }
-
-    private var metricStrip: some View {
-        let managed = store.hookEntries.filter(\.managedByConductor).count
-        let custom = store.hookEntries.count - managed
-        let installedPairs = store.hookRecipeStates.values.reduce(0) { $0 + $1.count }
-        return HStack(alignment: .top, spacing: 30) {
-            AgentToolsStat(value: "\(store.hookEntries.count)", title: "Hooks", valueColor: AppStyle.accent)
-            AgentToolsStat(value: "\(managed)", title: "Conductor")
-            AgentToolsStat(value: "\(custom)", title: L("自定义"))
-            AgentToolsStat(value: "\(installedPairs)", title: L("已安装配方"))
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, Space.md)
-        .padding(.vertical, 14)
-        .agentToolsGlass()
-    }
-
-    private var quickActions: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 8)], spacing: 8) {
-            actionTile(icon: "sparkles", title: L("安装推荐配方"), detail: L("通知、提示音、横幅和日志"), target: .recipes)
-            actionTile(icon: "hammer", title: L("构建自定义 Hook"), detail: L("选择事件并写入命令"), target: .builder)
-            actionTile(icon: "macwindow", title: L("选择应用"), detail: L("控制要安装到哪些 Agent 工具"), target: .clients)
-            actionTile(icon: "list.bullet.rectangle", title: L("审计已配置"), detail: L("查看并清理 hook 清单"), target: .configured)
-        }
-    }
-
-    private func actionTile(icon: String, title: String, detail: String, target: AgentToolsHooksWorkbenchSection) -> some View {
-        Button {
-            withAnimation(AgentToolsMotion.route) { selectedSection = target }
-        } label: {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppStyle.accent)
-                    .frame(width: 30, height: 30)
-                    .background(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous).fill(AppStyle.accent.opacity(0.12)))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.system(size: 12.5, weight: .bold))
-                        .foregroundStyle(AppStyle.textPrimary)
-                        .lineLimit(1)
-                    Text(detail)
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(AppStyle.textTertiary)
-                        .lineLimit(2)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(11)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .agentToolsGlass(cornerRadius: Radius.sm)
-        }
-        .buttonStyle(PressScaleStyle())
-    }
-
-    private var sourceSummary: some View {
-        AgentToolsSection(L("安装目标")) {
-            targetApplicationList(compact: true)
-        }
     }
 
     @ViewBuilder
@@ -651,6 +575,7 @@ struct AgentToolsHooksWorkbenchView: View {
                                     command: customCommand,
                                     timeout: Int(customTimeout) ?? 5000)
                                 resetComposer()
+                                showAddSheet = false
                             }
                             .disabled(selectedSources.isEmpty || customCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
@@ -672,7 +597,8 @@ struct AgentToolsHooksWorkbenchView: View {
         customCommand = entry.command
         customTimeout = entry.timeout.map(String.init) ?? "5000"
         editingEntry = entry
-        withAnimation(AgentToolsMotion.route) { selectedSection = .builder }
+        addTab = .custom
+        showAddSheet = true
     }
 
     private func saveEdit() {
@@ -688,6 +614,7 @@ struct AgentToolsHooksWorkbenchView: View {
     private func cancelEditing() {
         editingEntry = nil
         resetComposer()
+        showAddSheet = false
     }
 
     private func resetComposer() {
@@ -711,12 +638,65 @@ struct AgentToolsHooksWorkbenchView: View {
                     .strokeBorder(AppStyle.separator.opacity(0.16), lineWidth: 1))
     }
 
+    private var addSheet: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(editingEntry == nil ? L("添加 Hook") : L("编辑 Hook"))
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(AppStyle.textPrimary)
+                Spacer()
+                IconOnlyButton(systemName: "xmark", help: L("关闭"), size: 28, symbolSize: 12, weight: .bold) {
+                    showAddSheet = false
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+
+            if editingEntry == nil {
+                Picker("", selection: $addTab) {
+                    ForEach(AgentToolsHooksAddTab.allCases) { tab in
+                        Text(tab.title).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    if editingEntry == nil {
+                        AgentToolsSection(L("安装目标")) { targetApplicationList(compact: true) }
+                    }
+                    if editingEntry == nil && addTab == .recipe {
+                        recipesContent
+                    } else {
+                        customComposer
+                    }
+                }
+                .padding(16)
+            }
+            .scrollIndicators(.never)
+        }
+        .frame(width: 640, height: 580)
+        .background(AppStyle.windowBackground)
+    }
+
+    private var hookMetricLine: String {
+        let total = store.hookEntries.count
+        let managed = store.hookEntries.filter(\.managedByConductor).count
+        let custom = total - managed
+        return "\(total) hooks · \(managed) Conductor · \(custom) " + L("自定义")
+    }
+
     private var configuredContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 ToolsSectionLabel(L("已配置 hooks"))
                 Spacer()
-                Text(L("%ld 条", rows.count))
+                Text(hookMetricLine)
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(AppStyle.textTertiary)
             }

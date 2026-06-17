@@ -14,7 +14,6 @@ struct AgentToolsSkillsView: View {
     var body: some View {
         SkillsManagerView(
             presentationMode: .workbench,
-            openAgents: { onOpenModule(.agents) },
             initialSection: initialSection)
             .id(reloadID)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -232,15 +231,6 @@ struct AgentToolsSkillsInspector: View {
                         store.refreshAgentRegistry()
                     }
                     .disabled(store.isLoadingAgentRegistry)
-
-                ToolActionButton(
-                    title: L("打开 Agent 管理"),
-                    systemImage: "cpu",
-                    height: 28,
-                    fontSize: 11,
-                    horizontalPadding: 10) {
-                        onOpenModule(.agents)
-                    }
 
                 ToolActionButton(
                     title: L("复制状态摘要"),

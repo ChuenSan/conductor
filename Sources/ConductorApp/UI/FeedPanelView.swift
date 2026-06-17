@@ -62,7 +62,7 @@ struct FeedPanelView: View {
             }
         }
         .frame(maxHeight: .infinity)
-        .background(AppStyle.windowBackground)
+        .background(.clear)   // 透明：用根底统一磨砂
     }
 }
 

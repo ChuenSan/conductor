@@ -5,7 +5,6 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     case cli
     case usage
     case skills
-    case agents
     case hooks
     case snippets
     case coCreate
@@ -17,7 +16,6 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     var managementModule: AgentToolsManagementModule? {
         switch self {
         case .skills: return .skills
-        case .agents: return .agents
         case .hooks: return .hooks
         default: return nil
         }
@@ -28,7 +26,6 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .cli: return "CLI"
         case .usage: return L("用量")
         case .skills: return "Skills"
-        case .agents: return "Agents"
         case .hooks: return "Hooks"
         case .snippets: return L("片段")
         case .coCreate: return L("共创")
@@ -39,7 +36,6 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .cli: return "terminal"
         case .usage: return "chart.bar.xaxis"
         case .skills: return "wand.and.stars"
-        case .agents: return "cpu"
         case .hooks: return "link"
         case .snippets: return "text.badge.star"
         case .coCreate: return "text.bubble"
@@ -60,7 +56,7 @@ struct ToolsPanelView: View {
             content
         }
         .frame(maxHeight: .infinity)
-        .background(AppStyle.windowBackground)
+        .background(.clear)   // 透明：用根底统一磨砂
     }
 
     private var header: some View {
@@ -134,7 +130,7 @@ struct ToolsPanelView: View {
             UsageStatsView {
                 coordinator.openAgentToolsManagement(.usage)
             }
-        case .skills, .agents, .hooks:
+        case .skills, .hooks:
             Color.clear
                 .onAppear {
                     if let module = coordinator.toolsTab.managementModule {
