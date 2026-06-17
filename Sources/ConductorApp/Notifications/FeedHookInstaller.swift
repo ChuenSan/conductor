@@ -73,7 +73,7 @@ enum FeedHookInstaller {
         """
         #!/usr/bin/env python3
         # conductor-approve —— 由 Conductor 自动生成。Claude Code PreToolUse hook：
-        # 把工具调用经 Unix socket 交给 Conductor 审批面板，阻塞等决策，再按 hook 契约放行/拦截。
+        # 把工具调用经 Unix socket 交给 Conductor 审批，阻塞等决策，再按 hook 契约放行/拦截。
         # 任何异常或 socket 不可用都 fail-open（exit 0、不输出）→ 退回 Claude 自身权限流程。
         import sys, os, json, socket
 
@@ -130,12 +130,12 @@ enum FeedHookInstaller {
                 out = {"hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": "在 Conductor 审批面板被拒绝"}}
+                    "permissionDecisionReason": "在 Conductor 审批中被拒绝"}}
             else:
                 out = {"hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "allow",
-                    "permissionDecisionReason": "在 Conductor 审批面板已批准"}}
+                    "permissionDecisionReason": "在 Conductor 审批中已批准"}}
             sys.stdout.write(json.dumps(out))
             sys.exit(0)
 

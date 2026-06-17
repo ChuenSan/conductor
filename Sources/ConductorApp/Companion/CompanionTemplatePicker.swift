@@ -10,14 +10,18 @@ struct CompanionTemplatePicker: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            LazyHStack(spacing: 8) {
                 ForEach(pets) { pet in
                     cell(pet)
                 }
             }
             .padding(.vertical, 2)
         }
-        .onAppear { pets = CompanionPetCatalog.all() }
+        .onAppear {
+            let discovered = CompanionPetCatalog.all()
+            pets = discovered
+            CodexPetCatalog.prewarm(discovered)
+        }
     }
 
     private func cell(_ pet: CompanionPet) -> some View {

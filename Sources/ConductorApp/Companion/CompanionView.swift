@@ -5,6 +5,7 @@ import SwiftUI
 /// 交互分区：精灵区由原生 NSView 处理（拖拽/点击），气泡区里的审批按钮由 SwiftUI 处理。
 struct CompanionView: View {
     @ObservedObject var controller: CompanionController
+    @ObservedObject private var configStore = ConfigStore.shared
     @State private var pokeBounce = false
 
     private var showApproval: Bool {
@@ -46,6 +47,7 @@ struct CompanionView: View {
         .animation(.easeOut(duration: 0.18), value: controller.bubble)
         .animation(.easeOut(duration: 0.18), value: controller.resultText)
         .animation(.easeOut(duration: 0.18), value: showApproval)
+        .id(configStore.config.appearance.theme)
         .onChange(of: controller.pokeNonce) { _, _ in
             withAnimation(.spring(response: 0.15, dampingFraction: 0.45)) { pokeBounce = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {

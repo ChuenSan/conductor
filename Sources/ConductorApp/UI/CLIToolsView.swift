@@ -477,7 +477,7 @@ struct CLIToolsView: View {
                     Text(L("工具审批"))
                         .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(AppStyle.textPrimary)
-                    Text(L("Claude 执行命令/改文件前先在审批面板确认，拒绝即拦截；socket 不可用时自动放行不卡 agent。仅作用于 Conductor 启动的 Claude。"))
+                    Text(L("Claude 执行命令/改文件前先在 Conductor 审批，拒绝即拦截；socket 不可用时自动放行不卡 agent。仅作用于 Conductor 启动的 Claude。"))
                         .font(.system(size: 11))
                         .foregroundStyle(AppStyle.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

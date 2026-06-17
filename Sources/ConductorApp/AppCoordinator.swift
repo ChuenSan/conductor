@@ -75,8 +75,6 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var cliToolsPresentation = SettingsPresentationState()
     /// Agent 会话管理面板展示状态（与设置 / 工具面板互斥）。
     @Published private(set) var sessionPresentation = SettingsPresentationState()
-    /// 审批面板展示状态（与设置 / 工具 / 会话面板互斥）。
-    @Published private(set) var feedPresentation = SettingsPresentationState()
     /// 会话面板筛选范围（工作区路径或 pane cwd）；nil 表示全部。
     @Published private(set) var sessionScopePath: String?
     /// 会话面板「当前面板续聊」的目标 pane。
@@ -221,7 +219,6 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "shortcutCheatSheet", title: L("键位速查"), defaultKeybinding: "cmd+/") { [weak self] in self?.openShortcutCheatSheet() },
             AppCommand(id: "missionControl", title: L("任务总览"), defaultKeybinding: "cmd+shift+m") { [weak self] in self?.openMissionControl() },
             AppCommand(id: "queuePrompt", title: L("任务队列（当前面板）"), defaultKeybinding: "cmd+shift+enter") { [weak self] in self?.openQueuePanel() },
-            AppCommand(id: "openFeed", title: L("审批面板"), defaultKeybinding: nil) { [weak self] in self?.openFeed() },
             AppCommand(id: "openSnippets", title: L("命令片段库"), defaultKeybinding: nil) { [weak self] in self?.openTools(.snippets) },
             AppCommand(id: "coCreate", title: L("共创计划"), defaultKeybinding: nil) { [weak self] in self?.openTools(.coCreate) },
             AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+ctrl+e") { [weak self] in self?.equalizeSplits() },
@@ -411,7 +408,6 @@ final class AppCoordinator: ObservableObject {
     func openSettings() {
         cliToolsPresentation.close()
         sessionPresentation.close()
-        feedPresentation.close()
         settingsPresentation.open()
     }
 
@@ -419,22 +415,10 @@ final class AppCoordinator: ObservableObject {
         settingsPresentation.close()
     }
 
-    /// 打开审批面板（与其它右侧面板互斥）。agent 来新请求时由 feedCenter 回调自动调用。
-    func openFeed() {
-        settingsPresentation.close()
-        cliToolsPresentation.close()
-        sessionPresentation.close()
-        feedPresentation.open()
-    }
-
-    func closeFeed() {
-        feedPresentation.close()
-    }
-
-    /// 是否有右侧侧栏面板（设置 / CLI 工具 / 会话 / 审批）正在展示。用于让快捷操作面板让位。
+    /// 是否有右侧侧栏面板（设置 / CLI 工具 / 会话）正在展示。用于让快捷操作面板让位。
     var isSidePanelPresented: Bool {
         settingsPresentation.isPresented || cliToolsPresentation.isPresented
-            || sessionPresentation.isPresented || feedPresentation.isPresented
+            || sessionPresentation.isPresented
     }
 
     func openCLITools() {
@@ -442,7 +426,6 @@ final class AppCoordinator: ObservableObject {
         if !ToolsTab.panelTabs.contains(toolsTab) { toolsTab = .cli }
         settingsPresentation.close()
         sessionPresentation.close()
-        feedPresentation.close()
         cliToolsPresentation.open()
     }
 
@@ -451,7 +434,6 @@ final class AppCoordinator: ObservableObject {
         if let module = tab.managementModule {
             settingsPresentation.close()
             sessionPresentation.close()
-            feedPresentation.close()
             cliToolsPresentation.close()
             openAgentToolsManagement(module)
             return
@@ -459,7 +441,6 @@ final class AppCoordinator: ObservableObject {
         toolsTab = tab
         settingsPresentation.close()
         sessionPresentation.close()
-        feedPresentation.close()
         cliToolsPresentation.open()
     }
 
@@ -488,7 +469,6 @@ final class AppCoordinator: ObservableObject {
         sessionTargetPane = targetPane ?? activePane()
         settingsPresentation.close()
         cliToolsPresentation.close()
-        feedPresentation.close()
         sessionPresentation.open()
         SessionManagerStore.shared.refresh()
     }
@@ -675,7 +655,6 @@ final class AppCoordinator: ObservableObject {
                 ?? AutomationCodec.encode(AutomationResponse(id: nil, error: .internalError("服务已停止")))
         }
         if server.start() { automationServer = server }
-        feedCenter.onPendingAdded = { [weak self] in self?.openFeed() }
         feedCenter.startExpiryTimer()
     }
 
@@ -1297,7 +1276,10 @@ final class AppCoordinator: ObservableObject {
         let new = ConfigStore.shared.config
         guard new != old else { return }
 
-        applyTerminalAppearance(effectiveConfig())   // 保留 ⌘+/- 的字号覆盖
+        applyTerminalAppearance(
+            effectiveConfig(),
+            pulsePaletteRefresh: terminalPaletteChanged(from: old, to: new)
+        )   // 保留 ⌘+/- 的字号覆盖
         // 外壳主题色（SwiftUI 部分由 ConfigStore @Published 自动重渲染）
         restyleChrome()
         // 键位可能改了 → 重建命令索引
@@ -1307,25 +1289,51 @@ final class AppCoordinator: ObservableObject {
 
     /// 设置面板改配置：内存即时更新 + 应用终端/外壳/键位 + 落盘到 config.yaml。
     func applyConfig(_ new: AppConfig) {
+        let old = ConfigStore.shared.config
         ConfigStore.shared.set(new)
         UsageCredentials.apply(new)   // 把应用内填的用量 API key 注入进程环境
         refreshLaunchableAgentsFromConfig()
-        applyTerminalAppearance(effectiveConfig())
+        applyTerminalAppearance(
+            effectiveConfig(),
+            pulsePaletteRefresh: terminalPaletteChanged(from: old, to: new)
+        )
         restyleChrome()
         commandRegistry.rebuildIndex()
         ConfigStore.shared.persist()   // 写盘；watcher 自写幂等（new==old → no-op）
     }
 
     /// 把一份配置的终端外观应用到所有 surface（不重建、不丢 scrollback）。热更新与字号缩放共用。
-    private func applyTerminalAppearance(_ config: AppConfig) {
+    private func applyTerminalAppearance(_ config: AppConfig, pulsePaletteRefresh: Bool = false) {
         GhosttyRuntime.shared.applyConfig(config)
+        let visiblePanes = Set(activeTabModel()?.rootSplit.leaves() ?? [])
+        var palettePulseTargets: [GhosttySurface] = []
         for ws in store.workspaces {
             for tab in ws.tabs {
                 for pane in tab.rootSplit.leaves() {
-                    (registry.surface(for: pane) as? GhosttySurface)?.reloadConfig()
+                    guard let surface = registry.surface(for: pane) as? GhosttySurface else { continue }
+                    surface.reloadConfig()
+                    if pulsePaletteRefresh, visiblePanes.contains(pane) {
+                        palettePulseTargets.append(surface)
+                    }
                 }
             }
         }
+        palettePulseTargets.forEach { $0.pulseForPaletteRefresh() }
+    }
+
+    private func terminalPaletteChanged(from old: AppConfig, to new: AppConfig) -> Bool {
+        if ThemePalette.resolve(old.appearance) != ThemePalette.resolve(new.appearance) {
+            return true
+        }
+        let colorOverrideKeys: Set<String> = [
+            "background",
+            "foreground",
+            "cursor-color",
+            "selection-background",
+            "selection-foreground",
+            "palette",
+        ]
+        return colorOverrideKeys.contains { old.ghosttyOverrides[$0] != new.ghosttyOverrides[$0] }
     }
 
     /// 让原生控件（右键菜单 / 颜色选择器 / 下拉…）跟随 app 主题，而非系统外观。

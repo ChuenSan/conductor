@@ -50,7 +50,7 @@ final class FeedCenter: ObservableObject {
     private static let maxAudit = 500
     /// 软超时秒数（无人理多久按默认动作=拒绝结束）。0 = 不超时。
     var defaultTimeout: TimeInterval = 120
-    /// 有新的待人工处置请求入队时回调（AppCoordinator 用它自动弹出审批面板）。
+    /// 有新的待人工处置请求入队时回调。
     var onPendingAdded: (() -> Void)?
 
     init(store: FeedPolicyStore = .standard) {

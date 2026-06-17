@@ -22,7 +22,9 @@ enum AppStyle {
     }
     /// 外壳（侧栏 / Tab 栏 / 状态栏）毛玻璃 tint：压在窗口 NSVisualEffectView 上的半透明主题色，
     /// 让外壳透出模糊桌面又保留 app 自身色调。值越低越通透、越高越实——这一个数就是"玻璃浓淡"旋钮。
-    @MainActor static var chromeFill: Color { windowBackground.opacity(theme.isDark ? 0.62 : 0.68) }
+    @MainActor static var chromeFill: Color {
+        windowBackground.opacity(theme.isDark ? 0.496 : 0.544)   // 比原 0.62 / 0.68 约透明 20%
+    }
 
     // 文字
     @MainActor static var textPrimary: Color { theme.textPrimary }

@@ -363,13 +363,14 @@ final class GhosttySurface: TerminalSurface {
         if focused { reassertDisplayID() }
     }
 
-    /// Some TUIs re-query OSC 10/11 default colors on terminal focus gained,
-    /// but only repaint their transcript on resize. After a live theme change,
-    /// pulse both paths so cached palette-dependent UI refreshes without restart.
-    func pulseForPaletteRefresh() {
+    /// Some TUIs re-query OSC 10/11 default colors on terminal focus gained.
+    /// After a live theme change, pulse that path so cached palette-dependent
+    /// UI refreshes without restart or a manual pane switch.
+    func pulseForPaletteRefresh(includeResizeFallback: Bool = false) {
         guard let surface else { return }
         paletteRefreshGeneration &+= 1
         let generation = paletteRefreshGeneration
+        let wasFirstResponder = hostView.window?.firstResponder === hostView
         ghostty_surface_set_focus(surface, false)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             guard let self, let surface = self.surface else { return }
@@ -378,16 +379,30 @@ final class GhosttySurface: TerminalSurface {
             ghostty_surface_set_focus(surface, true)
             ghostty_surface_refresh(surface)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
-                self?.pulseResizeForPaletteRefresh(generation: generation)
+                guard let self, let surface = self.surface else { return }
+                guard self.paletteRefreshGeneration == generation else { return }
+                if includeResizeFallback {
+                    self.pulseResizeForPaletteRefresh(
+                        generation: generation,
+                        wasFirstResponder: wasFirstResponder
+                    )
+                } else {
+                    ghostty_surface_refresh(surface)
+                    ghostty_surface_render_now(surface)
+                    self.restoreFocusAfterPalettePulse(surface, wasFirstResponder: wasFirstResponder)
+                }
             }
         }
     }
 
-    private func pulseResizeForPaletteRefresh(generation: Int) {
+    private func pulseResizeForPaletteRefresh(generation: Int, wasFirstResponder: Bool) {
         guard let surface else { return }
         guard paletteRefreshGeneration == generation else { return }
         let original = lastSize
-        guard original.width > 1, original.height > 48 else { return }
+        guard original.width > 1, original.height > 48 else {
+            restoreFocusAfterPalettePulse(surface, wasFirstResponder: wasFirstResponder)
+            return
+        }
         let rowHeight = max(lastCellSize?.height ?? 28, 18)
         let shrink = min(max(rowHeight * 3, 96), max(1, original.height - rowHeight))
         let temporaryHeight = max(CGFloat(1), original.height - shrink)
@@ -407,7 +422,13 @@ final class GhosttySurface: TerminalSurface {
             ghostty_surface_set_occlusion(surface, true)
             ghostty_surface_refresh(surface)
             ghostty_surface_render_now(surface)
+            self.restoreFocusAfterPalettePulse(surface, wasFirstResponder: wasFirstResponder)
         }
+    }
+
+    private func restoreFocusAfterPalettePulse(_ surface: ghostty_surface_t, wasFirstResponder: Bool) {
+        let isFirstResponderNow = hostView.window?.firstResponder === hostView
+        ghostty_surface_set_focus(surface, wasFirstResponder || isFirstResponderNow)
     }
 
     private func reassertDisplayID() {

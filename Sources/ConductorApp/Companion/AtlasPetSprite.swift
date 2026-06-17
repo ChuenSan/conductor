@@ -17,14 +17,14 @@ struct AtlasPetSprite: View {
     var animated = true
 
     var body: some View {
-        let frames = framesForMood(in: CodexPetCatalog.animationFrames(of: sheet))
         if animated {
+            let frames = framesForMood(in: CodexPetCatalog.animationFrames(of: sheet))
             TimelineView(.animation) { context in
                 content(frames, at: context.date.timeIntervalSinceReferenceDate)
             }
             .transaction { $0.animation = nil }
         } else {
-            still(frames.first)
+            still(CodexPetCatalog.staticPreviewFrame(of: sheet, mood: mood, atlas: atlas))
         }
     }
 

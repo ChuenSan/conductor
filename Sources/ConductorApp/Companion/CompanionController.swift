@@ -54,6 +54,7 @@ final class CompanionController: ObservableObject {
     /// 程序化兜底模版（atlasSheet 为 nil 时用）。
     private(set) var proceduralTemplate: PetTemplate = PetTemplateCatalog.default
     private var resolvedPetName: String = L(PetTemplateCatalog.default.nameKey)
+    private var petLoadGeneration = 0
 
     var displayName: String {
         if let n = config.name, !n.isEmpty { return n }
@@ -62,18 +63,36 @@ final class CompanionController: ObservableObject {
 
     /// 把 `config.templateID` 解析成具体渲染源（内置程序化 / 发现到的 Codex 图集）。
     private func resolvePet() {
+        petLoadGeneration &+= 1
+        let generation = petLoadGeneration
         let pet = CompanionPetCatalog.pet(id: config.templateID)
+        let templateID = pet.id
         resolvedPetName = pet.name
         switch pet.kind {
         case let .procedural(template):
             proceduralTemplate = template
             atlasSheet = nil
         case let .atlas(url):
-            if let sheet = CodexPetCatalog.sheet(at: url) {
+            if let sheet = CodexPetCatalog.preparedSheet(at: url) {
                 atlasSheet = sheet
-            } else {                                   // 加载失败 → 程序化兜底，不空屏
-                proceduralTemplate = PetTemplateCatalog.default
-                atlasSheet = nil
+                return
+            }
+
+            // 第一次切到某个 Codex 图集时，解码 + 切 8×9 动画帧都比较贵。
+            // 放到后台做，完成后再发布给 SwiftUI，避免点击设置卡片时主线程卡一下。
+            DispatchQueue.global(qos: .userInitiated).async { [url, generation, templateID] in
+                let sheet = CodexPetCatalog.prepareSheet(at: url)
+                Task { @MainActor [weak self] in
+                    guard let self,
+                          self.petLoadGeneration == generation,
+                          self.config.templateID == templateID else { return }
+                    if let sheet {
+                        self.atlasSheet = sheet
+                    } else {                           // 加载失败 → 程序化兜底，不空屏
+                        self.proceduralTemplate = PetTemplateCatalog.default
+                        self.atlasSheet = nil
+                    }
+                }
             }
         }
     }
@@ -91,7 +110,9 @@ final class CompanionController: ObservableObject {
         guard cancellables.isEmpty else { return }   // 防重复 activate
         CodexPetCatalog.ensureDropFolder()       // 备好 ~/.config/conductor/pets/ 投放点（社区宠物丢这里即认）
         ConfigStore.shared.$config
-            .sink { [weak self] cfg in MainActor.assumeIsolated { self?.applyConfig(cfg.companion) } }
+            .map(\.companion)
+            .removeDuplicates()
+            .sink { [weak self] companion in MainActor.assumeIsolated { self?.applyConfig(companion) } }
             .store(in: &cancellables)
         applyConfig(config, isInitial: true)
     }
@@ -147,7 +168,7 @@ final class CompanionController: ObservableObject {
     private func applyConfig(_ new: CompanionConfig, isInitial: Bool = false) {
         let old = config
         config = new
-        resolvePet()
+        if isInitial || old.templateID != new.templateID { resolvePet() }
         if new.enabled {
             startActive()
             showWindowIfNeeded()
@@ -276,14 +297,12 @@ final class CompanionController: ObservableObject {
     // MARK: 交互
 
     /// 点宠物本体：弹一下（反馈）+ 拉前台 + 跳到最值得看处
-    /// （待审批→审批面板；刚通知的会话→那个 pane；跑完→那个 pane；在思考→那个 pane；都没有→摸一下回应）。
+    /// （刚通知的会话→那个 pane；跑完→那个 pane；在思考→那个 pane；都没有→摸一下回应）。
     func handleTap() {
         pokeNonce &+= 1
         guard let coordinator else { return }
         NSApp.activate(ignoringOtherApps: true)
-        if !feedCenter.pending.isEmpty {
-            coordinator.openFeed()
-        } else if let pid = resultPaneID, !pid.isEmpty {
+        if let pid = resultPaneID, !pid.isEmpty {
             coordinator.revealPane(PaneID(pid))
         } else if let pane = coordinator.unseenDonePanes.sorted(by: { $0.value < $1.value }).first {
             coordinator.revealPane(pane)

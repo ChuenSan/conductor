@@ -1,6 +1,15 @@
 import AppKit
 import ConductorCore
 import Foundation
+import ImageIO
+
+private extension NSLock {
+    func withLock<T>(_ body: () -> T) -> T {
+        lock()
+        defer { unlock() }
+        return body()
+    }
+}
 
 /// 一只可选的宠物：要么是程序化内置模版，要么是发现到的 Codex Pets 图集宠物。
 /// 设置里的「模版列表」和桌宠渲染都基于它——内置 + 发现 统一成一份目录。
@@ -74,24 +83,48 @@ enum CodexPetCatalog {
 
     // MARK: 图集加载（CGImage 缓存）
 
+    private static let cacheLock = NSLock()
     private static var cache: [URL: CGImage] = [:]
 
     /// 加载图集为 CGImage（webp/png 走 NSImage/ImageIO）；按 URL 缓存。
     static func sheet(at url: URL) -> CGImage? {
-        if let hit = cache[url] { return hit }
+        if let hit = cachedSheet(at: url) { return hit }
+        guard let cg = loadSheetImage(at: url) else { return nil }
+        return cacheLock.withLock {
+            if let hit = cache[url] { return hit }
+            cache[url] = cg
+            return cg
+        }
+    }
+
+    /// 只读缓存：切换桌宠时先看是否已准备好，避免在主线程同步解码。
+    static func cachedSheet(at url: URL) -> CGImage? {
+        cacheLock.withLock { cache[url] }
+    }
+
+    private static func loadSheetImage(at url: URL) -> CGImage? {
+        let options: CFDictionary = [
+            kCGImageSourceShouldCache: true,
+            kCGImageSourceShouldCacheImmediately: true,
+        ] as CFDictionary
+        if let source = CGImageSourceCreateWithURL(url as CFURL, options),
+           let image = CGImageSourceCreateImageAtIndex(source, 0, options) {
+            return image
+        }
+
+        // 兜底给 ImageIO 认不出的格式；主路径用 ImageIO，便于后台预热时立即解码。
         guard let img = NSImage(contentsOf: url) else { return nil }
         var rect = CGRect(origin: .zero, size: img.size)
-        guard let cg = img.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return nil }
-        cache[url] = cg
-        return cg
+        return img.cgImage(forProposedRect: &rect, context: nil, hints: nil)
     }
 
     /// 把图集切成 9 行帧，**剔除全透明的空格**（真 Codex 图集每行帧数不齐，循环到空格会整只闪没）。
     /// 一次切好缓存；渲染层只按行取帧、按时间索引，不再每帧裁剪。
+    private static let sliceCacheLock = NSLock()
     private static var sliceCache: [ObjectIdentifier: [[CGImage]]] = [:]
     static func animationFrames(of sheet: CGImage, cols: Int = 8, rows: Int = 9) -> [[CGImage]] {
         let key = ObjectIdentifier(sheet)
-        if let hit = sliceCache[key] { return hit }
+        if let hit = sliceCacheLock.withLock({ sliceCache[key] }) { return hit }
         let cw = max(1, sheet.width / cols), ch = max(1, sheet.height / rows)
         var grid: [[CGImage]] = []
         for r in 0..<rows {
@@ -103,8 +136,52 @@ enum CodexPetCatalog {
             }
             grid.append(frames)
         }
-        sliceCache[key] = grid
-        return grid
+        return sliceCacheLock.withLock {
+            if let hit = sliceCache[key] { return hit }
+            sliceCache[key] = grid
+            return grid
+        }
+    }
+
+    /// 已完成图片解码 + 动画切帧时才返回。桌宠切换优先用它，避免首帧 body 在主线程切图。
+    static func preparedSheet(at url: URL) -> CGImage? {
+        guard let sheet = cachedSheet(at: url) else { return nil }
+        let key = ObjectIdentifier(sheet)
+        return sliceCacheLock.withLock { sliceCache[key] != nil } ? sheet : nil
+    }
+
+    /// 后台预热入口：解码图集并切好动画帧。
+    @discardableResult
+    static func prepareSheet(at url: URL) -> CGImage? {
+        guard let sheet = sheet(at: url) else { return nil }
+        _ = animationFrames(of: sheet)
+        return sheet
+    }
+
+    static func prewarm(_ pets: [CompanionPet]) {
+        let urls = pets.compactMap { pet -> URL? in
+            if case let .atlas(url) = pet.kind { return url }
+            return nil
+        }
+        guard !urls.isEmpty else { return }
+        DispatchQueue.global(qos: .utility).async {
+            for url in urls {
+                _ = prepareSheet(at: url)
+            }
+        }
+    }
+
+    /// 设置页的静态缩略图只需要一帧：直接裁当前心情行的第一格，避免首次打开设置时
+    /// 为每只图集宠物同步切 8×9 帧并逐格做透明检测。
+    static func staticPreviewFrame(
+        of sheet: CGImage,
+        mood: PetMood,
+        atlas: SpriteAtlas = SpriteAtlas()
+    ) -> CGImage? {
+        let cw = max(1, sheet.width / atlas.columns)
+        let ch = max(1, sheet.height / atlas.rows)
+        let row = min(max(0, atlas.row(for: mood)), atlas.rows - 1)
+        return sheet.cropping(to: CGRect(x: 0, y: row * ch, width: cw, height: ch))
     }
 
     /// 缩到 8×8 看 alpha 是否全空（判定空帧）。
