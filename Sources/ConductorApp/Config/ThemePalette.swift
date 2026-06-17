@@ -74,6 +74,23 @@ struct ThemePalette: Equatable {
             "9ccfd8", "c4a7e7", "ebbcba", "e0def4",
         ])
 
+    /// 渐变主题的终端配色：底色贴合各自卡底、光标取 accent，ANSI 复用中性深色 16 色（任何深底都耐看）。
+    private static func gradientTerminal(bg: String, fg: String, cursor: String) -> ThemePalette {
+        ThemePalette(background: bg, foreground: fg, cursor: cursor,
+                     selection: "3a3d52", selectionForeground: "ffffff", ansi: dark.ansi)
+    }
+    static let midnight = gradientTerminal(bg: "141b30", fg: "eaf0fb", cursor: "6ea8ff")
+    static let orchidDusk = gradientTerminal(bg: "20162e", fg: "f0e7f7", cursor: "c792ea")
+    static let ember = gradientTerminal(bg: "241410", fg: "f5e9e1", cursor: "ff9466")
+    static let graphite = gradientTerminal(bg: "191c22", fg: "eaecf0", cursor: "7fb0ff")
+    static let deepSea = gradientTerminal(bg: "0d2236", fg: "dcebf6", cursor: "4cc2ff")
+    // 底色取各主题 card（与磨砂 header 同色系 → 终端体与卡片不脱节）。
+    static let blossom = gradientTerminal(bg: "2a2348", fg: "f4eff8", cursor: "ecbfe0")
+    static let nebula = gradientTerminal(bg: "1a1636", fg: "ece7f9", cursor: "c39bf2")
+    static let mojave = gradientTerminal(bg: "241a11", fg: "f3ecdf", cursor: "e3ab5e")
+    static let bordeaux = gradientTerminal(bg: "241019", fg: "f4e7ec", cursor: "e58da8")
+    static let slate = gradientTerminal(bg: "172230", fg: "e9eef6", cursor: "92b8e2")
+
     static func resolve(_ appearance: Appearance) -> ThemePalette {
         switch appearance.theme {
         case "light":
@@ -86,6 +103,16 @@ struct ThemePalette: Equatable {
             return .nord
         case "rose-pine":
             return .rosePine
+        case "midnight": return .midnight
+        case "orchid-dusk": return .orchidDusk
+        case "ember": return .ember
+        case "graphite": return .graphite
+        case "deep-sea": return .deepSea
+        case "blossom": return .blossom
+        case "nebula": return .nebula
+        case "mojave": return .mojave
+        case "bordeaux": return .bordeaux
+        case "slate": return .slate
         case "custom":
             let d = ThemePalette.dark
             let c = appearance.colors

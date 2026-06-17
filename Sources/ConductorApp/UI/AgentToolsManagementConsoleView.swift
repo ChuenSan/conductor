@@ -6,8 +6,9 @@ enum AgentToolsManagementModule: String, CaseIterable, Identifiable {
     case overview
     case cli
     case usage
-    case agents
     case skills
+    case mcp
+    case hooks
     case snippets
     case activity
 
@@ -18,8 +19,9 @@ enum AgentToolsManagementModule: String, CaseIterable, Identifiable {
         case .overview: return L("总览")
         case .cli: return "CLI"
         case .usage: return L("用量")
-        case .agents: return "Agents"
         case .skills: return "Skills"
+        case .mcp: return "MCP"
+        case .hooks: return "Hooks"
         case .snippets: return L("片段")
         case .activity: return L("活动")
         }
@@ -30,8 +32,9 @@ enum AgentToolsManagementModule: String, CaseIterable, Identifiable {
         case .overview: return L("跨渠道能力、状态和入口")
         case .cli: return L("命令行工具、渠道和凭证")
         case .usage: return L("账号用量、成本和趋势")
-        case .agents: return L("Agent 档案、会话和能力")
         case .skills: return L("中央库、安装和分发")
+        case .mcp: return L("服务器、工具和授权")
+        case .hooks: return L("事件、通知和自动化")
         case .snippets: return L("片段、模板和快捷动作")
         case .activity: return L("日志、变更和任务轨迹")
         }
@@ -42,15 +45,16 @@ enum AgentToolsManagementModule: String, CaseIterable, Identifiable {
         case .overview: return "rectangle.3.group"
         case .cli: return "terminal"
         case .usage: return "chart.bar.xaxis"
-        case .agents: return "cpu"
         case .skills: return "wand.and.stars"
+        case .mcp: return "point.3.connected.trianglepath.dotted"
+        case .hooks: return "link"
         case .snippets: return "text.badge.star"
         case .activity: return "waveform.path.ecg"
         }
     }
 
     /// 管理台左栏只展示已实现的模块。片段/活动仍走各自现成入口，不在这里摆空占位。
-    static let railModules: [AgentToolsManagementModule] = [.overview, .cli, .usage, .agents, .skills]
+    static let railModules: [AgentToolsManagementModule] = [.overview, .cli, .usage, .skills, .mcp, .hooks]
 }
 
 enum AgentToolsConsoleLayout {
@@ -112,20 +116,10 @@ enum AgentToolsConsoleLayout {
     }
 }
 
-struct AgentToolsRuntimeSnapshot {
-    var launchableAgents: [LaunchableAgent] = []
-    var paneAgentsByPaneID: [String: String] = [:]
-    var thinkingPaneIDs: Set<String> = []
-    var unseenDonePaneIDs: Set<String> = []
-    var queuedPaneIDs: Set<String> = []
-}
-
 struct AgentToolsManagementConsoleView: View {
     let initialModule: AgentToolsManagementModule
-    var runtime: AgentToolsRuntimeSnapshot
     var onLaunchCLI: (String) -> Void
     var onApplyConfig: (AppConfig) -> Void
-    var onScanAgentsIntoConfig: () -> Void
     var onClose: () -> Void
 
     @StateObject private var store: AgentToolsConsoleStore
@@ -136,17 +130,13 @@ struct AgentToolsManagementConsoleView: View {
 
     init(
         initialModule: AgentToolsManagementModule = .overview,
-        runtime: AgentToolsRuntimeSnapshot = AgentToolsRuntimeSnapshot(),
         onLaunchCLI: @escaping (String) -> Void = { _ in },
         onApplyConfig: @escaping (AppConfig) -> Void = { _ in },
-        onScanAgentsIntoConfig: @escaping () -> Void = {},
         onClose: @escaping () -> Void
     ) {
         self.initialModule = initialModule
-        self.runtime = runtime
         self.onLaunchCLI = onLaunchCLI
         self.onApplyConfig = onApplyConfig
-        self.onScanAgentsIntoConfig = onScanAgentsIntoConfig
         self.onClose = onClose
         _selectedModule = State(initialValue: initialModule)
         _store = StateObject(wrappedValue: AgentToolsConsoleStore())
@@ -193,7 +183,7 @@ struct AgentToolsManagementConsoleView: View {
                 .frame(width: proxy.size.width, height: contentHeight, alignment: .topLeading)
                 .padding(.bottom, AgentToolsConsoleLayout.bottomPadding)
                 .clipped()
-                .animation(AgentToolsMotion.route, value: selectedModule)
+                .animation(AgentToolsMotion.selection, value: selectedModule)
             }
         }
         .frame(
@@ -204,7 +194,7 @@ struct AgentToolsManagementConsoleView: View {
         .background(AppStyle.windowBackground)   // 工作台用纯色底，不透出桌面；半透明只留给卡片本身
         .onAppear { store.start() }
         .onChange(of: initialModule) { _, module in
-            withAnimation(AgentToolsMotion.route) { selectedModule = module }
+            withAnimation(AgentToolsMotion.selection) { selectedModule = module }
         }
     }
 
@@ -214,7 +204,7 @@ struct AgentToolsManagementConsoleView: View {
                 Text(L("Agent Tools 管理台"))
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(AppStyle.textPrimary)
-                Text(L("统一管理 CLI、用量、Agents 和 Skills 能力"))
+                Text(L("统一管理 CLI、用量、Skills、MCP、Hooks 和自动化能力"))
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(AppStyle.textTertiary)
             }
@@ -258,7 +248,7 @@ struct AgentToolsManagementConsoleView: View {
     private func moduleButton(_ module: AgentToolsManagementModule) -> some View {
         let selected = selectedModule == module
         return Button {
-            withAnimation(AgentToolsMotion.route) { selectedModule = module }
+            withAnimation(AgentToolsMotion.selection) { selectedModule = module }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: module.icon)
@@ -302,20 +292,16 @@ struct AgentToolsManagementConsoleView: View {
                     store: store,
                     onApplyConfig: onApplyConfig,
                     onOpenModule: openModule)
-            case .agents:
-                AgentToolsAgentsView(
-                    store: store,
-                    runtime: runtime,
-                    onLaunch: onLaunchCLI,
-                    onApplyConfig: onApplyConfig,
-                    onScanAgentsIntoConfig: onScanAgentsIntoConfig,
-                    onOpenModule: openModule)
             case .skills:
                 AgentToolsSkillsView(
                     store: store,
                     initialSection: skillsInitialSection,
                     reloadID: skillsReloadID,
                     onOpenModule: openModule)
+            case .mcp:
+                AgentToolsMCPWorkbenchView(store: store)
+            case .hooks:
+                AgentToolsHooksWorkbenchView(store: store)
             default:
                 placeholderWorkspace
             }
@@ -376,18 +362,15 @@ struct AgentToolsManagementConsoleView: View {
                 AgentToolsCLIInspector(store: store, onLaunch: onLaunchCLI, onOpenModule: openModule)
             case .usage:
                 AgentToolsUsageInspector(store: store)
-            case .agents:
-                AgentToolsAgentsInspector(
-                    store: store,
-                    runtime: runtime,
-                    onLaunch: onLaunchCLI,
-                    onApplyConfig: onApplyConfig,
-                    onOpenModule: openModule)
             case .skills:
                 AgentToolsSkillsInspector(
                     store: store,
                     onOpenModule: openModule,
                     onOpenSection: openSkillsSection)
+            case .mcp:
+                AgentToolsMCPInspector(store: store)
+            case .hooks:
+                AgentToolsHooksInspector(store: store)
             default:
                 placeholderInspector
             }
@@ -428,11 +411,11 @@ struct AgentToolsManagementConsoleView: View {
     }
 
     private func openModule(_ module: AgentToolsManagementModule) {
-        withAnimation(AgentToolsMotion.route) { selectedModule = module }
+        withAnimation(AgentToolsMotion.selection) { selectedModule = module }
     }
 
     private func openSkillsSection(_ section: String) {
-        withAnimation(AgentToolsMotion.route) {
+        withAnimation(AgentToolsMotion.selection) {
             selectedModule = .skills
             skillsInitialSection = section
             skillsReloadID = UUID()

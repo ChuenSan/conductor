@@ -70,6 +70,11 @@ enum HookInstaller {
         do {
             for source in [HookSource.claude, .codex] {
                 let doc = HookConfigDocument(source: source)
+                // 改名迁移：清掉 cmux 时代的哨兵条目（指向已废弃的 ~/.cmux/bin/cmux-notify）。
+                try doc.removeCommands(containing: "#cmux:")
+                // 先清掉所有 #conductor:notify（含旧版残留在 Notification 事件上的 "blocked" 条——
+                // 它会把"等待输入"误判成"完成"），再只装回该装的 3 个事件。幂等、顺带清残留。
+                try doc.removeCommands(containing: "#conductor:\(recipeID)")
                 try doc.addCommand(event: HookEventName.stop, command: stopCommand)
                 try doc.addCommand(event: HookEventName.userPromptSubmit, command: busyCommand)
                 try doc.addCommand(event: HookEventName.sessionStart, command: sessionStartCommand)
@@ -78,6 +83,18 @@ enum HookInstaller {
             throw InstallError.write(L("写 hook 配置失败：%@", error.localizedDescription))
         }
         return status()
+    }
+
+    /// 启动时自动迁移：用户已装过完成通知 hook 的话，重装一遍（幂等）——
+    /// 既刷新脚本到新版（未知参数不再误报完成），又清掉旧版残留在 Notification 事件上的 "blocked" 条。
+    /// 没装过的用户不动（不擅自给人塞 hook）。
+    static func migrateIfInstalled() {
+        let installed = HookSource.allCases.contains { source in
+            HookConfigDocument(source: source).entries()
+                .contains { $0.command.contains("#conductor:\(recipeID)") }
+        }
+        guard installed else { return }
+        _ = try? installAll()
     }
 
     static func installScript() throws {
@@ -126,7 +143,6 @@ enum HookInstaller {
         CWD="$(first_nonempty "$(json_get cwd)" "$(json_get working_directory)" "$(json_get workingDirectory)" "${PWD:-}")"
         TRANSCRIPT_PATH="$(first_nonempty "$(json_get transcript_path)" "$(json_get transcriptPath)")"
         LIFECYCLE="$(first_nonempty "$(json_get lifecycle)" "$(json_get state)")"
-        MESSAGE="$(first_nonempty "$(json_get message)" "$(json_get response)" "$(json_get output)" "$(json_get summary)")"
 
         write_event() {
           typ="$1"
@@ -150,11 +166,12 @@ enum HookInstaller {
           write_event "busy" "" ""
         elif [ "$1" = "session-start" ]; then
           write_event "sessionStart" "" ""
-        else
-          TITLE="AI 已完成"
-          MSG="$MESSAGE"
-          write_event "done" "$TITLE" "$MSG"
+        elif [ -z "$1" ]; then
+          # 无参 = Stop（agent 答完）→ 完成通知 + 熄灭思考动效
+          write_event "done" "AI 已完成" "可以查看结果了"
         fi
+        # 其它参数（如旧版 Notification hook 传的 "blocked"）：不动作。
+        # 关键：绝不把"等待输入/通知"误判成"完成"——那会误报完成并把仍在运行的转圈熄掉。
         exit 0
         """
     }

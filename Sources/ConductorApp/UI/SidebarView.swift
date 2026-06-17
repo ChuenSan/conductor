@@ -82,7 +82,11 @@ struct SidebarView: View {
             Spacer(minLength: 0)
         }
         .frame(maxHeight: .infinity)
-        .background(AppStyle.sidebarBackground)
+        // 侧栏 = 下沉的一层：在根渐变/磨砂之上叠一层极淡暗色，与正文画布拉开层级（不再一片同色）。
+        .background(Color.black.opacity(AppStyle.theme.isDark ? 0.18 : 0.045))
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(AppStyle.separator).frame(width: 1)   // 右缘 hairline：层与层的接缝
+        }
         // 从 Finder 拖文件夹进来 → 新建工作区（同路径已存在则直接切过去）
         .dropDestination(for: URL.self) { urls, _ in
             handleFolderDrop(urls)
@@ -109,7 +113,7 @@ struct SidebarView: View {
     }
 
     private var workspaceList: some View {
-        VStack(alignment: isCollapsed ? .center : .leading, spacing: 3) {
+        VStack(alignment: isCollapsed ? .center : .leading, spacing: 5) {
             let workspaces = coordinator.visibleWorkspaces
             ForEach(Array(workspaces.enumerated()), id: \.element.id) { index, ws in
                 let selected = ws.id == coordinator.store.activeWorkspace
@@ -251,6 +255,7 @@ struct SidebarView: View {
                 if !isCollapsed {
                     Text("Conductor")
                         .font(.system(size: 16, weight: .bold))
+                        .tracking(0.2)
                         .foregroundStyle(AppStyle.textPrimary)
                     Spacer()
                 }
@@ -719,7 +724,7 @@ private struct WorkspaceRow: View {
         .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .fill(selected ? AppStyle.activeFill : (hovering ? AppStyle.hoverFill : Color.clear))
+                .fill(selected ? AppStyle.accent.opacity(0.12) : (hovering ? AppStyle.hoverFill : Color.clear))
         )
         .contentShape(Rectangle())
         .animation(Motion.hover, value: hovering)
@@ -829,9 +834,9 @@ private struct WorkspaceRow: View {
 
     private var workspaceGlyph: some View {
         ZStack(alignment: .topTrailing) {
-            Image(systemName: "folder")
+            Image(systemName: selected ? "folder.fill" : "folder")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+                .foregroundStyle(selected ? AppStyle.accent : AppStyle.textSecondary)
                 .frame(width: isCollapsed ? 22 : 18, height: 20)
             // 收起态没有名字行，思考动效挂在图标右下角（右上角留给 pane 数角标）
             if isCollapsed, isThinking {

@@ -57,7 +57,11 @@ public enum JSONValue: Codable, Equatable, Sendable {
     public var intValue: Int? {
         switch self {
         case .int(let value): return value
-        case .double(let value): return Int(value)
+        case .double(let value):
+            // Int(value) 对 inf/NaN/超 Int 范围会 trap：先夹住（畸形 pi 数字字段不该崩进程）。
+            guard value.isFinite, value >= -9.223_372_036_854_775e18, value <= 9.223_372_036_854_775e18
+            else { return nil }
+            return Int(value)
         case .string(let value): return Int(value)
         default: return nil
         }

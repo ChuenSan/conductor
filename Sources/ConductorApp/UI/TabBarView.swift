@@ -140,7 +140,7 @@ struct TabBarView: View {
         .padding(.top, 4)
         .padding(.bottom, 4)
         .frame(maxWidth: .infinity)
-        .background(AppStyle.windowBackground)   // 与终端区同底，无分隔条
+        .background(.clear)   // 透明：用根底统一磨砂
         .onChange(of: renameFocused) { _, focused in
             if !focused, editingTab != nil { commitRename() }
         }
@@ -387,18 +387,16 @@ private struct TabPill: View {
             Color.clear.frame(width: 15, height: 15)   // 预留 X 位
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.62), value: tab.paneCount)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .fill(selected ? AnyShapeStyle(AppStyle.elevated)
+                .fill(selected ? AnyShapeStyle(AppStyle.accent.opacity(0.14))
                                : (hovering ? AnyShapeStyle(AppStyle.hoverFill) : AnyShapeStyle(Color.clear)))
-                .shadow(color: (selected && !AppStyle.theme.isDark) ? Color(nsColor: AppStyle.theme.cardShadowColor).opacity(0.05) : .clear,
-                        radius: 1.5, y: 0.5)
         )
         .overlay(
             RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .strokeBorder(selected ? AppStyle.separator : Color.clear, lineWidth: 1)
+                .strokeBorder(selected ? AppStyle.accent.opacity(0.38) : Color.clear, lineWidth: 1)
         )
         .contentShape(Rectangle())
     }

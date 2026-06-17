@@ -15,11 +15,22 @@ final class AgentToolsConsoleStore: ObservableObject {
     @Published private(set) var managedSkills: [ManagedSkill] = []
     @Published private(set) var isLoadingAgentRegistry = false
     @Published private(set) var agentRegistryError: String?
-    @Published private(set) var overviewRows: [AgentToolsOverviewRow] = []
+    @Published private(set) var mcpServers: [AgentToolsMCPServerRecord] = []
+    @Published private(set) var isScanningMCP = false
+    @Published private(set) var mcpScanError: String?
+    /// 写操作成功后的瞬时确认（安装/编辑/停用/删除），UI 显示为横幅。
+    @Published var mcpNotice: String?
+    @Published private(set) var hookEntries: [HookEntry] = []
+    @Published private(set) var hookRecipeStates: [String: Set<HookSource>] = [:]
+    @Published private(set) var isLoadingHooks = false
+    @Published private(set) var hookError: String?
+    @Published var hookNotice: String?
     @Published var selectedOverviewRowID: String?
     @Published var selectedCLIToolID: String?
     @Published var selectedUsageProviderID: String?
     @Published var selectedAgentID: String?
+    @Published var selectedMCPServerID: String?
+    @Published var selectedHookEntryID: String?
 
     private var started = false
 
@@ -53,7 +64,7 @@ final class AgentToolsConsoleStore: ObservableObject {
         skillTools.filter { $0.enabled && ($0.installed || $0.isCustom || $0.hasPathOverride) }.count
     }
 
-    private func rebuildOverviewRows() {
+    var overviewRows: [AgentToolsOverviewRow] {
         let providerMap = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0) })
         let toolRows = AgentCatalog.all.map { descriptor -> AgentToolsOverviewRow in
             let tool = cliTools.first { $0.id == descriptor.id }
@@ -95,7 +106,7 @@ final class AgentToolsConsoleStore: ObservableObject {
                     capability: Self.capability(for: provider.id, hasUsageProvider: true))
             }
 
-        overviewRows = toolRows + providerOnlyRows
+        return toolRows + providerOnlyRows
     }
 
     var selectedOverviewRow: AgentToolsOverviewRow? {
@@ -111,6 +122,16 @@ final class AgentToolsConsoleStore: ObservableObject {
     var selectedUsageProvider: UsageProviderEntry? {
         guard let selectedUsageProviderID else { return nil }
         return UsageProviderCatalog.all.first { $0.id == selectedUsageProviderID }
+    }
+
+    var selectedMCPServer: AgentToolsMCPServerRecord? {
+        guard let selectedMCPServerID else { return nil }
+        return mcpServers.first { $0.id == selectedMCPServerID }
+    }
+
+    var selectedHookEntry: HookEntry? {
+        guard let selectedHookEntryID else { return nil }
+        return hookEntries.first { $0.id == selectedHookEntryID }
     }
 
     func overviewRow(for tool: CLIToolStatus) -> AgentToolsOverviewRow? {
@@ -139,7 +160,6 @@ final class AgentToolsConsoleStore: ObservableObject {
             }
             scanCLI()
         }
-        rebuildOverviewRows()
         usageReport = UsageReportStore.load(daysBack: 30)
         Task { await prepareProviders() }
         refreshAgentRegistry()
@@ -157,7 +177,6 @@ final class AgentToolsConsoleStore: ObservableObject {
                 withAnimation(AgentToolsMotion.reveal) {
                     self.cliTools = detected
                     self.cliDetectedAt = cache.detectedAt
-                    self.rebuildOverviewRows()
                     self.isScanningCLI = false
                 }
             }
@@ -185,17 +204,13 @@ final class AgentToolsConsoleStore: ObservableObject {
         guard !isProviderLoading(provider.id) else { return }
         let cfg = ConfigStore.shared.config
         providerStates[provider.id] = .loading
-        rebuildOverviewRows()
         Task {
             let configured = await Task.detached(priority: .utility) {
                 UsageCredentials.apply(cfg)
                 return provider.isConfigured()
             }.value
             guard configured else {
-                await MainActor.run {
-                    providerStates[provider.id] = .unconfigured
-                    rebuildOverviewRows()
-                }
+                await MainActor.run { providerStates[provider.id] = .unconfigured }
                 return
             }
             do {
@@ -203,7 +218,6 @@ final class AgentToolsConsoleStore: ObservableObject {
                 await MainActor.run {
                     withAnimation(AgentToolsMotion.selection) {
                         providerStates[provider.id] = .loaded(snapshot)
-                        rebuildOverviewRows()
                     }
                     UsageHistoryStore.shared.record(id: provider.id, snapshot: snapshot)
                     UsageHistoryStore.shared.persist()
@@ -211,7 +225,6 @@ final class AgentToolsConsoleStore: ObservableObject {
             } catch {
                 await MainActor.run {
                     providerStates[provider.id] = .error(error.localizedDescription)
-                    rebuildOverviewRows()
                 }
             }
         }
@@ -263,6 +276,331 @@ final class AgentToolsConsoleStore: ObservableObject {
         }
     }
 
+    func refreshMCP() {
+        guard !isScanningMCP else { return }
+        isScanningMCP = true
+        mcpScanError = nil
+        Task {
+            let snapshot = await Task.detached(priority: .utility) {
+                AgentToolsMCPScanner.scan()
+            }.value
+            await MainActor.run {
+                withAnimation(AgentToolsMotion.reveal) {
+                    self.mcpServers = snapshot.servers
+                    self.mcpScanError = snapshot.error
+                    self.isScanningMCP = false
+                    if let selected = self.selectedMCPServerID,
+                       !snapshot.servers.contains(where: { $0.id == selected }) {
+                        self.selectedMCPServerID = snapshot.servers.first?.id
+                    } else if self.selectedMCPServerID == nil {
+                        self.selectedMCPServerID = snapshot.servers.first?.id
+                    }
+                }
+            }
+        }
+    }
+
+    func installMCPTemplate(_ template: AgentToolsMCPTemplate, to clientIDs: Set<String>) {
+        mcpScanError = nil
+        guard !clientIDs.isEmpty else { mcpScanError = L("请先选择要安装到的应用"); return }
+        do {
+            try AgentToolsMCPScanner.installTemplate(template, to: clientIDs)
+            refreshMCP()
+            mcpNotice = L("已安装 %@ 到 %ld 个应用", template.name, clientIDs.count)
+        } catch {
+            mcpScanError = L("写入 MCP 配置失败：%@", error.localizedDescription)
+        }
+    }
+
+    func installCustomMCPServer(name: String,
+                                transport: AgentToolsMCPTransport,
+                                command: String?,
+                                args: [String],
+                                url: String?,
+                                env: [String: String],
+                                to clientIDs: Set<String>) {
+        mcpScanError = nil
+        guard !clientIDs.isEmpty else { mcpScanError = L("请先选择要安装到的应用"); return }
+        do {
+            try AgentToolsMCPScanner.installCustomServer(
+                name: name,
+                transport: transport,
+                command: command,
+                args: args,
+                url: url,
+                env: env,
+                to: clientIDs)
+            refreshMCP()
+            mcpNotice = L("已写入 %@ 到 %ld 个应用", name, clientIDs.count)
+        } catch {
+            mcpScanError = L("写入 MCP 配置失败：%@", error.localizedDescription)
+        }
+    }
+
+    func removeMCPServer(_ server: AgentToolsMCPServerRecord) {
+        mcpScanError = nil
+        do {
+            if server.enabled {
+                try AgentToolsMCPScanner.removeServer(server)
+            } else {
+                // 已停用的 server 只在停用仓里，删它＝清出停用仓。
+                try AgentToolsMCPParkingStore().remove(
+                    configPath: server.configPath, keyPath: server.sourceKeyPath, name: server.name)
+            }
+            refreshMCP()
+            mcpNotice = L("已移除 %@", server.name)
+        } catch {
+            mcpScanError = L("移除 MCP server 失败：%@", error.localizedDescription)
+        }
+    }
+
+    /// 读回某 server 的原始配置（含 env 值），供编辑表单回填。
+    func mcpRawConfig(for server: AgentToolsMCPServerRecord) -> [String: Any]? {
+        AgentToolsMCPScanner.rawConfig(for: server)
+    }
+
+    /// 编辑一台已有 server（改名 / transport / 命令 / URL / env），原地写回。
+    func updateMCPServer(_ original: AgentToolsMCPServerRecord,
+                         newName: String,
+                         transport: AgentToolsMCPTransport,
+                         command: String?,
+                         args: [String],
+                         url: String?,
+                         env: [String: String]) {
+        mcpScanError = nil
+        do {
+            try AgentToolsMCPScanner.updateServer(
+                original: original, newName: newName, transport: transport,
+                command: command, args: args, url: url, env: env)
+            refreshMCP()
+            mcpNotice = L("已保存 %@", newName)
+        } catch {
+            mcpScanError = L("写入 MCP 配置失败：%@", error.localizedDescription)
+        }
+    }
+
+    /// 启用 / 停用一台 server（软开关，可逆，不删配置）。
+    func setMCPServerEnabled(_ server: AgentToolsMCPServerRecord, enabled: Bool) {
+        mcpScanError = nil
+        do {
+            if enabled {
+                try AgentToolsMCPScanner.enableServer(server)
+            } else {
+                try AgentToolsMCPScanner.disableServer(server)
+            }
+            refreshMCP()
+            mcpNotice = enabled ? L("已启用 %@", server.name) : L("已停用 %@", server.name)
+        } catch {
+            mcpScanError = enabled ? L("启用失败：%@", error.localizedDescription)
+                                   : L("停用失败：%@", error.localizedDescription)
+        }
+    }
+
+    // MARK: - MCP 原生 JSON 编辑
+
+    /// 读出某 client 配置文件的 mcpServers JSON 文本（编辑器回填）。
+    func mcpClientJSON(for adapter: AgentToolsMCPClientAdapter) -> String {
+        AgentToolsMCPScanner.currentServersJSON(for: adapter)
+    }
+
+    /// 保存用户编辑的 JSON 到某 client。成功返回 nil；失败返回错误文本（编辑器行内展示）。
+    @discardableResult
+    func saveMCPClientJSON(_ text: String, for adapter: AgentToolsMCPClientAdapter) -> String? {
+        mcpScanError = nil
+        do {
+            try AgentToolsMCPScanner.saveServersJSON(text, for: adapter)
+            refreshMCP()
+            mcpNotice = L("已写入 %@ 的配置", adapter.displayName)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    func refreshHooks() {
+        guard !isLoadingHooks else { return }
+        isLoadingHooks = true
+        hookError = nil
+        Task {
+            let result = await Task.detached(priority: .utility) { () -> ([HookEntry], [String: Set<HookSource>]) in
+                var entries = HookSource.allCases.flatMap { HookConfigDocument(source: $0).entries() }
+                // 合入停用仓里的 hook（enabled = false），供重新启用。
+                let parking = HookParkingStore()
+                entries += parking.load().map {
+                    HookEntry(source: $0.source, event: $0.event, command: $0.command,
+                              timeout: $0.timeout, enabled: false)
+                }
+                entries.sort { ($0.event, $0.command, $0.enabled ? 0 : 1) < ($1.event, $1.command, $1.enabled ? 0 : 1) }
+                var states: [String: Set<HookSource>] = [:]
+                for recipe in HookRecipes.all {
+                    states[recipe.id] = HookRecipes.installedSources(recipe)
+                }
+                return (entries, states)
+            }.value
+            await MainActor.run {
+                withAnimation(AgentToolsMotion.reveal) {
+                    self.hookEntries = result.0
+                    self.hookRecipeStates = result.1
+                    self.isLoadingHooks = false
+                    if let selected = self.selectedHookEntryID,
+                       !result.0.contains(where: { $0.id == selected }) {
+                        self.selectedHookEntryID = result.0.first?.id
+                    } else if self.selectedHookEntryID == nil {
+                        self.selectedHookEntryID = result.0.first?.id
+                    }
+                }
+            }
+        }
+    }
+
+    func installHookRecipe(_ recipe: HookRecipe) {
+        installHookRecipe(recipe, to: Set(HookSource.allCases))
+    }
+
+    func installHookRecipe(_ recipe: HookRecipe, to sources: Set<HookSource>) {
+        hookError = nil
+        guard !sources.isEmpty else { hookError = L("请先选择要安装到的应用"); return }
+        do {
+            try recipe.ensureScript?()
+            for source in sources {
+                try HookConfigDocument(source: source).addCommand(
+                    event: HookEventName.stop,
+                    command: recipe.command)
+            }
+            refreshHooks()
+            hookNotice = L("已安装 %@ 到 %ld 个应用", recipe.title, sources.count)
+        } catch {
+            hookError = L("安装失败：%@", error.localizedDescription)
+        }
+    }
+
+    func uninstallHookRecipe(_ recipe: HookRecipe) {
+        hookError = nil
+        do {
+            _ = try HookRecipes.uninstall(recipe)
+            refreshHooks()
+            hookNotice = L("已移除 %@", recipe.title)
+        } catch {
+            hookError = L("移除失败：%@", error.localizedDescription)
+        }
+    }
+
+    func removeHookEntry(_ entry: HookEntry) {
+        hookError = nil
+        do {
+            if entry.enabled {
+                // 精确删除该条（不是子串匹配，避免误删共享标记串的其它 hook）。
+                try HookConfigDocument(source: entry.source).removeExact(event: entry.event, command: entry.command)
+            } else {
+                // 已停用的条目只存在于停用仓，删它＝清出停用仓。
+                try HookParkingStore().remove(source: entry.source, event: entry.event, command: entry.command)
+            }
+            refreshHooks()
+            hookNotice = L("已移除 hook（%@）", entry.event)
+        } catch {
+            hookError = L("移除失败：%@", error.localizedDescription)
+        }
+    }
+
+    /// 编辑一条已有 hook（事件 / 命令 / 超时）。仅对启用中的条目生效。
+    func updateHookEntry(_ entry: HookEntry, newEvent: String, newCommand: String, newTimeout: Int) {
+        hookError = nil
+        let event = newEvent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let command = newCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !event.isEmpty, !command.isEmpty else { return }
+        do {
+            try HookConfigDocument(source: entry.source).update(
+                event: entry.event, command: entry.command,
+                newEvent: event, newCommand: command, newTimeout: newTimeout)
+            refreshHooks()
+            hookNotice = L("已保存 hook（%@）", event)
+        } catch {
+            hookError = L("写入 Hook 配置失败：%@", error.localizedDescription)
+        }
+    }
+
+    /// 启用 / 停用一条 hook。停用＝从 settings.json 移走、原样存入停用仓；启用＝写回、清出停用仓。
+    func setHookEntryEnabled(_ entry: HookEntry, enabled: Bool) {
+        hookError = nil
+        let parking = HookParkingStore()
+        do {
+            if enabled {
+                guard !entry.enabled else { return }
+                try HookConfigDocument(source: entry.source).addCommand(
+                    event: entry.event, command: entry.command, timeout: entry.timeout)
+                try parking.remove(source: entry.source, event: entry.event, command: entry.command)
+            } else {
+                guard entry.enabled else { return }
+                try parking.add(ParkedHook(
+                    source: entry.source, event: entry.event,
+                    command: entry.command, timeout: entry.timeout))
+                try HookConfigDocument(source: entry.source).removeExact(event: entry.event, command: entry.command)
+            }
+            refreshHooks()
+            hookNotice = enabled ? L("已启用 hook（%@）", entry.event) : L("已停用 hook（%@）", entry.event)
+        } catch {
+            hookError = enabled ? L("启用失败：%@", error.localizedDescription)
+                                : L("停用失败：%@", error.localizedDescription)
+        }
+    }
+
+    /// 从指定 source 卸载 recipe（不是全卸）。
+    func uninstallHookRecipe(_ recipe: HookRecipe, from sources: Set<HookSource>) {
+        hookError = nil
+        guard !sources.isEmpty else { return }
+        do {
+            for source in sources {
+                // 按唯一哨兵 #conductor:<id> 移除（子串匹配在此安全）。
+                try HookConfigDocument(source: source).removeCommands(containing: "#conductor:\(recipe.id)")
+            }
+            refreshHooks()
+            hookNotice = sources.count == 1
+                ? L("已从 %@ 移除 %@", sources.first!.displayName, recipe.title)
+                : L("已移除 %@", recipe.title)
+        } catch {
+            hookError = L("移除失败：%@", error.localizedDescription)
+        }
+    }
+
+    // MARK: - Hooks 原生 JSON 编辑
+
+    func hooksJSON(for source: HookSource) -> String {
+        HookConfigDocument(source: source).rawHooksJSON()
+    }
+
+    @discardableResult
+    func saveHooksJSON(_ text: String, for source: HookSource) -> String? {
+        hookError = nil
+        do {
+            try HookConfigDocument(source: source).saveHooksJSON(text)
+            refreshHooks()
+            hookNotice = L("已写入 %@ 的 hooks", source.displayName)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    func installCustomHook(sources: Set<HookSource>, event: String, command: String, timeout: Int) {
+        hookError = nil
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        let eventName = event.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !eventName.isEmpty else { hookError = L("命令和事件名不能为空"); return }
+        guard !sources.isEmpty else { hookError = L("请先选择要安装到的应用"); return }
+        do {
+            for source in sources {
+                try HookConfigDocument(source: source).addCommand(
+                    event: eventName,
+                    command: trimmed,
+                    timeout: timeout)
+            }
+            refreshHooks()
+            hookNotice = L("已写入 hook（%@）到 %ld 个应用", eventName, sources.count)
+        } catch {
+            hookError = L("写入 Hook 配置失败：%@", error.localizedDescription)
+        }
+    }
+
     func copyDiagnostics(for row: AgentToolsOverviewRow) {
         copyText(diagnostics(for: row))
     }
@@ -279,30 +617,22 @@ final class AgentToolsConsoleStore: ObservableObject {
 
     private func prepareProviders() async {
         let cfg = ConfigStore.shared.config
-        let resolved = await Task.detached(priority: .utility) { () -> [(UsageProviderEntry, Bool, Bool)] in
+        let resolved = await Task.detached(priority: .utility) { () -> [(UsageProviderEntry, Bool)] in
             UsageCredentials.apply(cfg)
             return UsageProviderCatalog.all
                 .filter { UsageCredentials.isVisible($0, config: cfg) }
-                .map {
-                    let deferred = UsageCredentials.shouldDeferBrowserCredentialProbe($0, config: cfg)
-                    let configured = UsageCredentials.isConfiguredWithoutBrowserPrompt($0, config: cfg)
-                    return ($0, configured, deferred)
-                }
+                .map { ($0, $0.isConfigured()) }
         }.value
 
         let visible = resolved.map(\.0)
         let configuredIDs = Set(resolved.filter(\.1).map { $0.0.id })
-        let deferredIDs = Set(resolved.filter(\.2).map { $0.0.id })
         await MainActor.run {
             providers = visible
             providerStates = providerStates.filter { id, _ in visible.contains { $0.id == id } }
             for provider in visible {
                 guard providerStates[provider.id] == nil else { continue }
-                providerStates[provider.id] = (configuredIDs.contains(provider.id) || deferredIDs.contains(provider.id))
-                    ? .manual
-                    : .unconfigured
+                providerStates[provider.id] = configuredIDs.contains(provider.id) ? .manual : .unconfigured
             }
-            rebuildOverviewRows()
         }
     }
 
@@ -333,6 +663,8 @@ final class AgentToolsConsoleStore: ObservableObject {
         }
         lines.append("capability.usage: \(row.usageSignal.shortLabel)")
         lines.append("capability.skills: \(row.skillSignal.shortLabel)")
+        lines.append("capability.hooks: \(row.hookSignal.shortLabel)")
+        lines.append("capability.mcp: \(row.mcpSignal.shortLabel)")
         return lines.joined(separator: "\n")
     }
 
@@ -388,19 +720,51 @@ final class AgentToolsConsoleStore: ObservableObject {
 
     private static let usageProviderIDs = Set(UsageProviderCatalog.all.map(\.id))
     private static let skillToolKeys = Set(SkillToolCatalog.defaultAdapters.map(\.key))
+    private static let hookAgentIDs: Set<String> = [
+        "codex",
+        "claude",
+        "gemini",
+        "cursor",
+        "copilot",
+        "grok",
+        "opencode",
+        "amp",
+        "auggie",
+        "augment",
+        "qwen",
+    ]
+    private static let mcpAgentIDs: Set<String> = [
+        "codex",
+        "claude",
+        "gemini",
+        "cursor",
+        "copilot",
+        "grok",
+        "opencode",
+        "amp",
+        "auggie",
+        "augment",
+        "qwen",
+        "windsurf",
+    ]
+
     private static func capability(for id: String, hasUsageProvider: Bool) -> AgentToolCapability {
         let skillKey = skillKeyByAgentID[id] ?? id
         return AgentToolCapability(
             usage: hasUsageProvider || usageProviderIDs.contains(id),
-            skills: skillToolKeys.contains(skillKey))
+            skills: skillToolKeys.contains(skillKey),
+            hooks: hookAgentIDs.contains(id),
+            mcp: mcpAgentIDs.contains(id))
     }
 }
 
 struct AgentToolCapability {
     var usage: Bool
     var skills: Bool
+    var hooks: Bool
+    var mcp: Bool
 
-    static let providerOnly = AgentToolCapability(usage: true, skills: false)
+    static let providerOnly = AgentToolCapability(usage: true, skills: false, hooks: false, mcp: false)
 }
 
 struct AgentToolsOverviewRow: Identifiable {
@@ -434,6 +798,8 @@ struct AgentToolsOverviewRow: Identifiable {
     }
 
     var skillSignal: AgentToolsSignal { capability.skills ? .ready(L("支持")) : .unavailable("-") }
+    var hookSignal: AgentToolsSignal { capability.hooks ? .ready(L("支持")) : .unavailable("-") }
+    var mcpSignal: AgentToolsSignal { capability.mcp ? .ready(L("支持")) : .unavailable("-") }
 
     private static func providerSignal(_ state: ToolUsageState?) -> AgentToolsSignal {
         switch state {
@@ -623,8 +989,7 @@ struct AgentToolsOverviewView: View {
     }
 
     private var capabilityMatrix: some View {
-        let visibleRows = filteredRows
-        return VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 ToolsSectionLabel(L("能力矩阵"))
                 Spacer()
@@ -636,10 +1001,10 @@ struct AgentToolsOverviewView: View {
                 matrixHeader
                 ScrollView {
                     LazyVStack(spacing: 1) {
-                        ForEach(visibleRows) { row in
+                        ForEach(filteredRows) { row in
                             matrixRow(row)
                         }
-                        if visibleRows.isEmpty {
+                        if filteredRows.isEmpty {
                             Text(L("无匹配结果"))
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(AppStyle.textTertiary)
@@ -666,6 +1031,8 @@ struct AgentToolsOverviewView: View {
             matrixHeaderCell(L("凭证"))
             matrixHeaderCell("Usage")
             matrixHeaderCell("Skills")
+            matrixHeaderCell("Hooks")
+            matrixHeaderCell("MCP")
         }
         .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(AppStyle.textTertiary)
@@ -706,6 +1073,8 @@ struct AgentToolsOverviewView: View {
                 AgentToolsSignalPill(signal: row.credentialSignal)
                 AgentToolsSignalPill(signal: row.usageSignal)
                 AgentToolsSignalPill(signal: row.skillSignal)
+                AgentToolsSignalPill(signal: row.hookSignal)
+                AgentToolsSignalPill(signal: row.mcpSignal)
             }
             .padding(.horizontal, 9)
             .frame(height: 44)
@@ -736,7 +1105,6 @@ struct AgentToolsOverviewView: View {
                 .foregroundStyle(AppStyle.textTertiary)
             quickAction(L("CLI"), icon: "terminal", module: .cli)
             quickAction(L("用量"), icon: "chart.bar.xaxis", module: .usage)
-            quickAction("Agents", icon: "cpu", module: .agents)
             quickAction("Skills", icon: "wand.and.stars", module: .skills)
             Spacer(minLength: 0)
         }
@@ -838,6 +1206,8 @@ struct AgentToolsOverviewInspector: View {
                 signalRow(L("凭证"), row.credentialSignal)
                 signalRow("Usage", row.usageSignal)
                 signalRow("Skills", row.skillSignal)
+                signalRow("Hooks", row.hookSignal)
+                signalRow("MCP", row.mcpSignal)
             }
 
             VStack(alignment: .leading, spacing: 8) {

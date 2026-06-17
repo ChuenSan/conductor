@@ -47,10 +47,11 @@ jobs:
           {
             echo "## Highlights"
             echo
-            echo "- Fixed update checks to avoid GitHub REST API rate limits by resolving the latest release through the public redirect URL."
-            echo "- Improved update error messages so HTTP/rate-limit failures are no longer shown as opaque NSURLErrorDomain codes."
-            echo "- Reworked terminal theme refresh and scrollback restore so live Codex panes repaint more reliably after theme changes."
-            echo "- Reduced Agent Tools management animations and removed the MCP/Hook management modules from the console."
+            echo "- Added a desktop Companion pet that ambiently reflects agent state — thinking, done, needs-approval, error — in the screen corner."
+            echo "- Inline approve/deny right from the pet's bubble, sharing the same Feed approval engine as the side panel."
+            echo "- Companion settings: enable, nickname, dock corner, speech bubbles, and separate Companion / System notification toggles (config-driven, no hook install needed)."
+            echo "- Codex Pets sprite-sheet support: drop an 8x9 pet bundle into ~/.config/conductor/pets/ (openpets-compatible), plus built-in pets."
+            echo "- Full English/Chinese localization for the Companion surface."
             echo
             echo "## Assets"
             echo

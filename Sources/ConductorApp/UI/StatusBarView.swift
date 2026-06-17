@@ -32,7 +32,6 @@ struct StatusBarView: View {
                 }
             }
             Spacer(minLength: 8)
-            ActivityBellView(coordinator: coordinator, log: coordinator.activityLog)
             CodexUsageChip(snapshot: usageMonitor.codex) { coordinator.openTools(.usage) }
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 Text(ctx.date.formatted(date: .omitted, time: .shortened))
@@ -44,7 +43,7 @@ struct StatusBarView: View {
         .padding(.horizontal, 12)
         .frame(height: 21)
         .frame(maxWidth: .infinity)
-        .background(AppStyle.windowBackground)
+        .background(.clear)   // 透明：用根底统一磨砂
     }
 
     private func item(_ icon: String, _ text: String, accent: Bool = false) -> some View {

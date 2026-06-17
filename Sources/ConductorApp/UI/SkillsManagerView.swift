@@ -318,7 +318,6 @@ struct SkillsManagerView: View {
     @State private var projects: [SkillProject] = []
     @State private var projectTargets: [SkillProjectTargetRecord] = []
     @State private var projectSkills: [String: [ProjectSkillInfo]] = [:]
-    @State private var projectSkillsLoadingIDs: Set<String> = []
     @State private var auditEntries: [SkillAuditEntry] = []
     @State private var scanResult: SkillScanResult?
     @State private var selectedSection: SkillManagerSection
@@ -335,7 +334,6 @@ struct SkillsManagerView: View {
     @State private var installTab: SkillInstallTab = .market
     @State private var drawerSection: SkillDrawerSection = .library
     @State private var libraryViewMode: SkillLibraryViewMode = .grid
-    @State private var libraryLayoutWidth: CGFloat = 0
     @State private var focusedWorkspaceToolKey: String?
     @State private var skillsShSkills: [SkillsShSkill] = []
     @State private var skillsShLoading = false
@@ -1908,73 +1906,39 @@ struct SkillsManagerView: View {
 
     @ViewBuilder
     private var libraryWorkbenchContent: some View {
-        let visibleSkills = filteredSkills
         if loading && skills.isEmpty {
             loadingRow
-        } else if visibleSkills.isEmpty {
+        } else if filteredSkills.isEmpty {
             emptyState(
                 icon: "tray",
                 title: query.isEmpty ? L("中央库还没有 Skill") : L("没有匹配的 Skill"),
                 detail: L("从 Discover 添加，或扫描本机已有 Agent Skills 后纳入管理。"))
         } else {
-            libraryHealthStrip(filteredCount: visibleSkills.count)
+            libraryHealthStrip
             libraryFilterBar
             if !selectedSkillIDs.isEmpty {
                 librarySelectionBar
                     .transition(AgentToolsMotion.revealTransition)
             }
-            libraryWidthReader
-            libraryWorkspaceLayout(visibleSkills)
+            libraryWorkspaceLayout
         }
     }
 
-    private func libraryWorkspaceLayout(_ visibleSkills: [ManagedSkill]) -> some View {
-        let profile = libraryLayoutProfile(for: libraryLayoutWidth)
-        return libraryWorkspaceColumns(
-            visibleSkills,
-            inspectorWidth: profile.inspectorWidth,
-            gridMinimum: profile.gridMinimum,
-            minLibraryWidth: profile.minLibraryWidth)
+    private var libraryWorkspaceLayout: some View {
+        ViewThatFits(in: .horizontal) {
+            libraryWorkspaceColumns(inspectorWidth: 318, gridMinimum: 220, minLibraryWidth: 340)
+            libraryWorkspaceColumns(inspectorWidth: 260, gridMinimum: 190, minLibraryWidth: 300)
+            libraryWorkspaceColumns(inspectorWidth: nil, gridMinimum: 190, minLibraryWidth: 0)
+        }
         .animation(AgentToolsMotion.route, value: libraryViewMode)
         .animation(AgentToolsMotion.selection, value: inspectedSkill?.id)
     }
 
-    private var libraryWidthReader: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .onAppear {
-                    updateLibraryLayoutWidth(proxy.size.width)
-                }
-                .onChange(of: proxy.size.width) { _, newWidth in
-                    updateLibraryLayoutWidth(newWidth)
-                }
-        }
-        .frame(height: 0)
-    }
-
-    private func updateLibraryLayoutWidth(_ width: CGFloat) {
-        let roundedWidth = width.rounded()
-        guard roundedWidth > 0,
-              abs(roundedWidth - libraryLayoutWidth) >= 1 else { return }
-        libraryLayoutWidth = roundedWidth
-    }
-
-    private func libraryLayoutProfile(for width: CGFloat) -> (inspectorWidth: CGFloat?, gridMinimum: CGFloat, minLibraryWidth: CGFloat) {
-        if width >= 668 {
-            return (318, 220, 340)
-        }
-        if width >= 570 {
-            return (260, 190, 300)
-        }
-        return (nil, 190, 0)
-    }
-
-    private func libraryWorkspaceColumns(_ visibleSkills: [ManagedSkill],
-                                         inspectorWidth: CGFloat?,
+    private func libraryWorkspaceColumns(inspectorWidth: CGFloat?,
                                          gridMinimum: CGFloat,
                                          minLibraryWidth: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            libraryCollection(visibleSkills, gridMinimum: gridMinimum)
+            libraryCollection(gridMinimum: gridMinimum)
                 .frame(minWidth: minLibraryWidth, maxWidth: .infinity, alignment: .topLeading)
 
             if let skill = inspectedSkill, let inspectorWidth {
@@ -1986,18 +1950,18 @@ struct SkillsManagerView: View {
     }
 
     @ViewBuilder
-    private func libraryCollection(_ visibleSkills: [ManagedSkill], gridMinimum: CGFloat) -> some View {
+    private func libraryCollection(gridMinimum: CGFloat) -> some View {
         switch libraryViewMode {
         case .list:
-            LazyVStack(alignment: .leading, spacing: 8) {
-                ForEach(visibleSkills) { skill in
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(filteredSkills) { skill in
                     libraryRow(for: skill)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
         case .grid:
             LazyVGrid(columns: [GridItem(.adaptive(minimum: gridMinimum), spacing: 8)], spacing: 8) {
-                ForEach(visibleSkills) { skill in
+                ForEach(filteredSkills) { skill in
                     libraryCard(for: skill)
                 }
             }
@@ -2083,9 +2047,9 @@ struct SkillsManagerView: View {
             onDelete: { pendingDelete = skill })
     }
 
-    private func libraryHealthStrip(filteredCount: Int) -> some View {
+    private var libraryHealthStrip: some View {
         HStack(spacing: 8) {
-            ToolBadge(text: L("%ld 个 Skill", filteredCount), color: AppStyle.textTertiary, style: .muted)
+            ToolBadge(text: L("%ld 个 Skill", filteredSkills.count), color: AppStyle.textTertiary, style: .muted)
             if unsyncedSkillsCount > 0 {
                 ToolBadge(text: L("%ld 未同步", unsyncedSkillsCount), color: AppStyle.waitAmber)
             }
@@ -2487,9 +2451,7 @@ struct SkillsManagerView: View {
                     skills: skills,
                     expanded: expandedPresetID == preset.id,
                     onExpand: {
-                        withAnimation(AgentToolsMotion.reveal) {
-                            expandedPresetID = expandedPresetID == preset.id ? nil : preset.id
-                        }
+                        expandedPresetID = expandedPresetID == preset.id ? nil : preset.id
                     },
                     onApply: { applyPreset(preset) },
                     onRemove: { removePreset(preset) },
@@ -2537,60 +2499,49 @@ struct SkillsManagerView: View {
 
     @ViewBuilder
     private var projectsContent: some View {
-        Group {
-            HStack(spacing: 8) {
-                Button(action: addProject) {
-                    Label(L("添加项目"), systemImage: "folder.badge.gearshape")
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .frame(height: 28)
-                        .skillPrimaryControlSurface()
-                }
-                .buttonStyle(PressScaleStyle())
-                Spacer()
+        HStack(spacing: 8) {
+            Button(action: addProject) {
+                Label(L("添加项目"), systemImage: "folder.badge.gearshape")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .skillPrimaryControlSurface()
             }
+            .buttonStyle(PressScaleStyle())
+            Spacer()
+        }
 
-            if projects.isEmpty {
-                emptyState(
-                    icon: "folder.badge.gearshape",
-                    title: L("还没有项目工作区"),
-                    detail: L("添加一个项目目录后，可以把中央库 Skills 同步到该项目的 .codex/.claude 等本地目录。"))
-            } else {
-                ForEach(projects) { project in
-                    ProjectWorkspaceRow(
-                        project: project,
-                        projectSkills: projectSkills[project.id] ?? [],
-                        projectSkillsLoading: projectSkillsLoadingIDs.contains(project.id),
-                        centralSkills: skills,
-                        presets: presets,
-                        tools: Array(projectTools.prefix(12)),
-                        targets: projectTargets.filter { $0.projectID == project.id },
-                        expanded: expandedProjectID == project.id,
-                        onExpand: {
-                            withAnimation(AgentToolsMotion.reveal) {
-                                expandedProjectID = expandedProjectID == project.id ? nil : project.id
-                            }
-                        },
-                        onReveal: { reveal(project.path) },
-                        onDelete: { pendingProjectDelete = project },
-                        onToggleSkill: { skill, tool, enabled in
-                            toggleProjectSkill(project: project, skill: skill, tool: tool, enabled: enabled)
-                        },
-                        onApplyPreset: { preset in
-                            applyPresetToProject(preset: preset, project: project)
-                        },
-                        onRemovePreset: { preset in
-                            removePresetFromProject(preset: preset, project: project)
-                        })
-                }
+        if projects.isEmpty {
+            emptyState(
+                icon: "folder.badge.gearshape",
+                title: L("还没有项目工作区"),
+                detail: L("添加一个项目目录后，可以把中央库 Skills 同步到该项目的 .codex/.claude 等本地目录。"))
+        } else {
+            ForEach(projects) { project in
+                ProjectWorkspaceRow(
+                    project: project,
+                    projectSkills: projectSkills[project.id] ?? [],
+                    centralSkills: skills,
+                    presets: presets,
+                    tools: Array(projectTools.prefix(12)),
+                    targets: projectTargets.filter { $0.projectID == project.id },
+                    expanded: expandedProjectID == project.id,
+                    onExpand: {
+                        expandedProjectID = expandedProjectID == project.id ? nil : project.id
+                    },
+                    onReveal: { reveal(project.path) },
+                    onDelete: { pendingProjectDelete = project },
+                    onToggleSkill: { skill, tool, enabled in
+                        toggleProjectSkill(project: project, skill: skill, tool: tool, enabled: enabled)
+                    },
+                    onApplyPreset: { preset in
+                        applyPresetToProject(preset: preset, project: project)
+                    },
+                    onRemovePreset: { preset in
+                        removePresetFromProject(preset: preset, project: project)
+                    })
             }
-        }
-        .onAppear {
-            loadProjectSkillsIfNeeded()
-        }
-        .onChange(of: projects.map(\.id)) { _, _ in
-            loadProjectSkillsIfNeeded()
         }
     }
 
@@ -3199,7 +3150,6 @@ struct SkillsManagerView: View {
     private func reload(scan: Bool = false) {
         do {
             let engine = try ensureEngine()
-            let includeProjectSkills = selectedSection == .projects
             loading = true
             error = nil
             loadingText = scan ? L("正在扫描本机 Skills…") : L("正在刷新 Skills…")
@@ -3216,17 +3166,32 @@ struct SkillsManagerView: View {
                             presetSummaries: engine.presetSummaries(),
                             projects: projects,
                             projectTargets: engine.listProjectTargets(),
-                            projectSkills: includeProjectSkills
-                                ? Dictionary(
-                                    uniqueKeysWithValues: projects.map {
-                                        ($0.id, engine.readProjectSkills(projectID: $0.id))
-                                    })
-                                : nil,
+                            projectSkills: Dictionary(
+                                uniqueKeysWithValues: projects.map {
+                                    ($0.id, engine.readProjectSkills(projectID: $0.id))
+                                }),
                             auditEntries: engine.listAudit(limit: 140),
                             scanResult: result)
                     }.value
                     await MainActor.run {
-                        applyPayload(payload)
+                        skills = payload.skills
+                        tools = payload.tools
+                        presets = payload.presets
+                        presetSummaries = payload.presetSummaries
+                        projects = payload.projects
+                        projectTargets = payload.projectTargets
+                        projectSkills = payload.projectSkills
+                        auditEntries = payload.auditEntries
+                        selectedSkillIDs = selectedSkillIDs.intersection(Set(payload.skills.map(\.id)))
+                        if let inspectedSkillID,
+                           !payload.skills.contains(where: { $0.id == inspectedSkillID }) {
+                            self.inspectedSkillID = payload.skills.first?.id
+                        } else if inspectedSkillID == nil {
+                            inspectedSkillID = payload.skills.first?.id
+                        }
+                        if let result = payload.scanResult { applyScanResult(result) }
+                        loading = false
+                        loadingText = ""
                     }
                 } catch {
                     await MainActor.run {
@@ -3240,77 +3205,6 @@ struct SkillsManagerView: View {
             self.error = error.localizedDescription
             loading = false
             loadingText = ""
-        }
-    }
-
-    private func applyPayload(_ payload: SkillManagerPayload) {
-        skills = payload.skills
-        tools = payload.tools
-        presets = payload.presets
-        presetSummaries = payload.presetSummaries
-        projects = payload.projects
-        projectTargets = payload.projectTargets
-        if let refreshedProjectSkills = payload.projectSkills {
-            projectSkills = refreshedProjectSkills
-        } else {
-            invalidateProjectSkillCache(for: payload.projects)
-        }
-        auditEntries = payload.auditEntries
-        selectedSkillIDs = selectedSkillIDs.intersection(Set(payload.skills.map(\.id)))
-        if let inspectedSkillID,
-           !payload.skills.contains(where: { $0.id == inspectedSkillID }) {
-            self.inspectedSkillID = payload.skills.first?.id
-        } else if inspectedSkillID == nil {
-            inspectedSkillID = payload.skills.first?.id
-        }
-        if let result = payload.scanResult { applyScanResult(result) }
-        loading = false
-        loadingText = ""
-        if selectedSection == .projects {
-            loadProjectSkillsIfNeeded()
-        }
-    }
-
-    private func invalidateProjectSkillCache(for projects: [SkillProject]) {
-        let projectIDs = Set(projects.map(\.id))
-        projectSkills.removeAll()
-        projectSkillsLoadingIDs.formIntersection(projectIDs)
-    }
-
-    private func loadProjectSkillsIfNeeded(force: Bool = false) {
-        let projectIDs = projects
-            .map(\.id)
-            .filter { id in
-                (force || projectSkills[id] == nil) && !projectSkillsLoadingIDs.contains(id)
-            }
-        guard !projectIDs.isEmpty else { return }
-
-        do {
-            let engine = try ensureEngine()
-            projectSkillsLoadingIDs.formUnion(projectIDs)
-            Task {
-                do {
-                    let loaded = try await Task.detached(priority: .utility) {
-                        try Task.checkCancellation()
-                        return projectIDs.map { id in
-                            (id, engine.readProjectSkills(projectID: id))
-                        }
-                    }.value
-                    await MainActor.run {
-                        for (id, skills) in loaded {
-                            projectSkills[id] = skills
-                        }
-                        projectSkillsLoadingIDs.subtract(projectIDs)
-                    }
-                } catch {
-                    await MainActor.run {
-                        projectSkillsLoadingIDs.subtract(projectIDs)
-                        self.error = error.localizedDescription
-                    }
-                }
-            }
-        } catch {
-            self.error = error.localizedDescription
         }
     }
 
@@ -3655,9 +3549,8 @@ struct SkillsManagerView: View {
 
     private func toggleSkillExpansion(_ skill: ManagedSkill) {
         let opening = expandedSkillID != skill.id
-        withAnimation(AgentToolsMotion.reveal) {
-            expandedSkillID = opening ? skill.id : nil
-        }
+        // 瞬时展开：不做高度生长动画（那种"撑开"和工作台其它处的淡入不是一种动作）。
+        expandedSkillID = opening ? skill.id : nil
         if opening {
             inspectedSkillID = skill.id
             loadSkillDetails(skill)
@@ -4025,7 +3918,6 @@ struct SkillsManagerView: View {
                      operation: @escaping @Sendable (SkillManagerEngine) throws -> Void) {
         do {
             let engine = try ensureEngine()
-            let includeProjectSkills = selectedSection == .projects
             loading = true
             loadingText = message
             error = nil
@@ -4043,17 +3935,32 @@ struct SkillsManagerView: View {
                             presetSummaries: engine.presetSummaries(),
                             projects: projects,
                             projectTargets: engine.listProjectTargets(),
-                            projectSkills: includeProjectSkills
-                                ? Dictionary(
-                                    uniqueKeysWithValues: projects.map {
-                                        ($0.id, engine.readProjectSkills(projectID: $0.id))
-                                    })
-                                : nil,
+                            projectSkills: Dictionary(
+                                uniqueKeysWithValues: projects.map {
+                                    ($0.id, engine.readProjectSkills(projectID: $0.id))
+                                }),
                             auditEntries: engine.listAudit(limit: 140),
                             scanResult: result)
                     }.value
                     await MainActor.run {
-                        applyPayload(payload)
+                        skills = payload.skills
+                        tools = payload.tools
+                        presets = payload.presets
+                        presetSummaries = payload.presetSummaries
+                        projects = payload.projects
+                        projectTargets = payload.projectTargets
+                        projectSkills = payload.projectSkills
+                        auditEntries = payload.auditEntries
+                        selectedSkillIDs = selectedSkillIDs.intersection(Set(payload.skills.map(\.id)))
+                        if let inspectedSkillID,
+                           !payload.skills.contains(where: { $0.id == inspectedSkillID }) {
+                            self.inspectedSkillID = payload.skills.first?.id
+                        } else if inspectedSkillID == nil {
+                            inspectedSkillID = payload.skills.first?.id
+                        }
+                        if let result = payload.scanResult { applyScanResult(result) }
+                        loading = false
+                        loadingText = ""
                     }
                 } catch {
                     await MainActor.run {
@@ -5680,7 +5587,7 @@ private struct SkillManagerPayload: Sendable {
     var presetSummaries: [SkillPresetSummary]
     var projects: [SkillProject]
     var projectTargets: [SkillProjectTargetRecord]
-    var projectSkills: [String: [ProjectSkillInfo]]?
+    var projectSkills: [String: [ProjectSkillInfo]]
     var auditEntries: [SkillAuditEntry]
     var scanResult: SkillScanResult?
 }
@@ -6664,7 +6571,6 @@ private struct PresetRow: View {
 private struct ProjectWorkspaceRow: View {
     let project: SkillProject
     let projectSkills: [ProjectSkillInfo]
-    let projectSkillsLoading: Bool
     let centralSkills: [ManagedSkill]
     let presets: [SkillPreset]
     let tools: [SkillToolInfo]
@@ -6695,9 +6601,7 @@ private struct ProjectWorkspaceRow: View {
                             .font(.system(size: 12.5, weight: .semibold))
                             .foregroundStyle(AppStyle.textPrimary)
                             .lineLimit(1)
-                        tinyBadge(
-                            projectSkillsLoading ? L("扫描中") : L("%ld 个项目 Skill", projectSkills.count),
-                            color: projectSkillsLoading ? AppStyle.waitAmber : AppStyle.textTertiary)
+                        tinyBadge(L("%ld 个项目 Skill", projectSkills.count), color: AppStyle.textTertiary)
                         if !targets.isEmpty {
                             tinyBadge(L("同步 %ld", targets.count), color: AppStyle.accent)
                         }
@@ -6848,15 +6752,7 @@ private struct ProjectWorkspaceRow: View {
             Text(L("项目实际存在的 Skills"))
                 .font(.system(size: 10.5, weight: .semibold))
                 .foregroundStyle(AppStyle.textSecondary)
-            if projectSkillsLoading {
-                HStack(spacing: 7) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(L("正在扫描项目 Skills…"))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(AppStyle.textTertiary)
-                }
-            } else if projectSkills.isEmpty {
+            if projectSkills.isEmpty {
                 Text(L("这个项目目录里还没有扫描到项目级 Skills。"))
                     .font(.system(size: 10.5))
                     .foregroundStyle(AppStyle.textTertiary)
@@ -7344,14 +7240,7 @@ private func skillAuditActionLabel(_ action: String) -> String {
     }
 }
 
-private func collapsedPath(_ path: String) -> String {
-    let home = FileManager.default.homeDirectoryForCurrentUser.path
-    if path == home { return "~" }
-    if path.hasPrefix(home + "/") {
-        return "~" + path.dropFirst(home.count)
-    }
-    return path
-}
+private func collapsedPath(_ path: String) -> String { PathDisplay.tilde(path) }
 
 private func byteCount(_ bytes: Int64) -> String {
     ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)

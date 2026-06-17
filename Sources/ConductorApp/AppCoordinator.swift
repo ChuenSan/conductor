@@ -49,6 +49,8 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var cliToolsPresentation = SettingsPresentationState()
     /// Agent 会话管理面板展示状态（与设置 / 工具面板互斥）。
     @Published private(set) var sessionPresentation = SettingsPresentationState()
+    /// 审批面板展示状态（与设置 / 工具 / 会话面板互斥）。
+    @Published private(set) var feedPresentation = SettingsPresentationState()
     /// 会话面板筛选范围（工作区路径或 pane cwd）；nil 表示全部。
     @Published private(set) var sessionScopePath: String?
     /// 会话面板「当前面板续聊」的目标 pane。
@@ -70,6 +72,7 @@ final class AppCoordinator: ObservableObject {
     private let hooksInbox = HooksInbox()
     /// 工作区侧栏元数据（自动化状态/进度/日志 + 端口 + PR）。
     let workspaceMetadata = WorkspaceMetadataCenter()
+    let feedCenter = FeedCenter()
     /// 自动化 socket 服务（conductor CLI 的对端）。
     private var automationServer: AutomationSocketServer?
     private var automationService: AutomationService?
@@ -100,12 +103,6 @@ final class AppCoordinator: ObservableObject {
     /// 头条活计时的起点账本：pane 进入思考集合时记 busy 时刻为起点，离开即清。
     private var thinkingStartTimes: [PaneID: Date] = [:]
     private static let hookThinkingTimeout: TimeInterval = 600
-    /// 输出活动兜底：每个「思考中」pane 的可见视口文本哈希 + 上次变化时刻。
-    /// agent 答完停在 REPL 提示符时（进程还在、Stop hook 可能丢失），视口不再变化；
-    /// 静止超过 thinkingIdleWindow 即熄灭思考动效，不必死等 600s 超时。
-    private var thinkingViewportHash: [PaneID: Int] = [:]
-    private var thinkingLastOutputChange: [PaneID: Date] = [:]
-    private static let thinkingIdleWindow: TimeInterval = 6
     private var agentPollTimer: Timer?
     /// 命令面板（懒创建）。
     private lazy var commandPalette = CommandPaletteController(coordinator: self)
@@ -129,6 +126,8 @@ final class AppCoordinator: ObservableObject {
     private var capturedPaneSessions: [String: AgentSessionRef] = [:]
     /// hook 写入的 pane → 原生 agent session token 账本，优先于目录扫描启发式。
     let agentSessionBindings: AgentSessionBindingStore
+    /// 通用 surface resume binding（tmux/自定义 shell 恢复），低于 agent session 优先级。
+    let surfaceResumeBindings: SurfaceResumeBindingStore
     /// 本轮启动时记录的净化后 agent 启动命令，hook 上报 session 后合并进账本。
     private var paneLaunchCommands: [PaneID: AgentLaunchCommandSnapshot] = [:]
 
@@ -145,6 +144,8 @@ final class AppCoordinator: ObservableObject {
         stateStore = StateStore(fileURL: appSupport.appendingPathComponent("state.json"))
         agentSessionBindings = AgentSessionBindingStore(
             fileURL: appSupport.appendingPathComponent("agent-sessions.json"))
+        surfaceResumeBindings = SurfaceResumeBindingStore(
+            fileURL: appSupport.appendingPathComponent("surface-resume-bindings.json"))
         LoginShellPathCache.shared.captureOnce(
             shell: ConfigStore.shared.config.terminal.shell ?? ProcessInfo.processInfo.environment["SHELL"])
 
@@ -154,7 +155,7 @@ final class AppCoordinator: ObservableObject {
                 // 每个 pane 注入自动化身份：hook 与 conductor CLI 都靠它们定位 pane / 连 socket。
                 surface.extraEnvironment = [
                     ("CONDUCTOR_PANE_ID", pane.value),
-                    (AutomationProtocol.socketPathEnvKey, AutomationSocketServer.defaultSocketURL.path),
+                    ("CONDUCTOR_SOCKET", AutomationSocketServer.defaultSocketURL.path),
                 ]
                 // 内容恢复：这个 pane 有待回放快照 → 带上，attach 时回放。
                 if let file = self?.pendingRestoreFiles.removeValue(forKey: pane) {
@@ -193,6 +194,7 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "shortcutCheatSheet", title: L("键位速查"), defaultKeybinding: "cmd+/") { [weak self] in self?.openShortcutCheatSheet() },
             AppCommand(id: "missionControl", title: L("任务总览"), defaultKeybinding: "cmd+shift+m") { [weak self] in self?.openMissionControl() },
             AppCommand(id: "queuePrompt", title: L("任务队列（当前面板）"), defaultKeybinding: "cmd+shift+enter") { [weak self] in self?.openQueuePanel() },
+            AppCommand(id: "openFeed", title: L("审批面板"), defaultKeybinding: nil) { [weak self] in self?.openFeed() },
             AppCommand(id: "openSnippets", title: L("命令片段库"), defaultKeybinding: nil) { [weak self] in self?.openTools(.snippets) },
             AppCommand(id: "coCreate", title: L("共创计划"), defaultKeybinding: nil) { [weak self] in self?.openTools(.coCreate) },
             AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+ctrl+e") { [weak self] in self?.equalizeSplits() },
@@ -382,6 +384,7 @@ final class AppCoordinator: ObservableObject {
     func openSettings() {
         cliToolsPresentation.close()
         sessionPresentation.close()
+        feedPresentation.close()
         settingsPresentation.open()
     }
 
@@ -389,9 +392,22 @@ final class AppCoordinator: ObservableObject {
         settingsPresentation.close()
     }
 
-    /// 是否有右侧侧栏面板（设置 / CLI 工具 / 会话）正在展示。用于让快捷操作面板让位。
+    /// 打开审批面板（与其它右侧面板互斥）。agent 来新请求时由 feedCenter 回调自动调用。
+    func openFeed() {
+        settingsPresentation.close()
+        cliToolsPresentation.close()
+        sessionPresentation.close()
+        feedPresentation.open()
+    }
+
+    func closeFeed() {
+        feedPresentation.close()
+    }
+
+    /// 是否有右侧侧栏面板（设置 / CLI 工具 / 会话 / 审批）正在展示。用于让快捷操作面板让位。
     var isSidePanelPresented: Bool {
-        settingsPresentation.isPresented || cliToolsPresentation.isPresented || sessionPresentation.isPresented
+        settingsPresentation.isPresented || cliToolsPresentation.isPresented
+            || sessionPresentation.isPresented || feedPresentation.isPresented
     }
 
     func openCLITools() {
@@ -399,6 +415,7 @@ final class AppCoordinator: ObservableObject {
         if !ToolsTab.panelTabs.contains(toolsTab) { toolsTab = .cli }
         settingsPresentation.close()
         sessionPresentation.close()
+        feedPresentation.close()
         cliToolsPresentation.open()
     }
 
@@ -407,6 +424,7 @@ final class AppCoordinator: ObservableObject {
         if let module = tab.managementModule {
             settingsPresentation.close()
             sessionPresentation.close()
+            feedPresentation.close()
             cliToolsPresentation.close()
             openAgentToolsManagement(module)
             return
@@ -414,6 +432,7 @@ final class AppCoordinator: ObservableObject {
         toolsTab = tab
         settingsPresentation.close()
         sessionPresentation.close()
+        feedPresentation.close()
         cliToolsPresentation.open()
     }
 
@@ -442,6 +461,7 @@ final class AppCoordinator: ObservableObject {
         sessionTargetPane = targetPane ?? activePane()
         settingsPresentation.close()
         cliToolsPresentation.close()
+        feedPresentation.close()
         sessionPresentation.open()
         SessionManagerStore.shared.refresh()
     }
@@ -534,7 +554,9 @@ final class AppCoordinator: ObservableObject {
                     // 上次这里跑着 agent → 按配置自动续聊，或把 resume 命令预输入到提示符。
                     let session = agentSessionBindings.ref(for: pane.value)
                         ?? result.state.paneSessions[pane.value]
-                    _ = stageSessionRestore(session, for: pane)
+                    if !stageSessionRestore(session, for: pane) {
+                        stageSurfaceResumeRestore(surfaceResumeBindings.binding(for: pane.value), for: pane)
+                    }
                 }
             }
         }
@@ -618,30 +640,8 @@ final class AppCoordinator: ObservableObject {
                 ?? AutomationCodec.encode(AutomationResponse(id: nil, error: .internalError("服务已停止")))
         }
         if server.start() { automationServer = server }
-
-        workspaceMetadata.workspacesProvider = { [weak self] in
-            guard let self else { return [] }
-            // 文件夹浏览上下文是隐藏工作区，不参与元数据扫描
-            return store.workspaces
-                .filter { $0.id != Self.folderContextID }
-                .map { ($0.id, $0.path) }
-        }
-        workspaceMetadata.branchProvider = { path in
-            Self.gitBranch(at: path)
-        }
-        workspaceMetadata.start()
-    }
-
-    /// 免 spawn 读当前分支：解析 `.git/HEAD` 的 `ref: refs/heads/<branch>`。
-    nonisolated static func gitBranch(at path: String) -> String? {
-        guard let head = try? String(contentsOfFile: path + "/.git/HEAD", encoding: .utf8) else {
-            return nil
-        }
-        let trimmed = head.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("ref: refs/heads/") else {
-            return trimmed.isEmpty ? nil : String(trimmed.prefix(8))   // detached HEAD → 短 SHA
-        }
-        return String(trimmed.dropFirst("ref: refs/heads/".count))
+        feedCenter.onPendingAdded = { [weak self] in self?.openFeed() }
+        feedCenter.startExpiryTimer()
     }
 
     /// 启动后低优先级预扫一次 30 天用量并写缓存，让用量面板首次打开即有数据。
@@ -655,6 +655,9 @@ final class AppCoordinator: ObservableObject {
     // MARK: - 通知（agent 完成）
 
     private func startNotifications() {
+        // 完成通知 hook 默认就装好：**仅在未装全/脚本过期时**才安装。
+        // 不再每次启动都"删→加"——那会和正在跑的会话抢配置、出现思考 hook 短暂消失（转圈丢）。
+        if !HookInstaller.status().allDone { _ = try? HookInstaller.installAll() }
         NotificationManager.shared.configure()
         NotificationManager.shared.onActivatePane = { [weak self] paneID in
             self?.revealPane(PaneID(paneID))
@@ -665,29 +668,31 @@ final class AppCoordinator: ObservableObject {
         hooksInbox.start()
     }
 
+    /// hook 事件分类：决定走「点亮思考 / 仅记会话不通知 / 完成通知」哪条路。可单测。
+    enum HookEventKind: Equatable { case busy, sessionStart, done }
+    nonisolated static func classifyHookEvent(type: String?) -> HookEventKind {
+        switch type {
+        case "busy": return .busy
+        case "sessionStart", "session-start", "sessionstart": return .sessionStart
+        default: return .done   // nil（旧脚本无 type = Stop）或 "done"
+        }
+    }
+
     private func handleHookEvent(_ event: HookEvent) {
         let pane = event.paneID.map { PaneID($0) }
         rememberAgentSession(from: event, pane: pane)
 
-        let eventType = event.type?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-        // busy（UserPromptSubmit）：纯状态事件，点亮思考动效即返回，不发通知
-        if eventType == "busy" {
-            if let pane {
-                setHookThinking(pane, active: true)
-            }
+        switch Self.classifyHookEvent(type: event.type) {
+        case .busy:
+            // UserPromptSubmit：纯状态事件，点亮思考动效即返回，不发通知
+            if let pane { setHookThinking(pane, active: true) }
             return
-        }
-
-        // sessionStart 只用于尽早记录原生 session id，不代表任务完成。
-        // 这类事件常发生在启动/加载 MCP 阶段，不能弹完成通知。
-        if eventType == "sessionstart" {
+        case .sessionStart:
+            // SessionStart（含「恢复会话」）：上面已记原生 session id，到此为止——
+            // 不发通知、不当成完成（曾经的 bug：sessionStart 落进完成分支，一恢复会话就弹通知）。
             return
-        }
-
-        // 只允许 Stop 对应的 done（以及旧脚本无 type）进入完成通知路径。
-        guard eventType == nil || eventType == "" || eventType == "done" || eventType == "stop" else {
-            return
+        case .done:
+            break   // 继续走下面的完成流程
         }
 
         // done / 旧脚本无 type（Stop）：熄灭思考动效 + 发完成通知 + 记入活动账本
@@ -703,16 +708,14 @@ final class AppCoordinator: ObservableObject {
         if let pane, let paneTitle = paneTitles[pane] {
             title = "\(event.title) · \(paneTitle)"
         }
-        let agentID = event.agent ?? pane.flatMap { paneAgents[$0] }
-        let message = completionMessage(for: event, pane: pane, agentID: agentID)
-        activityLog.record(paneID: pane, agentID: agentID,
-                           title: title, message: message, duration: duration)
-        var body = message
-        if let duration {
-            let took = L("耗时 %@", AgentActivityEntry.durationText(duration))
-            body = body.isEmpty ? took : body + "\n" + took
-        }
-        NotificationManager.shared.notify(paneID: event.paneID, title: title, body: body)
+        activityLog.record(paneID: pane, agentID: pane.flatMap { paneAgents[$0] },
+                           title: title, message: event.message, duration: duration)
+        let durationSuffix = duration.map { L("耗时 %@", AgentActivityEntry.durationText($0)) }
+        deliverDoneNotification(
+            paneID: event.paneID, title: title, fallback: event.message,
+            transcriptPath: event.transcriptPath,
+            agent: event.agent ?? pane.flatMap { paneAgents[$0] },
+            durationSuffix: durationSuffix)
         // 完成时不在屏上 → 记未读绿点；就在屏上 → 边框闪绿两下；app 在后台 → Dock 角标 +1
         if let pane {
             markUnseenDoneIfHidden(pane)
@@ -725,27 +728,42 @@ final class AppCoordinator: ObservableObject {
         if let pane { dispatchNextQueued(pane) }
     }
 
-    private func completionMessage(for event: HookEvent, pane: PaneID?, agentID: String?) -> String {
-        if let direct = AgentCompletionSummary.directMessage(event.message) {
-            return direct
+    /// 完成通知：尽量带上 agent 最后一句回复（读 transcript 末条 assistant，IO 放后台避免卡主线程）；
+    /// 读不到则回退到 hook 带来的文案。
+    private func deliverDoneNotification(
+        paneID: String?, title: String, fallback: String,
+        transcriptPath: String?, agent: String?, durationSuffix: String?
+    ) {
+        // 只要有 transcript 就试着读 agent 最后一句——agent 没识别（手动起的会话）也读：
+        // AgentSessionPreview 对未知 agent 会自动探测格式。读不到才回退到 hook 兜底文案。
+        guard let transcriptPath, !transcriptPath.isEmpty else {
+            NotificationManager.shared.notify(
+                paneID: paneID, title: title,
+                body: Self.doneNotificationBody(lastAssistant: nil, fallback: fallback, durationSuffix: durationSuffix))
+            return
         }
-        if let summary = AgentCompletionSummary.transcriptSummary(path: event.transcriptPath) {
-            return summary
+        Task.detached(priority: .utility) {
+            let messages = AgentSessionPreview.load(agent: agent ?? "", filePath: transcriptPath, limit: 4)
+            let lastAssistant = messages.last { $0.role == .assistant }?.text
+            await MainActor.run {
+                NotificationManager.shared.notify(
+                    paneID: paneID, title: title,
+                    body: Self.doneNotificationBody(
+                        lastAssistant: lastAssistant, fallback: fallback, durationSuffix: durationSuffix))
+            }
         }
-        if let agentID,
-           let cwd = event.cwd ?? pane.flatMap({ paneCwds[$0] }),
-           let record = AgentSessionCatalog.scanForDirectory(cwd, limit: 8)
-            .first(where: { $0.agent == agentID }),
-           let summary = AgentCompletionSummary.transcriptSummary(path: record.filePath) {
-            return summary
+    }
+
+    /// 纯函数：组装完成通知 body——优先 agent 最后一句，否则回退文案；末尾附耗时。可单测。
+    nonisolated static func doneNotificationBody(
+        lastAssistant: String?, fallback: String, durationSuffix: String?
+    ) -> String {
+        let trimmed = lastAssistant?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var base = (trimmed?.isEmpty == false) ? trimmed! : fallback
+        if let durationSuffix, !durationSuffix.isEmpty {
+            base = base.isEmpty ? durationSuffix : base + "\n" + durationSuffix
         }
-        if let pane,
-           let surface = registry.surface(for: pane) as? GhosttySurface,
-           let raw = surface.readAllText(),
-           let summary = AgentCompletionSummary.terminalSummary(raw) {
-            return summary
-        }
-        return ""
+        return base
     }
 
     private func rememberAgentSession(from event: HookEvent, pane: PaneID?) {
@@ -1056,39 +1074,24 @@ final class AppCoordinator: ObservableObject {
     }
 
     /// hook 思考状态的兜底回收（hook 事件可能丢：agent 崩溃/被 kill）：
-    /// agent 进程已不在的 pane、点亮超时的条目，随轮询清掉。
+    /// 只清掉「agent 进程已不在」或「点亮超过硬上限」的条目。
+    /// 注意：**不**靠「输出静止」判完成——agent 跑长工具/等模型时可长时间不刷屏，
+    /// 那样会把仍在运行的转圈误熄（曾经的 bug）。完成由 Stop hook 权威熄灭，这里只兜底崩溃/卡死。
     private func pruneHookThinking(agents: [PaneID: String]) {
         guard !hookThinkingSince.isEmpty else { return }
-        let now = Date()
-        let cutoff = now.addingTimeInterval(-Self.hookThinkingTimeout)
-        hookThinkingSince = hookThinkingSince.filter { pane, since in
-            // 1) agent 进程已不在（崩溃/被 kill）→ 熄灭
-            guard agents[pane] != nil else { return false }
-            // 2) 点亮超过硬上限 → 兜底熄灭
-            guard since > cutoff else { return false }
-            // 3) 输出活动兜底：可见视口持续静止超过窗口 → 这轮答完在等输入 → 熄灭
-            return !isThinkingOutputIdle(pane, now: now)
-        }
-        // 清掉已离开思考集合的辅助账
-        let live = Set(hookThinkingSince.keys)
-        thinkingViewportHash = thinkingViewportHash.filter { live.contains($0.key) }
-        thinkingLastOutputChange = thinkingLastOutputChange.filter { live.contains($0.key) }
+        let survivors = Self.prunedThinking(
+            hookThinkingSince, agents: agents, now: Date(), timeout: Self.hookThinkingTimeout)
+        guard survivors.count != hookThinkingSince.count else { return }
+        hookThinkingSince = survivors
         publishThinking()
     }
 
-    /// 读 pane 可见视口文本与上次比对：变了就刷新「上次变化时刻」并视为仍在动；
-    /// 自上次变化起静止超过 thinkingIdleWindow，判为输出空闲（agent 在等输入）。
-    /// 这是 hook 的 Stop 事件丢失时的兜底——agent 工作时会刷 spinner/输出，空闲时视口静止。
-    private func isThinkingOutputIdle(_ pane: PaneID, now: Date) -> Bool {
-        let text = (registry.surface(for: pane) as? GhosttySurface)?.readViewportText() ?? ""
-        let hash = text.hashValue
-        if thinkingViewportHash[pane] != hash {
-            thinkingViewportHash[pane] = hash
-            thinkingLastOutputChange[pane] = now
-            return false
-        }
-        let lastChange = thinkingLastOutputChange[pane] ?? hookThinkingSince[pane] ?? now
-        return now.timeIntervalSince(lastChange) >= Self.thinkingIdleWindow
+    /// 纯函数：保留「进程仍在 且 点亮未超时」的思考条目，其余回收。可单测。
+    nonisolated static func prunedThinking(
+        _ since: [PaneID: Date], agents: [PaneID: String], now: Date, timeout: TimeInterval
+    ) -> [PaneID: Date] {
+        let cutoff = now.addingTimeInterval(-timeout)
+        return since.filter { pane, start in agents[pane] != nil && start > cutoff }
     }
 
     /// 发布 hook 思考集合（仅在变化时触发 UI 更新）。
@@ -1115,13 +1118,8 @@ final class AppCoordinator: ObservableObject {
     private func setHookThinking(_ pane: PaneID, active: Bool) {
         if active {
             hookThinkingSince[pane] = Date()
-            // 重置输出活动基线：给这一轮一个 idle 窗口的宽限，等 agent 开始刷输出。
-            thinkingLastOutputChange[pane] = Date()
-            thinkingViewportHash.removeValue(forKey: pane)
         } else {
             hookThinkingSince.removeValue(forKey: pane)
-            thinkingViewportHash.removeValue(forKey: pane)
-            thinkingLastOutputChange.removeValue(forKey: pane)
         }
         publishThinking()
     }
@@ -1285,19 +1283,13 @@ final class AppCoordinator: ObservableObject {
 
     /// 把一份配置的终端外观应用到所有 surface（不重建、不丢 scrollback）。热更新与字号缩放共用。
     private func applyTerminalAppearance(_ config: AppConfig) {
-        let surfaces = store.workspaces.flatMap { ws in
-            ws.tabs.flatMap { tab in
-                tab.rootSplit.leaves().compactMap { pane in
-                    registry.surface(for: pane) as? GhosttySurface
+        GhosttyRuntime.shared.applyConfig(config)
+        for ws in store.workspaces {
+            for tab in ws.tabs {
+                for pane in tab.rootSplit.leaves() {
+                    (registry.surface(for: pane) as? GhosttySurface)?.reloadConfig()
                 }
             }
-        }
-        surfaces.forEach { $0.refreshThemeBackground(for: config) }
-        GhosttyRuntime.shared.applyConfig(config)
-        surfaces.forEach { $0.reloadConfig(for: config) }
-        if let pane = activePane(),
-           let surface = registry.surface(for: pane) as? GhosttySurface {
-            surface.pulseForPaletteRefresh()
         }
     }
 
@@ -1309,7 +1301,8 @@ final class AppCoordinator: ObservableObject {
 
     private func restyleChrome() {
         syncNativeAppearance()
-        window?.backgroundColor = NSColor(AppStyle.windowBackground)
+        window?.backgroundColor = .clear   // 外壳毛玻璃：窗口保持透明（背衬 NSVisualEffectView）
+        window?.isOpaque = false
         paneContainers.values.forEach { $0.restyle() }
         func walk(_ v: NSView) {
             if let split = v as? RatioSplitView { split.restyleForCurrentTheme() }
@@ -1370,38 +1363,6 @@ final class AppCoordinator: ObservableObject {
         run(.newTab(newTabID: TabID(nextID("t")), newPaneID: PaneID(nextID("p")), cwd: path))
     }
 
-    /// Finder / `open -a Conductor file.command`：新建 tab 并执行 .command 脚本。
-    @discardableResult
-    func openCommandFile(_ url: URL) -> Bool {
-        let fileURL = url.standardizedFileURL
-        guard fileURL.pathExtension.lowercased() == "command" else {
-            ToastHUD.shared.show(L("只能打开 .command 文件"),
-                                 icon: "exclamationmark.circle.fill", over: window)
-            return false
-        }
-        let path = fileURL.path
-        guard FileManager.default.fileExists(atPath: path) else {
-            ToastHUD.shared.show(L("文件不存在：%@", fileURL.lastPathComponent),
-                                 icon: "exclamationmark.circle.fill", over: window)
-            return false
-        }
-
-        let paneID = PaneID(nextID("p"))
-        let cwd = fileURL.deletingLastPathComponent().path
-        run(.newTab(newTabID: TabID(nextID("t")), newPaneID: paneID, cwd: cwd))
-        paneCwds[paneID] = cwd
-
-        let quotedPath = ShellQuoting.quote(path)
-        let command = FileManager.default.isExecutableFile(atPath: path)
-            ? quotedPath
-            : "/bin/zsh \(quotedPath)"
-        (registry.surface(for: paneID) as? GhosttySurface)?
-            .enqueueCommand(command)
-        ToastHUD.shared.show(L("已打开 %@", fileURL.lastPathComponent),
-                             icon: "terminal.fill", over: window)
-        return true
-    }
-
     // MARK: - 命令入口（键位调用）
 
     /// ⌘T：新标签的 shell 在当前 pane 的目录启动（Terminal.app 惯例）；拿不到则回退工作区根。
@@ -1452,43 +1413,6 @@ final class AppCoordinator: ObservableObject {
         (registry.surface(for: paneID) as? GhosttySurface)?
             .enqueueCommand(launchCommand(agent.command, pane: paneID, agentID: agent.id))
         tagPaneAgent(paneID, agentID: agent.id)
-    }
-
-    @discardableResult
-    func launchAutomationAgent(
-        command rawCommand: String,
-        agentID explicitAgentID: String? = nil,
-        cwd: String? = nil,
-        prompt: String? = nil,
-        submit: Bool = true
-    ) -> PaneID {
-        let command = rawCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-        let agentID = explicitAgentID ?? agentID(forCommand: command)
-        let paneID = PaneID(nextID("p"))
-        let tabID = TabID(nextID("t"))
-        run(.newTab(newTabID: tabID, newPaneID: paneID, cwd: cwd))
-        if let cwd { paneCwds[paneID] = cwd }
-        if let agentID { rememberAgentLaunch(paneID, agentID: agentID, command: command) }
-        guard let surface = registry.surface(for: paneID) as? GhosttySurface else {
-            return paneID
-        }
-        surface.enqueueCommand(launchCommand(command, pane: paneID, agentID: agentID))
-        if let agentID {
-            tagPaneAgent(paneID, agentID: agentID)
-        } else {
-            tagPaneAgentOptimistically(paneID, command: command)
-        }
-        if let prompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak surface] in
-                surface?.sendTextInput(prompt)
-                if submit {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        surface?.sendEnterKey()
-                    }
-                }
-            }
-        }
-        return paneID
     }
 
     /// 在当前 tab 内分屏启动 Agent。`agentTag` 用于带参数命令（如二次意见）的 logo 即时识别。
@@ -1738,6 +1662,19 @@ final class AppCoordinator: ObservableObject {
         return true
     }
 
+    @discardableResult
+    private func stageSurfaceResumeRestore(_ binding: SurfaceResumeBinding?, for pane: PaneID) -> Bool {
+        guard let binding, binding.isUsable,
+              let surface = registry.surface(for: pane) as? GhosttySurface
+        else { return false }
+        if binding.autoResume && binding.trusted {
+            surface.enqueueCommand(binding.restoreCommand)
+        } else {
+            surface.enqueueTypedText(binding.restoreCommand)
+        }
+        return true
+    }
+
     /// 找 pane 在树里的父分屏方向（恢复时按原方向接回去）。
     static func parentAxis(of pane: PaneID, in node: SplitNode) -> SplitAxis? {
         guard case let .split(_, axis, _, first, second) = node else { return nil }
@@ -1758,7 +1695,9 @@ final class AppCoordinator: ObservableObject {
             stageContentRestore(for: tab.rootSplit.leaves())
             run(.restoreTab(tab: tab, workspaceID: target, paneCwds: cwds))
             for pane in tab.rootSplit.leaves() {
-                _ = stageSessionRestore(sessions[pane.value], for: pane)
+                if !stageSessionRestore(sessions[pane.value], for: pane) {
+                    stageSurfaceResumeRestore(surfaceResumeBindings.binding(for: pane.value), for: pane)
+                }
             }
         case let .pane(workspaceID, tabID, pane, cwd, axis, session):
             if let cwd { paneCwds[pane] = cwd }
@@ -1777,7 +1716,9 @@ final class AppCoordinator: ObservableObject {
                 run(.restoreTab(tab: tab, workspaceID: target,
                                 paneCwds: cwd.map { [pane.value: $0] } ?? [:]))
             }
-            _ = stageSessionRestore(session, for: pane)
+            if !stageSessionRestore(session, for: pane) {
+                stageSurfaceResumeRestore(surfaceResumeBindings.binding(for: pane.value), for: pane)
+            }
         }
     }
 
@@ -1816,6 +1757,7 @@ final class AppCoordinator: ObservableObject {
         }
         ScrollbackStore.cleanup(keeping: keep)
         try? agentSessionBindings.cleanup(keeping: Set(keep.map(\.value)))
+        try? surfaceResumeBindings.cleanup(keeping: Set(keep.map(\.value)))
     }
 
     /// 拖动重排 tab。
@@ -2239,11 +2181,7 @@ final class AppCoordinator: ObservableObject {
         return nil
     }
 
-    static func shortName(_ path: String) -> String {
-        if path == NSHomeDirectory() { return "~" }
-        let base = (path as NSString).lastPathComponent
-        return base.isEmpty ? path : base
-    }
+    static func shortName(_ path: String) -> String { PathDisplay.lastComponent(path) }
 
     private func refreshActiveRings() {
         let active = activePane()

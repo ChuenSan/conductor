@@ -6,12 +6,13 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: NSWindow!
     var coordinator: AppCoordinator!
+    private var companion: CompanionController?
     private var keyMonitor: Any?
-    private var pendingOpenFiles: [String] = []
     /// 关窗时已确认过中断思考，applicationShouldTerminate 不再问第二遍。
     private var closeConfirmed = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LegacyMigration.migrateIfNeeded()   // cmux → Conductor 改名后迁移旧用户数据
         AppLanguage.bootstrap()   // 把持久化的语言选择应用到运行时查表（App + ConductorCore）
         // 原生控件外观跟随 app 主题（coordinator.attach 起持续同步；这里设初值避免启动闪深色）。
         NSApp.appearance = NSAppearance(named: AppStyle.theme.isDark ? .darkAqua : .aqua)
@@ -27,7 +28,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         )
         window.title = "Conductor"
         WindowChromePolicy.applyMainWindowChrome(to: window)
-        window.contentView = NSHostingView(rootView: RootView(coordinator: coordinator))
+        // 真毛玻璃背衬：透出模糊桌面。外壳（侧栏/Tab/状态栏）半透明压在其上 → 朦胧；
+        // 终端区的 AppKit 容器画实色盖住这层 → 不受影响、保持可读。
+        let host = NSHostingView(rootView: RootView(coordinator: coordinator))
+        host.translatesAutoresizingMaskIntoConstraints = false
+        let blur = NSVisualEffectView()
+        blur.material = .underWindowBackground
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        blur.translatesAutoresizingMaskIntoConstraints = false
+        let container = NSView()
+        container.addSubview(blur)
+        container.addSubview(host)
+        NSLayoutConstraint.activate([
+            blur.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            blur.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            blur.topAnchor.constraint(equalTo: container.topAnchor),
+            blur.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            host.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            host.topAnchor.constraint(equalTo: container.topAnchor),
+            host.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        window.contentView = container
         window.delegate = self   // 误关保护：windowShouldClose 守门
         coordinator.attach(to: window)
         window.center()
@@ -36,14 +59,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         installKeyMonitor()
-        openPendingFiles()
+
+        // 桌面通知宠物：内置 Agent 状态的一张环境化的脸（订阅真实在线信号）。
+        let pet = CompanionController(coordinator: coordinator, feedCenter: coordinator.feedCenter)
+        companion = pet
+        pet.activate()
     }
+
+    @objc private func toggleCompanion() { companion?.toggleEnabled() }
 
     private func installMainMenu() {
         let mainMenu = NSMenu()
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
+        let petItem = NSMenuItem(title: L("桌面伙伴"), action: #selector(toggleCompanion), keyEquivalent: "")
+        petItem.target = self
+        appMenu.addItem(petItem)
+        appMenu.addItem(.separator())
         appMenu.addItem(NSMenuItem(title: L("退出 Conductor"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
@@ -76,31 +109,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
-
-    func application(_ sender: NSApplication, openFiles filenames: [String]) {
-        guard coordinator != nil else {
-            pendingOpenFiles.append(contentsOf: filenames)
-            sender.reply(toOpenOrPrint: .success)
-            return
-        }
-        let opened = openFiles(filenames)
-        sender.reply(toOpenOrPrint: opened ? .success : .failure)
-    }
-
-    private func openPendingFiles() {
-        guard !pendingOpenFiles.isEmpty else { return }
-        _ = openFiles(pendingOpenFiles)
-        pendingOpenFiles.removeAll()
-    }
-
-    private func openFiles(_ filenames: [String]) -> Bool {
-        var openedAny = false
-        for filename in filenames {
-            let url = URL(fileURLWithPath: filename)
-            openedAny = coordinator.openCommandFile(url) || openedAny
-        }
-        return openedAny
-    }
 
     /// 误关保护：红绿灯关窗时有 agent 正在思考 → 先确认（窗口没了 app 也就退出了）。
     func windowShouldClose(_ sender: NSWindow) -> Bool {

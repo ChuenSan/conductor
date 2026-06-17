@@ -14,8 +14,6 @@ final class GhosttyRuntime {
 
     private(set) var app: ghostty_app_t?
     private(set) var config: ghostty_config_t?
-    private var appliedColorScheme: ghostty_color_scheme_e?
-    private var colorSchemeSyncDepth = 0
     private var tickScheduled = false
 
     private init() {}
@@ -121,26 +119,16 @@ final class GhosttyRuntime {
     /// 热更新:用新配置重建 ghostty 配置并应用到 app(各 surface 由 GhosttySurface.reloadConfig 各自更新)。
     func applyConfig(_ appConfig: AppConfig) {
         guard let app, let newConfig = Self.makeConfig(from: appConfig) else { return }
-        applyColorScheme(for: appConfig, force: true)
         ghostty_app_update_config(app, newConfig)
-        applyColorScheme(for: appConfig, force: true)
+        applyColorScheme(for: appConfig)
         let old = config
         config = newConfig
         if let old { ghostty_config_free(old) }
     }
 
-    func applyColorScheme(for appConfig: AppConfig, force: Bool = false) {
-        applyColorScheme(Self.colorScheme(for: appConfig), force: force)
-    }
-
-    func applyColorScheme(_ scheme: ghostty_color_scheme_e, force: Bool = false) {
+    func applyColorScheme(for appConfig: AppConfig) {
         guard let app else { return }
-        guard colorSchemeSyncDepth == 0 else { return }
-        guard force || appliedColorScheme != scheme else { return }
-        appliedColorScheme = scheme
-        colorSchemeSyncDepth += 1
-        defer { colorSchemeSyncDepth -= 1 }
-        ghostty_app_set_color_scheme(app, scheme)
+        ghostty_app_set_color_scheme(app, Self.colorScheme(for: appConfig))
     }
 
     static func colorScheme(for appConfig: AppConfig) -> ghostty_color_scheme_e {
@@ -169,13 +157,17 @@ final class GhosttyRuntime {
         // （用户仍可在 ghosttyOverrides 里改回 xterm-ghostty。）
         set("term", managedTerminalType)
         set("background", theme.background)
+        // 终端透明仅限光晕主题（透出后方光晕暗底，黑不至于太死）；纯色主题保持实底，
+        // 否则透出的是半透磨砂 + 模糊桌面，终端文字对比度会掉。用户仍可在 ghosttyOverrides 覆盖。
+        set("background-opacity", Theme.resolve(a).terminalTranslucent ? "0.8" : "1")
         set("foreground", theme.foreground)
         set("cursor-color", theme.cursor)
         set("selection-background", theme.selection)
         set("selection-foreground", theme.selectionForeground)
-        // Match cmux: let Ghostty's macOS renderer use the host layer as the
-        // default backdrop so OSC background probes and AppKit chrome agree.
-        set("macos-background-from-layer", "true")
+        // 不开 macos-background-from-layer：codex 这类「只用 default 前景/背景色」渲染的 TUI，
+        // 输入框背景就是终端 default bg。若 default bg 取自 NSView layer，切主题只改了 layer 颜色、
+        // ghostty 不会重绘已画好的 default-bg 单元格 → codex 输入框卡在旧色不跟随（暗色主题下显白看不清）。
+        // 让 default bg 直接由 config `background` 渲染：切主题 → update_config 改 background → 重绘即跟随。
         for (index, color) in theme.ansi.enumerated() {
             append("palette", "\(index)=#\(color)")
         }
@@ -229,7 +221,7 @@ final class GhosttyRuntime {
                 return true
             case GHOSTTY_ACTION_CONFIG_CHANGE:
                 Task { @MainActor in
-                    GhosttyRuntime.shared.applyColorScheme(for: ConfigStore.shared.config, force: true)
+                    GhosttyRuntime.shared.applyColorScheme(for: ConfigStore.shared.config)
                 }
                 return true
             case GHOSTTY_ACTION_RELOAD_CONFIG:
@@ -256,13 +248,6 @@ final class GhosttyRuntime {
             Task { @MainActor in
                 GhosttySurface.fromGhosttySurface(surfaceHandle)?
                     .handleScrollbar(total: sb.total, offset: sb.offset, len: sb.len)
-            }
-            return true
-        case GHOSTTY_ACTION_CELL_SIZE:
-            let cell = action.action.cell_size
-            Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?
-                    .handleCellSize(width: cell.width, height: cell.height)
             }
             return true
         case GHOSTTY_ACTION_PWD:
@@ -365,7 +350,7 @@ final class GhosttyRuntime {
     private func handleAppColorChange(_ change: ghostty_action_color_change_s) {
         if change.kind == GHOSTTY_ACTION_COLOR_KIND_BACKGROUND {
             let color = Self.color(from: change)
-            applyColorScheme(Self.colorScheme(forBackground: color), force: true)
+            ghostty_app_set_color_scheme(app, Self.colorScheme(forBackground: color))
         }
     }
 

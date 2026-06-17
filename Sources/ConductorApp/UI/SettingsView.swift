@@ -9,6 +9,7 @@ struct SettingsView: View {
     @ObservedObject private var configStore = ConfigStore.shared
 
     @State private var shell = ConfigStore.shared.config.terminal.shell ?? ""
+    @State private var companionName = ConfigStore.shared.config.companion.name ?? ""
     @State private var selectedSection: SettingsSectionID = .default
     /// 键位编辑用本地草稿：避免每个按键都落盘，提交（回车）时才生效。
     @State private var keybindingDrafts: [String: String] = [:]
@@ -47,7 +48,7 @@ struct SettingsView: View {
             }
         }
         .frame(maxHeight: .infinity)
-        .background(AppStyle.windowBackground)   // 纯色主题背景：跟随浅/深，不用毛玻璃（停靠面板背后无内容，材质会误跟系统外观）
+        .background(.clear)   // 透明：用根底统一磨砂
     }
 
     private var header: some View {
@@ -126,9 +127,60 @@ struct SettingsView: View {
             ghosttySection
         case .behavior:
             behaviorSection
+        case .companion:
+            companionSection
         case .keybindings:
             keybindingsSection
         }
+    }
+
+    private var companionSection: some View {
+        SettingsSection(title: L("桌面伙伴")) {
+            SettingsRow(label: L("显示桌面伙伴"), first: true) {
+                ThemedToggle(isOn: bind(\.companion.enabled))
+            }
+            SettingsRow(label: L("伙伴通知")) {
+                ThemedToggle(isOn: bind(\.companion.notifyPet))
+            }
+            SettingsRow(label: L("系统通知")) {
+                ThemedToggle(isOn: bind(\.companion.notifySystem))
+            }
+            SettingsRow(label: L("昵称")) {
+                ThemedTextField(placeholder: L(config.companion.template.nameKey), text: $companionName) {
+                    update { $0.companion.name = companionName.isEmpty ? nil : companionName }
+                }
+            }
+            SettingsRow(label: L("停靠角落")) {
+                ThemedSegmented(
+                    options: [(L("左上"), "topLeft"), (L("右上"), "topRight"),
+                              (L("左下"), "bottomLeft"), (L("右下"), "bottomRight")],
+                    selection: companionCornerBinding)
+            }
+            SettingsRow(label: L("说话气泡")) {
+                ThemedToggle(isOn: bind(\.companion.speechBubbles))
+            }
+            SettingsRow(label: L("待审批时气泡内联允许/拒绝")) {
+                ThemedToggle(isOn: bind(\.companion.inlineApproval))
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("模版"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppStyle.textSecondary)
+                CompanionTemplatePicker(selectedID: bind(\.companion.templateID))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 8)
+            .padding(.horizontal, 2)
+        }
+    }
+
+    /// Corner ↔ String 桥接（ThemedSegmented 只吃 String）。
+    private var companionCornerBinding: Binding<String> {
+        Binding(
+            get: { config.companion.corner.rawValue },
+            set: { raw in
+                update { $0.companion.corner = CompanionConfig.Corner(rawValue: raw) ?? .bottomRight }
+            })
     }
 
     private var appearanceSection: some View {
@@ -411,6 +463,12 @@ private struct ThemePickerRow: View {
         [("dark", L("深色")), ("light", L("浅色")),
          ("tokyo-night", "Tokyo Night"), ("catppuccin", "Catppuccin"),
          ("nord", "Nord"), ("rose-pine", "Rosé Pine"),
+         ("midnight", "Midnight"),
+         ("orchid-dusk", "Orchid Dusk"), ("ember", "Ember"),
+         ("graphite", "Graphite"), ("deep-sea", "Deep Sea"),
+         ("blossom", "Blossom"), ("nebula", "Nebula"),
+         ("mojave", "Mojave"), ("bordeaux", "Bordeaux"),
+         ("slate", "Slate"),
          ("custom", L("自定义"))]
     }
 
@@ -467,7 +525,11 @@ private struct ThemeSwatch: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         ZStack(alignment: .topLeading) {
-            theme.windowBackground
+            if theme.backgroundGlows != nil {
+                ThemeBackdrop(theme: theme)   // 暗底 + 光晕，与主窗口同款
+            } else {
+                theme.windowBackground
+            }
             HStack(spacing: 0) {
                 Rectangle()
                     .fill(theme.isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.05))

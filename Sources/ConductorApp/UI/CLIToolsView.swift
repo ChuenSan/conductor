@@ -215,8 +215,8 @@ struct CLIToolsView: View {
     @State private var configuredProviders: [UsageProviderEntry] = []
     @State private var providerUsage: [String: ToolUsageState] = [:]
     /// 通知 hook 安装状态。
-    @State private var hookStatus = HookInstaller.status()
-    @State private var hookError: String?
+    @State private var feedHookStatus = FeedHookInstaller.status()
+    @State private var feedHookError: String?
     @State private var inspectorMode: CLIInspectorMode = .tools
     @State private var selectedProviderID: String?
 
@@ -242,7 +242,7 @@ struct CLIToolsView: View {
             .scrollIndicators(.visible)
         }
         .frame(maxHeight: .infinity)
-        .background(AppStyle.windowBackground)
+        .background(.clear)   // 内层透明：露出 ToolsPanel 的微玻璃
         .onAppear { loadOrDetect() }
         .onChange(of: inspectorMode) { _, mode in
             guard mode == .providers, providerUsage.isEmpty else { return }
@@ -253,7 +253,7 @@ struct CLIToolsView: View {
     @ViewBuilder
     private var cliToolsWorkbench: some View {
         cliInventoryStrip
-        notificationCard
+        feedApprovalCard
         if results.isEmpty, detecting {
             loadingPlaceholder
         } else {
@@ -454,11 +454,19 @@ struct CLIToolsView: View {
                 .fill(AppStyle.hoverFill))
     }
 
-    /// 「完成通知」卡片：安装 hook + 显示通知权限状态。
-    private var notificationCard: some View {
+    private func hookBadge(_ label: String, _ on: Bool) -> some View {
+        ToolBadge(
+            text: label,
+            icon: on ? "checkmark.circle.fill" : "circle.dashed",
+            color: on ? AppStyle.doneGreen : AppStyle.textTertiary,
+            style: on ? .soft : .muted,
+            height: 22)
+    }
+
+    private var feedApprovalCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "bell.badge.fill")
+                Image(systemName: "shield.lefthalf.filled")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppStyle.accent)
                     .frame(width: 30, height: 30)
@@ -466,10 +474,10 @@ struct CLIToolsView: View {
                         RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                             .fill(AppStyle.accent.opacity(0.12)))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(L("完成通知"))
+                    Text(L("工具审批"))
                         .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(AppStyle.textPrimary)
-                    Text(L("Agent 答完后发 macOS 通知，点击跳回对应 pane。"))
+                    Text(L("Claude 执行命令/改文件前先在审批面板确认，拒绝即拦截；socket 不可用时自动放行不卡 agent。仅作用于 Conductor 启动的 Claude。"))
                         .font(.system(size: 11))
                         .foregroundStyle(AppStyle.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -478,37 +486,22 @@ struct CLIToolsView: View {
             }
 
             HStack(spacing: 6) {
-                hookBadge(L("脚本"), hookStatus.scriptInstalled)
-                hookBadge("Codex", hookStatus.codexConfigured)
-                hookBadge("Claude", hookStatus.claudeConfigured)
+                hookBadge(L("脚本"), feedHookStatus.scriptInstalled)
+                hookBadge("Claude", feedHookStatus.claudeConfigured)
                 Spacer()
             }
 
             HStack(spacing: 8) {
-                ToolActionButton(
-                    title: hookStatus.allDone ? L("重新安装 hook") : L("安装通知 hook"),
-                    role: .primary,
-                    action: installHooks)
-
-                if !NotificationManager.shared.canDeliverRich {
-                    ToolActionButton(
-                        title: L("去系统设置授权"),
-                        role: .secondary,
-                        help: L("打开 macOS 通知设置，允许 Conductor 发送可点击通知。")) {
-                            NotificationManager.shared.openSystemNotificationSettings()
-                        }
+                if feedHookStatus.allDone {
+                    ToolActionButton(title: L("停用工具审批"), role: .secondary, action: uninstallFeedHook)
+                } else {
+                    ToolActionButton(title: L("启用工具审批"), role: .primary, action: installFeedHook)
                 }
                 Spacer()
             }
 
-            if !NotificationManager.shared.canDeliverRich {
-                Text(L("当前无法发送可点击通知，已自动回退为普通横幅（看得到、点了不跳转）。"))
-                    .font(.system(size: 10))
-                    .foregroundStyle(AppStyle.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let hookError {
-                Text(hookError)
+            if let feedHookError {
+                Text(feedHookError)
                     .font(.system(size: 10.5))
                     .foregroundStyle(AppStyle.errorRed)
                     .fixedSize(horizontal: false, vertical: true)
@@ -519,25 +512,26 @@ struct CLIToolsView: View {
         .toolsCard()
     }
 
-    private func hookBadge(_ label: String, _ on: Bool) -> some View {
-        ToolBadge(
-            text: label,
-            icon: on ? "checkmark.circle.fill" : "circle.dashed",
-            color: on ? AppStyle.doneGreen : AppStyle.textTertiary,
-            style: on ? .soft : .muted,
-            height: 22)
+    private func installFeedHook() {
+        feedHookError = nil
+        do {
+            feedHookStatus = try FeedHookInstaller.installAll()
+        } catch {
+            feedHookError = error.localizedDescription
+            feedHookStatus = FeedHookInstaller.status()
+        }
     }
 
-    private func installHooks() {
-        hookError = nil
+    private func uninstallFeedHook() {
+        feedHookError = nil
         do {
-            hookStatus = try HookInstaller.installAll()
+            try FeedHookInstaller.uninstall()
         } catch {
-            hookError = error.localizedDescription
-            hookStatus = HookInstaller.status()
+            feedHookError = error.localizedDescription
         }
-        NotificationManager.shared.refreshAuthStatus()
+        feedHookStatus = FeedHookInstaller.status()
     }
+
 
     private var loadingPlaceholder: some View {
         HStack(spacing: 8) {
@@ -670,26 +664,21 @@ struct CLIToolsView: View {
     /// 只有用户点刷新时才请求用量，避免打开面板就触发 CLI/账号访问。
     private func prepareProviderUsage() async {
         let cfg = ConfigStore.shared.config
-        let resolved = await Task.detached(priority: .utility) { () -> [(UsageProviderEntry, Bool, Bool)] in
+        let resolved = await Task.detached(priority: .utility) { () -> [(UsageProviderEntry, Bool)] in
             UsageCredentials.apply(cfg)   // 注入 key 后 isConfigured() 才反映应用内配置
             return UsageProviderCatalog.all
                 .filter { UsageCredentials.isVisible($0, config: cfg) }
-                .map {
-                    let deferred = UsageCredentials.shouldDeferBrowserCredentialProbe($0, config: cfg)
-                    let configured = UsageCredentials.isConfiguredWithoutBrowserPrompt($0, config: cfg)
-                    return ($0, configured, deferred)
-                }
+                .map { ($0, $0.isConfigured()) }
         }.value
         // 已配置的排前面，组内保持目录顺序。
         let providers = resolved.filter { $0.1 }.map { $0.0 } + resolved.filter { !$0.1 }.map { $0.0 }
         let configuredIDs = Set(resolved.filter { $0.1 }.map { $0.0.id })
-        let deferredIDs = Set(resolved.filter { $0.2 }.map { $0.0.id })
         let visibleIDs = Set(providers.map(\.id))
         await MainActor.run {
             configuredProviders = providers
             providerUsage = providerUsage.filter { visibleIDs.contains($0.key) }
             for provider in providers {
-                if configuredIDs.contains(provider.id) || deferredIDs.contains(provider.id) {
+                if configuredIDs.contains(provider.id) {
                     switch providerUsage[provider.id] {
                     case .loaded, .loading, .error:
                         break
@@ -1189,7 +1178,7 @@ private struct UsageBar: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(AppStyle.theme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07))
+                        .fill(AppStyle.subtleFill)
                     Capsule()
                         .fill(barColor)
                         .frame(width: max(3, geo.size.width * fraction))
@@ -1232,7 +1221,7 @@ struct CostLine: View {
             if cost.hasLimit {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(AppStyle.theme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.07))
+                        Capsule().fill(AppStyle.subtleFill)
                         Capsule()
                             .fill(cost.usedPercent >= 90 ? AppStyle.errorRed : cost.usedPercent >= 70 ? AppStyle.waitAmber : AppStyle.accent)
                             .frame(width: geo.size.width * max(0.02, min(1, cost.usedPercent / 100)))

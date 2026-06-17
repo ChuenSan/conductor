@@ -14,15 +14,17 @@ enum AgentToolsChrome {
 }
 
 enum AgentToolsMotion {
-    // 管理台是高密度文字界面，动画要短、轻，避免文本进入缩放合成层后发糊。
-    static let route = Animation.easeOut(duration: 0.12)
-    static let selection = Animation.easeOut(duration: 0.08)
-    static let reveal = Animation.easeOut(duration: 0.10)
-    static let hover = Animation.easeOut(duration: 0.08)
+    // 全工作台只用一种动画：统一的 easeOut(0.15)——不分档、不回弹、不缩放、不位移。
+    // 各语义名都指向同一条 standard，让切 tab / 切视图 / 选中 / 开检视器 / hover 手感完全一致。
+    static let standard = Animation.easeOut(duration: 0.15)
+    static let route = standard
+    static let selection = standard
+    static let reveal = standard
+    static let hover = standard
     static let loading = Animation.linear(duration: 0.85).repeatForever(autoreverses: false)
 
+    // 过场：一律纯淡入淡出（无滑入 / 无缩放）。
     static let contentTransition = AnyTransition.opacity
-
     static let revealTransition = AnyTransition.opacity
 }
 
@@ -401,7 +403,13 @@ extension View {
         let fill: AnyShapeStyle = AppStyle.theme.isDark
             ? AnyShapeStyle(theme.elevated.opacity(0.34))
             : AnyShapeStyle(Color.black.opacity(0.022))
+        // 边缘高光 rim：顶亮→底暗的 1px 渐变描边，比平描边更像玻璃（调研结论：玻璃质感主要来自 rim）。
+        let rim = LinearGradient(
+            colors: theme.isDark
+                ? [Color.white.opacity(0.22), Color.white.opacity(0.05)]
+                : [Color.white.opacity(0.7), Color.black.opacity(0.06)],
+            startPoint: .top, endPoint: .bottom)
         return background(shape.fill(fill))
-            .overlay(shape.strokeBorder(AppStyle.separator.opacity(theme.isDark ? 0.62 : 0.5), lineWidth: 1))
+            .overlay(shape.strokeBorder(rim, lineWidth: 1))
     }
 }

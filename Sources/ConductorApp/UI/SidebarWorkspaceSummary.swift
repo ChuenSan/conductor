@@ -56,7 +56,5 @@ struct SidebarWorkspaceSummary: Equatable {
         return L("当前：%1$@ · %2$@", tabTitle, compactPath(cwd))
     }
 
-    private static func compactPath(_ path: String) -> String {
-        (path as NSString).abbreviatingWithTildeInPath
-    }
+    private static func compactPath(_ path: String) -> String { PathDisplay.tilde(path) }
 }

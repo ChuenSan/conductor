@@ -113,24 +113,20 @@ public enum ScrollbackTrimmer {
         var index = scalars.startIndex
         let esc: UnicodeScalar = "\u{1B}"
         let csi: UnicodeScalar = "["
-        let sgr: UnicodeScalar = "m"
 
         while index < scalars.endIndex {
+            // 整段跳过 CSI 转义：ESC [ … 终止字节(0x40–0x7E，含 'm')。
             if scalars[index] == esc {
                 let next = scalars.index(after: index)
                 if next < scalars.endIndex, scalars[next] == csi {
                     var cursor = scalars.index(after: next)
                     while cursor < scalars.endIndex {
-                        let scalar = scalars[cursor]
+                        let value = scalars[cursor].value
                         cursor = scalars.index(after: cursor)
-                        if scalar == sgr {
-                            index = cursor
-                            continue
-                        }
-                        if scalar.value >= 0x40, scalar.value <= 0x7E {
-                            break
-                        }
+                        if value >= 0x40, value <= 0x7E { break }   // 终止字节
                     }
+                    index = cursor          // 跳到转义序列之后
+                    continue                // 继续**外层**循环，别 append（之前的 bug：可能越界）
                 }
             }
             output.append(scalars[index])
@@ -144,7 +140,7 @@ public enum ScrollbackTrimmer {
         let reset = "\u{1B}[0m"
         var result = text
         if !result.hasPrefix(reset) { result = reset + result }
-        if !result.hasSuffix(reset) { result += reset }
+        result += reset   // 末尾无条件补 reset：保证回放内容的转义状态被收口（即便已以 reset 结尾）
         return result
     }
 }

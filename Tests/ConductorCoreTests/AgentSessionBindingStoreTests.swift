@@ -17,6 +17,10 @@ final class AgentSessionBindingStoreTests: XCTestCase {
 
     func testRecordAndLoadBinding() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
+        // capturedAt 默认是 Date()，两次单独构造会得到不同的微秒级时间（且 JSON 往返丢精度），
+        // 故必须显式钉死时间并复用同一个实例，否则相等断言必挂。
+        let launchCommand = AgentLaunchCommandSnapshot(
+            agent: "codex", argv: ["codex", "--model", "gpt-5"], capturedAt: now)
         try store.record(AgentSessionHookPayload(
             paneID: "p1",
             agent: "codex",
@@ -25,7 +29,7 @@ final class AgentSessionBindingStoreTests: XCTestCase {
             transcriptPath: "/tmp/project/rollout.jsonl",
             isRunning: true,
             lifecycle: .running,
-            launchCommand: AgentLaunchCommandSnapshot(agent: "codex", argv: ["codex", "--model", "gpt-5"]),
+            launchCommand: launchCommand,
             updatedAt: now))
 
         XCTAssertEqual(store.ref(for: "p1"), AgentSessionRef(
@@ -36,7 +40,7 @@ final class AgentSessionBindingStoreTests: XCTestCase {
             updatedAt: now,
             wasRunning: true,
             lifecycle: .running,
-            launchCommand: AgentLaunchCommandSnapshot(agent: "codex", argv: ["codex", "--model", "gpt-5"])))
+            launchCommand: launchCommand))
     }
 
     func testCleanupKeepsOnlyLivePanes() throws {
