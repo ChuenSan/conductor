@@ -2,6 +2,12 @@ import AppKit
 import QuartzCore
 @preconcurrency import GhosttyKit
 
+private extension CGSize {
+    var isFinitePositiveArea: Bool {
+        width.isFinite && height.isFinite && width > 1 && height > 1
+    }
+}
+
 /// 承载一个 libghostty surface 的 NSView：CAMetalLayer 背衬。
 /// 自身不直接调 libghostty——把生命周期/几何/输入都委托给 `owner`（GhosttySurface）。
 @MainActor
@@ -66,6 +72,7 @@ final class TerminalHostView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        owner?.attachIfPossible()
         owner?.syncGeometry()
     }
 

@@ -7,6 +7,32 @@ private enum TerminalAreaTransition: Equatable {
     case zoom(expanding: Bool)
 }
 
+private extension CGSize {
+    var isFinitePositiveArea: Bool {
+        width.isFinite && height.isFinite && width > 1 && height > 1
+    }
+}
+
+@MainActor
+final class TerminalRootContainerView: NSView {
+    var onGeometryReady: (() -> Void)?
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        onGeometryReady?()
+    }
+
+    override func layout() {
+        super.layout()
+        onGeometryReady?()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onGeometryReady?()
+    }
+}
+
 /// 应用协调器：持有 WorkspaceStore + SessionRegistry，把命令经 reducer 应用到状态、
 /// 执行副作用（建/关/聚焦真终端），并把当前 active tab 的分屏树重建进窗口。
 /// ObservableObject：SwiftUI 外壳（Tab 栏/侧栏）观察 store 变化自动刷新。
@@ -23,7 +49,7 @@ final class AppCoordinator: ObservableObject {
     var activeBranch: String? { activePane().flatMap { paneBranches[$0] } }
     private(set) var registry: SessionRegistry!
     /// 终端分屏区（AppKit，承载 libghostty 视图）。SwiftUI 通过 representable 嵌入它。
-    let containerView = NSView()
+    let containerView = TerminalRootContainerView()
     /// 按 PaneID 复用 pane 容器：避免每次重建都 reparent 活动的 Metal 终端视图（会变白）。
     private var paneContainers: [PaneID: PaneContainerView] = [:]
     /// 即将创建的 pane → 入场动势；container 首次上树时取走。
@@ -117,6 +143,7 @@ final class AppCoordinator: ObservableObject {
     private let stateStore: StateStore
     private let workspaceAccessRegistry = SecurityScopedAccessRegistry()
     private var saveWorkItem: DispatchWorkItem?
+    private var terminalTreeNeedsInitialBuild = false
     /// 最近关闭的 tab/pane（误关恢复，⌘⇧T 弹栈）。@Published 让右键菜单的可用态跟着变。
     @Published private(set) var recentlyClosed = RecentlyClosedStack()
     /// 待回放的内容快照（pane → 文件路径）：surface 工厂创建时取走。
@@ -145,6 +172,7 @@ final class AppCoordinator: ObservableObject {
             fileURL: appSupport.appendingPathComponent("agent-sessions.json"))
         surfaceResumeBindings = SurfaceResumeBindingStore(
             fileURL: appSupport.appendingPathComponent("surface-resume-bindings.json"))
+        containerView.onGeometryReady = { [weak self] in self?.rebuildInitialTerminalTreeIfReady() }
         LoginShellPathCache.shared.captureOnce(
             shell: ConfigStore.shared.config.terminal.shell ?? ProcessInfo.processInfo.environment["SHELL"])
 
@@ -590,9 +618,9 @@ final class AppCoordinator: ObservableObject {
     func attach(to window: NSWindow) {
         self.window = window
         syncNativeAppearance()
-        rebuild()
-        // SwiftUI 布局是异步的：等容器上墙后再聚焦初始终端。
-        DispatchQueue.main.async { [weak self] in self?.focusActivePane() }
+        terminalTreeNeedsInitialBuild = true
+        // SwiftUI 布局是异步的：等 TerminalAreaView 真拿到有限尺寸后再建终端树。
+        DispatchQueue.main.async { [weak self] in self?.rebuildInitialTerminalTreeIfReady() }
         startConfigWatch()
         detectLaunchableAgents()
         startAgentPolling()
@@ -612,6 +640,14 @@ final class AppCoordinator: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in self?.syncWindowOcclusion() }
         }
+    }
+
+    private func rebuildInitialTerminalTreeIfReady() {
+        guard terminalTreeNeedsInitialBuild,
+              window != nil,
+              containerView.bounds.size.isFinitePositiveArea else { return }
+        terminalTreeNeedsInitialBuild = false
+        rebuild()
     }
 
     /// 窗口可见性 → 终端渲染器开/睡。不可见时连当前 tab 的 surface 也睡（光标闪烁等动画停画）。
@@ -2399,10 +2435,18 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
-    private func focusActivePane() {
+    private func focusActivePane(retryIfDetached: Bool = true) {
         guard let tab = activeTabModel(),
               let surface = registry.surface(for: tab.activePane) as? GhosttySurface else { return }
-        window?.makeFirstResponder(surface.hostView)
+        guard let hostWindow = surface.hostView.window,
+              hostWindow === window else {
+            if retryIfDetached {
+                DispatchQueue.main.async { [weak self] in
+                    self?.focusActivePane(retryIfDetached: false)
+                }
+            }
+            return
+        }
         surface.focus()
     }
 

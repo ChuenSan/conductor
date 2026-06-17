@@ -191,8 +191,8 @@ final class CompanionController: ObservableObject {
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.contentView = CompanionPanelContentView(controller: self)
         p.setFrameAutosaveName(Self.frameAutosaveName)
-        if p.frame.origin == .zero { repositionToCorner(config.corner) }   // 没有存档位置 → 落到配置角落
         panel = p
+        if p.frame.origin == .zero { repositionToCorner(config.corner) }   // 没有存档位置 → 落到配置角落
         return p
     }
 

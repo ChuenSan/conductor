@@ -3,6 +3,12 @@ import ConductorCore
 import Foundation
 @preconcurrency import GhosttyKit
 
+private extension CGSize {
+    var isFinitePositiveArea: Bool {
+        width.isFinite && height.isFinite && width > 1 && height > 1
+    }
+}
+
 /// 一个真 libghostty 终端。持有 `ghostty_surface_t` 和承载它的 `TerminalHostView`，
 /// 实现 ConductorCore 的引擎无关 `TerminalSurface` 生命周期协议。几何/输入逻辑也在此（host view 只转发事件）。
 @MainActor
@@ -161,6 +167,7 @@ final class GhosttySurface: TerminalSurface {
     /// host view 上墙后调用：若尚未创建则创建 libghostty surface。
     func attachIfPossible() {
         guard surface == nil, hostView.window != nil, let cwd = pendingCwd else { return }
+        guard hostView.bounds.size.isFinitePositiveArea else { return }
         GhosttyRuntime.shared.ensureStarted()
         guard let app = GhosttyRuntime.shared.app else { return }
 
@@ -245,6 +252,7 @@ final class GhosttySurface: TerminalSurface {
 
     func syncGeometry(force: Bool = false) {
         guard let surface, let window = hostView.window else { return }
+        guard hostView.bounds.size.isFinitePositiveArea else { return }
         // 面板开合动画期间不做真实 resize（每帧网格重排 + drawable 重分配是动画卡顿主因）；
         // 解冻时 resizeFreezeDidEnd 会 force 补一次最终尺寸。
         if TerminalResizeFreeze.shared.isFrozen, !force { return }
@@ -254,6 +262,7 @@ final class GhosttySurface: TerminalSurface {
             lastScale = scale
         }
         let backing = hostView.convertToBacking(NSRect(origin: .zero, size: hostView.bounds.size)).size
+        guard backing.isFinitePositiveArea else { return }
         let width = max(1, UInt32(backing.width.rounded(.toNearestOrAwayFromZero)))
         let height = max(1, UInt32(backing.height.rounded(.toNearestOrAwayFromZero)))
         let pixel = CGSize(width: CGFloat(width), height: CGFloat(height))

@@ -432,7 +432,13 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     private func layoutCard() {
         // 卡片矩形吸附到物理像素边界：分屏比例/SwiftUI 布局可能给出小数坐标，
         // Metal 终端层落在半像素上会被 GPU 重采样，文字发虚、边缘起锯齿。
-        var inset = bounds.insetBy(dx: gap, dy: gap)
+        guard bounds.width.isFinite, bounds.height.isFinite else { return }
+        var inset = NSRect(
+            x: gap,
+            y: gap,
+            width: max(0, bounds.width - gap * 2),
+            height: max(0, bounds.height - gap * 2)
+        )
         if window != nil {
             inset = backingAlignedRect(inset, options: .alignAllEdgesNearest)
         }
@@ -442,14 +448,17 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
                                               cornerWidth: cornerRadius, cornerHeight: cornerRadius,
                                               transform: nil)
         let fb = frameView.bounds
-        header.frame = NSRect(x: 0, y: fb.height - headerH, width: fb.width, height: headerH)
-        card.frame = NSRect(x: 0, y: 0, width: fb.width, height: max(0, fb.height - headerH))
+        let fbWidth = max(0, fb.width)
+        let fbHeight = max(0, fb.height)
+        let headerHeight = min(headerH, fbHeight)
+        header.frame = NSRect(x: 0, y: max(0, fbHeight - headerHeight), width: fbWidth, height: headerHeight)
+        card.frame = NSRect(x: 0, y: 0, width: fbWidth, height: max(0, fbHeight - headerHeight))
         hostView.frame = card.bounds
-        scrollbar.frame = NSRect(x: fb.width - 14, y: 0, width: 14, height: max(0, fb.height - headerH))
+        scrollbar.frame = NSRect(x: max(0, fbWidth - 14), y: 0, width: min(14, fbWidth), height: card.bounds.height)
         if let searchBar, !searchBar.isHidden {
-            let width = min(320, fb.width - 24)
-            searchBar.frame = NSRect(x: fb.width - width - 12,
-                                     y: fb.height - headerH - 32 - 8,
+            let width = min(320, max(0, fbWidth - 24))
+            searchBar.frame = NSRect(x: max(0, fbWidth - width - 12),
+                                     y: max(0, fbHeight - headerHeight - 32 - 8),
                                      width: width, height: 32)
         }
     }

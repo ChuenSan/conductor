@@ -2,6 +2,23 @@ import AppKit
 import ConductorCore
 import SwiftUI
 
+/// Root SwiftUI content fills the AppKit window by autoresizing only.
+///
+/// NSHostingView otherwise reports an intrinsic/fitting size derived from the
+/// SwiftUI tree. RootView intentionally contains flexible `maxWidth: .infinity`
+/// regions; during launch AppKit can query that fitting size before the host
+/// has a finite window proposal and produce invalid infinite geometry. Keep the
+/// host out of AppKit sizing and let the fixed window frame drive layout.
+private final class RootHostingView<Content: View>: NSHostingView<Content> {
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
+    }
+
+    override var fittingSize: NSSize {
+        bounds.size
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: NSWindow!
@@ -35,8 +52,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         //（日志 "Invalid view geometry: x/y is infinity"）→ 窗口内容空白、ghostty 表面坏尺寸 → app 不可用退出。
         // autoresizing 不依赖内在尺寸，稳（等价 0.0.5 直挂 hostingView 的行为，且保留毛玻璃背衬）。
         let contentRect = NSRect(x: 0, y: 0, width: 1180, height: 760)
-        let host = NSHostingView(rootView: RootView(coordinator: coordinator))
+        let host = RootHostingView(rootView: RootView(coordinator: coordinator))
         host.sizingOptions = []                       // 不按 SwiftUI 内容尺寸生成约束（双保险）
+        host.translatesAutoresizingMaskIntoConstraints = true
         host.frame = contentRect
         host.autoresizingMask = [.width, .height]
         let blur = NSVisualEffectView(frame: contentRect)
@@ -124,10 +142,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 }
 
+@MainActor
+private var retainedAppDelegate: AppDelegate?
+
 MainActor.assumeIsolated {
     let app = NSApplication.shared
     app.setActivationPolicy(.regular)
     let delegate = AppDelegate()
+    retainedAppDelegate = delegate
     app.delegate = delegate
     app.run()
 }
