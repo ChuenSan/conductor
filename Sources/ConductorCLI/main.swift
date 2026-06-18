@@ -4,7 +4,12 @@ import Foundation
 
 struct CLIError: Error, CustomStringConvertible {
     let description: String
-    init(_ description: String) { self.description = description }
+    var httpStatus: String
+
+    init(_ description: String, httpStatus: String = "500 Internal Server Error") {
+        self.description = description
+        self.httpStatus = httpStatus
+    }
 }
 
 struct Options {

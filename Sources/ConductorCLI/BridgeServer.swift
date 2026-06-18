@@ -5,6 +5,7 @@ import Foundation
 
 enum BridgeServer {
     private static let websocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+    private static let maxPayloadBytes = PayloadLimit.maxBytes
 
     static func run(host: String, port: Int, interval: Double) throws {
         let server = socket(AF_INET, SOCK_STREAM, 0)
@@ -96,6 +97,12 @@ enum BridgeServer {
             } else {
                 try writeHTTP(fd: fd, status: "200 OK", body: docsData())
             }
+        } catch let error as CLIError {
+            let body = jsonData(.object([
+                "ok": .bool(false),
+                "error": .string(error.description),
+            ]))
+            try? writeHTTP(fd: fd, status: error.httpStatus, body: body)
         } catch {
             let body = jsonData(.object([
                 "ok": .bool(false),
@@ -107,7 +114,13 @@ enum BridgeServer {
 
     private static func rpcWebSocketLoop(fd: Int32) throws {
         while true {
-            let frame = try readFrame(fd: fd)
+            let frame: WebSocketFrame
+            do {
+                frame = try readFrame(fd: fd)
+            } catch let error as CLIError where error.description == "WebSocket frame too large" {
+                try? sendFrame(fd: fd, opcode: 0x8, payload: Data([0x03, 0xF1]))
+                return
+            }
             switch frame.opcode {
             case 0x1:
                 let response = proxyData(body: frame.payload)
@@ -234,19 +247,25 @@ enum BridgeServer {
             let status = try SocketClient().request(method: AutomationMethod.appStatus)
             var payload = object(status.result)
             payload["ok"] = .bool(true)
-            payload["bridge"] = .object([
-                "transport": .string("http-websocket"),
-                "rpc": .string("/rpc"),
-                "events": .string("/events"),
-            ])
+            payload["bridge"] = bridgeInfo()
             return jsonData(.object(payload))
         } catch {
             return jsonData(.object([
                 "ok": .bool(false),
                 "error": .string("\(error)"),
                 "socket": .string(AutomationProtocol.defaultSocketURL.path),
+                "bridge": bridgeInfo(),
             ]))
         }
+    }
+
+    private static func bridgeInfo() -> JSONValue {
+        .object([
+            "transport": .string("http-websocket"),
+            "rpc": .string("/rpc"),
+            "events": .string("/events"),
+            "maxPayloadBytes": .int(maxPayloadBytes),
+        ])
     }
 
     private static func docsData() -> Data {
@@ -295,7 +314,7 @@ enum BridgeServer {
                 "/rpc": .object([
                     "post": .object([
                         "summary": .string("Proxy one AutomationRequest"),
-                        "requestBody": jsonRequestBody(description: "AutomationRequest JSON"),
+                        "requestBody": jsonRequestBody(description: "AutomationRequest JSON (max 4 MiB)"),
                         "responses": automationResponseSpec(),
                     ]),
                 ]),
@@ -304,6 +323,7 @@ enum BridgeServer {
                         "summary": .string("Proxy newline-delimited AutomationRequest messages"),
                         "requestBody": .object([
                             "required": .bool(true),
+                            "description": .string("NDJSON AutomationRequest lines (max 4 MiB total)"),
                             "content": .object([
                                 "application/x-ndjson": .object([
                                     "schema": .object(["type": .string("string")]),
@@ -453,6 +473,9 @@ enum BridgeServer {
             let data = try readExactly(fd: fd, count: 8)
             length = data.reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
         }
+        if case .failure = PayloadLimit.validateFrameLength(length) {
+            throw CLIError("WebSocket frame too large", httpStatus: "413 Payload Too Large")
+        }
         let mask = masked ? try readExactly(fd: fd, count: 4) : []
         var payload = try readExactly(fd: fd, count: Int(length))
         if masked {
@@ -561,7 +584,15 @@ private struct HTTPRequest {
             let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespacesAndNewlines)
             headers[key] = value
         }
-        let contentLength = headers["content-length"].flatMap(Int.init) ?? 0
+        let contentLength: Int
+        switch PayloadLimit.validateContentLength(headers["content-length"]) {
+        case .success(let value):
+            contentLength = value
+        case .failure(.invalidContentLength(let raw)):
+            throw CLIError("Invalid Content-Length: \(raw)", httpStatus: "400 Bad Request")
+        case .failure(.tooLarge):
+            throw CLIError("Payload too large", httpStatus: "413 Payload Too Large")
+        }
         while body.count < contentLength {
             let count = Darwin.read(fd, &scratch, min(scratch.count, contentLength - body.count))
             guard count > 0 else { throw CLIError("connection closed") }
@@ -569,6 +600,9 @@ private struct HTTPRequest {
         }
         if body.count > contentLength {
             body = body.subdata(in: 0..<contentLength)
+        }
+        guard body.count <= PayloadLimit.maxBytes else {
+            throw CLIError("Payload too large", httpStatus: "413 Payload Too Large")
         }
         return HTTPRequest(method: requestLine[0], path: path, query: query, headers: headers, body: body)
     }
