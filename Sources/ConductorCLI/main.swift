@@ -99,21 +99,36 @@ final class SocketClient {
     }
 
     private func performRequest(_ request: AutomationRequest, throwOnRPCError: Bool) throws -> AutomationResponse {
+        let response: AutomationResponse
         do {
-            return try send(request, throwOnRPCError: throwOnRPCError)
+            response = try send(request)
         } catch {
             AppLauncher.wake()
             let deadline = Date().addingTimeInterval(3)
             var lastError = error
             while Date() < deadline {
                 usleep(150_000)
-                do { return try send(request, throwOnRPCError: throwOnRPCError) } catch { lastError = error }
+                let retryResponse: AutomationResponse
+                do {
+                    retryResponse = try send(request)
+                } catch {
+                    lastError = error
+                    continue
+                }
+                if throwOnRPCError, let error = retryResponse.error {
+                    throw CLIError("\(error.code): \(error.message)")
+                }
+                return retryResponse
             }
             throw CLIError("Could not connect to Conductor socket at \(socketURL.path): \(lastError)")
         }
+        if throwOnRPCError, let error = response.error {
+            throw CLIError("\(error.code): \(error.message)")
+        }
+        return response
     }
 
-    private func send(_ request: AutomationRequest, throwOnRPCError: Bool) throws -> AutomationResponse {
+    private func send(_ request: AutomationRequest) throws -> AutomationResponse {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw CLIError("socket() failed: \(String(cString: strerror(errno)))") }
         defer { close(fd) }
@@ -144,11 +159,7 @@ final class SocketClient {
         payload.append(0x0A)
         try writeAll(payload, fd: fd)
         let reply = try readLine(fd: fd)
-        let response = try AutomationCodec.decodeResponse(reply)
-        if throwOnRPCError, let error = response.error {
-            throw CLIError("\(error.code): \(error.message)")
-        }
-        return response
+        return try AutomationCodec.decodeResponse(reply)
     }
 
     private func writeAll(_ data: Data, fd: Int32) throws {
@@ -248,6 +259,7 @@ func usage() -> String {
     Usage:
       conductorctl ping
       conductorctl status [--json]
+      conductorctl taskcards [--json]
       conductorctl raw METHOD '{"key":"value"}'
       conductorctl batch < requests.ndjson
       conductorctl methods
@@ -304,13 +316,13 @@ func main() throws {
         print(usage())
 
     case "ping":
-        let response = try client.request(method: "app.ping")
+        let response = try client.request(method: AutomationMethod.appPing)
         let result = object(response.result)
         print("Conductor OK protocol=\(result["protocol"]?.intValue ?? 0) socket=\(result["socket"]?.stringValue ?? "")")
 
     case "status":
         let options = try parseOptions(args)
-        let response = try client.request(method: "app.status")
+        let response = try client.request(method: AutomationMethod.appStatus)
         if options.has("json") {
             printResult(response, json: true)
         } else {
@@ -318,9 +330,18 @@ func main() throws {
         }
 
     case "methods":
-        let response = try client.request(method: "app.methods")
+        let response = try client.request(method: AutomationMethod.appMethods)
         for item in array(response.result) {
             if let name = item.stringValue { print(name) }
+        }
+
+    case "taskcards", "task-cards":
+        let options = try parseOptions(args)
+        let response = try client.request(method: AutomationMethod.appOpenTaskCards)
+        if options.has("json") {
+            printResult(response, json: true)
+        } else {
+            print("Opened task cards")
         }
 
     case "raw":
@@ -336,14 +357,14 @@ func main() throws {
         let options = try parseOptions(Array(args.dropFirst()))
         switch subcommand {
         case "list", "ls":
-            let response = try client.request(method: "workspace.list")
+            let response = try client.request(method: AutomationMethod.workspaceList)
             if options.has("json") {
                 printResult(response, json: true)
             } else {
                 printWorkspaces(array(response.result))
             }
         case "current":
-            let response = try client.request(method: "workspace.current")
+            let response = try client.request(method: AutomationMethod.workspaceCurrent)
             if options.has("json") {
                 printResult(response, json: true)
             } else {
@@ -351,12 +372,12 @@ func main() throws {
             }
         case "select":
             let workspace = try requiredValue(options, key: "workspace", positionalIndex: 0, label: "WORKSPACE")
-            _ = try client.request(method: "workspace.select", params: ["workspace": .string(workspace)])
+            _ = try client.request(method: AutomationMethod.workspaceSelect, params: ["workspace": .string(workspace)])
         case "create", "new":
             let path = try requiredValue(options, key: "path", positionalIndex: 0, label: "PATH")
             var params: [String: JSONValue] = ["path": .string(path)]
             if let name = options.value("name") { params["name"] = .string(name) }
-            let response = try client.request(method: "workspace.create", params: params)
+            let response = try client.request(method: AutomationMethod.workspaceCreate, params: params)
             if options.has("json") {
                 printResult(response, json: true)
             } else {
@@ -365,19 +386,19 @@ func main() throws {
         case "rename":
             let workspace = try requiredValue(options, key: "workspace", positionalIndex: 0, label: "WORKSPACE")
             let name = try requiredValue(options, key: "name", positionalIndex: 1, label: "NAME")
-            _ = try client.request(method: "workspace.rename", params: [
+            _ = try client.request(method: AutomationMethod.workspaceRename, params: [
                 "workspace": .string(workspace),
                 "name": .string(name),
             ])
         case "close":
             let workspace = try requiredValue(options, key: "workspace", positionalIndex: 0, label: "WORKSPACE")
-            _ = try client.request(method: "workspace.close", params: ["workspace": .string(workspace)])
+            _ = try client.request(method: AutomationMethod.workspaceClose, params: ["workspace": .string(workspace)])
         case "tree":
             var params: [String: JSONValue] = [:]
             if let workspace = options.value("workspace") ?? options.positional.first {
                 params["workspace"] = .string(workspace)
             }
-            printResult(try client.request(method: "workspace.tree", params: params), json: true)
+            printResult(try client.request(method: AutomationMethod.workspaceTree, params: params), json: true)
         case "status":
             let action = options.positional.first ?? "list"
             var params = workspaceScopedParams(options)
@@ -387,9 +408,9 @@ func main() throws {
                 params["text"] = .string(try requiredJoinedText(options, key: "text", from: 2, label: "TEXT"))
                 if let color = options.value("color") { params["color"] = .string(color) }
                 if let icon = options.value("icon") { params["icon"] = .string(icon) }
-                _ = try client.request(method: "workspace.status.set", params: params)
+                _ = try client.request(method: AutomationMethod.workspaceStatusSet, params: params)
             case "list", "ls":
-                let response = try client.request(method: "workspace.status.list", params: params)
+                let response = try client.request(method: AutomationMethod.workspaceStatusList, params: params)
                 if options.has("json") {
                     printResult(response, json: true)
                 } else {
@@ -399,7 +420,7 @@ func main() throws {
                 if let key = options.value("key") ?? options.positional.dropFirst().first {
                     params["key"] = .string(key)
                 }
-                _ = try client.request(method: "workspace.status.clear", params: params)
+                _ = try client.request(method: AutomationMethod.workspaceStatusClear, params: params)
             default:
                 throw CLIError("Unknown workspace status subcommand: \(action)")
             }
@@ -412,9 +433,9 @@ func main() throws {
                 guard let value = Double(raw) else { throw CLIError("Invalid VALUE: \(raw)") }
                 params["value"] = .double(value)
                 if let label = options.value("label") { params["label"] = .string(label) }
-                _ = try client.request(method: "workspace.progress.set", params: params)
+                _ = try client.request(method: AutomationMethod.workspaceProgressSet, params: params)
             case "clear":
-                _ = try client.request(method: "workspace.progress.clear", params: params)
+                _ = try client.request(method: AutomationMethod.workspaceProgressClear, params: params)
             default:
                 throw CLIError("Unknown workspace progress subcommand: \(action)")
             }
@@ -426,17 +447,17 @@ func main() throws {
                 params["text"] = .string(try requiredJoinedText(options, key: "text", from: 1, label: "TEXT"))
                 if let level = options.value("level") { params["level"] = .string(level) }
                 if let source = options.value("source") { params["source"] = .string(source) }
-                _ = try client.request(method: "workspace.log.append", params: params)
+                _ = try client.request(method: AutomationMethod.workspaceLogAppend, params: params)
             case "list", "ls":
                 if let limit = options.value("limit").flatMap(Int.init) { params["limit"] = .int(limit) }
-                let response = try client.request(method: "workspace.log.list", params: params)
+                let response = try client.request(method: AutomationMethod.workspaceLogList, params: params)
                 if options.has("json") {
                     printResult(response, json: true)
                 } else {
                     printWorkspaceLogs(array(response.result))
                 }
             case "clear":
-                _ = try client.request(method: "workspace.log.clear", params: params)
+                _ = try client.request(method: AutomationMethod.workspaceLogClear, params: params)
             default:
                 throw CLIError("Unknown workspace log subcommand: \(action)")
             }
@@ -451,7 +472,7 @@ func main() throws {
         case "list", "ls":
             var params: [String: JSONValue] = [:]
             if let workspace = options.value("workspace") { params["workspace"] = .string(workspace) }
-            let response = try client.request(method: "tab.list", params: params)
+            let response = try client.request(method: AutomationMethod.tabList, params: params)
             if options.has("json") {
                 printResult(response, json: true)
             } else {
@@ -461,18 +482,18 @@ func main() throws {
             let tab = try requiredValue(options, key: "tab", positionalIndex: 0, label: "TAB")
             var params: [String: JSONValue] = ["tab": .string(tab)]
             if let workspace = options.value("workspace") { params["workspace"] = .string(workspace) }
-            _ = try client.request(method: "tab.select", params: params)
+            _ = try client.request(method: AutomationMethod.tabSelect, params: params)
         case "rename":
             let tab = try requiredValue(options, key: "tab", positionalIndex: 0, label: "TAB")
             let title = try requiredValue(options, key: "title", positionalIndex: 1, label: "TITLE")
             var params: [String: JSONValue] = ["tab": .string(tab), "title": .string(title)]
             if let workspace = options.value("workspace") { params["workspace"] = .string(workspace) }
-            _ = try client.request(method: "tab.rename", params: params)
+            _ = try client.request(method: AutomationMethod.tabRename, params: params)
         case "close":
             let tab = try requiredValue(options, key: "tab", positionalIndex: 0, label: "TAB")
             var params: [String: JSONValue] = ["tab": .string(tab)]
             if let workspace = options.value("workspace") { params["workspace"] = .string(workspace) }
-            _ = try client.request(method: "tab.close", params: params)
+            _ = try client.request(method: AutomationMethod.tabClose, params: params)
         default:
             throw CLIError("Unknown tab subcommand: \(subcommand)")
         }
@@ -482,7 +503,7 @@ func main() throws {
         let options = try parseOptions(Array(args.dropFirst()))
         switch subcommand {
         case "list", "ls":
-            let response = try client.request(method: "pane.list", params: [:])
+            let response = try client.request(method: AutomationMethod.paneList, params: [:])
             if options.has("json") {
                 printResult(response, json: true)
             } else {
@@ -499,20 +520,20 @@ func main() throws {
         case "create", "new":
             var params: [String: JSONValue] = [:]
             if let cwd = options.value("cwd") { params["cwd"] = .string(cwd) }
-            printResult(try client.request(method: "pane.create", params: params), json: options.has("json"))
+            printResult(try client.request(method: AutomationMethod.paneCreate, params: params), json: options.has("json"))
         case "split":
             var params: [String: JSONValue] = [:]
             if let pane = options.value("pane") ?? options.positional.first { params["pane"] = .string(pane) }
             if let direction = options.value("direction") { params["direction"] = .string(direction) }
             if let cwd = options.value("cwd") { params["cwd"] = .string(cwd) }
-            printResult(try client.request(method: "pane.split", params: params), json: options.has("json"))
+            printResult(try client.request(method: AutomationMethod.paneSplit, params: params), json: options.has("json"))
         case "focus":
             guard let pane = options.positional.first else { throw CLIError("pane focus requires PANE") }
-            _ = try client.request(method: "pane.focus", params: ["pane": .string(pane)])
+            _ = try client.request(method: AutomationMethod.paneFocus, params: ["pane": .string(pane)])
         case "close":
             var params: [String: JSONValue] = [:]
             if let pane = options.value("pane") ?? options.positional.first { params["pane"] = .string(pane) }
-            _ = try client.request(method: "pane.close", params: params)
+            _ = try client.request(method: AutomationMethod.paneClose, params: params)
         default:
             throw CLIError("Unknown pane subcommand: \(subcommand)")
         }
@@ -522,7 +543,7 @@ func main() throws {
         var params: [String: JSONValue] = [:]
         if let pane = options.value("pane") ?? options.positional.first { params["pane"] = .string(pane) }
         if options.has("scrollback") { params["scrollback"] = .bool(true) }
-        let response = try client.request(method: "pane.read", params: params)
+        let response = try client.request(method: AutomationMethod.paneRead, params: params)
         print(object(response.result)["text"]?.stringValue ?? "")
 
     case "send":
@@ -542,7 +563,7 @@ func main() throws {
             "submit": .bool(!options.has("no-submit")),
         ]
         if let pane = options.value("pane") { params["pane"] = .string(pane) }
-        _ = try client.request(method: "agent.send", params: params)
+        _ = try client.request(method: AutomationMethod.agentSend, params: params)
 
     case "run":
         let options = try parseOptions(args)
@@ -566,7 +587,7 @@ func main() throws {
         } else if let prompt = options.value("prompt") {
             params["prompt"] = .string(prompt)
         }
-        let response = try client.request(method: "agent.run", params: params)
+        let response = try client.request(method: AutomationMethod.agentRun, params: params)
         let result = object(response.result)
         let job = result["jobId"]?.stringValue ?? result["pane"]?.stringValue
         if options.has("wait") {
@@ -595,7 +616,7 @@ func main() throws {
         if let job { params["job"] = .string(job) }
         switch subcommand {
         case "status":
-            let response = try client.request(method: "agent.status", params: params)
+            let response = try client.request(method: AutomationMethod.agentStatus, params: params)
             if options.has("json") {
                 printResult(response, json: true)
             } else {
@@ -612,7 +633,7 @@ func main() throws {
                 printAgentResult(object(completed.result))
             }
         case "result":
-            let response = try client.request(method: "agent.result", params: params)
+            let response = try client.request(method: AutomationMethod.agentResult, params: params)
             if options.has("json") {
                 printResult(response, json: true)
             } else {
@@ -625,7 +646,7 @@ func main() throws {
     case "activity":
         let options = try parseOptions(args)
         let limit = options.value("limit").flatMap(Int.init) ?? 20
-        let response = try client.request(method: "activity.list", params: ["limit": .int(limit)])
+        let response = try client.request(method: AutomationMethod.activityList, params: ["limit": .int(limit)])
         if options.has("json") {
             printResult(response, json: true)
         } else {
@@ -638,7 +659,7 @@ func main() throws {
         let interval = max(0.5, options.value("interval").flatMap(Double.init) ?? 2.0)
         var seen = Set<String>()
         while true {
-            let response = try client.request(method: "events.recent", params: ["limit": .int(limit)])
+            let response = try client.request(method: AutomationMethod.eventsRecent, params: ["limit": .int(limit)])
             for event in array(response.result).reversed() {
                 let item = object(event)
                 guard let id = item["id"]?.stringValue, !seen.contains(id) else { continue }
@@ -654,7 +675,7 @@ func main() throws {
         let interval = max(0.5, options.value("interval").flatMap(Double.init) ?? 2.0)
         var seen = Set<String>()
         while true {
-            let response = try client.request(method: "activity.list", params: ["limit": .int(20)])
+            let response = try client.request(method: AutomationMethod.activityList, params: ["limit": .int(20)])
             let entries = array(response.result)
             for entry in entries.reversed() {
                 let item = object(entry)
@@ -749,13 +770,13 @@ func waitForAgentResult(client: SocketClient, job: String?, timeout: Double, pol
     let started = Date()
     while true {
         let statusParams: [String: JSONValue] = job.map { ["job": .string($0)] } ?? [:]
-        let statusResponse = try client.request(method: "agent.status", params: statusParams)
+        let statusResponse = try client.request(method: AutomationMethod.agentStatus, params: statusParams)
         let statusObject = object(statusResponse.result)
         let status = statusObject["status"]?.stringValue ?? "unknown"
         let resolvedJob = statusObject["jobId"]?.stringValue ?? job
         if status == "completed" {
             let resultParams: [String: JSONValue] = resolvedJob.map { ["job": .string($0)] } ?? [:]
-            return try client.request(method: "agent.result", params: resultParams)
+            return try client.request(method: AutomationMethod.agentResult, params: resultParams)
         }
         if timeout > 0, Date().timeIntervalSince(started) >= timeout {
             let label = resolvedJob ?? "-"

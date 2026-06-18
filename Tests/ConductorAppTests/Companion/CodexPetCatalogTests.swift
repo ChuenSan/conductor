@@ -59,6 +59,30 @@ final class CodexPetCatalogTests: XCTestCase {
         if case .atlas = pets.first?.kind {} else { XCTFail("应是 atlas 宠物") }
     }
 
+    func testCompanionCatalogDoesNotPrependBuiltinPlaceholders() {
+        let pet = CompanionPet(
+            id: "starcorn",
+            name: "Starcorn",
+            kind: .atlas(root.appendingPathComponent("starcorn/spritesheet.png"))
+        )
+
+        let pets = CompanionPetCatalog.all(discovered: [pet])
+
+        XCTAssertEqual(pets.map(\.id), ["starcorn"])
+        XCTAssertFalse(pets.map(\.id).contains(PetTemplateCatalog.default.id))
+    }
+
+    func testCompanionCatalogFallsBackFromBuiltinIDToFirstExternalPet() {
+        let pet = CompanionPet(
+            id: "starcorn",
+            name: "Starcorn",
+            kind: .atlas(root.appendingPathComponent("starcorn/spritesheet.png"))
+        )
+
+        XCTAssertEqual(CompanionPetCatalog.pet(id: PetTemplateCatalog.default.id, discovered: [pet]).id, "starcorn")
+        XCTAssertEqual(CompanionPetCatalog.pet(id: "missing", discovered: []).id, PetTemplateCatalog.default.id)
+    }
+
     func testDiscoverSkipsBundleWithoutSpritesheet() throws {
         let dir = root.appendingPathComponent("nosheet", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

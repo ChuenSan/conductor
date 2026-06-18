@@ -11,7 +11,7 @@ final class CompanionRenderTests: XCTestCase {
         let dir = URL(fileURLWithPath: "/tmp/conductor-pet")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        // 默认模版的六态
+        // 默认模版的六态（含头顶辉光的发光取色由 CompanionView 负责，这里验本体）
         for mood in PetMood.allCases {
             try render(PetSprite(mood: mood, template: PetTemplateCatalog.default).frame(width: 84, height: 84),
                        size: 120, to: dir.appendingPathComponent("mood-\(mood.rawValue).png"))
@@ -21,18 +21,6 @@ final class CompanionRenderTests: XCTestCase {
             try render(PetSprite(mood: .idle, template: t).frame(width: 84, height: 84),
                        size: 120, to: dir.appendingPathComponent("template-\(t.id).png"))
         }
-
-        // 审批卡（气泡内联允许/拒绝）：权限请求 + 多选项提问
-        let perm = ApprovalCard(
-            request: FeedRequest(kind: .permission(tool: "bash", category: .executeCommand,
-                                                   detail: "rm -rf ./build")),
-            onDecision: { _ in }, onMore: {})
-        try render(perm, size: 240, to: dir.appendingPathComponent("approval-permission.png"))
-
-        let question = ApprovalCard(
-            request: FeedRequest(kind: .question(prompt: "用哪个分支？", options: ["main", "dev", "feat/x"])),
-            onDecision: { _ in }, onMore: {})
-        try render(question, size: 240, to: dir.appendingPathComponent("approval-question.png"))
     }
 
     private func render<V: View>(_ content: V, size: CGFloat, to url: URL) throws {

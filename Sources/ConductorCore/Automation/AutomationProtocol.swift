@@ -23,6 +23,75 @@ public enum AutomationProtocol {
     }
 }
 
+public enum AutomationMethod {
+    public static let appPing = "app.ping"
+    public static let appStatus = "app.status"
+    public static let appMethods = "app.methods"
+    public static let appOpenTools = "app.open-tools"
+    public static let appOpenTaskCards = "app.open-task-cards"
+
+    public static let workspaceList = "workspace.list"
+    public static let workspaceCurrent = "workspace.current"
+    public static let workspaceSelect = "workspace.select"
+    public static let workspaceCreate = "workspace.create"
+    public static let workspaceRename = "workspace.rename"
+    public static let workspaceClose = "workspace.close"
+    public static let workspaceTree = "workspace.tree"
+    public static let workspaceStatusSet = "workspace.status.set"
+    public static let workspaceStatusList = "workspace.status.list"
+    public static let workspaceStatusClear = "workspace.status.clear"
+    public static let workspaceProgressSet = "workspace.progress.set"
+    public static let workspaceProgressClear = "workspace.progress.clear"
+    public static let workspaceLogAppend = "workspace.log.append"
+    public static let workspaceLogList = "workspace.log.list"
+    public static let workspaceLogClear = "workspace.log.clear"
+
+    public static let tabList = "tab.list"
+    public static let tabCreate = "tab.create"
+    public static let tabSelect = "tab.select"
+    public static let tabRename = "tab.rename"
+    public static let tabClose = "tab.close"
+
+    public static let paneList = "pane.list"
+    public static let paneCreate = "pane.create"
+    public static let paneSplit = "pane.split"
+    public static let paneFocus = "pane.focus"
+    public static let paneClose = "pane.close"
+    public static let paneRead = "pane.read"
+    public static let paneKeys = "pane.keys"
+    public static let paneNotify = "pane.notify"
+    public static let paneResumeSet = "pane.resume.set"
+    public static let paneResumeShow = "pane.resume.show"
+    public static let paneResumeClear = "pane.resume.clear"
+
+    public static let agentSend = "agent.send"
+    public static let agentRun = "agent.run"
+    public static let agentStatus = "agent.status"
+    public static let agentResult = "agent.result"
+
+    public static let activityList = "activity.list"
+    public static let eventsRecent = "events.recent"
+
+    public static let feedRequest = "feed.request"
+    public static let feedList = "feed.list"
+    public static let feedApprove = "feed.approve"
+    public static let feedDeny = "feed.deny"
+    public static let feedAnswer = "feed.answer"
+
+    public static let all: [String] = [
+        appPing, appStatus, appMethods, appOpenTools, appOpenTaskCards,
+        workspaceList, workspaceCurrent, workspaceSelect, workspaceCreate, workspaceRename, workspaceClose,
+        workspaceTree, workspaceStatusSet, workspaceStatusList, workspaceStatusClear,
+        workspaceProgressSet, workspaceProgressClear, workspaceLogAppend, workspaceLogList, workspaceLogClear,
+        tabList, tabCreate, tabSelect, tabRename, tabClose,
+        paneList, paneCreate, paneSplit, paneFocus, paneClose, paneRead, paneKeys, paneNotify,
+        paneResumeSet, paneResumeShow, paneResumeClear,
+        agentSend, agentRun, agentStatus, agentResult,
+        activityList, eventsRecent,
+        feedRequest, feedList, feedApprove, feedDeny, feedAnswer,
+    ]
+}
+
 public struct AutomationRequest: Codable, Sendable {
     public var id: Int?
     public var method: String

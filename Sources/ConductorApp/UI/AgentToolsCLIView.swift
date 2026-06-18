@@ -63,6 +63,7 @@ struct AgentToolsCLIView: View {
             tools = tools.filter { tool in
                 tool.name.lowercased().contains(trimmed)
                     || tool.id.lowercased().contains(trimmed)
+                    || tool.command.lowercased().contains(trimmed)
                     || (tool.path ?? "").lowercased().contains(trimmed)
                     || (tool.version ?? "").lowercased().contains(trimmed)
             }
@@ -293,9 +294,9 @@ struct AgentToolsCLIView: View {
         .buttonStyle(PressScaleStyle())
         .contextMenu {
             if tool.isInstalled {
-                Button(L("启动")) { onLaunch(tool.id) }
+                Button(L("启动")) { onLaunch(tool.command) }
             }
-            Button(L("复制命令")) { store.copyText(tool.id) }
+            Button(L("复制命令")) { store.copyText(tool.command) }
             if let path = tool.path {
                 Button(L("复制路径")) { store.copyText(path) }
                 Button(L("在 Finder 中显示")) { reveal(path) }
@@ -325,7 +326,7 @@ struct AgentToolsCLIView: View {
                         .foregroundStyle(AppStyle.textPrimary)
                         .lineLimit(1)
                     HStack(spacing: 5) {
-                        Text(tool.id)
+                        Text(tool.command)
                             .font(.system(size: 9.5, weight: .medium, design: .monospaced))
                         if let path = tool.path {
                             Text(shortPath(path))
@@ -451,7 +452,7 @@ struct AgentToolsCLIInspector: View {
                         .font(.system(size: 14.5, weight: .bold))
                         .foregroundStyle(AppStyle.textPrimary)
                         .lineLimit(1)
-                    Text(tool.id)
+                    Text(tool.command)
                         .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(AppStyle.textTertiary)
                         .lineLimit(1)
@@ -460,7 +461,7 @@ struct AgentToolsCLIInspector: View {
 
             AgentToolsSection(L("基础信息")) {
                 AgentToolsInfoRow(label: L("状态"), value: tool.isInstalled ? L("可用") : L("缺失"))
-                AgentToolsInfoRow(label: L("命令"), value: tool.id, monospaced: true)
+                AgentToolsInfoRow(label: L("命令"), value: tool.command, monospaced: true)
                 AgentToolsInfoRow(label: L("版本"), value: tool.version ?? "-")
                 AgentToolsInfoRow(label: L("安装来源"), value: tool.path.map(installRootLabel) ?? L("未检测到位置"))
             }
@@ -489,14 +490,14 @@ struct AgentToolsCLIInspector: View {
                     height: 28,
                     fontSize: 11,
                     horizontalPadding: 10) {
-                        onLaunch(tool.id)
+                        onLaunch(tool.command)
                     }
                     .disabled(!tool.isInstalled)
                     .opacity(tool.isInstalled ? 1 : 0.55)
 
                 VStack(alignment: .leading, spacing: 7) {
                     AgentToolsLinkButton(title: L("复制命令"), icon: "doc.on.doc") {
-                        store.copyText(tool.id)
+                        store.copyText(tool.command)
                     }
 
                     if let path = tool.path {

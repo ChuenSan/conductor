@@ -15,7 +15,7 @@ import subprocess
 import threading
 import time
 
-ROOT = "/Users/cses-38/workspace/conductor"
+ROOT = os.getcwd()
 BIN = os.path.join(ROOT, ".build/debug/conductorctl")
 
 

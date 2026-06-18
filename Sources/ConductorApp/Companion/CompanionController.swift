@@ -15,32 +15,54 @@ import SwiftUI
 @MainActor
 final class CompanionController: ObservableObject {
     @Published private(set) var mood: PetMood = .idle
+    /// 队长头顶的临时卖萌气泡（摸一下）。审批 / 跑完 / 干活都进 `members` 了，这里只剩闲聊。
     @Published private(set) var bubble: String?
-    @Published private(set) var pendingApproval: FeedRequest?
     @Published private(set) var config: CompanionConfig
     /// 点宠物时自增 → 视图弹一下（点击反馈）。
     @Published private(set) var pokeNonce = 0
 
-    /// AI 完成后 agent 的**真实回复全文**：宠物直接冒出来（可展开看全文），不是"可查看结果"这种死文案。
+    /// 在线会话们（每个一颗头顶光点）。一只宠物罩多会话，不分身。
+    @Published private(set) var members: [CompanionMember] = []
+    /// 容量外被折叠掉的会话数（→ "+N" 光点，点了在它们之间轮转聚焦）。
+    @Published private(set) var rosterOverflow = 0
+    /// 宠物当前替哪个会话开口（说话/批准）。默认最急的；点头顶光点可切。
+    @Published private(set) var activeMemberID: String?
+    /// 用户显式点过的会话（在它还在线期间黏住，盖过"默认最急"）。
+    private var userPickedID: String?
+
+    /// 当前被宠物"代言"的会话。
+    var activeMember: CompanionMember? {
+        guard let id = activeMemberID else { return nil }
+        return members.first { $0.id == id }
+    }
+
+    /// 每个 pane 最近一次 AI 完成的真实回复全文（带过期）——跑完那行直接显示，点进去看全文。
     /// 新一轮开始干活、或窗口过期则清。
-    @Published private(set) var resultText: String?
-    private var resultUntil: TimeInterval?
-    private var resultPaneID: String?
+    private var results: [String: (text: String, until: TimeInterval)] = [:]
     private static let resultWindow: TimeInterval = 20
 
     /// 摸一下的临时卖萌气泡。
     private var quip: String?
     private var quipUntil: TimeInterval?
 
-    static let windowSize = CGSize(width: 224, height: 248)
-    /// 底部「精灵命中区」高度：这块归原生 NSView（拖拽 + 点击跳转）；
-    /// 上方气泡/审批卡区交回 SwiftUI（按钮可点）。见 `CompanionPanelContentView.hitTest`。
-    static let petZoneHeight: CGFloat = 100
+    /// 窗口宽固定；高随小队行数增长（见 `desiredWindowHeight`）。
+    static let windowWidth: CGFloat = 252
+    /// 「队长命中区」高度：这块归原生 NSView（拖拽 + 点击跳转），固定占 pet 边的这一截；
+    /// 小队行落在另一侧的 SwiftUI 区（按钮可点）。见 `CompanionPanelContentView.hitTest`。
+    static let petZoneHeight: CGFloat = 104
+    /// 最多同时显示几行小队；超出折叠成 "+N"。
+    static let maxVisibleMembers = 5
+    static let rowSpacing: CGFloat = 7
+    /// 折叠态（无小队）窗口基准尺寸。
+    static var windowSize: CGSize { CGSize(width: windowWidth, height: petZoneHeight + 8) }
     private static let frameAutosaveName = "ConductorCompanionWindow"
 
     private weak var coordinator: AppCoordinator?
     private let feedCenter: FeedCenter
     private var reducer = PetStateReducer()
+
+    /// 顶部角落 → 队长贴窗口顶端、小队向下长；底部角落 → 队长贴底、小队向上长。
+    var petAtTop: Bool { config.corner == .topLeft || config.corner == .topRight }
 
     private var panel: NSPanel?
     /// 始终在的订阅（只观察配置，用来起停下面的"活动订阅"）。
@@ -122,10 +144,9 @@ final class CompanionController: ObservableObject {
     private func handleNotice(paneID: String?, title: String, body: String) {
         guard CompanionConfig.shouldDeliverToPet(notifyPet: config.notifyPet) else { return }  // 伙伴通知关 → 宠物不冒通知
         let text = Self.noticeText(title: title, body: body)
-        guard !text.isEmpty else { return }
-        resultText = text                        // 存 agent 真实回复全文（视图里可展开）
-        resultUntil = Date().timeIntervalSinceReferenceDate + Self.resultWindow
-        resultPaneID = paneID
+        // 回复挂到**具体会话**那一行上（多会话各显各的）；无 pane 归属的通知交给系统横幅，不上小队。
+        guard !text.isEmpty, let paneID, !paneID.isEmpty else { return }
+        results[paneID] = (text, Date().timeIntervalSinceReferenceDate + Self.resultWindow)
         recompute()                              // 立刻把真实回复顶上来
     }
 
@@ -220,11 +241,55 @@ final class CompanionController: ObservableObject {
     private func repositionToCorner(_ corner: CompanionConfig.Corner) {
         let p = panel ?? makePanel()
         guard let vf = NSScreen.main?.visibleFrame else { return }
-        let m: CGFloat = 24, s = Self.windowSize
-        let x = (corner == .topLeft || corner == .bottomLeft) ? vf.minX + m : vf.maxX - s.width - m
-        let y = (corner == .topLeft || corner == .topRight) ? vf.maxY - s.height - m : vf.minY + m
-        p.setFrameOrigin(NSPoint(x: x, y: y))
+        let m: CGFloat = 24, w = Self.windowWidth, h = desiredWindowHeight()
+        let x = (corner == .topLeft || corner == .bottomLeft) ? vf.minX + m : vf.maxX - w - m
+        let y = (corner == .topLeft || corner == .topRight) ? vf.maxY - h - m : vf.minY + m
+        p.setFrame(NSRect(x: x, y: y, width: w, height: h), display: true)
         p.saveFrame(usingName: Self.frameAutosaveName)
+    }
+
+    // MARK: 动态高度（随光点/飘字内容增长，队长锚点不动）
+
+    static let dotsRowHeight: CGFloat = 26
+    static let quipRowHeight: CGFloat = 26
+
+    /// 当前会话飘字块的高度——须与视图里 `speech(for:)` 的实际高度对上(略宽出，避免窗口裁切)。
+    static func speechHeight(_ member: CompanionMember?) -> CGFloat {
+        guard let member else { return 0 }
+        switch member.state {
+        case .working: return 24
+        case let .done(reply): return (reply?.isEmpty == false) ? 50 : 26
+        case .needsApproval: return 86
+        }
+    }
+
+    /// 窗口高度 = 队长占位 + 头顶光晕（飘字块 + 光点排 / 或仅卖萌）+ 间距。
+    private func desiredWindowHeight() -> CGFloat {
+        var aura: CGFloat = 0
+        if !members.isEmpty {
+            aura = Self.speechHeight(activeMember) + Self.rowSpacing + Self.dotsRowHeight
+        } else if bubble != nil {
+            aura = Self.quipRowHeight
+        }
+        let gap: CGFloat = aura > 0 ? Self.rowSpacing : 0
+        return Self.petZoneHeight + 8 + (aura > 0 ? aura + gap : 0)
+    }
+
+    /// 把窗口高度调到刚好放下小队，并保持队长锚点不动：
+    /// 顶部角落锚住上边（队长贴顶、小队向下长）；底部角落锚住下边（队长贴底、小队向上长）。
+    private func relayoutPanel() {
+        guard let p = panel, p.isVisible else { return }
+        let newH = desiredWindowHeight()
+        let cur = p.frame
+        guard abs(cur.height - newH) > 0.5 else { return }
+        var origin = cur.origin
+        if petAtTop { origin.y = (cur.origin.y + cur.height) - newH }   // 顶边固定
+        if let vf = (p.screen ?? NSScreen.main)?.visibleFrame {
+            origin.x = min(max(origin.x, vf.minX), max(vf.minX, vf.maxX - Self.windowWidth))
+            origin.y = min(max(origin.y, vf.minY), max(vf.minY, vf.maxY - newH))
+        }
+        p.setFrame(NSRect(origin: origin, size: CGSize(width: Self.windowWidth, height: newH)),
+                   display: true, animate: true)
     }
 
     // MARK: 信号 → 心情
@@ -242,67 +307,131 @@ final class CompanionController: ObservableObject {
         return AgentSignal(activity: activity, pendingApprovals: pending)
     }
 
+    /// 把 pane 世界的多组状态合并成"小队"：每个在线会话一员，审批/跑完/干活各成一行；
+    /// 同一 pane 有待审批就只显示审批（盖过它的 working/done），在跑的 pane 旧结果作废。
+    /// 纯函数，可单测。`cap` 外的按 `keepPriority`（审批>跑完>干活）折叠成 `overflow`。
+    nonisolated static func buildRoster(
+        thinking: [String],
+        done: [String],
+        feedPending: [FeedRequest],
+        terminalApprovals: [FeedRequest],
+        results: [String: String],
+        titles: [String: String],
+        fallbackTitle: String,
+        cap: Int
+    ) -> CompanionRoster {
+        func title(forPane pane: String?) -> String {
+            guard let pane, let t = titles[pane], !t.isEmpty else { return fallbackTitle }
+            return t
+        }
+
+        // 1) 审批成员（feed 队列 + 终端嗅探），按 request.id 去重；记下被占用的 pane。
+        var approvals: [CompanionMember] = []
+        var approvalPanes = Set<String>()
+        var seenRequests = Set<String>()
+        func addApproval(_ req: FeedRequest, terminal: Bool) {
+            guard seenRequests.insert(req.id).inserted else { return }
+            if let p = req.paneID { approvalPanes.insert(p) }
+            let name = title(forPane: req.paneID)
+            approvals.append(CompanionMember(
+                id: "approval:\(req.id)", paneID: req.paneID,
+                title: name == fallbackTitle ? (req.tool ?? fallbackTitle) : name,
+                state: .needsApproval(request: req, terminal: terminal)))
+        }
+        feedPending.forEach { addApproval($0, terminal: false) }
+        terminalApprovals.forEach { addApproval($0, terminal: true) }
+
+        let thinkingSet = Set(thinking)
+
+        // 2) 干活成员：在思考、且没有待审批的 pane。
+        let working = thinking.filter { !approvalPanes.contains($0) }.sorted().map {
+            CompanionMember(id: "pane:\($0)", paneID: $0, title: title(forPane: $0), state: .working)
+        }
+
+        // 3) 跑完成员：跑完未读 ∪ 有新鲜回复的 pane，去掉在审批/在思考的（思考=新一轮，旧结果作废）。
+        var donePanes: [String] = []
+        var seenDone = Set<String>()
+        for p in done + Array(results.keys)
+        where !approvalPanes.contains(p) && !thinkingSet.contains(p) && seenDone.insert(p).inserted {
+            donePanes.append(p)
+        }
+        let doneMembers = donePanes.sorted().map {
+            CompanionMember(id: "pane:\($0)", paneID: $0, title: title(forPane: $0),
+                            state: .done(reply: results[$0]))
+        }
+
+        // 4) 按 keepPriority 裁剪（审批 > 跑完 > 干活），再按 displayRank 排展示序（审批贴队长）。
+        let prioritized = approvals + doneMembers + working
+        let shown = Array(prioritized.prefix(max(0, cap)))
+        let overflow = prioritized.count - shown.count
+        let display = shown.sorted {
+            $0.displayRank != $1.displayRank ? $0.displayRank < $1.displayRank : $0.id < $1.id
+        }
+        return CompanionRoster(members: display, overflow: overflow)
+    }
+
     private func recompute() {
         guard let coordinator else { return }
         let now = Date().timeIntervalSinceReferenceDate
-        let pending = feedCenter.pending.count
-        pendingApproval = feedCenter.pending.first
-        let signal = Self.signal(thinking: !coordinator.thinkingPanes.isEmpty,
-                                 done: !coordinator.unseenDonePanes.isEmpty,
-                                 pending: pending)
+
+        results = results.filter { $0.value.until > now }              // 过期回复先清
+
+        let thinking = coordinator.thinkingPanes
+        let doneSet = coordinator.unseenDonePanes
+        let terminalApprovals = detectTerminalApprovals(in: coordinator)
+        let pending = feedCenter.pending.count + terminalApprovals.count
+
+        // 队长心情 = 全队聚合（沿用既有 signal + reducer 的优先级归约：审批 > 失败 > 干活 > 庆祝 …）。
+        let signal = Self.signal(thinking: !thinking.isEmpty, done: !doneSet.isEmpty, pending: pending)
         let newMood = reducer.reduce(signal, now: now)
         if newMood != mood { mood = newMood }
 
-        // 结果回复：新一轮开始干活 → 旧结果作废；窗口过期 → 清。
-        if signal.activity == .working {
-            resultText = nil; resultUntil = nil; resultPaneID = nil
-        } else if let until = resultUntil, now >= until {
-            resultText = nil; resultUntil = nil; resultPaneID = nil
+        var titles: [String: String] = [:]
+        for (pane, t) in coordinator.paneTitles where !t.isEmpty { titles[pane.value] = t }
+        // 还没拿到标题的活跃 pane（刚起、标题未落）→ 用 agent 名兜底，别露生硬的"会话"。
+        for pane in thinking.union(doneSet) where titles[pane.value] == nil {
+            if let a = coordinator.paneAgents[pane], !a.isEmpty { titles[pane.value] = a.capitalized }
         }
 
-        // 普通气泡（次于结果回复，视图里结果优先）：摸一下的 quip（新鲜）> 心情文案。
-        let quipText = (quipUntil.map { now < $0 } ?? false) ? quip : nil
-        let moodText = config.speechBubbles
-            ? bubbleText(for: newMood, coordinator: coordinator, pending: pending) : nil
-        let newBubble = quipText ?? moodText
-        if newBubble != bubble { bubble = newBubble }
-    }
+        let roster = Self.buildRoster(
+            thinking: thinking.map(\.value),
+            done: doneSet.map(\.value),
+            feedPending: feedCenter.pending,
+            terminalApprovals: terminalApprovals,
+            results: results.mapValues { $0.text },
+            titles: titles,
+            fallbackTitle: L("会话"),
+            cap: Self.maxVisibleMembers)
+        if roster.members != members { members = roster.members }
+        if roster.overflow != rosterOverflow { rosterOverflow = roster.overflow }
 
-    private func bubbleText(for mood: PetMood, coordinator: AppCoordinator, pending: Int) -> String? {
-        switch mood {
-        case .needsYou:
-            return pending > 1 ? L("有 %ld 个待批准", pending) : L("需要你批准")
-        case .thinking:
-            if let title = firstTitle(in: coordinator.thinkingPanes, coordinator: coordinator) {
-                return L("%@ 干活中…", title)
-            }
-            return L("干活中…")
-        case .celebrating:
-            if let title = firstTitle(in: coordinator.unseenDonePanes, coordinator: coordinator) {
-                return L("%@ 跑完了", title)
-            }
-            return L("跑完了")
-        case .sad:
-            return L("出错了")
-        case .idle, .sleeping:
-            return nil
+        // 代言谁：用户点过且还在线 → 黏住；否则默认最急的。
+        let pick: String?
+        if let picked = userPickedID, roster.members.contains(where: { $0.id == picked }) {
+            pick = picked
+        } else {
+            userPickedID = nil
+            pick = Self.mostUrgent(roster.members)?.id
         }
-    }
+        if pick != activeMemberID { activeMemberID = pick }
 
-    private func firstTitle(in panes: Set<PaneID>, coordinator: AppCoordinator) -> String? {
-        guard let pane = panes.sorted(by: { $0.value < $1.value }).first else { return nil }
-        return coordinator.paneTitles[pane]
+        // 队长气泡：审批/结果都进 roster 了，这里只剩"摸一下"的卖萌（受 speechBubbles 开关）。
+        let quipText = (config.speechBubbles && (quipUntil.map { now < $0 } ?? false)) ? quip : nil
+        if quipText != bubble { bubble = quipText }
+
+        relayoutPanel()
     }
 
     // MARK: 交互
 
-    /// 点宠物本体：弹一下（反馈）+ 拉前台 + 跳到最值得看处
-    /// （刚通知的会话→那个 pane；跑完→那个 pane；在思考→那个 pane；都没有→摸一下回应）。
+    /// 点队长本体：弹一下（反馈）+ 拉前台 + 跳到全队最值得看处
+    /// （待审批 → 跑完 → 在思考；都没有 → 摸一下回应）。
     func handleTap() {
         pokeNonce &+= 1
         guard let coordinator else { return }
         NSApp.activate(ignoringOtherApps: true)
-        if let pid = resultPaneID, !pid.isEmpty {
+        if let approval = members.first(where: { if case .needsApproval = $0.state { return true }; return false }),
+           let pid = approval.paneID, !pid.isEmpty {
             coordinator.revealPane(PaneID(pid))
         } else if let pane = coordinator.unseenDonePanes.sorted(by: { $0.value < $1.value }).first {
             coordinator.revealPane(pane)
@@ -321,10 +450,111 @@ final class CompanionController: ObservableObject {
         recompute()
     }
 
-    /// 气泡里就地处置当前待审批请求（复用 FeedCenter，与右侧面板/socket 同一套闸）。
-    func resolve(_ decision: FeedDecision) {
-        guard let req = pendingApproval else { return }
-        _ = feedCenter.resolve(id: req.id, decision: decision)   // recompute 由 feedCenter.$pending 回调触发
+    /// 某个会话行的就地审批（复用 FeedCenter / 终端按键，与右侧面板/socket 同一套闸）。
+    func resolve(_ decision: FeedDecision, for member: CompanionMember) {
+        guard case let .needsApproval(request, terminal) = member.state else { return }
+        if terminal {
+            resolveTerminalApproval(request, decision: decision)
+        } else {
+            _ = feedCenter.resolve(id: request.id, decision: decision)   // recompute 由 feedCenter.$pending 回调触发
+        }
+    }
+
+    /// 点某行 → 拉前台并跳到那个会话；跑完行点完即清（那行随之消失）。
+    func jump(to member: CompanionMember) {
+        pokeNonce &+= 1
+        guard let coordinator, let pid = member.paneID, !pid.isEmpty else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        coordinator.revealPane(PaneID(pid))
+        if case .done = member.state { results[pid] = nil; recompute() }
+    }
+
+    /// "+N" 片：在被折叠掉的会话间轮转聚焦（复用状态栏中枢的轮转逻辑）。
+    func cycleOverflow() {
+        NSApp.activate(ignoringOtherApps: true)
+        coordinator?.revealNextAttentionPane()
+    }
+
+    /// 点头顶某颗光点 → 宠物切过去替那个会话说话（黏住直到它下线）。
+    func focusSession(_ id: String) {
+        pokeNonce &+= 1
+        guard members.contains(where: { $0.id == id }) else { return }
+        userPickedID = id
+        if activeMemberID != id { activeMemberID = id; relayoutPanel() }
+    }
+
+    /// 默认代言谁：最急的（keepPriority 最高，审批 > 跑完 > 干活）。
+    private static func mostUrgent(_ members: [CompanionMember]) -> CompanionMember? {
+        members.max { $0.keepPriority < $1.keepPriority }
+    }
+
+    /// 嗅探所有在思考的 pane 里"Codex 终端就地审批"提示（每个独立成一员）。
+    private func detectTerminalApprovals(in coordinator: AppCoordinator) -> [FeedRequest] {
+        var out: [FeedRequest] = []
+        for pane in coordinator.thinkingPanes.sorted(by: { $0.value < $1.value }) {
+            guard let surface = coordinator.registry.surface(for: pane) as? GhosttySurface,
+                  let text = surface.readViewportText(),
+                  let request = Self.codexTerminalApproval(from: text, paneID: pane.value, cwd: coordinator.paneCwds[pane])
+            else { continue }
+            out.append(request)
+        }
+        return out
+    }
+
+    private func resolveTerminalApproval(_ request: FeedRequest, decision: FeedDecision) {
+        guard let coordinator, let pid = request.paneID else { return }
+        let pane = PaneID(pid)
+        guard let surface = coordinator.registry.surface(for: pane) as? GhosttySurface else { return }
+        coordinator.revealPane(pane)
+        switch decision {
+        case .allow(.once):
+            surface.sendTextInput("y")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak surface] in
+                surface?.sendEnterKey()
+            }
+        case .allow:
+            surface.sendTextInput("p")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak surface] in
+                surface?.sendEnterKey()
+            }
+        case .deny, .answer:
+            surface.sendEscapeKey()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            MainActor.assumeIsolated { self?.recompute() }
+        }
+    }
+
+    nonisolated static func codexTerminalApproval(from text: String, paneID: String, cwd: String?) -> FeedRequest? {
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+        guard normalized.contains("Would you like to run the following command?"),
+              normalized.contains("Press enter to confirm") || normalized.contains("Yes, proceed")
+        else { return nil }
+
+        let command = codexApprovalCommand(in: normalized)
+        return FeedRequest(
+            id: "codex-terminal:\(paneID):\(command ?? "unknown")",
+            paneID: paneID,
+            agent: "codex",
+            cwd: cwd,
+            kind: .permission(tool: "Codex", category: .executeCommand, detail: command),
+            createdAt: Date(timeIntervalSinceReferenceDate: 0)
+        )
+    }
+
+    private nonisolated static func codexApprovalCommand(in text: String) -> String? {
+        let lines = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let shellLine = lines.last(where: { $0.hasPrefix("$ ") }) {
+            let command = shellLine.dropFirst(2).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !command.isEmpty { return command }
+        }
+        guard let regex = try? NSRegularExpression(pattern: "`([^`]+)`") else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let commandRange = Range(match.range(at: 1), in: text) else { return nil }
+        let command = String(text[commandRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return command.isEmpty ? nil : command
     }
 
     // MARK: 右键菜单动作
@@ -371,8 +601,14 @@ private final class CompanionPanelContentView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
         guard bounds.contains(local) else { return nil }
-        if local.y <= CompanionController.petZoneHeight { return self }   // 精灵区：原生
-        return super.hitTest(point)                                        // 气泡/审批卡区：SwiftUI
+        // 队长命中区随角落落在底部或顶部（y=0 在底）：这块归原生（拖拽/点击）；
+        // 另一侧的小队行交回 SwiftUI（按钮可点）。
+        let zone = CompanionController.petZoneHeight
+        let inPetZone = (controller?.petAtTop ?? false)
+            ? local.y >= bounds.height - zone
+            : local.y <= zone
+        if inPetZone { return self }
+        return super.hitTest(point)
     }
 
     override func mouseDown(with event: NSEvent) { didDrag = false }

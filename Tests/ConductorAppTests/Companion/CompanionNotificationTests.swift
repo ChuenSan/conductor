@@ -19,6 +19,44 @@ final class CompanionNotificationTests: XCTestCase {
         XCTAssertEqual(CompanionController.noticeText(title: "T", body: long), long)  // 不截断
     }
 
+    func testCodexTerminalApprovalDetectedFromVisiblePrompt() {
+        let text = """
+        Would you like to run the following command?
+
+        Reason: 这是一个权限申请测试。你要允许我在沙箱外运行一次无害的 `pwd` 命令吗?
+
+        $ pwd
+
+        › 1. Yes, proceed (y)
+          2. Yes, and don't ask again for commands that start with `pwd` (p)
+          3. No, and tell Codex what to do differently (esc)
+
+        Press enter to confirm or esc to cancel
+        """
+
+        let request = CompanionController.codexTerminalApproval(from: text, paneID: "p1", cwd: "/tmp")
+
+        XCTAssertEqual(request?.paneID, "p1")
+        XCTAssertEqual(request?.agent, "codex")
+        XCTAssertEqual(request?.cwd, "/tmp")
+        XCTAssertEqual(request?.detail, "pwd")
+        XCTAssertEqual(request?.category, .executeCommand)
+    }
+
+    func testCodexTerminalApprovalFallsBackToBacktickedCommand() {
+        let text = """
+        Would you like to run the following command?
+        Reason: allow `git status`?
+        Press enter to confirm or esc to cancel
+        """
+
+        XCTAssertEqual(CompanionController.codexTerminalApproval(from: text, paneID: "p1", cwd: nil)?.detail, "git status")
+    }
+
+    func testCodexTerminalApprovalIgnoresOrdinaryOutput() {
+        XCTAssertNil(CompanionController.codexTerminalApproval(from: "Would you like tea?", paneID: "p1", cwd: nil))
+    }
+
     /// 宠物气泡里的「允许/拒绝」走的就是 FeedCenter.resolve——验它真能解阻塞一条待审批。
     @MainActor
     func testInlineApprovalResolvesPendingRequest() async {

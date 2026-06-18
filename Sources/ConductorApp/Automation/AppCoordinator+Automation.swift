@@ -273,6 +273,230 @@ extension AppCoordinator {
         }
     }
 
+    // MARK: - App / jobs / events
+
+    func automationStatusJSON() -> JSONValue {
+        let activeWorkspace = automationActiveWorkspace
+        let activeTab = activeWorkspace?.tabs.first { $0.id == activeWorkspace?.activeTab }
+        let tabCount = store.workspaces.reduce(0) { $0 + $1.tabs.count }
+        let paneCount = store.workspaces.reduce(0) { total, workspace in
+            total + workspace.tabs.reduce(0) { $0 + $1.rootSplit.leaves().count }
+        }
+        return .object([
+            "app": .string("Conductor"),
+            "version": .string(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""),
+            "protocol": .int(AutomationProtocol.version),
+            "socket": .string(AutomationSocketServer.defaultSocketURL.path),
+            "active": .object([
+                "workspace": activeWorkspace.map { .string($0.id.value) } ?? .null,
+                "tab": activeTab.map { .string($0.id.value) } ?? .null,
+                "pane": activeTab.map { .string($0.activePane.value) } ?? .null,
+            ]),
+            "counts": .object([
+                "workspaces": .int(store.workspaces.count),
+                "tabs": .int(tabCount),
+                "panes": .int(paneCount),
+                "runningAgents": .int(thinkingPanes.count),
+                "activities": .int(activityLog.entries.count),
+            ]),
+            "methods": .array(AutomationMethod.all.map(JSONValue.string)),
+        ])
+    }
+
+    func automationRunAgent(
+        agent agentRef: String,
+        command commandOverride: String?,
+        cwd: String?,
+        prompt: String?,
+        submit: Bool
+    ) throws -> JSONValue {
+        let agent = automationLaunchableAgent(agentRef: agentRef, commandOverride: commandOverride)
+        let pane = launchAIAgentSession(agent, cwd: cwd.map { ($0 as NSString).expandingTildeInPath })
+        if let prompt, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            automationSendPrompt(prompt, to: pane, submit: submit)
+        }
+
+        let job = AutomationAgentJob(
+            id: pane.value,
+            pane: pane,
+            agent: agent.id,
+            command: agent.command,
+            startedAt: Date())
+        automationAgentJobs[job.id] = job
+        return .object([
+            "jobId": .string(job.id),
+            "pane": .string(pane.value),
+            "agent": .string(agent.id),
+            "command": .string(agent.command),
+            "status": .string("running"),
+        ])
+    }
+
+    private func automationLaunchableAgent(agentRef: String, commandOverride: String?) -> LaunchableAgent {
+        let trimmedAgent = agentRef.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedCommand = commandOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = launchableAgents.first { $0.id == trimmedAgent || $0.command == trimmedAgent }
+            ?? AgentCatalog.all.first { $0.id == trimmedAgent || $0.command == trimmedAgent }.map {
+                LaunchableAgent(
+                    id: $0.id,
+                    title: $0.name,
+                    command: $0.command,
+                    logo: $0.logo,
+                    fallbackSystemImage: $0.fallbackSystemImage)
+            }
+        if let base {
+            guard let trimmedCommand, !trimmedCommand.isEmpty else { return base }
+            return LaunchableAgent(
+                id: base.id,
+                title: base.title,
+                command: trimmedCommand,
+                logo: base.logo,
+                fallbackSystemImage: base.fallbackSystemImage)
+        }
+
+        let command = (trimmedCommand?.isEmpty == false ? trimmedCommand! : trimmedAgent)
+        let firstToken = command.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init)
+        if let descriptor = AgentCatalog.all.first(where: { $0.command == firstToken || $0.id == firstToken }) {
+            return LaunchableAgent(
+                id: descriptor.id,
+                title: descriptor.name,
+                command: command,
+                logo: descriptor.logo,
+                fallbackSystemImage: descriptor.fallbackSystemImage)
+        }
+
+        return LaunchableAgent(
+            id: trimmedAgent.isEmpty ? command : trimmedAgent,
+            title: trimmedAgent.isEmpty ? command : trimmedAgent,
+            command: command,
+            logo: trimmedAgent.isEmpty ? "terminal" : trimmedAgent,
+            fallbackSystemImage: "terminal")
+    }
+
+    private func automationSendPrompt(_ prompt: String, to pane: PaneID, submit: Bool) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let surface = self?.registry.surface(for: pane) as? GhosttySurface else { return }
+            surface.sendTextInput(prompt)
+            guard submit else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak surface] in
+                surface?.sendEnterKey()
+            }
+        }
+    }
+
+    func automationAgentStatus(jobRef: String?) throws -> JSONValue {
+        let job = try automationResolveAgentJob(jobRef)
+        return automationAgentStatusJSON(job: job, completion: automationCompletion(for: job))
+    }
+
+    func automationAgentResult(jobRef: String?) throws -> JSONValue {
+        let job = try automationResolveAgentJob(jobRef)
+        guard let completion = automationCompletion(for: job) else {
+            return automationAgentStatusJSON(job: job, completion: nil)
+        }
+        var result = automationAgentStatusObject(job: job, completion: completion)
+        result["title"] = .string(completion.title)
+        result["summary"] = .string(completion.message)
+        result["markdown"] = .string(completion.message)
+        if let duration = completion.duration {
+            result["duration"] = .double(duration)
+        }
+        if let session = agentSessionBindings.ref(for: job.pane.value) {
+            result["transcriptPath"] = session.transcriptPath.map(JSONValue.string) ?? .null
+            result["restorableSession"] = automationDescribe(session: session)
+        }
+        return .object(result)
+    }
+
+    private func automationResolveAgentJob(_ ref: String?) throws -> AutomationAgentJob {
+        if let ref, let job = automationAgentJobs[ref] { return job }
+        let pane = try automationFindPane(ref)
+        if let job = automationAgentJobs.values.first(where: { $0.pane == pane }) { return job }
+        let agent = paneAgents[pane] ?? "shell"
+        return AutomationAgentJob(
+            id: pane.value,
+            pane: pane,
+            agent: agent,
+            command: paneLaunchCommands[pane]?.shellCommand ?? agent,
+            startedAt: .distantPast)
+    }
+
+    private func automationCompletion(for job: AutomationAgentJob) -> AgentActivityEntry? {
+        activityLog.entries.first { entry in
+            entry.paneID == job.pane && entry.date >= job.startedAt
+        }
+    }
+
+    private func automationAgentStatusJSON(
+        job: AutomationAgentJob,
+        completion: AgentActivityEntry?
+    ) -> JSONValue {
+        .object(automationAgentStatusObject(job: job, completion: completion))
+    }
+
+    private func automationAgentStatusObject(
+        job: AutomationAgentJob,
+        completion: AgentActivityEntry?
+    ) -> [String: JSONValue] {
+        let status: String
+        if completion != nil {
+            status = "completed"
+        } else if paneExists(job.pane) {
+            status = "running"
+        } else {
+            status = "closed"
+        }
+        return [
+            "jobId": .string(job.id),
+            "pane": .string(job.pane.value),
+            "agent": .string(job.agent),
+            "command": .string(job.command),
+            "status": .string(status),
+            "thinking": .bool(thinkingPanes.contains(job.pane)),
+            "startedAt": .double(job.startedAt.timeIntervalSince1970),
+        ]
+    }
+
+    func automationActivityList(limit: Int) -> [JSONValue] {
+        let limit = max(1, min(limit, 200))
+        return activityLog.entries.prefix(limit).map(automationDescribe(activity:))
+    }
+
+    func automationRecentEvents(limit: Int) -> [JSONValue] {
+        let limit = max(1, min(limit, 500))
+        return activityLog.entries.prefix(limit).map { entry in
+            let payload = automationActivityObject(entry)
+            return .object([
+                "id": .string(entry.id.uuidString),
+                "type": .string("agent.completed"),
+                "topic": .string("agent.completed"),
+                "time": .double(entry.date.timeIntervalSince1970),
+                "pane": entry.paneID.map { .string($0.value) } ?? .null,
+                "agent": entry.agentID.map(JSONValue.string) ?? .null,
+                "payload": .object(payload),
+            ])
+        }
+    }
+
+    private func automationDescribe(activity entry: AgentActivityEntry) -> JSONValue {
+        .object(automationActivityObject(entry))
+    }
+
+    private func automationActivityObject(_ entry: AgentActivityEntry) -> [String: JSONValue] {
+        var object: [String: JSONValue] = [
+            "id": .string(entry.id.uuidString),
+            "time": .double(entry.date.timeIntervalSince1970),
+            "title": .string(entry.title),
+            "message": .string(entry.message),
+            "pane": entry.paneID.map { .string($0.value) } ?? .null,
+            "agent": entry.agentID.map(JSONValue.string) ?? .null,
+        ]
+        if let duration = entry.duration {
+            object["duration"] = .double(duration)
+        }
+        return object
+    }
+
     // MARK: - 描述（list-* / tree 的数据源）
 
     func automationDescribe(workspace: Workspace) -> JSONValue {

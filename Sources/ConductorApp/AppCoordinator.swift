@@ -13,6 +13,14 @@ private extension CGSize {
     }
 }
 
+struct AutomationAgentJob {
+    let id: String
+    let pane: PaneID
+    let agent: String
+    let command: String
+    let startedAt: Date
+}
+
 @MainActor
 final class TerminalRootContainerView: NSView {
     var onGeometryReady: (() -> Void)?
@@ -135,6 +143,9 @@ final class AppCoordinator: ObservableObject {
     private lazy var snippetFillPanel = SnippetFillPanelController()
     /// pane 任务队列面板（懒创建）。
     private lazy var queuePanel = QueuePanelController()
+    /// 桌面任务卡片：跨工作区保存可执行 todo。
+    let taskCardStore = TaskCardStore()
+    lazy var taskCardsPanel = TaskCardsPanelController()
     /// Mission Control 任务总览（懒创建）。
     private lazy var missionControl = MissionControlController()
     weak var window: NSWindow?
@@ -153,7 +164,9 @@ final class AppCoordinator: ObservableObject {
     /// 通用 surface resume binding（tmux/自定义 shell 恢复），低于 agent session 优先级。
     let surfaceResumeBindings: SurfaceResumeBindingStore
     /// 本轮启动时记录的净化后 agent 启动命令，hook 上报 session 后合并进账本。
-    private var paneLaunchCommands: [PaneID: AgentLaunchCommandSnapshot] = [:]
+    var paneLaunchCommands: [PaneID: AgentLaunchCommandSnapshot] = [:]
+    /// Socket/CLI 启动的 agent job。完成状态由该 pane 后续 activity/done 记录归约。
+    var automationAgentJobs: [String: AutomationAgentJob] = [:]
 
     var hasRecentlyClosed: Bool { !recentlyClosed.isEmpty }
 
@@ -180,6 +193,7 @@ final class AppCoordinator: ObservableObject {
                 // 每个 pane 注入自动化身份：hook 与 conductor CLI 都靠它们定位 pane / 连 socket。
                 surface.extraEnvironment = [
                     ("CONDUCTOR_PANE_ID", pane.value),
+                    (AutomationProtocol.socketPathEnvKey, AutomationSocketServer.defaultSocketURL.path),
                     ("CONDUCTOR_SOCKET", AutomationSocketServer.defaultSocketURL.path),
                 ]
                 // 内容恢复：这个 pane 有待回放快照 → 带上，attach 时回放。
@@ -219,6 +233,7 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "shortcutCheatSheet", title: L("键位速查"), defaultKeybinding: "cmd+/") { [weak self] in self?.openShortcutCheatSheet() },
             AppCommand(id: "missionControl", title: L("任务总览"), defaultKeybinding: "cmd+shift+m") { [weak self] in self?.openMissionControl() },
             AppCommand(id: "queuePrompt", title: L("任务队列（当前面板）"), defaultKeybinding: "cmd+shift+enter") { [weak self] in self?.openQueuePanel() },
+            AppCommand(id: "taskCards", title: L("任务卡片"), defaultKeybinding: "cmd+shift+k") { [weak self] in self?.openTaskCards() },
             AppCommand(id: "openSnippets", title: L("命令片段库"), defaultKeybinding: nil) { [weak self] in self?.openTools(.snippets) },
             AppCommand(id: "coCreate", title: L("共创计划"), defaultKeybinding: nil) { [weak self] in self?.openTools(.coCreate) },
             AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+ctrl+e") { [weak self] in self?.equalizeSplits() },
@@ -672,6 +687,9 @@ final class AppCoordinator: ObservableObject {
         // 完成通知 hook 默认就装好：**仅在未装全/脚本过期时**才安装。
         // 不再每次启动都"删→加"——那会和正在跑的会话抢配置、出现思考 hook 短暂消失（转圈丢）。
         if !HookInstaller.status().allDone { _ = try? HookInstaller.installAll() }
+        // 审批 hook（PreToolUse → Feed → 宠物就地批）同样默认装好，仅在未装全/脚本过期时装。
+        // 脚本只拦命令类工具（见 FeedHookInstaller.scriptBody 的 GATED）；socket 不可用一律 fail-open。
+        if !FeedHookInstaller.status().allDone { _ = try? FeedHookInstaller.installAll() }
         NotificationManager.shared.configure()
         NotificationManager.shared.onActivatePane = { [weak self] paneID in
             self?.revealPane(PaneID(paneID))
@@ -757,8 +775,17 @@ final class AppCoordinator: ObservableObject {
             return
         }
         Task.detached(priority: .utility) {
-            let messages = AgentSessionPreview.load(agent: agent ?? "", filePath: transcriptPath, limit: 4)
-            let lastAssistant = messages.last { $0.role == .assistant }?.text
+            func readLastAssistant() -> String? {
+                AgentSessionPreview.load(agent: agent ?? "", filePath: transcriptPath, limit: 4)
+                    .last { $0.role == .assistant }?.text
+            }
+            // 读不到先重试一次：Stop hook 可能早于 agent 末条文本落盘（flush 竞态）→ 否则回落兜底文案。
+            var reply = readLastAssistant()
+            if reply?.isEmpty != false {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                reply = readLastAssistant()
+            }
+            let lastAssistant = reply
             await MainActor.run {
                 NotificationManager.shared.notify(
                     paneID: paneID, title: title,
@@ -1211,7 +1238,7 @@ final class AppCoordinator: ObservableObject {
             let tools = await Task.detached(priority: .userInitiated) { AgentCatalog.detectStatuses() }.value
             let cache = CLIDetectionStore.save(tools)
             let detected = tools.filter(\.isInstalled).map {
-                AIAgentConfig(id: $0.id, title: $0.name, command: $0.id, enabled: true)
+                AIAgentConfig(id: $0.id, title: $0.name, command: $0.command, enabled: true)
             }
             await MainActor.run {
                 guard let self else { return }
@@ -1238,7 +1265,7 @@ final class AppCoordinator: ObservableObject {
     private func launchableAgents(from tools: [CLIToolStatus]) -> [LaunchableAgent] {
         tools.filter(\.isInstalled).map {
             LaunchableAgent(
-                id: $0.id, title: $0.name, command: $0.id,
+                id: $0.id, title: $0.name, command: $0.command,
                 logo: $0.logo, fallbackSystemImage: $0.fallbackSystemImage)
         }
     }
@@ -1444,7 +1471,8 @@ final class AppCoordinator: ObservableObject {
     }
 
     /// 新建一个 AI Agent 会话 tab。可指定工作区和 cwd，供工作区右键与 tab 加号菜单复用。
-    func launchAIAgentSession(_ agent: LaunchableAgent, workspaceID: WorkspaceID? = nil, cwd: String? = nil) {
+    @discardableResult
+    func launchAIAgentSession(_ agent: LaunchableAgent, workspaceID: WorkspaceID? = nil, cwd: String? = nil) -> PaneID {
         if let workspaceID, store.activeWorkspace != workspaceID {
             selectWorkspace(workspaceID)
         }
@@ -1456,6 +1484,7 @@ final class AppCoordinator: ObservableObject {
         (registry.surface(for: paneID) as? GhosttySurface)?
             .enqueueCommand(launchCommand(agent.command, pane: paneID, agentID: agent.id))
         tagPaneAgent(paneID, agentID: agent.id)
+        return paneID
     }
 
     /// 在当前 tab 内分屏启动 Agent。`agentTag` 用于带参数命令（如二次意见）的 logo 即时识别。

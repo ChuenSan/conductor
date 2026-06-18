@@ -15,6 +15,15 @@ enum AppStyle {
     @MainActor static var activeFill: Color { theme.activeFill }
     @MainActor static var separator: Color { theme.separator }
     @MainActor static var hoverFill: Color { theme.hoverFill }
+    /// 终端分屏线：跟随主题，但比普通 separator 更轻。
+    /// 纯色主题贴近 pane 卡片底，避免两块终端之间出现硬暗缝；光晕主题只给一点 accent 色相。
+    @MainActor static var splitDivider: NSColor {
+        let t = theme
+        if t.terminalTranslucent {
+            return NSColor(t.accent).withAlphaComponent(0.07)
+        }
+        return t.cardBackground.withAlphaComponent(t.isDark ? 0.58 : 0.54)
+    }
     /// 淡填充：胶囊/分段/计数等次级元素的底（主题感知）。此前各处裸写
     /// `isDark ? white.opacity(0.08) : black.opacity(0.07)`，收口到这里。
     @MainActor static var subtleFill: Color {

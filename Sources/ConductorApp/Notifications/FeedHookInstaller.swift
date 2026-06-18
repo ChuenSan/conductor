@@ -3,7 +3,7 @@ import Foundation
 
 /// 安装「agent 工具调用 → Conductor 审批」所需的 hook：
 /// - 写 `~/.conductor/bin/conductor-approve`（python）：读 Claude 的 PreToolUse JSON，
-///   经 `$CONDUCTOR_SOCKET` 调 `feed-request` 阻塞等决策，再按 Claude hook 契约返回 allow/deny；
+///   经 `$CONDUCTOR_SOCKET_PATH` 调 `feed.request` 阻塞等决策，再按 Claude hook 契约返回 allow/deny；
 /// - Claude：`~/.claude/settings.json` 的 `hooks.PreToolUse` 加一条命令。
 ///
 /// 安全：socket 不可用 / 解析失败一律 **fail-open（exit 0、不输出）**——退回 Claude 自己的权限流程，
@@ -99,13 +99,21 @@ enum FeedHookInstaller {
                         detail = v
                         break
 
-            sock_path = os.environ.get("CONDUCTOR_SOCKET", "")
+            # 只拦「命令执行」类工具（最高价值、最低噪声，与 Codex 终端审批同口径）：
+            # 读/搜/编辑等不打扰，直接放行走 Claude 自身流程，避免每个工具都弹宠物。
+            tl = tool.lower()
+            gated = (tool in ("Bash", "Shell", "Terminal", "Execute")
+                     or "bash" in tl or "shell" in tl or "exec" in tl or "command" in tl)
+            if not gated:
+                sys.exit(0)
+
+            sock_path = os.environ.get("CONDUCTOR_SOCKET_PATH") or os.environ.get("CONDUCTOR_SOCKET", "")
             pane = os.environ.get("CONDUCTOR_PANE_ID", "")
             agent = os.environ.get("CONDUCTOR_AGENT_ID", "")
             if not sock_path or not tool:
                 sys.exit(0)  # 缺 socket / 工具名：放行
 
-            req = {"id": 1, "method": "feed-request", "params": {
+            req = {"id": 1, "method": "feed.request", "params": {
                 "kind": "permission", "tool": tool, "detail": detail,
                 "pane": pane, "agent": agent}}
 

@@ -197,18 +197,26 @@ enum CodexPetCatalog {
     }
 }
 
-/// 全部可选宠物 = 程序化内置 + 发现到的 Codex 宠物。
+/// 全部可选宠物 = 发现到的 Codex/openpets 宠物。
+/// 内置程序化模版只保留作兜底，不再出现在设置/右键选择列表里。
 enum CompanionPetCatalog {
     static func all() -> [CompanionPet] {
-        let builtins = PetTemplateCatalog.builtins.map {
-            CompanionPet(id: $0.id, name: L($0.nameKey), kind: .procedural($0))
-        }
-        return builtins + CodexPetCatalog.discover()
+        all(discovered: CodexPetCatalog.discover())
     }
 
-    /// 按 id 解析；找不到回落第一个内置模版。
+    static func all(discovered pets: [CompanionPet]) -> [CompanionPet] {
+        pets
+    }
+
+    /// 按 id 解析；旧配置若还指向内置占位宠物，优先回落到第一只外部宠物。
+    /// 完全没有外部宠物时才使用程序化默认值，避免空屏。
     static func pet(id: String) -> CompanionPet {
-        all().first { $0.id == id }
+        pet(id: id, discovered: all())
+    }
+
+    static func pet(id: String, discovered pets: [CompanionPet]) -> CompanionPet {
+        pets.first { $0.id == id }
+            ?? pets.first
             ?? CompanionPet(id: PetTemplateCatalog.default.id,
                             name: L(PetTemplateCatalog.default.nameKey),
                             kind: .procedural(PetTemplateCatalog.default))

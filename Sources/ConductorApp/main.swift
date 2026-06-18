@@ -91,6 +91,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let petItem = NSMenuItem(title: L("桌面伙伴"), action: #selector(toggleCompanion), keyEquivalent: "")
         petItem.target = self
         appMenu.addItem(petItem)
+        let taskCardsItem = ClosureMenuItem(L("任务卡片"), systemImage: "checklist") { [weak self] in
+            self?.coordinator?.openTaskCards()
+        }
+        taskCardsItem.keyEquivalent = "k"
+        taskCardsItem.keyEquivalentModifierMask = [.command, .shift]
+        appMenu.addItem(taskCardsItem)
         appMenu.addItem(.separator())
         appMenu.addItem(NSMenuItem(title: L("退出 Conductor"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appMenuItem.submenu = appMenu

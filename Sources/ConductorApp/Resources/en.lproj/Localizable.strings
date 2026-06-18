@@ -1440,6 +1440,8 @@
 "隐藏伙伴" = "Hide Companion";
 "回复" = "Reply";
 "去会话 →" = "Go to session →";
+"去处理 →" = "Handle it →";
+"会话" = "Session";
 "更多" = "More";
 /* 宠物模版名 */
 "团子" = "Dumpling";

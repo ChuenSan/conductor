@@ -79,10 +79,10 @@ enum BridgeServer {
                     body: proxyBatchData(body: request.body))
             } else if request.method == "GET", request.path == "/status" {
                 try writeHTTP(fd: fd, status: "200 OK", body: proxyData(
-                    body: AutomationCodec.encode(AutomationRequest(id: 1, method: "app.status"))))
+                    body: AutomationCodec.encode(AutomationRequest(id: 1, method: AutomationMethod.appStatus))))
             } else if request.method == "GET", request.path == "/methods" {
                 try writeHTTP(fd: fd, status: "200 OK", body: proxyData(
-                    body: AutomationCodec.encode(AutomationRequest(id: 1, method: "app.methods"))))
+                    body: AutomationCodec.encode(AutomationRequest(id: 1, method: AutomationMethod.appMethods))))
             } else if request.method == "GET", request.path == "/health" {
                 try writeHTTP(fd: fd, status: "200 OK", body: healthData())
             } else if request.method == "GET", request.path == "/openapi.json" {
@@ -150,7 +150,7 @@ enum BridgeServer {
         let limit = max(1, min(limit, 500))
         while true {
             guard let response = try? SocketClient().request(
-                method: "events.recent",
+                method: AutomationMethod.eventsRecent,
                 params: ["limit": .int(limit)])
             else {
                 usleep(sleepMicros)
@@ -231,7 +231,7 @@ enum BridgeServer {
 
     private static func healthData() -> Data {
         do {
-            let status = try SocketClient().request(method: "app.status")
+            let status = try SocketClient().request(method: AutomationMethod.appStatus)
             var payload = object(status.result)
             payload["ok"] = .bool(true)
             payload["bridge"] = .object([

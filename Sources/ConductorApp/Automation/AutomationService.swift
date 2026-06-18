@@ -53,14 +53,19 @@ final class AutomationService {
         }
 
         switch method {
-        // —— 系统 ——
-        case "ping":
+        // —— App ——
+        case AutomationMethod.appPing:
             return .object([
                 "pong": .bool(true),
                 "protocol": .int(AutomationProtocol.version),
                 "app": .string("Conductor"),
+                "socket": .string(AutomationSocketServer.defaultSocketURL.path),
             ])
-        case "open-agent-tools", "open-agent-tools-management":
+        case AutomationMethod.appStatus:
+            return c.automationStatusJSON()
+        case AutomationMethod.appMethods:
+            return .array(AutomationMethod.all.map(JSONValue.string))
+        case AutomationMethod.appOpenTools:
             let rawModule = str("module") ?? AgentToolsManagementModule.overview.rawValue
             guard let module = AgentToolsManagementModule(rawValue: rawModule) else {
                 let supported = AgentToolsManagementModule.railModules.map(\.rawValue).joined(separator: ", ")
@@ -70,6 +75,12 @@ final class AutomationService {
             return .object([
                 "module": .string(module.rawValue),
                 "window": .string("agent-tools"),
+            ])
+        case AutomationMethod.appOpenTaskCards:
+            c.openTaskCards()
+            return .object([
+                "window": .string("task-cards"),
+                "panel": c.taskCardsPanel.automationSnapshot(),
             ])
         #if DEBUG
         case "debug-agent-tools-smoke-test":
@@ -86,112 +97,28 @@ final class AutomationService {
         #endif
 
         // —— 工作区 ——
-        case "list-workspaces":
+        case AutomationMethod.workspaceList:
             return .array(c.store.workspaces.map { c.automationDescribe(workspace: $0) })
-        case "current-workspace":
+        case AutomationMethod.workspaceCurrent:
             return c.automationDescribe(workspace: try c.automationFindWorkspace(nil))
-        case "select-workspace":
+        case AutomationMethod.workspaceSelect:
             try c.automationSelectWorkspace(try requireStr("workspace"))
             return .bool(true)
-        case "new-workspace":
+        case AutomationMethod.workspaceCreate:
             let workspace = try c.automationNewWorkspace(path: try requireStr("path"),
                                                          name: str("name"))
             return c.automationDescribe(workspace: workspace)
-        case "rename-workspace":
+        case AutomationMethod.workspaceRename:
             let workspace = try c.automationFindWorkspace(try requireStr("workspace"))
             c.renameWorkspace(workspace.id, to: try requireStr("name"))
             return .bool(true)
-        case "close-workspace":
+        case AutomationMethod.workspaceClose:
             let workspace = try c.automationFindWorkspace(try requireStr("workspace"))
             c.removeWorkspace(workspace.id)
             return .bool(true)
-
-        // —— 标签 ——
-        case "list-tabs":
-            let workspace = try c.automationFindWorkspace(str("workspace"))
-            return .array(workspace.tabs.map { c.automationDescribe(tab: $0, in: workspace) })
-        case "new-tab":
-            let (tab, pane) = try c.automationNewTab(workspaceRef: str("workspace"),
-                                                     cwd: str("cwd"))
-            return .object(["tab": .string(tab.value), "pane": .string(pane.value)])
-        case "select-tab":
-            try c.automationSelectTab(try requireStr("tab"), workspaceRef: str("workspace"))
-            return .bool(true)
-        case "rename-tab":
-            let workspace = try c.automationFindWorkspace(str("workspace"))
-            let tab = try c.automationFindTab(try requireStr("tab"), in: workspace)
-            c.renameTab(tab.id, to: try requireStr("title"))
-            return .bool(true)
-        case "close-tab":
-            try c.automationCloseTab(try requireStr("tab"), workspaceRef: str("workspace"))
-            return .bool(true)
-
-        // —— pane ——
-        case "list-panes":
-            let workspace = try c.automationFindWorkspace(str("workspace"))
-            let tab = try c.automationFindTab(str("tab"), in: workspace)
-            return .array(tab.rootSplit.leaves().map { c.automationDescribe(pane: $0, in: tab) })
-        case "split":
-            let direction = str("direction") ?? "right"
-            let axis: SplitAxis
-            switch direction {
-            case "right", "vertical": axis = .vertical
-            case "down", "horizontal": axis = .horizontal
-            default: throw AutomationError.badRequest("direction 只支持 right / down")
-            }
-            let pane = try c.automationSplit(paneRef: str("pane"), axis: axis, cwd: str("cwd"))
-            return .object(["pane": .string(pane.value)])
-        case "focus-pane":
-            try c.automationFocusPane(try requireStr("pane"))
-            return .bool(true)
-        case "close-pane":
-            try c.automationClosePane(str("pane"))
-            return .bool(true)
-        case "tree":
+        case AutomationMethod.workspaceTree:
             return try c.automationTree(workspaceRef: str("workspace"))
-
-        // —— 终端 I/O ——
-        case "send-text":
-            try c.automationSendText(paneRef: str("pane"),
-                                     text: try requireStr("text"),
-                                     submit: params["submit"]?.boolValue ?? true)
-            return .bool(true)
-        case "send-keys":
-            let keys = (params["keys"]?.arrayValue ?? []).compactMap(\.stringValue)
-            guard !keys.isEmpty else { throw AutomationError.badRequest("缺少参数：keys") }
-            try c.automationSendKeys(paneRef: str("pane"), keys: keys)
-            return .bool(true)
-        case "read-screen", "capture-pane":
-            let text = try c.automationReadScreen(paneRef: str("pane"),
-                                                  scrollback: params["scrollback"]?.boolValue ?? false)
-            return .object(["text": .string(text)])
-        case "surface-resume-set", "resume-set":
-            let binding = try c.automationSetSurfaceResume(
-                paneRef: str("pane"),
-                kind: str("kind") ?? "shell",
-                checkpoint: str("checkpoint"),
-                command: try requireStr("command"),
-                autoResume: params["autoResume"]?.boolValue ?? false,
-                trusted: params["trusted"]?.boolValue ?? false)
-            return c.automationDescribe(binding: binding)
-        case "surface-resume-show", "resume-show":
-            guard let binding = try c.automationShowSurfaceResume(paneRef: str("pane")) else {
-                return .null
-            }
-            return c.automationDescribe(binding: binding)
-        case "surface-resume-clear", "resume-clear":
-            let removed = try c.automationClearSurfaceResume(paneRef: str("pane"))
-            return removed.map { c.automationDescribe(binding: $0) } ?? .null
-
-        // —— 通知 ——
-        case "notify":
-            c.automationNotify(paneRef: str("pane"),
-                               title: str("title") ?? "",
-                               body: try requireStr("message"))
-            return .bool(true)
-
-        // —— 侧栏元数据（状态 / 进度 / 日志）——
-        case "set-status":
+        case AutomationMethod.workspaceStatusSet:
             let workspace = try c.automationFindWorkspace(str("workspace"))
             c.workspaceMetadata.setStatus(workspace: workspace.id,
                                           key: try requireStr("key"),
@@ -199,11 +126,7 @@ final class AutomationService {
                                           color: str("color"),
                                           icon: str("icon"))
             return .bool(true)
-        case "clear-status":
-            let workspace = try c.automationFindWorkspace(str("workspace"))
-            c.workspaceMetadata.clearStatus(workspace: workspace.id, key: str("key"))
-            return .bool(true)
-        case "list-status":
+        case AutomationMethod.workspaceStatusList:
             let workspace = try c.automationFindWorkspace(str("workspace"))
             return .array(c.workspaceMetadata.statuses(for: workspace.id).map { status in
                 .object([
@@ -213,26 +136,30 @@ final class AutomationService {
                     "icon": status.icon.map(JSONValue.string) ?? .null,
                 ])
             })
-        case "set-progress":
+        case AutomationMethod.workspaceStatusClear:
+            let workspace = try c.automationFindWorkspace(str("workspace"))
+            c.workspaceMetadata.clearStatus(workspace: workspace.id, key: str("key"))
+            return .bool(true)
+        case AutomationMethod.workspaceProgressSet:
             let workspace = try c.automationFindWorkspace(str("workspace"))
             guard let value = params["value"]?.doubleValue, (0...1).contains(value) else {
-                throw AutomationError.badRequest("value 需在 0–1 之间")
+                throw AutomationError.badRequest("value 需在 0-1 之间")
             }
             c.workspaceMetadata.setProgress(workspace: workspace.id, value: value,
                                             label: str("label"))
             return .bool(true)
-        case "clear-progress":
+        case AutomationMethod.workspaceProgressClear:
             let workspace = try c.automationFindWorkspace(str("workspace"))
             c.workspaceMetadata.clearProgress(workspace: workspace.id)
             return .bool(true)
-        case "log":
+        case AutomationMethod.workspaceLogAppend:
             let workspace = try c.automationFindWorkspace(str("workspace"))
             c.workspaceMetadata.appendLog(workspace: workspace.id,
                                           text: try requireStr("text"),
                                           level: str("level") ?? "info",
                                           source: str("source"))
             return .bool(true)
-        case "list-log":
+        case AutomationMethod.workspaceLogList:
             let workspace = try c.automationFindWorkspace(str("workspace"))
             let limit = params["limit"]?.intValue ?? 50
             return .array(c.workspaceMetadata.logs(for: workspace.id, limit: limit).map { entry in
@@ -243,26 +170,131 @@ final class AutomationService {
                     "text": .string(entry.text),
                 ])
             })
-        case "clear-log":
+        case AutomationMethod.workspaceLogClear:
             let workspace = try c.automationFindWorkspace(str("workspace"))
             c.workspaceMetadata.clearLog(workspace: workspace.id)
             return .bool(true)
 
+        // —— 标签 ——
+        case AutomationMethod.tabList:
+            let workspace = try c.automationFindWorkspace(str("workspace"))
+            return .array(workspace.tabs.map { c.automationDescribe(tab: $0, in: workspace) })
+        case AutomationMethod.tabCreate:
+            let (tab, pane) = try c.automationNewTab(workspaceRef: str("workspace"),
+                                                     cwd: str("cwd"))
+            return .object(["tab": .string(tab.value), "pane": .string(pane.value)])
+        case AutomationMethod.tabSelect:
+            try c.automationSelectTab(try requireStr("tab"), workspaceRef: str("workspace"))
+            return .bool(true)
+        case AutomationMethod.tabRename:
+            let workspace = try c.automationFindWorkspace(str("workspace"))
+            let tab = try c.automationFindTab(try requireStr("tab"), in: workspace)
+            c.renameTab(tab.id, to: try requireStr("title"))
+            return .bool(true)
+        case AutomationMethod.tabClose:
+            try c.automationCloseTab(try requireStr("tab"), workspaceRef: str("workspace"))
+            return .bool(true)
+
+        // —— pane ——
+        case AutomationMethod.paneList:
+            let workspace = try c.automationFindWorkspace(str("workspace"))
+            let tab = try c.automationFindTab(str("tab"), in: workspace)
+            return .array(tab.rootSplit.leaves().map { c.automationDescribe(pane: $0, in: tab) })
+        case AutomationMethod.paneCreate:
+            let (tab, pane) = try c.automationNewTab(workspaceRef: str("workspace"),
+                                                     cwd: str("cwd"))
+            return .object(["tab": .string(tab.value), "pane": .string(pane.value)])
+        case AutomationMethod.paneSplit:
+            let direction = str("direction") ?? "right"
+            let axis: SplitAxis
+            switch direction {
+            case "right", "vertical": axis = .vertical
+            case "down", "horizontal": axis = .horizontal
+            default: throw AutomationError.badRequest("direction 只支持 right / down")
+            }
+            let pane = try c.automationSplit(paneRef: str("pane"), axis: axis, cwd: str("cwd"))
+            return .object(["pane": .string(pane.value)])
+        case AutomationMethod.paneFocus:
+            try c.automationFocusPane(try requireStr("pane"))
+            return .bool(true)
+        case AutomationMethod.paneClose:
+            try c.automationClosePane(str("pane"))
+            return .bool(true)
+
+        // —— 终端 I/O ——
+        case AutomationMethod.agentSend:
+            try c.automationSendText(paneRef: str("pane"),
+                                     text: try requireStr("text"),
+                                     submit: params["submit"]?.boolValue ?? true)
+            return .bool(true)
+        case AutomationMethod.paneKeys:
+            let keys = (params["keys"]?.arrayValue ?? []).compactMap(\.stringValue)
+            guard !keys.isEmpty else { throw AutomationError.badRequest("缺少参数：keys") }
+            try c.automationSendKeys(paneRef: str("pane"), keys: keys)
+            return .bool(true)
+        case AutomationMethod.paneRead:
+            let text = try c.automationReadScreen(paneRef: str("pane"),
+                                                  scrollback: params["scrollback"]?.boolValue ?? false)
+            return .object(["text": .string(text)])
+        case AutomationMethod.paneResumeSet:
+            let binding = try c.automationSetSurfaceResume(
+                paneRef: str("pane"),
+                kind: str("kind") ?? "shell",
+                checkpoint: str("checkpoint"),
+                command: try requireStr("command"),
+                autoResume: params["autoResume"]?.boolValue ?? false,
+                trusted: params["trusted"]?.boolValue ?? false)
+            return c.automationDescribe(binding: binding)
+        case AutomationMethod.paneResumeShow:
+            guard let binding = try c.automationShowSurfaceResume(paneRef: str("pane")) else {
+                return .null
+            }
+            return c.automationDescribe(binding: binding)
+        case AutomationMethod.paneResumeClear:
+            let removed = try c.automationClearSurfaceResume(paneRef: str("pane"))
+            return removed.map { c.automationDescribe(binding: $0) } ?? .null
+
+        // —— 通知 ——
+        case AutomationMethod.paneNotify:
+            c.automationNotify(paneRef: str("pane"),
+                               title: str("title") ?? "",
+                               body: try requireStr("message"))
+            return .bool(true)
+
+        // —— Agent jobs ——
+        case AutomationMethod.agentRun:
+            return try c.automationRunAgent(
+                agent: try requireStr("agent"),
+                command: str("command"),
+                cwd: str("cwd"),
+                prompt: str("prompt"),
+                submit: params["submit"]?.boolValue ?? true)
+        case AutomationMethod.agentStatus:
+            return try c.automationAgentStatus(jobRef: str("job"))
+        case AutomationMethod.agentResult:
+            return try c.automationAgentResult(jobRef: str("job"))
+
+        // —— Activity / events ——
+        case AutomationMethod.activityList:
+            return .array(c.automationActivityList(limit: params["limit"]?.intValue ?? 20))
+        case AutomationMethod.eventsRecent:
+            return .array(c.automationRecentEvents(limit: params["limit"]?.intValue ?? 20))
+
         // —— Feed 审批 ——
         // 阻塞式：命中规则/默认即刻返回，否则挂起等 GUI/CLI 决策（agent 的 hook 等这条回包）。
-        case "feed-request", "feed.request":
+        case AutomationMethod.feedRequest:
             let request = try Self.parseFeedRequest(params: params, requireStr: requireStr, str: str)
             let decision = await c.feedCenter.submit(request)
             return Self.feedDecisionJSON(decision)
-        case "feed-list", "feed.list":
+        case AutomationMethod.feedList:
             return .array(c.feedCenter.pendingRequests().map(Self.feedRequestJSON))
-        case "feed-approve", "feed.approve":
+        case AutomationMethod.feedApprove:
             let scope = FeedScope(rawValue: str("scope") ?? "once") ?? .once
             return .bool(c.feedCenter.resolve(id: try requireStr("id"), decision: .allow(scope)))
-        case "feed-deny", "feed.deny":
+        case AutomationMethod.feedDeny:
             let scope = FeedScope(rawValue: str("scope") ?? "once") ?? .once
             return .bool(c.feedCenter.resolve(id: try requireStr("id"), decision: .deny(scope)))
-        case "feed-answer", "feed.answer":
+        case AutomationMethod.feedAnswer:
             guard let option = params["option"]?.intValue else {
                 throw AutomationError.badRequest("缺少参数：option")
             }
@@ -334,12 +366,12 @@ final class AutomationService {
 
     #if DEBUG
     /// 把已打开的 AgentTools 窗口内容渲染成 PNG（NSView 自快照，不需要屏幕录制权限）。
-    /// 需先用 open-agent-tools 打开窗口并留出一帧布局时间。返回写出的文件路径。
+    /// 需先用 app.open-tools 打开窗口并留出一帧布局时间。返回写出的文件路径。
     private func debugSnapshotWindow(coordinator c: AppCoordinator,
                                      params: [String: JSONValue]) throws -> JSONValue {
         guard let window = c.agentToolsWindowController?.window,
               let view = window.contentView else {
-            throw AutomationError.internalError("AgentTools 窗口未打开（先调用 open-agent-tools）")
+            throw AutomationError.internalError("AgentTools 窗口未打开（先调用 app.open-tools）")
         }
         let bounds = view.bounds
         guard bounds.width > 1, bounds.height > 1,

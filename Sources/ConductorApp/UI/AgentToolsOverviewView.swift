@@ -155,6 +155,7 @@ final class AgentToolsConsoleStore: ObservableObject {
                     name: $0.name,
                     logo: $0.logo,
                     fallbackSystemImage: $0.fallbackSystemImage,
+                    command: $0.command,
                     path: nil,
                     version: nil)
             }

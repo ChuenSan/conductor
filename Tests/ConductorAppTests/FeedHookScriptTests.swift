@@ -58,7 +58,13 @@ final class FeedHookScriptTests: XCTestCase {
         var env = ProcessInfo.processInfo.environment
         env["CONDUCTOR_PANE_ID"] = "p-test"
         env["CONDUCTOR_AGENT_ID"] = "claude"
-        if let socket { env["CONDUCTOR_SOCKET"] = socket } else { env["CONDUCTOR_SOCKET"] = nil }
+        if let socket {
+            env["CONDUCTOR_SOCKET_PATH"] = socket
+            env["CONDUCTOR_SOCKET"] = socket
+        } else {
+            env["CONDUCTOR_SOCKET_PATH"] = nil
+            env["CONDUCTOR_SOCKET"] = nil
+        }
         process.environment = env
         let inPipe = Pipe(), outPipe = Pipe()
         process.standardInput = inPipe
@@ -84,7 +90,7 @@ final class FeedHookScriptTests: XCTestCase {
         XCTAssertTrue(out.contains("\"permissionDecision\": \"deny\""), "应映射为 deny，实际：\(out)")
 
         let req = capture.value
-        XCTAssertTrue(req.contains("\"method\": \"feed-request\"") || req.contains("\"method\":\"feed-request\""))
+        XCTAssertTrue(req.contains("\"method\": \"feed.request\"") || req.contains("\"method\":\"feed.request\""))
         XCTAssertTrue(req.contains("\"tool\": \"Bash\"") || req.contains("\"tool\":\"Bash\""))
         XCTAssertTrue(req.contains("git push --force"), "请求应带命令明细，实际：\(req)")
     }
@@ -95,9 +101,23 @@ final class FeedHookScriptTests: XCTestCase {
         let (server, sock) = try startServer(decision: "allow")
         defer { server.stop() }
         let out = runScript(script, socket: sock.path,
-                            stdin: "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"/etc/hosts\"}}",
+                            stdin: "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls -la\"}}",
                             python: python)
         XCTAssertTrue(out.contains("\"permissionDecision\": \"allow\""), "应映射为 allow，实际：\(out)")
+    }
+
+    /// 只拦命令类工具：读/搜/编辑等非命令工具应直接放行（exit 0、无输出、不连 socket）。
+    func testNonCommandToolPassesThrough() throws {
+        let python = try XCTUnwrap(python, "未找到 python3，跳过").self
+        let script = try writeScript()
+        let (server, sock) = try startServer(decision: "deny")   // 即便服务器要拒，也不该被问到
+        defer { server.stop() }
+        for tool in ["Read", "Grep", "Edit", "WebFetch"] {
+            let out = runScript(script, socket: sock.path,
+                                stdin: "{\"tool_name\":\"\(tool)\",\"tool_input\":{\"file_path\":\"/x\"}}",
+                                python: python)
+            XCTAssertTrue(out.isEmpty, "\(tool) 非命令类应放行（无输出），实际：\(out)")
+        }
     }
 
     func testFailOpenWhenSocketMissing() throws {

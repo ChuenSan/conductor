@@ -34,10 +34,10 @@ struct FeedPolicyStore {
 /// Feed 审批中枢：收口所有 agent 的待批请求。
 /// - 命中策略/规则的请求自动处置、即刻返回；
 /// - 需要人工的挂起（continuation），等 GUI/CLI `resolve` 或超时/断开 `cancel` 再放行 agent。
-/// socket 的 `feed-request` handler 是 async，可直接 `await submit(...)` 挂起而不冻结主线程。
+/// socket 的 `feed.request` handler 是 async，可直接 `await submit(...)` 挂起而不冻结主线程。
 @MainActor
 final class FeedCenter: ObservableObject {
-    /// 当前待人工处置的请求（GUI 队列 + `feed-list` 读它）。
+    /// 当前待人工处置的请求（GUI 队列 + `feed.list` 读它）。
     @Published private(set) var pending: [FeedRequest] = []
     /// 审计环形缓冲。
     @Published private(set) var audit: [FeedAuditEntry] = []

@@ -10,6 +10,8 @@ struct CLIToolStatus: Identifiable, Sendable, Codable {
     let logo: String
     /// 加载不到 logo 时的 SF Symbol 兜底。
     let fallbackSystemImage: String
+    /// 用户可执行的真实命令；`id` 只作为稳定标识。
+    let command: String
     let path: String?
     let version: String?
 
@@ -158,6 +160,7 @@ enum AgentCatalog {
             return CLIToolStatus(
                 id: agent.id, name: agent.name,
                 logo: agent.logo, fallbackSystemImage: agent.fallbackSystemImage,
+                command: agent.command,
                 path: path,
                 version: path != nil ? agent.readVersion() : nil)
         }
@@ -264,7 +267,7 @@ struct CLIToolsView: View {
                     CLIToolRow(
                         tool: tool,
                         onLaunch: {
-                            coordinator.launchAgent(command: tool.id)
+                            coordinator.launchAgent(command: tool.command)
                             onClose()
                         },
                         onCopyPath: { coordinator.copyToClipboard($0) },
@@ -371,7 +374,7 @@ struct CLIToolsView: View {
     private func pushLaunchableAgents(_ tools: [CLIToolStatus]) {
         coordinator.setLaunchableAgents(tools.filter(\.isInstalled).map {
             LaunchableAgent(
-                id: $0.id, title: $0.name, command: $0.id,
+                id: $0.id, title: $0.name, command: $0.command,
                 logo: $0.logo, fallbackSystemImage: $0.fallbackSystemImage)
         })
     }
@@ -802,7 +805,7 @@ private struct CLIToolRow: View {
                     }
                 }
                 HStack(spacing: 5) {
-                    CLIInfoChip(icon: "terminal", text: tool.id, monospaced: true)
+                    CLIInfoChip(icon: "terminal", text: tool.command, monospaced: true)
                     if let path = tool.path {
                         CLIInfoChip(icon: "externaldrive", text: installRootLabel(path))
                     } else {

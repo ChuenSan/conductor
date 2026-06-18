@@ -1,7 +1,7 @@
 import Foundation
 import ConductorCore
 
-/// 工作区侧栏元数据中枢：自动化（socket `set-status` / `set-progress` / `log`）写入的
+/// 工作区侧栏元数据中枢：自动化（socket `workspace.status.*` / `workspace.progress.*` / `workspace.log.*`）写入的
 /// 状态指示 / 进度条 / 日志流，按 WorkspaceID 组织，供侧栏行与自动化读回。
 @MainActor
 final class WorkspaceMetadataCenter: ObservableObject {

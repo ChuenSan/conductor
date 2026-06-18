@@ -10,4 +10,24 @@ final class SplitContainerViewTests: XCTestCase {
         split.restyleForCurrentTheme()
         XCTAssertEqual(split.layer?.backgroundColor?.alpha, 0)
     }
+
+    func testRatioSplitViewDividerUsesThemeDividerToken() {
+        let split = RatioSplitView()
+        XCTAssertEqual(components(of: split.dividerColor), components(of: AppStyle.splitDivider))
+        XCTAssertNotEqual(components(of: split.dividerColor), components(of: NSColor(AppStyle.windowBackground)))
+        XCTAssertLessThan(split.dividerColor.alphaComponent, 0.7)
+    }
+
+    private func components(of color: NSColor) -> [CGFloat] {
+        guard let converted = color.usingColorSpace(.sRGB) else {
+            XCTFail("Expected color to convert to sRGB")
+            return []
+        }
+        return [
+            converted.redComponent,
+            converted.greenComponent,
+            converted.blueComponent,
+            converted.alphaComponent,
+        ]
+    }
 }

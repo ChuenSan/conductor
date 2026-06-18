@@ -1,7 +1,7 @@
 import ConductorCore
 import SwiftUI
 
-/// 设置里的「模版列表」：内置程序化模版 + 发现到的 Codex 宠物，各一张可选卡片（展示 idle 形象）。
+/// 设置里的「模版列表」：发现到的 Codex/openpets 宠物，各一张可选卡片（展示 idle 形象）。
 /// 点选即写 `companion.templateID`（→ 落盘 + 桌宠实时换装）。
 struct CompanionTemplatePicker: View {
     @Binding var selectedID: String

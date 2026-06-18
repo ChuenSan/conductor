@@ -30,7 +30,7 @@ enum SplitTreeBuilder {
 }
 
 /// NSSplitView 子类：首次按 ratio 设分隔位置；用户拖动后把新比例回报给模型。
-/// 分隔条颜色 = 画布色 → 与卡片间隙融为一体，没有硬线（卡片靠柔阴影区分）。
+/// 分隔条颜色走主题 token，尽量贴近 pane 卡片底，避免两块终端之间出现硬线。
 final class RatioSplitView: NSSplitView, NSSplitViewDelegate {
     var initialRatio: CGFloat = 0.5
     var splitID: SplitID?
@@ -38,7 +38,7 @@ final class RatioSplitView: NSSplitView, NSSplitViewDelegate {
     private var applied = false
     private var applyingInitialRatio = false
 
-    override var dividerColor: NSColor { NSColor(AppStyle.windowBackground) }
+    override var dividerColor: NSColor { AppStyle.splitDivider }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -58,7 +58,7 @@ final class RatioSplitView: NSSplitView, NSSplitViewDelegate {
     }
 
     override func drawDivider(in rect: NSRect) {
-        NSColor(AppStyle.windowBackground).setFill()
+        AppStyle.splitDivider.setFill()
         rect.fill()
     }
 

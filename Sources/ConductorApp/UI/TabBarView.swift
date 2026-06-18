@@ -112,6 +112,13 @@ struct TabBarView: View {
                             coordinator.toggleCLITools()
                         }
                     IconOnlyButton(
+                        systemName: "checklist",
+                        help: L("任务卡片"),
+                        size: 26,
+                        symbolSize: 12) {
+                            coordinator.toggleTaskCards()
+                        }
+                    IconOnlyButton(
                         systemName: "rectangle.3.group",
                         help: L("打开工具管理台"),
                         size: 26,
