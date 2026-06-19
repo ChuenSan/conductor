@@ -60,7 +60,7 @@ public enum JetBrainsUsageFetcher {
         } catch {
             throw JetBrainsUsageError.parseError(error.localizedDescription)
         }
-        return try parse(xmlData)
+        return try parse(xmlData).withSourceLabel("local")
     }
 
     // MARK: - 凭证（本地文件探测）
@@ -156,6 +156,7 @@ public enum JetBrainsUsageFetcher {
             windowSeconds: 0)
 
         return CodexUsageSnapshot(planType: nil, session: sessionWindow, weekly: nil)
+            .withSourceLabel("local")
     }
 
     /// 还原 IDE 写盘时对 JSON 做的 HTML 转义。

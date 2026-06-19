@@ -204,10 +204,15 @@ struct AgentToolsStat: View {
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(valueColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
             Text(title)
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(AppStyle.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .help(sub ?? title)
     }

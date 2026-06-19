@@ -54,9 +54,9 @@ public enum ManusUsageFetcher {
         token(env: env) != nil
     }
 
-    /// 是否能从浏览器拿到 Manus 登录 cookie。注意：会触发浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        cookieToken() != nil
+    /// 是否已配置 Manus 手动 token/Cookie。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        token(env: env) != nil
     }
 
     // MARK: - 凭证（优先 token，其次 cookie）

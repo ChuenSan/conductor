@@ -21,15 +21,15 @@ public enum FeedPresentation {
         switch request.kind {
         case let .permission(tool, category, _):
             return [
-                FeedActionButton(label: "允许一次", decision: .allow(.once), role: .allow),
-                FeedActionButton(label: "总是允许 \(tool)", decision: .allow(.tool), role: .allow),
-                FeedActionButton(label: "允许所有\(category.label)", decision: .allow(.category), role: .allow),
-                FeedActionButton(label: "拒绝", decision: .deny(.once), role: .deny),
+                FeedActionButton(label: L("允许一次"), decision: .allow(.once), role: .allow),
+                FeedActionButton(label: L("总是允许 %@", tool), decision: .allow(.tool), role: .allow),
+                FeedActionButton(label: L("允许所有%@", category.label), decision: .allow(.category), role: .allow),
+                FeedActionButton(label: L("拒绝"), decision: .deny(.once), role: .deny),
             ]
         case .exitPlan:
             return [
-                FeedActionButton(label: "批准计划", decision: .allow(.once), role: .allow),
-                FeedActionButton(label: "拒绝", decision: .deny(.once), role: .deny),
+                FeedActionButton(label: L("批准计划"), decision: .allow(.once), role: .allow),
+                FeedActionButton(label: L("拒绝"), decision: .deny(.once), role: .deny),
             ]
         case let .question(_, options):
             return options.enumerated().map { index, option in
@@ -41,9 +41,9 @@ public enum FeedPresentation {
     /// 标题（请求类型的一句话）。
     public static func title(for request: FeedRequest) -> String {
         switch request.kind {
-        case let .permission(tool, _, _): return "\(tool) 请求权限"
-        case .exitPlan: return "Agent 想退出计划模式开始执行"
-        case .question: return "Agent 有个问题"
+        case let .permission(tool, _, _): return L("%@ 请求权限", tool)
+        case .exitPlan: return L("Agent 想退出计划模式开始执行")
+        case .question: return L("Agent 有个问题")
         }
     }
 

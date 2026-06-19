@@ -49,6 +49,8 @@ public enum AlibabaTokenPlanUsageFetcher {
     private static let subscriptionSummaryAction = "GetSubscriptionSummary"
     private static let tokenPlanProductCode = "sfm_tokenplanteams_dp_cn"
     private static let cookieEnvKey = "ALIBABA_TOKEN_PLAN_COOKIE"
+    private static let hostEnvironmentKey = "ALIBABA_TOKEN_PLAN_HOST"
+    private static let quotaURLEnvironmentKey = "ALIBABA_TOKEN_PLAN_QUOTA_URL"
     /// 浏览器 cookie 取数的域名。
     private static let cookieDomains = ["bailian.console.aliyun.com", "console.aliyun.com", "aliyun.com"]
     private static let browserLikeUserAgent =
@@ -69,9 +71,9 @@ public enum AlibabaTokenPlanUsageFetcher {
         envCookieHeader(env: env) != nil
     }
 
-    /// 是否能从浏览器拿到百炼登录 cookie。注意：会触发浏览器 cookie 读取（可能弹钥匙串授权框）。
-    public static func hasSession() -> Bool {
-        browserCookieHeader() != nil
+    /// 是否已配置百炼手动 Cookie。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        envCookieHeader(env: env) != nil
     }
 
     static func envCookieHeader(env: [String: String]) -> String? {
@@ -123,9 +125,9 @@ public enum AlibabaTokenPlanUsageFetcher {
             throw AlibabaTokenPlanUsageError.loginRequired
         }
 
-        let secToken = await resolveSECToken(cookieHeader: normalized, session: session)
+        let secToken = await resolveSECToken(cookieHeader: normalized, env: env, session: session)
 
-        var request = URLRequest(url: defaultQuotaURL)
+        var request = URLRequest(url: quotaURL(env: env))
         request.httpMethod = "POST"
         request.timeoutInterval = 20
         request.httpBody = subscriptionSummaryRequestBody(secToken: secToken)
@@ -171,6 +173,43 @@ public enum AlibabaTokenPlanUsageFetcher {
         return components.url!
     }
 
+    static func quotaURL(env: [String: String]) -> URL {
+        if let raw = clean(env[quotaURLEnvironmentKey]),
+           let override = normalizedHTTPSURL(from: raw)
+        {
+            return override
+        }
+        if let rawHost = clean(env[hostEnvironmentKey]),
+           let hostURL = quotaURL(from: rawHost)
+        {
+            return hostURL
+        }
+        return defaultQuotaURL
+    }
+
+    private static func quotaURL(from rawHost: String) -> URL? {
+        guard let base = normalizedHTTPSURL(from: rawHost),
+              var components = URLComponents(url: base, resolvingAgainstBaseURL: false),
+              let defaultComponents = URLComponents(url: defaultQuotaURL, resolvingAgainstBaseURL: false)
+        else { return nil }
+        components.path = "/data/api.json"
+        components.queryItems = defaultComponents.queryItems
+        return components.url
+    }
+
+    public static func normalizedHTTPSURL(from raw: String) -> URL? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let candidate = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
+        guard let components = URLComponents(string: candidate),
+              components.scheme?.lowercased() == "https",
+              components.host?.isEmpty == false,
+              components.user == nil,
+              components.password == nil
+        else { return nil }
+        return components.url
+    }
+
     private static func subscriptionSummaryRequestBody(secToken: String?) -> Data {
         let paramsObject = ["ProductCode": tokenPlanProductCode]
         guard let paramsData = try? JSONSerialization.data(withJSONObject: paramsObject),
@@ -193,7 +232,11 @@ public enum AlibabaTokenPlanUsageFetcher {
 
     // MARK: - sec_token 解析（尽力而为，缺失也能继续）
 
-    private static func resolveSECToken(cookieHeader: String, session: URLSession) async -> String? {
+    private static func resolveSECToken(
+        cookieHeader: String,
+        env: [String: String],
+        session: URLSession) async -> String?
+    {
         let cookieSECToken = extractCookieValue(name: "sec_token", from: cookieHeader)
 
         // ① 仪表盘 HTML。
@@ -214,7 +257,7 @@ public enum AlibabaTokenPlanUsageFetcher {
         }
 
         // ② tool/user/info.json。
-        if let token = await fetchSECTokenFromUserInfo(cookieHeader: cookieHeader, session: session) {
+        if let token = await fetchSECTokenFromUserInfo(cookieHeader: cookieHeader, env: env, session: session) {
             return token
         }
 
@@ -223,15 +266,21 @@ public enum AlibabaTokenPlanUsageFetcher {
         return nil
     }
 
-    private static func fetchSECTokenFromUserInfo(cookieHeader: String, session: URLSession) async -> String? {
-        let userInfoURL = URL(string: dashboardOriginURLString)!.appendingPathComponent("tool/user/info.json")
+    private static func fetchSECTokenFromUserInfo(
+        cookieHeader: String,
+        env: [String: String],
+        session: URLSession) async -> String?
+    {
+        let baseURL = consoleBaseURL(env: env)
+        let userInfoURL = baseURL.appendingPathComponent("tool/user/info.json")
         var request = URLRequest(url: userInfoURL)
         request.httpMethod = "GET"
         request.timeoutInterval = 10
         request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
         request.setValue(safariLikeUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
-        request.setValue("\(dashboardOriginURLString)/", forHTTPHeaderField: "Referer")
+        let referer = baseURL.absoluteString.hasSuffix("/") ? baseURL.absoluteString : "\(baseURL.absoluteString)/"
+        request.setValue(referer, forHTTPHeaderField: "Referer")
 
         guard let (data, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
@@ -241,6 +290,13 @@ public enum AlibabaTokenPlanUsageFetcher {
         guard let token = findFirstString(forKeys: ["secToken", "sec_token"], in: expanded), !token.isEmpty
         else { return nil }
         return token
+    }
+
+    private static func consoleBaseURL(env: [String: String]) -> URL {
+        guard let raw = clean(env[hostEnvironmentKey]),
+              let url = normalizedHTTPSURL(from: raw)
+        else { return URL(string: dashboardOriginURLString)! }
+        return url
     }
 
     // MARK: - 解析

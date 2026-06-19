@@ -73,16 +73,10 @@ public enum DevinUsageFetcher {
         manualToken(env: env) != nil
     }
 
-    /// 是否能从浏览器 localStorage 拿到 Devin 登录会话（cookie 路）。注意：会触发浏览器本地存储读取。
+    /// Devin 浏览器会话只在显式刷新时导入；配置探测不能读取浏览器 localStorage。
     public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
-        guard UsageProviderRuntimeConfig.shouldReadBrowserCookies(providerID: "devin", env: env) else {
-            return false
-        }
-        #if os(macOS)
-        return importSession() != nil
-        #else
+        _ = env
         return false
-        #endif
     }
 
     // MARK: - 取数

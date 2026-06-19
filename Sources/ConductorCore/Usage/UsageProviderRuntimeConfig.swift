@@ -5,7 +5,7 @@ enum UsageProviderRuntimeConfig {
         providerID: String,
         env: [String: String] = ProcessInfo.processInfo.environment
     ) -> String? {
-        normalizedHeader(env["CONDUCTOR_USAGE_\(envSafe(providerID))_COOKIE"])
+        CookieHeaderNormalizer.normalize(env["CONDUCTOR_USAGE_\(envSafe(providerID))_COOKIE"])
     }
 
     static func shouldReadBrowserCookies(
@@ -56,17 +56,55 @@ enum UsageProviderRuntimeConfig {
         normalized(env["CONDUCTOR_USAGE_\(envSafe(providerID))_SOURCE"])?.lowercased()
     }
 
-    private static func normalizedHeader(_ raw: String?) -> String? {
-        guard var value = normalized(raw) else { return nil }
-        if value.lowercased().hasPrefix("cookie:") {
-            value = String(value.dropFirst("cookie:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+    static func webTimeout(
+        providerID: String,
+        defaultValue: TimeInterval,
+        env: [String: String] = ProcessInfo.processInfo.environment
+    ) -> TimeInterval {
+        guard let raw = normalized(env["CONDUCTOR_USAGE_\(envSafe(providerID))_WEB_TIMEOUT"]),
+              let value = TimeInterval(raw),
+              value.isFinite,
+              value > 0
+        else {
+            return defaultValue
         }
-        return value.isEmpty ? nil : value
+        return value
+    }
+
+    static func webDebugDumpHTML(
+        providerID: String,
+        env: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        truthy(env["CONDUCTOR_USAGE_\(envSafe(providerID))_WEB_DEBUG_DUMP_HTML"])
+    }
+
+    static func webBatterySaver(
+        providerID: String,
+        env: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        truthy(env["CONDUCTOR_USAGE_\(envSafe(providerID))_WEB_BATTERY_SAVER"])
+    }
+
+    static func shouldUseOpenAIWebBatterySaver(
+        providerID: String,
+        env: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        webBatterySaver(providerID: providerID, env: env)
+            && !UsageProviderRuntimeContext.isForcedWebRefresh(providerID: providerID, env: env)
     }
 
     private static func normalized(_ raw: String?) -> String? {
         let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    static func truthy(_ raw: String?) -> Bool {
+        switch normalized(raw)?.lowercased() {
+        case "1", "true", "yes", "y", "on":
+            return true
+        default:
+            return false
+        }
     }
 
     private static func envSafe(_ raw: String) -> String {

@@ -48,9 +48,9 @@ struct QuickStartLaunchPanel: View {
                 .truncationMode(.middle)
 
             HStack(alignment: .firstTextBaseline, spacing: 9) {
-                Text("❯")
+                Text(verbatim: "❯")
                     .foregroundStyle(AppStyle.accent)
-                Text("▮")
+                Text(verbatim: "▮")
                     .foregroundStyle(AppStyle.accent)
                     .opacity(caretLit ? 1 : 0.12)
             }

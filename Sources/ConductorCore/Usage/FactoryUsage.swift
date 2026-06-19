@@ -56,10 +56,9 @@ public enum FactoryUsageFetcher {
     private static let authBaseURL = URL(string: "https://auth.factory.ai")!
     private static let apiBaseURL = URL(string: "https://api.factory.ai")!
 
-    /// 是否能从浏览器拿到 Factory 登录 cookie。注意：会触发浏览器 cookie 读取（可能弹钥匙串）。
+    /// 是否已配置 Factory 手动 Cookie。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
     public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
         UsageProviderRuntimeConfig.manualCookieHeader(providerID: "factory", env: env) != nil
-            || cookies(env: env) != nil
     }
 
     /// 跨默认浏览器顺序取 factory.ai 域的 cookie；要求至少含一个已知会话 cookie。
@@ -91,6 +90,7 @@ public enum FactoryUsageFetcher {
                 bearerToken: bearerToken(fromCookieHeader: manualHeader),
                 candidates: [apiBaseURL, appBaseURL, authBaseURL],
                 session: session)
+                .withSourceLabel("web")
         }
 
         guard let cookies = cookies(env: env) else { throw FactoryUsageError.noSession }
@@ -103,6 +103,7 @@ public enum FactoryUsageFetcher {
             bearerToken: bearer,
             candidates: baseURLCandidates(cookies: cookies),
             session: session)
+            .withSourceLabel("web")
     }
 
     private static func fetchUsingCandidates(

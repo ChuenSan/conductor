@@ -19,6 +19,16 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.behavior.newTabCwd, "workspace")
         XCTAssertTrue(c.keybindings.isEmpty)
         XCTAssertTrue(c.ghosttyOverrides.isEmpty)
+        XCTAssertEqual(c.usage.providerRefreshIntervalSeconds, 300)
+        XCTAssertFalse(c.usage.usageBarsShowUsed)
+        XCTAssertFalse(c.usage.resetTimesShowAbsolute)
+        XCTAssertTrue(c.usage.showOptionalCreditsAndExtraUsage)
+        XCTAssertFalse(c.usage.hidePersonalInfo)
+        XCTAssertNil(c.usage.weeklyProgressWorkDays)
+        XCTAssertFalse(c.usage.providerChangelogLinksEnabled)
+        XCTAssertFalse(c.usage.providerStorageFootprintsEnabled)
+        XCTAssertTrue(c.usage.statusBarOverviewProviderIDs.isEmpty)
+        XCTAssertTrue(c.usage.statusBarOverviewSelectionBasisIDs.isEmpty)
     }
 
     func testFullDecode() throws {
@@ -120,6 +130,132 @@ final class AppConfigTests: XCTestCase {
         let v = c.validated()
         XCTAssertEqual(v.appearance.cursorStyle, "bar")
         XCTAssertEqual(v.behavior.newTabCwd, "workspace")
+    }
+
+    func testUsageTokenAccountsDecodeWithDefaults() throws {
+        let c = try decode("""
+        {
+          "usage": {
+            "providers": {
+              "codex": {
+                "tokenAccounts": {
+                  "accounts": [
+                    { "label": "alpha", "token": "/tmp/codex-alpha" },
+                    { "label": "beta", "token": "/tmp/codex-beta" }
+                  ],
+                  "activeIndex": 8
+                }
+              }
+            }
+          }
+        }
+        """)
+        let data = try XCTUnwrap(c.usage.providers["codex"]?.tokenAccounts)
+        XCTAssertEqual(data.accounts.map(\.label), ["alpha", "beta"])
+        XCTAssertEqual(data.accounts.first?.token, "/tmp/codex-alpha")
+        XCTAssertEqual(data.version, 1)
+        XCTAssertEqual(data.validated()?.clampedActiveIndex(), 1)
+    }
+
+    func testUsageProviderOrderNormalizesAndCompletesKnownProviders() {
+        let order = UsageConfig.effectiveProviderOrder(
+            raw: [" claude ", "codex", "claude", "missing", ""],
+            knownProviderIDs: ["codex", "claude", "gemini"])
+        XCTAssertEqual(order, ["claude", "codex", "gemini"])
+    }
+
+    func testUsageProviderOrderFallsBackToCatalogOrderWhenEmpty() {
+        let order = UsageConfig.effectiveProviderOrder(
+            raw: ["missing"],
+            knownProviderIDs: ["codex", "claude"])
+        XCTAssertEqual(order, ["codex", "claude"])
+    }
+
+    func testUsageProvidersSortedAlphabeticallyDecodes() throws {
+        XCTAssertFalse(AppConfig.default.usage.providersSortedAlphabetically)
+
+        let c = try decode(#"{ "usage": { "providersSortedAlphabetically": true } }"#)
+        XCTAssertTrue(c.usage.providersSortedAlphabetically)
+    }
+
+    func testUsageProviderRefreshIntervalDecodeAndValidate() throws {
+        let c = try decode(#"{ "usage": { "providerRefreshIntervalSeconds": 60 } }"#)
+        XCTAssertEqual(c.usage.providerRefreshIntervalSeconds, 60)
+
+        let manual = try decode(#"{ "usage": { "providerRefreshIntervalSeconds": 0 } }"#)
+        XCTAssertEqual(manual.usage.providerRefreshIntervalSeconds, 0)
+
+        var invalid = AppConfig.default
+        invalid.usage.providerRefreshIntervalSeconds = 7
+        XCTAssertEqual(invalid.validated().usage.providerRefreshIntervalSeconds, 300)
+    }
+
+    func testUsageBarsShowUsedDecodes() throws {
+        let c = try decode(#"{ "usage": { "usageBarsShowUsed": true } }"#)
+        XCTAssertTrue(c.usage.usageBarsShowUsed)
+    }
+
+    func testResetTimesShowAbsoluteDecodes() throws {
+        let c = try decode(#"{ "usage": { "resetTimesShowAbsolute": true } }"#)
+        XCTAssertTrue(c.usage.resetTimesShowAbsolute)
+    }
+
+    func testShowOptionalCreditsAndExtraUsageDecodes() throws {
+        let c = try decode(#"{ "usage": { "showOptionalCreditsAndExtraUsage": false } }"#)
+        XCTAssertFalse(c.usage.showOptionalCreditsAndExtraUsage)
+    }
+
+    func testHidePersonalInfoDecodes() throws {
+        let c = try decode(#"{ "usage": { "hidePersonalInfo": true } }"#)
+        XCTAssertTrue(c.usage.hidePersonalInfo)
+    }
+
+    func testWeeklyProgressWorkDaysDecodesAndNormalizes() throws {
+        let c = try decode(#"{ "usage": { "weeklyProgressWorkDays": 5 } }"#)
+        XCTAssertEqual(c.usage.weeklyProgressWorkDays, 5)
+
+        let invalid = try decode(#"{ "usage": { "weeklyProgressWorkDays": 6 } }"#)
+        XCTAssertNil(invalid.usage.weeklyProgressWorkDays)
+    }
+
+    func testProviderChangelogLinksEnabledDecodes() throws {
+        let c = try decode(#"{ "usage": { "providerChangelogLinksEnabled": true } }"#)
+        XCTAssertTrue(c.usage.providerChangelogLinksEnabled)
+    }
+
+    func testProviderStorageFootprintsEnabledDecodes() throws {
+        let c = try decode(#"{ "usage": { "providerStorageFootprintsEnabled": true } }"#)
+        XCTAssertTrue(c.usage.providerStorageFootprintsEnabled)
+    }
+
+    func testStatusBarOverviewProviderSelectionDefaultsToFirstThreeActiveProviders() {
+        let ids = AppConfig.default.usage.effectiveStatusBarOverviewProviderIDs(
+            activeProviderIDs: ["codex", "claude", "gemini", "cursor"])
+        XCTAssertEqual(ids, ["codex", "claude", "gemini"])
+    }
+
+    func testStatusBarOverviewProviderSelectionPreservesExplicitSelectionInActiveOrder() {
+        var usage = UsageConfig(
+            statusBarOverviewProviderIDs: ["cursor", "claude", "missing", "cursor"],
+            statusBarOverviewSelectionBasisIDs: ["codex", "claude", "gemini", "cursor"])
+            .validated()
+        let ids = usage.effectiveStatusBarOverviewProviderIDs(
+            activeProviderIDs: ["codex", "claude", "gemini", "cursor"])
+        XCTAssertEqual(ids, ["claude", "cursor"])
+
+        usage.statusBarOverviewProviderIDs = []
+        usage.statusBarOverviewSelectionBasisIDs = ["codex", "claude", "gemini", "cursor"]
+        XCTAssertEqual(
+            usage.effectiveStatusBarOverviewProviderIDs(activeProviderIDs: ["codex", "claude", "gemini", "cursor"]),
+            [])
+    }
+
+    func testStatusBarOverviewProviderSelectionFallsBackWhenSmallActiveSetChanged() {
+        let usage = UsageConfig(
+            statusBarOverviewProviderIDs: ["claude"],
+            statusBarOverviewSelectionBasisIDs: ["codex", "claude", "gemini", "cursor"])
+        let ids = usage.effectiveStatusBarOverviewProviderIDs(activeProviderIDs: ["codex", "claude"])
+        XCTAssertEqual(ids, ["codex", "claude"])
     }
 
     func testRoundTripEncodeDecode() throws {

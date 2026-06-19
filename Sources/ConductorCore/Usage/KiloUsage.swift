@@ -3,8 +3,9 @@ import Foundation
 /// Kilo（Kilo Code）用量取数。忠实摘自 CodexBar `Kilo` provider，自足、不依赖 cookie。
 ///
 /// 凭证为 Bearer token，优先级照搬 CodexBar `KiloBearerTokenResolver`：
-/// 1) 环境变量 `KILO_API_KEY`；
-/// 2) CLI 登录文件 `~/.local/share/kilo/auth.json` 里的 `kilo.access`（`HOME` 可覆盖）。
+/// - `source=api`：只读环境变量 `KILO_API_KEY`；
+/// - `source=cli`：只读 CLI 登录文件 `~/.local/share/kilo/auth.json` 里的 `kilo.access`；
+/// - `source=auto`：先 API key，再回退 CLI 登录文件。
 ///
 /// 走 tRPC batch 调 `https://app.kilo.ai/api/trpc/<procedures>?batch=1&input=...`，
 /// 批量拉 `user.getCreditBlocks` / `kiloPass.getState` / `user.getAutoTopUpPaymentMethod`，
@@ -17,6 +18,10 @@ import Foundation
 /// - 无 Pass → primary = nil。planName 透传到 `UsageSnapshot.planName`。
 public enum KiloUsageError: LocalizedError, Sendable {
     case missingCredentials
+    case cliSessionMissing(String)
+    case cliSessionUnreadable(String)
+    case cliSessionInvalid(String)
+    case unsupportedSource(String)
     case unauthorized
     case endpointNotFound
     case server(Int)
@@ -26,6 +31,10 @@ public enum KiloUsageError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .missingCredentials: L("未找到 Kilo 凭证，请设置环境变量 KILO_API_KEY 或运行 `kilo login`")
+        case let .cliSessionMissing(path): L("未找到 Kilo CLI 登录文件 %@，请运行 `kilo login`", path)
+        case let .cliSessionUnreadable(path): L("无法读取 Kilo CLI 登录文件 %@，请检查权限或重新运行 `kilo login`", path)
+        case let .cliSessionInvalid(path): L("Kilo CLI 登录文件 %@ 无效，请重新运行 `kilo login`", path)
+        case let .unsupportedSource(source): L("Kilo 来源 %@ 不受支持，请使用 auto、api 或 cli", source)
         case .unauthorized: L("Kilo 鉴权失败（401/403），请刷新 KILO_API_KEY 或重新运行 `kilo login`")
         case .endpointNotFound: L("Kilo 接口未找到（404）")
         case let .server(code): L("Kilo 接口错误（%ld）", code)
@@ -38,6 +47,11 @@ public enum KiloUsageError: LocalizedError, Sendable {
 public enum KiloUsageFetcher {
     static let apiTokenKey = "KILO_API_KEY"
     private static let baseURL = URL(string: "https://app.kilo.ai/api/trpc")!
+
+    struct ResolvedToken: Equatable, Sendable {
+        let token: String
+        let sourceLabel: String
+    }
 
     /// tRPC 批量过程，顺序与解析逻辑强绑定（照搬 CodexBar）。
     private static let procedures = [
@@ -59,15 +73,55 @@ public enum KiloUsageFetcher {
     }
 
     static func token(env: [String: String]) -> String? {
-        if let v = clean(env[apiTokenKey]) { return v }
-        return cliToken(env: env)
+        try? resolvedToken(env: env).token
+    }
+
+    static func resolvedToken(env: [String: String]) throws -> ResolvedToken {
+        let source = UsageProviderRuntimeConfig.sourceMode(providerID: "kilo", env: env) ?? "auto"
+        switch source {
+        case "api":
+            return try apiResolvedToken(env: env)
+        case "cli":
+            return try cliResolvedToken(env: env)
+        case "auto":
+            if let token = apiToken(env: env) {
+                return ResolvedToken(token: token, sourceLabel: "api")
+            }
+            return try cliResolvedToken(env: env)
+        default:
+            throw KiloUsageError.unsupportedSource(source)
+        }
+    }
+
+    static func apiToken(env: [String: String]) -> String? {
+        clean(env[apiTokenKey])
+    }
+
+    private static func apiResolvedToken(env: [String: String]) throws -> ResolvedToken {
+        guard let token = apiToken(env: env) else { throw KiloUsageError.missingCredentials }
+        return ResolvedToken(token: token, sourceLabel: "api")
     }
 
     /// 读 `~/.local/share/kilo/auth.json`（或 `$HOME` 覆盖）里的 `kilo.access`。
     static func cliToken(env: [String: String]) -> String? {
+        try? cliResolvedToken(env: env).token
+    }
+
+    private static func cliResolvedToken(env: [String: String]) throws -> ResolvedToken {
         let url = authFileURL(env: env)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return parseAuthToken(data: data)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw KiloUsageError.cliSessionMissing(url.path)
+        }
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            throw KiloUsageError.cliSessionUnreadable(url.path)
+        }
+        guard let token = parseAuthToken(data: data) else {
+            throw KiloUsageError.cliSessionInvalid(url.path)
+        }
+        return ResolvedToken(token: token, sourceLabel: "cli")
     }
 
     static func authFileURL(env: [String: String]) -> URL {
@@ -108,12 +162,12 @@ public enum KiloUsageFetcher {
         env: [String: String] = ProcessInfo.processInfo.environment,
         session: URLSession = .shared) async throws -> UsageSnapshot
     {
-        guard let apiKey = token(env: env) else { throw KiloUsageError.missingCredentials }
+        let resolved = try resolvedToken(env: env)
 
         var request = URLRequest(url: try makeBatchURL())
         request.httpMethod = "GET"
         request.timeoutInterval = 15
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(resolved.token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let data: Data
@@ -142,7 +196,7 @@ public enum KiloUsageFetcher {
             throw KiloUsageError.server(http.statusCode)
         }
 
-        return try parse(data)
+        return try parse(data).withSourceLabel(resolved.sourceLabel)
     }
 
     private static func makeBatchURL() throws -> URL {

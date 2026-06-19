@@ -166,7 +166,7 @@ struct AgentToolsHooksWorkbenchView: View {
             AgentToolsWorkbenchBrand(
                 icon: "link",
                 title: "Hooks Manager",
-                subtitle: L("Events / Recipes"))
+                subtitle: L("事件 / 配方"))
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -332,7 +332,7 @@ struct AgentToolsHooksWorkbenchView: View {
                         .font(.system(size: 12.5, weight: .bold))
                         .foregroundStyle(AppStyle.textPrimary)
                         .lineLimit(1)
-                    Text(L("Stop hook"))
+                    Text(L("停止 Hook"))
                         .font(.system(size: 9.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(AppStyle.textTertiary)
                 }
@@ -418,7 +418,13 @@ struct AgentToolsHooksWorkbenchView: View {
             .filter { selectedSources.contains($0) }
             .map(\.displayName)
         if names.isEmpty { return L("还没有选择安装应用") }
-        return L("安装到 %@", names.joined(separator: "、"))
+        return L("安装到 %@", localizedNameList(names))
+    }
+
+    private func localizedNameList(_ names: [String]) -> String {
+        let formatter = ListFormatter()
+        formatter.locale = AppLanguage.activeLocale
+        return formatter.string(from: names) ?? names.joined(separator: ", ")
     }
 
     private func targetApplicationList(compact: Bool) -> some View {
@@ -547,7 +553,7 @@ struct AgentToolsHooksWorkbenchView: View {
                 }
                 textInput(L("事件名"), text: $customEvent)
                 textInput(L("命令"), text: $customCommand)
-                textInput(L("Timeout ms"), text: $customTimeout)
+                textInput(L("超时 ms"), text: $customTimeout)
                 HStack(spacing: 8) {
                     if !editing {
                         ToolBadge(text: L("%ld 个应用", selectedSources.count), color: selectedSources.isEmpty ? AppStyle.waitAmber : AppStyle.accent, style: .muted, height: 20)
@@ -953,7 +959,7 @@ private func hookWorkbenchTitle(_ entry: HookEntry) -> String {
     if entry.command.contains("#conductor:sound") { return L("完成提示音") }
     if entry.command.contains("#conductor:banner") { return L("系统横幅") }
     if entry.command.contains("#conductor:log") { return L("完成日志") }
-    if entry.managedByConductor { return L("Conductor hook") }
+    if entry.managedByConductor { return L("Conductor 管理的 Hook") }
     return L("自定义命令")
 }
 

@@ -1,10 +1,13 @@
 import Foundation
 import SweetCookieKit
 
-/// Grok 用量取数。忠实移植自 CodexBar `Grok` provider 的「网页计费 / 浏览器 cookie」路径
-/// （`GrokWebBillingFetcher` + `GrokCookieImporter`），**不依赖 grok CLI 的 RPC 路径**。
+/// Grok 用量取数。忠实移植自 CodexBar `Grok` provider 的两条路径：
+/// `grok agent stdio` CLI RPC（优先）与「网页计费 / 浏览器 cookie」回退路径。
 ///
-/// 取数路径：从浏览器里取 grok.com 的登录 cookie（要求至少含 `sso` 或 `sso-rw`）→
+/// CLI 路径：启动 `grok agent stdio`，JSON-RPC 初始化后调用 `x.ai/billing`，把
+/// monthly total/limit 换算成用量百分比。
+///
+/// Web 路径：从浏览器里取 grok.com 的登录 cookie（要求至少含 `sso` 或 `sso-rw`）→
 /// `POST https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig`（gRPC-Web + protobuf，
 /// 空 body 为 5 字节 0）→ 扫描 protobuf：取 `fixed32` 字段（path 末位 == 1，值 0...100）作为已用百分比、
 /// 取 `varint` 字段里落在 unix 秒区间的当作重置时间（优先 path `[1,5,1]`，取未来最近的）。
@@ -12,6 +15,12 @@ import SweetCookieKit
 /// 这是 cookie 类 provider。注意：首次读取 Chrome cookie 会弹一次「Chrome 安全存储」钥匙串授权框；
 /// Safari 需要「完全磁盘访问」。无登录态 / 无授权则报错。照搬自 CodexBar，本机无登录态无法实跑验证。
 public enum GrokUsageError: LocalizedError, Sendable {
+    case unsupportedSource(String)
+    case cliUnavailable
+    case cliStartFailed(String)
+    case cliRequestFailed(String)
+    case cliTimeout(String)
+    case cliMalformed(String)
     case noSession
     case unauthorized
     case emptyResponse
@@ -22,13 +31,37 @@ public enum GrokUsageError: LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .noSession: L("没有找到 Grok 登录态，请在浏览器登录 grok.com（Safari 需开启完全磁盘访问）")
-        case .unauthorized: L("Grok 登录态已失效，请重新登录 grok.com")
-        case .emptyResponse: L("Grok 用量接口返回空数据")
-        case .invalidResponse: L("Grok 用量接口返回异常")
-        case .parseFailed: L("无法解析 Grok 用量数据")
-        case let .server(c): L("Grok 接口错误（%ld）", c)
-        case let .network(m): L("网络错误：%@", m)
+        case let .unsupportedSource(source):
+            return L("Grok 来源 %@ 不受支持，请使用 auto、cli 或 web", source)
+        case .cliUnavailable:
+            return L("未找到 Grok CLI，请安装 grok 或设置 GROK_CLI_PATH")
+        case let .cliStartFailed(message):
+            return L("Grok CLI 启动失败：%@", message)
+        case let .cliRequestFailed(message):
+            if message.localizedCaseInsensitiveContains("authentication required") ||
+                message.localizedCaseInsensitiveContains("grok login")
+            {
+                return L("Grok CLI 需要登录，请运行 `grok login`")
+            }
+            return L("Grok CLI 请求失败：%@", message)
+        case let .cliTimeout(method):
+            return L("Grok CLI RPC 超时：%@", method)
+        case let .cliMalformed(message):
+            return L("Grok CLI RPC 返回异常：%@", message)
+        case .noSession:
+            return L("没有找到 Grok 登录态，请在浏览器登录 grok.com（Safari 需开启完全磁盘访问）")
+        case .unauthorized:
+            return L("Grok 登录态已失效，请重新登录 grok.com")
+        case .emptyResponse:
+            return L("Grok 用量接口返回空数据")
+        case .invalidResponse:
+            return L("Grok 用量接口返回异常")
+        case .parseFailed:
+            return L("无法解析 Grok 用量数据")
+        case let .server(c):
+            return L("Grok 接口错误（%ld）", c)
+        case let .network(m):
+            return L("网络错误：%@", m)
         }
     }
 }
@@ -41,9 +74,10 @@ public enum GrokUsageFetcher {
     private static let sessionCookieNames: Set<String> = ["sso", "sso-rw"]
     private static let requestTimeoutSeconds: TimeInterval = 15
 
-    /// 是否能从浏览器拿到 Grok 登录 cookie。注意：会触发浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        cookieHeader() != nil
+    /// 是否已配置 Grok。配置探测只看手动 Cookie 或 CLI 二进制，不读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        UsageProviderRuntimeConfig.manualCookieHeader(providerID: "grok", env: env) != nil ||
+            resolvedGrokBinary(env: env) != nil
     }
 
     /// 跨默认浏览器顺序取 grok.com 的 cookie，要求至少含一个已知会话 cookie（`sso`/`sso-rw`），
@@ -65,9 +99,41 @@ public enum GrokUsageFetcher {
         return nil
     }
 
-    public static func fetch(session: URLSession = .shared) async throws -> CodexUsageSnapshot {
-        guard let header = cookieHeader() else { throw GrokUsageError.noSession }
+    public static func fetch(
+        env: [String: String] = ProcessInfo.processInfo.environment,
+        session: URLSession = .shared) async throws -> CodexUsageSnapshot
+    {
+        let source = UsageProviderRuntimeConfig.sourceMode(providerID: "grok", env: env) ?? "auto"
+        switch source {
+        case "auto":
+            var cliError: Error?
+            if resolvedGrokBinary(env: env) != nil {
+                do {
+                    return try await fetchCLI(env: env)
+                } catch {
+                    cliError = error
+                }
+            }
+            if let header = cookieHeader(env: env) {
+                return try await fetchWeb(cookieHeader: header, session: session)
+            }
+            if let cliError { throw cliError }
+            return try await fetchWeb(env: env, session: session)
+        case "cli":
+            return try await fetchCLI(env: env)
+        case "web":
+            return try await fetchWeb(env: env, session: session)
+        default:
+            throw GrokUsageError.unsupportedSource(source)
+        }
+    }
 
+    private static func fetchWeb(env: [String: String], session: URLSession) async throws -> CodexUsageSnapshot {
+        guard let header = cookieHeader(env: env) else { throw GrokUsageError.noSession }
+        return try await fetchWeb(cookieHeader: header, session: session)
+    }
+
+    private static func fetchWeb(cookieHeader header: String, session: URLSession) async throws -> CodexUsageSnapshot {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = requestTimeoutSeconds
@@ -101,7 +167,26 @@ public enum GrokUsageFetcher {
         try validateGRPCStatus(headerFields: http.allHeaderFields, body: data)
 
         let billing = try parseGRPCWebResponse(data)
-        return makeSnapshot(billing)
+        return makeSnapshot(billing).withSourceLabel("web")
+    }
+
+    private static func fetchCLI(env: [String: String]) async throws -> CodexUsageSnapshot {
+        guard let binary = resolvedGrokBinary(env: env) else {
+            throw GrokUsageError.cliUnavailable
+        }
+        let client = try GrokCLIUsageRPCClient(binary: binary, env: env)
+        defer { client.shutdown() }
+        try await client.initialize()
+        let billing = try await client.fetchBilling()
+        return try makeSnapshot(billing).withSourceLabel("grok-cli")
+    }
+
+    private static func resolvedGrokBinary(env: [String: String]) -> String? {
+        BinaryLocator.resolveGrokBinary(
+            env: env,
+            loginPATH: LoginShellPathCache.shared.current,
+            home: env["HOME"] ?? NSHomeDirectory())
+            ?? TTYCommandRunner.which("grok")
     }
 
     // MARK: - 快照映射
@@ -125,11 +210,80 @@ public enum GrokUsageFetcher {
         return CodexUsageSnapshot(planType: nil, session: window, weekly: nil)
     }
 
+    private static func makeSnapshot(_ billing: BillingResponse, now: Date = Date()) throws -> CodexUsageSnapshot {
+        guard let percent = billing.monthlyUsedPercent else {
+            throw GrokUsageError.invalidResponse
+        }
+        let clamped = Int(max(0, min(100, percent)).rounded())
+        let resetAt = billing.billingPeriodEndDate ?? now
+        let windowSeconds: Int
+        if let start = billing.billingPeriodStartDate,
+           let end = billing.billingPeriodEndDate,
+           end > start
+        {
+            windowSeconds = Int(end.timeIntervalSince(start))
+        } else if resetAt > now {
+            windowSeconds = Int(resetAt.timeIntervalSince(now))
+        } else {
+            windowSeconds = 0
+        }
+        return CodexUsageSnapshot(
+            planType: nil,
+            session: CodexUsageSnapshot.Window(
+                usedPercent: clamped,
+                resetAt: resetAt,
+                windowSeconds: windowSeconds),
+            weekly: nil)
+    }
+
     // MARK: - gRPC-Web / protobuf 解析（照搬 GrokWebBillingFetcher）
 
     private struct WebBilling {
         let usedPercent: Double?
         let resetsAt: Date?
+    }
+
+    struct BillingResponse: Decodable, Sendable {
+        let billingCycle: BillingCycle?
+        let monthlyLimit: Cent?
+        let usage: BillingUsage?
+
+        var monthlyUsedPercent: Double? {
+            guard let limit = monthlyLimit?.val, limit > 0,
+                  let used = usage?.totalUsed?.val
+            else { return nil }
+            return min(100, max(0, Double(used) / Double(limit) * 100))
+        }
+
+        var billingPeriodStartDate: Date? {
+            Self.parseISO8601(billingCycle?.billingPeriodStart)
+        }
+
+        var billingPeriodEndDate: Date? {
+            Self.parseISO8601(billingCycle?.billingPeriodEnd)
+        }
+
+        private static func parseISO8601(_ raw: String?) -> Date? {
+            guard let raw, !raw.isEmpty else { return nil }
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: raw) { return date }
+            formatter.formatOptions = [.withInternetDateTime]
+            return formatter.date(from: raw)
+        }
+    }
+
+    struct BillingCycle: Decodable, Sendable {
+        let billingPeriodStart: String?
+        let billingPeriodEnd: String?
+    }
+
+    struct BillingUsage: Decodable, Sendable {
+        let totalUsed: Cent?
+    }
+
+    struct Cent: Decodable, Sendable {
+        let val: Int?
     }
 
     private static func parseGRPCWebResponse(_ data: Data, now: Date = Date()) throws -> WebBilling {
@@ -392,5 +546,199 @@ public enum GrokUsageFetcher {
             shift += 7
         }
         return nil
+    }
+}
+
+private final class GrokCLIUsageRPCClient: @unchecked Sendable {
+    private let process = Process()
+    private let stdinPipe = Pipe()
+    private let stdoutPipe = Pipe()
+    private let stderrPipe = Pipe()
+    private let stdoutLines: AsyncStream<Data>
+    private let stdoutContinuation: AsyncStream<Data>.Continuation
+    private let initializeTimeout: TimeInterval = 4
+    private let requestTimeout: TimeInterval = 3
+    private var nextID = 1
+
+    private struct SendableJSONMessage: @unchecked Sendable {
+        let value: [String: Any]
+    }
+
+    init(binary: String, env: [String: String]) throws {
+        var continuation: AsyncStream<Data>.Continuation!
+        self.stdoutLines = AsyncStream<Data> { continuation = $0 }
+        self.stdoutContinuation = continuation
+
+        var resolvedEnv = env
+        resolvedEnv["PATH"] = PathBuilder.effectivePATH(
+            purposes: [.rpc],
+            env: resolvedEnv,
+            loginPATH: LoginShellPathCache.shared.currentOrCapture())
+        self.process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        self.process.arguments = [binary, "agent", "stdio"]
+        self.process.environment = resolvedEnv
+        self.process.standardInput = stdinPipe
+        self.process.standardOutput = stdoutPipe
+        self.process.standardError = stderrPipe
+
+        do {
+            try process.run()
+        } catch {
+            throw GrokUsageError.cliStartFailed(error.localizedDescription)
+        }
+
+        let stdoutBuffer = LineBuffer()
+        let stdoutContinuation = self.stdoutContinuation
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                stdoutContinuation.finish()
+                return
+            }
+            for line in stdoutBuffer.appendAndDrain(chunk) {
+                stdoutContinuation.yield(line)
+            }
+        }
+
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+            }
+        }
+    }
+
+    deinit {
+        shutdown()
+    }
+
+    func initialize() async throws {
+        _ = try await request(
+            method: "initialize",
+            params: [
+                "protocolVersion": "1",
+                "clientCapabilities": [
+                    "fs": ["readTextFile": false, "writeTextFile": false],
+                    "terminal": false,
+                ],
+            ],
+            timeout: initializeTimeout)
+    }
+
+    func fetchBilling() async throws -> GrokUsageFetcher.BillingResponse {
+        let message = try await request(method: "x.ai/billing", params: [:])
+        guard let result = message["result"] else {
+            throw GrokUsageError.cliMalformed("missing result")
+        }
+        let data = try JSONSerialization.data(withJSONObject: result)
+        do {
+            return try JSONDecoder().decode(GrokUsageFetcher.BillingResponse.self, from: data)
+        } catch {
+            throw GrokUsageError.cliMalformed(error.localizedDescription)
+        }
+    }
+
+    func shutdown() {
+        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        stderrPipe.fileHandleForReading.readabilityHandler = nil
+        stdoutContinuation.finish()
+        if process.isRunning {
+            process.terminate()
+        }
+    }
+
+    private func request(
+        method: String,
+        params: [String: Any]? = nil,
+        timeout: TimeInterval? = nil) async throws -> [String: Any]
+    {
+        let id = nextID
+        nextID += 1
+        try sendRequest(id: id, method: method, params: params)
+        let wrapped = try await withTimeout(seconds: timeout ?? requestTimeout, method: method) {
+            while true {
+                let message = try await self.readNextMessage()
+                if message["id"] == nil { continue }
+                guard self.jsonID(message["id"]) == id else { continue }
+                if let error = message["error"] as? [String: Any] {
+                    let text = error["message"] as? String ?? "\(error)"
+                    throw GrokUsageError.cliRequestFailed(text)
+                }
+                return SendableJSONMessage(value: message)
+            }
+        }
+        return wrapped.value
+    }
+
+    private func withTimeout<T: Sendable>(
+        seconds: TimeInterval,
+        method: String,
+        body: @escaping @Sendable () async throws -> T) async throws -> T
+    {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await body() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(max(0.1, seconds) * 1_000_000_000))
+                self.shutdown()
+                throw GrokUsageError.cliTimeout(method)
+            }
+            let result = try await group.next()
+            group.cancelAll()
+            guard let result else { throw GrokUsageError.cliTimeout(method) }
+            return result
+        }
+    }
+
+    private func sendRequest(id: Int, method: String, params: [String: Any]?) throws {
+        try sendPayload([
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params ?? [:],
+        ])
+    }
+
+    private func sendPayload(_ payload: [String: Any]) throws {
+        let raw = try JSONSerialization.data(withJSONObject: payload)
+        let unescaped = String(data: raw, encoding: .utf8)?
+            .replacingOccurrences(of: "\\/", with: "/")
+        let data = unescaped.flatMap { $0.data(using: .utf8) } ?? raw
+        stdinPipe.fileHandleForWriting.write(data)
+        stdinPipe.fileHandleForWriting.write(Data([0x0A]))
+    }
+
+    private func readNextMessage() async throws -> [String: Any] {
+        for await line in stdoutLines {
+            guard !line.isEmpty else { continue }
+            if let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any] {
+                return object
+            }
+        }
+        throw GrokUsageError.cliMalformed("stdout closed")
+    }
+
+    private func jsonID(_ raw: Any?) -> Int? {
+        if let int = raw as? Int { return int }
+        if let number = raw as? NSNumber { return number.intValue }
+        return nil
+    }
+
+    private final class LineBuffer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var data = Data()
+
+        func appendAndDrain(_ chunk: Data) -> [Data] {
+            lock.lock()
+            defer { lock.unlock() }
+            data.append(chunk)
+            var lines: [Data] = []
+            while let newline = data.firstIndex(of: 0x0A) {
+                let line = Data(data[..<newline])
+                data.removeSubrange(...newline)
+                if !line.isEmpty { lines.append(line) }
+            }
+            return lines
+        }
     }
 }

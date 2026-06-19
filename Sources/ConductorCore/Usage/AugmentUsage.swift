@@ -1,7 +1,8 @@
 import Foundation
 import SweetCookieKit
 
-/// Augment（auggie）用量取数。摘自 CodexBar `Augment` provider 的浏览器 cookie 路径(用 SweetCookieKit):
+/// Augment（auggie）用量取数。摘自 CodexBar `Augment` provider:
+/// 优先跑 `auggie account status`，失败后回落到浏览器 cookie 路径：
 /// 从浏览器里取 augmentcode.com 的登录 cookie → `GET app.augmentcode.com/api/credits`（必需）拿额度，
 /// 再 `GET /api/subscription`（可选，给套餐名/计费周期结束日）→ 算已用百分比。
 ///
@@ -14,6 +15,12 @@ public enum AugmentUsageError: LocalizedError, Sendable {
     case server(Int)
     case invalidResponse
     case network(String)
+    case unsupportedSource(String)
+    case cliUnavailable
+    case cliFailed(String)
+    case cliNoOutput
+    case cliNotAuthenticated
+    case cliParseFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -22,6 +29,12 @@ public enum AugmentUsageError: LocalizedError, Sendable {
         case let .server(c): L("Augment 接口错误（%ld）", c)
         case .invalidResponse: L("Augment 用量接口返回异常")
         case let .network(m): L("网络错误：%@", m)
+        case let .unsupportedSource(source): L("Augment 来源 %@ 不受支持，请使用 auto 或 cli", source)
+        case .cliUnavailable: L("未找到 Augment CLI，请安装 auggie 或设置 AUGGIE_CLI_PATH")
+        case let .cliFailed(message): L("Augment CLI 失败：%@", message)
+        case .cliNoOutput: L("Augment CLI 没有输出")
+        case .cliNotAuthenticated: L("Augment CLI 未登录，请运行 `auggie login`")
+        case let .cliParseFailed(message): L("Augment CLI 输出解析失败：%@", message)
         }
     }
 }
@@ -43,9 +56,12 @@ public enum AugmentUsageFetcher {
         "authjs.session-token", // AuthJS session
     ]
 
-    /// 是否能从浏览器拿到 Augment 登录 cookie。注意：会触发浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        cookieHeader() != nil
+    private static let commandTimeout: TimeInterval = 15
+
+    /// 是否已配置 Augment 手动 Cookie 或本地 auggie。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        UsageProviderRuntimeConfig.manualCookieHeader(providerID: "augment", env: env) != nil
+            || resolvedAuggieBinary(env: env) != nil
     }
 
     /// 跨默认浏览器顺序取 augmentcode.com 的 cookie，拼成 Cookie 头；要求至少含一个已知会话 cookie。
@@ -75,15 +91,63 @@ public enum AugmentUsageFetcher {
         return nil
     }
 
-    public static func fetch(session: URLSession = .shared) async throws -> CodexUsageSnapshot {
-        guard let header = cookieHeader() else { throw AugmentUsageError.noSession }
+    public static func fetch(
+        env: [String: String] = ProcessInfo.processInfo.environment,
+        session: URLSession = .shared
+    ) async throws -> CodexUsageSnapshot {
+        switch UsageProviderRuntimeConfig.sourceMode(providerID: "augment", env: env) ?? "auto" {
+        case "auto":
+            if let binary = resolvedAuggieBinary(env: env) {
+                do {
+                    return try await fetchCLI(binary: binary, env: env)
+                } catch {
+                    // CodexBar falls back from auggie to the web cookie path when CLI auth/output fails.
+                }
+            }
+            return try await fetchWeb(env: env, session: session)
+        case "cli":
+            guard let binary = resolvedAuggieBinary(env: env) else { throw AugmentUsageError.cliUnavailable }
+            return try await fetchCLI(binary: binary, env: env)
+        case let source:
+            throw AugmentUsageError.unsupportedSource(source)
+        }
+    }
+
+    private static func fetchWeb(
+        env: [String: String],
+        session: URLSession) async throws -> CodexUsageSnapshot
+    {
+        guard let header = cookieHeader(env: env) else { throw AugmentUsageError.noSession }
 
         // 额度（必需）。
         let credits = try await fetchCredits(cookieHeader: header, session: session)
         // 订阅（可选）：拿套餐名/计费周期结束日；失败不影响主流程。
         let subscription = try? await fetchSubscription(cookieHeader: header, session: session)
 
-        return parse(credits: credits, subscription: subscription)
+        return parse(credits: credits, subscription: subscription).withSourceLabel("web")
+    }
+
+    private static func fetchCLI(binary: String, env: [String: String]) async throws -> CodexUsageSnapshot {
+        var commandEnv = env
+        commandEnv["NO_COLOR"] = "1"
+        commandEnv["PATH"] = PathBuilder.effectivePATH(
+            purposes: [.tty, .nodeTooling],
+            env: env,
+            loginPATH: LoginShellPathCache.shared.currentOrCapture(),
+            home: env["HOME"] ?? NSHomeDirectory())
+        let output = try runCommand(
+            binary: binary,
+            arguments: ["account", "status"],
+            environment: commandEnv,
+            timeout: commandTimeout)
+        return try parseCLI(output).withSourceLabel("cli")
+    }
+
+    private static func resolvedAuggieBinary(env: [String: String]) -> String? {
+        BinaryLocator.resolveAuggieBinary(
+            env: env,
+            loginPATH: LoginShellPathCache.shared.currentOrCapture(),
+            home: env["HOME"] ?? NSHomeDirectory())
     }
 
     // MARK: - 请求
@@ -180,10 +244,158 @@ public enum AugmentUsageFetcher {
         return CodexUsageSnapshot(planType: subscription?.planName, session: window, weekly: nil)
     }
 
+    static func parseCLI(_ output: String) throws -> CodexUsageSnapshot {
+        var maxCredits: Int?
+        var remaining: Int?
+        var used: Int?
+        var total: Int?
+        var billingCycleEnd: Date?
+
+        for line in output.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if trimmed.contains("credits / month") {
+                if let match = trimmed.range(
+                    of: #"([\d,]+)\s+credits\s*/\s*month"#,
+                    options: .regularExpression)
+                {
+                    let number = cliNumber(String(trimmed[match]))
+                    maxCredits = number
+                    total = total ?? number
+                }
+            } else if trimmed.contains("Max Plan"),
+                      trimmed.contains("credits"),
+                      !trimmed.contains("remaining"),
+                      let match = trimmed.range(of: #"([\d,]+)\s+credits"#, options: .regularExpression)
+            {
+                maxCredits = cliNumber(String(trimmed[match]))
+            }
+
+            if trimmed.contains("credits remaining"), !trimmed.contains("billing cycle") {
+                if let match = trimmed.range(
+                    of: #"([\d,]+)\s+credits\s+remaining"#,
+                    options: .regularExpression)
+                {
+                    remaining = cliNumber(String(trimmed[match]))
+                }
+            }
+
+            if trimmed.contains("remaining"), trimmed.contains("credits used") {
+                if let match = trimmed.range(of: #"([\d,]+)\s+remaining"#, options: .regularExpression) {
+                    remaining = cliNumber(String(trimmed[match]))
+                }
+                if let match = trimmed.range(
+                    of: #"([\d,]+)\s*/\s*([\d,]+)\s+credits used"#,
+                    options: .regularExpression)
+                {
+                    let parts = String(trimmed[match])
+                        .replacingOccurrences(of: " credits used", with: "")
+                        .split(separator: "/")
+                    if parts.count == 2 {
+                        used = cliNumber(String(parts[0]))
+                        total = cliNumber(String(parts[1]))
+                    }
+                }
+            }
+
+            if trimmed.contains("billing cycle"), trimmed.contains("ends"),
+               let match = trimmed.range(of: #"ends\s+([\d/]+)"#, options: .regularExpression)
+            {
+                let dateText = String(trimmed[match])
+                    .replacingOccurrences(of: "ends", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+                let formatter = DateFormatter()
+                formatter.dateFormat = "M/d/yyyy"
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.timeZone = TimeZone.current
+                billingCycleEnd = formatter.date(from: dateText)
+            }
+        }
+
+        guard let finalRemaining = remaining else {
+            throw AugmentUsageError.cliParseFailed("missing remaining credits")
+        }
+        guard let finalTotal = total ?? maxCredits else {
+            throw AugmentUsageError.cliParseFailed("missing total credits")
+        }
+        let finalUsed = used ?? max(0, finalTotal - finalRemaining)
+        let percent = finalTotal > 0 ? max(0, min(100, Double(finalUsed) / Double(finalTotal) * 100)) : 0
+        let resetAt = billingCycleEnd ?? Date().addingTimeInterval(30 * 24 * 3600)
+        let windowSeconds = max(1, Int(resetAt.timeIntervalSinceNow))
+        let window = CodexUsageSnapshot.Window(
+            usedPercent: Int(percent.rounded()),
+            resetAt: resetAt,
+            windowSeconds: windowSeconds)
+        return CodexUsageSnapshot(
+            planType: maxCredits.map { "\($0.formatted()) credits/month" },
+            session: window,
+            weekly: nil)
+    }
+
     private static func parseISO(_ s: String?) -> Date? {
         guard let s, !s.isEmpty else { return nil }
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f.date(from: s) ?? ISO8601DateFormatter().date(from: s)
+    }
+
+    private static func cliNumber(_ raw: String) -> Int? {
+        let digits = raw.filter(\.isNumber)
+        return digits.isEmpty ? nil : Int(digits)
+    }
+
+    private static func runCommand(
+        binary: String,
+        arguments: [String],
+        environment: [String: String],
+        timeout: TimeInterval) throws -> String
+    {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = arguments
+        process.environment = environment
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+        do {
+            try process.run()
+        } catch {
+            throw AugmentUsageError.cliFailed(error.localizedDescription)
+        }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning {
+            if Date() >= deadline {
+                process.terminate()
+                throw AugmentUsageError.cliFailed("timed out")
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+
+        let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        guard process.terminationStatus == 0 else {
+            if stdoutText.contains("Authentication failed") || stdoutText.contains("auggie login")
+                || stderrText.contains("Authentication failed") || stderrText.contains("auggie login")
+            {
+                throw AugmentUsageError.cliNotAuthenticated
+            }
+            throw AugmentUsageError.cliFailed(nonEmpty(stderrText) ?? nonEmpty(stdoutText) ?? "exit \(process.terminationStatus)")
+        }
+        guard let output = nonEmpty(stdoutText) else { throw AugmentUsageError.cliNoOutput }
+        if output.contains("Authentication failed") || output.contains("auggie login") {
+            throw AugmentUsageError.cliNotAuthenticated
+        }
+        return output
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else {
+            return nil
+        }
+        return trimmed
     }
 }

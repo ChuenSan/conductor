@@ -103,9 +103,9 @@ public enum CommandCodeUsageFetcher {
         tokenCookieHeader(env: env) != nil
     }
 
-    /// 是否能从浏览器拿到 CommandCode 登录 cookie（cookie 路）。注意：会触发浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        browserCookieHeader() != nil
+    /// 是否已配置 CommandCode 手动 Cookie。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        tokenCookieHeader(env: env) != nil
     }
 
     // MARK: - 取数

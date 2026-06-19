@@ -55,6 +55,12 @@ final class SessionPreviewCache: ObservableObject {
         Task { _ = await messages(for: record, limit: limit, tailBytes: tailBytes) }
     }
 
+    func trimCacheForMemoryPressure() -> Int {
+        let count = entries.count
+        entries.removeAll(keepingCapacity: false)
+        return count
+    }
+
     fileprivate static func modificationDate(_ path: String) -> Date {
         (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate] as? Date)
             ?? .distantPast
@@ -90,5 +96,11 @@ final class SessionUsageCache {
         inflight[path] = nil
         entries[path] = Entry(mtime: mtime, usage: usage)
         return usage
+    }
+
+    func trimCacheForMemoryPressure() -> Int {
+        let count = entries.count
+        entries.removeAll(keepingCapacity: false)
+        return count
     }
 }

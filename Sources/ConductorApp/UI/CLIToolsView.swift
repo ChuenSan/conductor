@@ -53,6 +53,14 @@ enum CLIToolLogo {
         return image
     }
 
+    @MainActor
+    static func trimCacheForMemoryPressure() -> Int {
+        let count = cache.count + templateCache.count
+        cache.removeAll(keepingCapacity: false)
+        templateCache.removeAll(keepingCapacity: false)
+        return count
+    }
+
     private static func shouldRenderSVGAsTemplate(_ url: URL) -> Bool {
         guard let text = try? String(contentsOf: url, encoding: .utf8).lowercased() else { return false }
         if text.contains("currentcolor") { return true }
@@ -323,9 +331,11 @@ struct CLIToolsView: View {
 
     private var providerSettingsWorkbench: some View {
         UsageProvidersSettingsView(
-            providers: UsageProviderCatalog.all,
+            providers: UsageProviderCatalog.orderedEntries(config: ConfigStore.shared.config),
             tools: results,
             states: providerUsage,
+            storageFootprints: [:],
+            isScanningStorage: false,
             selectedID: $selectedProviderID,
             onApplyConfig: { coordinator.applyConfig($0) },
             onReload: { reloadProvider($0) })
@@ -644,13 +654,18 @@ struct CLIToolsView: View {
                 return
             }
             do {
-                let snap = try await provider.fetch()
+                let snap = try await UsageProviderAppFetchBridge.fetch(provider, config: cfg) {
+                    try await UsageProviderRuntimeContext.withForcedWebRefresh(for: provider.id) {
+                        try await provider.fetch()
+                    }
+                }
                 await MainActor.run {
                     providerUsage[provider.id] = .loaded(snap)
                     if shouldRecordHistory(provider.id, config: cfg) {
-                        UsageHistoryStore.shared.record(id: provider.id, snapshot: snap)
+                        UsageHistoryStore.shared.record(providerID: provider.id, snapshot: snap, config: cfg)
                         UsageHistoryStore.shared.persist()
                     }
+                    UsageQuotaWarningCenter.shared.handle(provider: provider, snapshot: snap, config: cfg)
                 }
             } catch {
                 await MainActor.run { providerUsage[provider.id] = .error(error.localizedDescription) }
@@ -669,9 +684,9 @@ struct CLIToolsView: View {
         let cfg = ConfigStore.shared.config
         let resolved = await Task.detached(priority: .utility) { () -> [(UsageProviderEntry, Bool)] in
             UsageCredentials.apply(cfg)   // 注入 key 后 isConfigured() 才反映应用内配置
-            return UsageProviderCatalog.all
+            return UsageProviderCatalog.orderedEntries(config: cfg)
                 .filter { UsageCredentials.isVisible($0, config: cfg) }
-                .map { ($0, $0.isConfigured()) }
+                .map { ($0, UsageCredentials.isConfiguredWithoutBrowserPrompt($0, config: cfg)) }
         }.value
         // 已配置的排前面，组内保持目录顺序。
         let providers = resolved.filter { $0.1 }.map { $0.0 } + resolved.filter { !$0.1 }.map { $0.0 }
@@ -906,10 +921,14 @@ private struct ProviderUsageRow: View {
     /// 重新拉取该 provider。
     let onReload: () -> Void
     @ObservedObject private var history = UsageHistoryStore.shared
+    @ObservedObject private var configStore = ConfigStore.shared
     @State private var expanded = false
 
     var body: some View {
-        let samples = history.samples(for: provider.id)
+        let samples = history.samples(
+            for: provider.id,
+            snapshot: loadedSnapshot,
+            config: configStore.config)
         VStack(alignment: .leading, spacing: 9) {
             header
             usageBody
@@ -920,6 +939,11 @@ private struct ProviderUsageRow: View {
         }
         .padding(Space.sm)
         .toolsCard()
+    }
+
+    private var loadedSnapshot: UsageSnapshot? {
+        if case let .loaded(snapshot) = state { return snapshot }
+        return nil
     }
 
     private var header: some View {
@@ -961,7 +985,12 @@ private struct ProviderUsageRow: View {
     private var headerSubtitle: String? {
         switch state {
         case let .loaded(snap):
-            let rawParts: [String?] = [snap.accountLabel, snap.planName]
+            let rawParts: [String?] = [
+                UsagePersonalInfoRedactor.redactEmails(
+                    in: snap.accountLabel,
+                    isEnabled: configStore.config.usage.hidePersonalInfo),
+                snap.planName
+            ]
             let parts = rawParts
                 .compactMap { (value: String?) -> String? in
                     guard let value, !value.isEmpty else { return nil }
@@ -1028,7 +1057,7 @@ private struct ProviderUsageRow: View {
         if let w = snap.primary ?? snap.secondary ?? snap.tertiary {
             return L("剩 %ld%%", Int(w.remainingPercent.rounded()))
         }
-        if let c = snap.providerCost {
+        if optionalCreditsAndExtraUsageVisible, let c = snap.providerCost {
             return CostLine.shortText(c)
         }
         return nil
@@ -1060,18 +1089,36 @@ private struct ProviderUsageRow: View {
         case let .error(message):
             ProviderUsageHint(icon: "exclamationmark.triangle.fill", text: message, color: AppStyle.errorRed)
         case let .loaded(snap):
-            if snap.isEmpty {
+            let windows = visibleUsageWindows(snap)
+            let cost = optionalCreditsAndExtraUsageVisible ? snap.providerCost : nil
+            if windows.isEmpty && cost == nil {
                 ProviderUsageHint(icon: "chart.bar.xaxis", text: L("暂无用量数据"), color: AppStyle.textTertiary)
             } else {
                 VStack(alignment: .leading, spacing: 7) {
-                    ForEach(Array(snap.allWindows.enumerated()), id: \.offset) { _, item in
+                    ForEach(Array(windows.enumerated()), id: \.offset) { _, item in
                         UsageBar(title: item.title, window: item.window)
                     }
-                    if let cost = snap.providerCost { CostLine(cost: cost) }
+                    if let cost { CostLine(cost: cost) }
                 }
                 .padding(.top, 9).padding(.leading, 44)
             }
         }
+    }
+
+    private var optionalCreditsAndExtraUsageVisible: Bool {
+        configStore.config.usage.showOptionalCreditsAndExtraUsage
+    }
+
+    private func visibleUsageWindows(_ snapshot: UsageSnapshot) -> [(title: String, window: RateWindow)] {
+        let metadata = provider.displayMetadata
+        var windows: [(title: String, window: RateWindow)] = []
+        if let primary = snapshot.primary { windows.append((primary.title ?? metadata.sessionLabel, primary)) }
+        if let secondary = snapshot.secondary { windows.append((secondary.title ?? metadata.weeklyLabel, secondary)) }
+        if let tertiary = snapshot.tertiary { windows.append((tertiary.title ?? metadata.opusLabel ?? L("其它"), tertiary)) }
+        if optionalCreditsAndExtraUsageVisible {
+            windows.append(contentsOf: snapshot.extraRateWindows.map { ($0.title, $0.window) })
+        }
+        return windows
     }
 
     // MARK: 展开动作
@@ -1142,7 +1189,9 @@ private struct UsageBar: View {
     /// 主题变 → 重渲染（字段不变时 SwiftUI 会跳过 body）。
     @ObservedObject private var configStore = ConfigStore.shared
 
-    private var fraction: Double { window.usedPercent / 100.0 }
+    private var showUsed: Bool { configStore.config.usage.usageBarsShowUsed }
+    private var displayPercent: Double { showUsed ? window.usedPercent : window.remainingPercent }
+    private var fraction: Double { max(0.02, min(1, displayPercent / 100.0)) }
 
     /// 用量越高越警示：<70 绿、70-90 橙、>90 红。
     private var barColor: Color {
@@ -1168,11 +1217,11 @@ private struct UsageBar: View {
                 }
                 Spacer(minLength: 6)
                 VStack(alignment: .trailing, spacing: 0) {
-                    Text(L("剩 %ld%%", Int(window.remainingPercent.rounded())))
+                    Text(primaryPercentText)
                         .font(.system(size: 11.5, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(AppStyle.textPrimary)
-                    Text(L("已用 %ld%%", Int(window.usedPercent.rounded())))
+                    Text(secondaryPercentText)
                         .font(.system(size: 9.5, weight: .medium, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(AppStyle.textTertiary)
@@ -1185,6 +1234,13 @@ private struct UsageBar: View {
                     Capsule()
                         .fill(barColor)
                         .frame(width: max(3, geo.size.width * fraction))
+                        .animation(Motion.snappy, value: displayPercent)
+                    CLIUsageWorkDayMarkers(
+                        workDays: configStore.config.usage.weeklyProgressWorkDays,
+                        showUsed: showUsed,
+                        windowMinutes: window.windowMinutes,
+                        width: geo.size.width,
+                        height: 7)
                 }
             }
             .frame(height: 5)
@@ -1195,10 +1251,47 @@ private struct UsageBar: View {
                 .fill(AppStyle.hoverFill.opacity(0.54)))
     }
 
+    private var primaryPercentText: String {
+        if showUsed { return L("已用 %ld%%", Int(window.usedPercent.rounded())) }
+        return L("剩 %ld%%", Int(window.remainingPercent.rounded()))
+    }
+
+    private var secondaryPercentText: String {
+        if showUsed { return L("剩 %ld%%", Int(window.remainingPercent.rounded())) }
+        return L("已用 %ld%%", Int(window.usedPercent.rounded()))
+    }
+
     private var resetText: String {
-        if let reset = window.resetsAt { return UsageFormatting.resetText(reset) }
+        if let reset = window.resetsAt {
+            return UsageFormatting.resetText(
+                reset,
+                showAbsolute: configStore.config.usage.resetTimesShowAbsolute)
+        }
         if let description = window.resetDescription, !description.isEmpty { return description }
         return L("无固定重置")
+    }
+}
+
+private struct CLIUsageWorkDayMarkers: View {
+    let workDays: Int?
+    let showUsed: Bool
+    let windowMinutes: Int?
+    let width: CGFloat
+    let height: CGFloat
+
+    private var markerPercents: [Double] {
+        UsagePace.workDayMarkerPercents(workDays: workDays, windowMinutes: windowMinutes)
+            .map { showUsed ? $0 : 100 - $0 }
+            .filter { $0 > 0 && $0 < 100 }
+    }
+
+    var body: some View {
+        ForEach(Array(markerPercents.enumerated()), id: \.offset) { _, percent in
+            Rectangle()
+                .fill(AppStyle.textTertiary.opacity(0.5))
+                .frame(width: 1, height: height)
+                .offset(x: max(0, min(width - 1, width * CGFloat(percent / 100))))
+        }
     }
 }
 
@@ -1206,6 +1299,11 @@ private struct UsageBar: View {
 struct CostLine: View {
     let cost: ProviderCostSnapshot
     @ObservedObject private var configStore = ConfigStore.shared
+
+    private var showUsed: Bool { configStore.config.usage.usageBarsShowUsed }
+    private var remainingPercent: Double { max(0, min(100, 100 - cost.usedPercent)) }
+    private var displayPercent: Double { showUsed ? cost.usedPercent : remainingPercent }
+    private var fraction: Double { max(0.02, min(1, displayPercent / 100)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1227,8 +1325,8 @@ struct CostLine: View {
                         Capsule().fill(AppStyle.subtleFill)
                         Capsule()
                             .fill(cost.usedPercent >= 90 ? AppStyle.errorRed : cost.usedPercent >= 70 ? AppStyle.waitAmber : AppStyle.accent)
-                            .frame(width: geo.size.width * max(0.02, min(1, cost.usedPercent / 100)))
-                            .animation(Motion.snappy, value: cost.usedPercent)
+                            .frame(width: geo.size.width * fraction)
+                            .animation(Motion.snappy, value: displayPercent)
                     }
                 }
                 .frame(height: 5)
@@ -1280,8 +1378,9 @@ enum UsageFormatting {
         return date.formatted(date: .abbreviated, time: .omitted)
     }
 
-    /// 把重置时间格式化成「4 小时后重置」「2 天后重置」「8 分钟后重置」。
-    static func resetText(_ date: Date) -> String {
+    /// 把重置时间格式化成倒计时，或按 CodexBar 设置显示为绝对时钟。
+    static func resetText(_ date: Date, showAbsolute: Bool = false) -> String {
+        if showAbsolute { return absoluteResetText(date) }
         let seconds = date.timeIntervalSinceNow
         guard seconds > 0 else { return L("已重置") }
         let minutes = Int(seconds / 60)
@@ -1294,5 +1393,21 @@ enum UsageFormatting {
         let days = hours / 24
         let remHours = hours % 24
         return remHours > 0 ? L("%1$ld 天 %2$ld 小时后重置", days, remHours) : L("%ld 天后重置", days)
+    }
+
+    private static func absoluteResetText(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        let timeText = date.formatted(.dateTime.hour().minute())
+        if calendar.isDate(date, inSameDayAs: now) {
+            return L("重置于 %@", timeText)
+        }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now),
+           calendar.isDate(date, inSameDayAs: tomorrow)
+        {
+            return L("重置于 %@", L("明天 %@", timeText))
+        }
+        let dateText = date.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+        return L("重置于 %@", dateText)
     }
 }

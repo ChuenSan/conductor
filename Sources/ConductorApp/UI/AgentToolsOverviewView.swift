@@ -9,6 +9,8 @@ final class AgentToolsConsoleStore: ObservableObject {
     @Published private(set) var isScanningCLI = false
     @Published private(set) var providers: [UsageProviderEntry] = []
     @Published private(set) var providerStates: [String: ToolUsageState] = [:]
+    @Published private(set) var providerStorageFootprints: [String: ProviderStorageFootprint] = [:]
+    @Published private(set) var isScanningProviderStorage = false
     @Published private(set) var usageReport: UsageReport?
     @Published private(set) var isScanningLocalUsage = false
     @Published private(set) var skillTools: [SkillToolInfo] = []
@@ -33,6 +35,11 @@ final class AgentToolsConsoleStore: ObservableObject {
     @Published var selectedHookEntryID: String?
 
     private var started = false
+    private var providerStorageScanTask: Task<Void, Never>?
+
+    deinit {
+        providerStorageScanTask?.cancel()
+    }
 
     var installedCLICount: Int { cliTools.filter(\.isInstalled).count }
     var missingCLICount: Int { cliTools.filter { !$0.isInstalled }.count }
@@ -189,7 +196,7 @@ final class AgentToolsConsoleStore: ObservableObject {
         isScanningLocalUsage = true
         Task {
             let report = await Task.detached(priority: .userInitiated) {
-                UsageScanner().scan(daysBack: daysBack)
+                await CostUsageFetcher().loadReportOrFallback(daysBack: daysBack)
             }.value
             UsageReportStore.save(report, daysBack: daysBack)
             await MainActor.run {
@@ -215,19 +222,70 @@ final class AgentToolsConsoleStore: ObservableObject {
                 return
             }
             do {
-                let snapshot = try await provider.fetch()
+                let snapshot = try await UsageProviderAppFetchBridge.fetch(provider, config: cfg) {
+                    try await provider.fetch()
+                }
                 await MainActor.run {
                     withAnimation(AgentToolsMotion.selection) {
                         providerStates[provider.id] = .loaded(snapshot)
                     }
-                    UsageHistoryStore.shared.record(id: provider.id, snapshot: snapshot)
+                    UsageHistoryStore.shared.record(providerID: provider.id, snapshot: snapshot, config: cfg)
                     UsageHistoryStore.shared.persist()
+                    UsageQuotaWarningCenter.shared.handle(provider: provider, snapshot: snapshot, config: cfg)
                 }
             } catch {
                 await MainActor.run {
                     providerStates[provider.id] = .error(error.localizedDescription)
                 }
             }
+        }
+    }
+
+    func refreshProviderStorageFootprints(force: Bool = false) {
+        let cfg = ConfigStore.shared.config
+        guard cfg.usage.providerStorageFootprintsEnabled else {
+            clearProviderStorageFootprints()
+            return
+        }
+        let visibleProviders = providers
+        guard !visibleProviders.isEmpty else { return }
+        if force {
+            providerStorageScanTask?.cancel()
+            providerStorageScanTask = nil
+            isScanningProviderStorage = false
+        } else if isScanningProviderStorage {
+            return
+        }
+
+        isScanningProviderStorage = true
+        let config = cfg
+        providerStorageScanTask = Task { [weak self] in
+            let footprints = await Task.detached(priority: .utility) {
+                ProviderStorageFootprintLoader.scanProviders(visibleProviders, config: config)
+            }.value
+            await MainActor.run { [weak self] in
+                guard let self, !Task.isCancelled else { return }
+                let updated = ProviderStorageFootprint.applyingScanResults(
+                    footprints,
+                    to: self.providerStorageFootprints,
+                    providerIDs: visibleProviders.map(\.id))
+                if updated != self.providerStorageFootprints {
+                    withAnimation(AgentToolsMotion.reveal) {
+                        self.providerStorageFootprints = updated
+                    }
+                }
+                self.isScanningProviderStorage = false
+                self.providerStorageScanTask = nil
+            }
+        }
+    }
+
+    func clearProviderStorageFootprints() {
+        providerStorageScanTask?.cancel()
+        providerStorageScanTask = nil
+        isScanningProviderStorage = false
+        if !providerStorageFootprints.isEmpty {
+            providerStorageFootprints = [:]
         }
     }
 
@@ -620,9 +678,9 @@ final class AgentToolsConsoleStore: ObservableObject {
         let cfg = ConfigStore.shared.config
         let resolved = await Task.detached(priority: .utility) { () -> [(UsageProviderEntry, Bool)] in
             UsageCredentials.apply(cfg)
-            return UsageProviderCatalog.all
+            return UsageProviderCatalog.orderedEntries(config: cfg)
                 .filter { UsageCredentials.isVisible($0, config: cfg) }
-                .map { ($0, $0.isConfigured()) }
+                .map { ($0, UsageCredentials.isConfiguredWithoutBrowserPrompt($0, config: cfg)) }
         }.value
 
         let visible = resolved.map(\.0)
@@ -633,6 +691,11 @@ final class AgentToolsConsoleStore: ObservableObject {
             for provider in visible {
                 guard providerStates[provider.id] == nil else { continue }
                 providerStates[provider.id] = configuredIDs.contains(provider.id) ? .manual : .unconfigured
+            }
+            if cfg.usage.providerStorageFootprintsEnabled {
+                refreshProviderStorageFootprints()
+            } else {
+                clearProviderStorageFootprints()
             }
         }
     }
@@ -684,7 +747,10 @@ final class AgentToolsConsoleStore: ObservableObject {
         }
         if case let .loaded(snapshot) = providerStates[provider.id] {
             lines.append("updated: \(snapshot.updatedAt)")
-            lines.append("account: \(snapshot.accountLabel ?? "-")")
+            let account = UsagePersonalInfoRedactor.redactEmails(
+                in: snapshot.accountLabel,
+                isEnabled: ConfigStore.shared.config.usage.hidePersonalInfo) ?? "-"
+            lines.append("account: \(account.isEmpty ? "-" : account)")
             lines.append("plan: \(snapshot.planName ?? "-")")
             lines.append("windows: \(snapshot.allWindows.count)")
             lines.append("cost: \(snapshot.providerCost == nil ? "false" : "true")")

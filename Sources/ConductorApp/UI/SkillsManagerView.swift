@@ -1065,7 +1065,7 @@ struct SkillsManagerView: View {
             SkillRailBrand(
                 icon: "wand.and.stars",
                 title: "Skills Manager",
-                subtitle: L("Central Library"),
+                subtitle: L("中央库"),
                 tint: AppStyle.accent)
 
             ScrollView {

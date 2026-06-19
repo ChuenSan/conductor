@@ -5,10 +5,9 @@ import SweetCookieKit
 /// （用 SweetCookieKit）：从浏览器读 ollama.com 的登录 cookie → `GET https://ollama.com/settings`
 /// → 在返回的 HTML 里抓「Session usage / Hourly usage」与「Weekly usage」两个用量块的百分比与重置时刻。
 ///
-/// 为什么走 cookie 而不是 token：CodexBar 里 Ollama 的 token(env) 路径（`OLLAMA_API_KEY` / `OLLAMA_KEY`
-/// → `Bearer` → `GET https://ollama.com/api/tags`）只回模型列表，能拿到的只有「已安装模型数」，
-/// 没有任何额度/百分比/重置时间，无法填 `Window(usedPercent:resetAt:windowSeconds:)`。真正的会话/周用量
-/// 只在 `/settings` 页面 HTML 里，故这里转写 cookie 路径。
+/// API token 路径（`OLLAMA_API_KEY` / `OLLAMA_KEY` → `GET https://ollama.com/api/tags`）只回模型列表，
+/// 没有任何额度/百分比/重置时间；这里仍按 CodexBar 保留 `api` source，用于验证 API key 并返回
+/// 一个无窗口的 API-key snapshot。真正的会话/周用量只在 `/settings` 页面 HTML 里。
 ///
 /// 解析照搬 CodexBar `OllamaUsageParser`：百分比优先匹配 `N% used`，回退 `width: N%`；重置时刻取
 /// `data-time="<ISO8601>"`。session 窗固定 5 小时（300 分钟），weekly 窗固定 7 天。无百分比则该窗为 nil。
@@ -18,26 +17,35 @@ import SweetCookieKit
 /// 照搬自 CodexBar，本机无登录态无法实跑验证。
 public enum OllamaUsageError: LocalizedError, Sendable {
     case noSession
+    case missingAPIKey
     case unauthorized
+    case apiUnauthorized
     case notLoggedIn
     case server(Int)
     case invalidResponse
+    case parseFailed(String)
     case network(String)
+    case unsupportedSource(String)
 
     public var errorDescription: String? {
         switch self {
         case .noSession: L("没有找到 Ollama 登录态，请在浏览器登录 ollama.com（Safari 需开启完全磁盘访问）")
+        case .missingAPIKey: L("未找到 Ollama API key，请设置环境变量 OLLAMA_API_KEY 或 OLLAMA_KEY")
         case .unauthorized: L("Ollama 登录态已失效，请重新登录 ollama.com")
+        case .apiUnauthorized: L("Ollama API key 无效或已过期")
         case .notLoggedIn: L("尚未登录 Ollama，请在浏览器登录 ollama.com/settings")
         case let .server(c): L("Ollama 接口错误（%ld）", c)
         case .invalidResponse: L("Ollama 用量接口返回异常")
+        case let .parseFailed(message): L("Ollama API 返回无法解析：%@", message)
         case let .network(m): L("网络错误：%@", m)
+        case let .unsupportedSource(source): L("Ollama 来源 %@ 不受支持，请使用 auto、web 或 api", source)
         }
     }
 }
 
 public enum OllamaUsageFetcher {
     private static let settingsURL = URL(string: "https://ollama.com/settings")!
+    private static let tagsURL = URL(string: "https://ollama.com/api/tags")!
     // 照搬 CodexBar：ollama.com / www.ollama.com 两域。
     private static let cookieDomains = ["ollama.com", "www.ollama.com"]
     // 照搬 CodexBar 的已知会话 cookie 名（含 next-auth 的分块 `<name>.0`/`.1`）。
@@ -51,10 +59,31 @@ public enum OllamaUsageFetcher {
         return name.hasPrefix("__Secure-next-auth.session-token.") || name.hasPrefix("next-auth.session-token.")
     }
 
-    /// 是否能从浏览器拿到 Ollama 登录 cookie（要求至少含一个已知会话 cookie）。
-    /// 注意：会触发一次浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        cookieHeader() != nil
+    /// 是否已配置 Ollama 手动 Cookie 或 API key。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        token(env: env) != nil || UsageProviderRuntimeConfig.manualCookieHeader(providerID: "ollama", env: env) != nil
+    }
+
+    public static func hasToken(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        token(env: env) != nil
+    }
+
+    static func token(env: [String: String]) -> String? {
+        for key in ["OLLAMA_API_KEY", "OLLAMA_KEY"] {
+            if let value = clean(env[key]) { return value }
+        }
+        return nil
+    }
+
+    static func clean(_ raw: String?) -> String? {
+        guard var value = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        if (value.hasPrefix("\"") && value.hasSuffix("\"")) || (value.hasPrefix("'") && value.hasSuffix("'")) {
+            value = String(value.dropFirst().dropLast())
+        }
+        value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 
     /// 跨默认浏览器顺序取 ollama 域 cookie，要求含已知会话 cookie；拼成 Cookie 头返回。
@@ -75,7 +104,34 @@ public enum OllamaUsageFetcher {
         return nil
     }
 
-    public static func fetch(session: URLSession = .shared) async throws -> CodexUsageSnapshot {
+    public static func fetch(
+        env: [String: String] = ProcessInfo.processInfo.environment,
+        session: URLSession = .shared) async throws -> UsageSnapshot
+    {
+        let source = UsageProviderRuntimeConfig.sourceMode(providerID: "ollama", env: env) ?? "auto"
+        switch source {
+        case "api":
+            return try await fetchAPI(env: env, session: session)
+        case "web":
+            return UsageSnapshot(codexSnapshot: try await fetchWeb(session: session))
+        case "auto":
+            if UsageProviderRuntimeConfig.cookieSource(providerID: "ollama", env: env) == "off" {
+                return try await fetchAPI(env: env, session: session)
+            }
+            guard token(env: env) != nil else {
+                return UsageSnapshot(codexSnapshot: try await fetchWeb(session: session))
+            }
+            do {
+                return UsageSnapshot(codexSnapshot: try await fetchWeb(session: session))
+            } catch {
+                return try await fetchAPI(env: env, session: session)
+            }
+        default:
+            throw OllamaUsageError.unsupportedSource(source)
+        }
+    }
+
+    private static func fetchWeb(session: URLSession = .shared) async throws -> CodexUsageSnapshot {
         guard let header = cookieHeader() else { throw OllamaUsageError.noSession }
 
         var request = URLRequest(url: settingsURL)
@@ -108,7 +164,58 @@ public enum OllamaUsageFetcher {
         guard http.statusCode == 200 else { throw OllamaUsageError.server(http.statusCode) }
 
         let html = String(data: data, encoding: .utf8) ?? ""
-        return try parse(html: html, now: Date())
+        return try parse(html: html, now: Date()).withSourceLabel("web")
+    }
+
+    private static func fetchAPI(
+        env: [String: String],
+        session: URLSession = .shared) async throws -> UsageSnapshot
+    {
+        guard let apiKey = token(env: env) else { throw OllamaUsageError.missingAPIKey }
+
+        var request = URLRequest(url: tagsURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 20
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Conductor/1.0", forHTTPHeaderField: "User-Agent")
+
+        let data: Data
+        let http: HTTPURLResponse
+        do {
+            let (d, response) = try await session.data(for: request)
+            guard let h = response as? HTTPURLResponse else { throw OllamaUsageError.invalidResponse }
+            data = d
+            http = h
+        } catch let e as OllamaUsageError {
+            throw e
+        } catch {
+            throw OllamaUsageError.network(error.localizedDescription)
+        }
+
+        switch http.statusCode {
+        case 200...299:
+            _ = try parseTags(data)
+            return UsageSnapshot(sourceLabel: "api", planName: L("API 密钥"), updatedAt: Date())
+        case 401, 403:
+            throw OllamaUsageError.apiUnauthorized
+        default:
+            throw OllamaUsageError.server(http.statusCode)
+        }
+    }
+
+    private struct TagsResponse: Decodable {
+        let models: [Model]
+        struct Model: Decodable {}
+    }
+
+    @discardableResult
+    static func parseTags(_ data: Data) throws -> Int {
+        do {
+            return try JSONDecoder().decode(TagsResponse.self, from: data).models.count
+        } catch {
+            throw OllamaUsageError.parseFailed(error.localizedDescription)
+        }
     }
 
     // MARK: - 解析（照搬 CodexBar OllamaUsageParser）

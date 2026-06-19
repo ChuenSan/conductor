@@ -31,9 +31,9 @@ public enum CursorUsageFetcher {
         "wos-session", "__Secure-wos-session", "authjs.session-token", "__Secure-authjs.session-token",
     ]
 
-    /// 是否能从浏览器拿到 Cursor 登录 cookie。注意：会触发浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        cookieHeader() != nil
+    /// 是否已配置 Cursor 手动 Cookie。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        UsageProviderRuntimeConfig.manualCookieHeader(providerID: "cursor", env: env) != nil
     }
 
     /// 跨默认浏览器顺序取 cursor.com 的 cookie，拼成 Cookie 头；要求至少含一个已知会话 cookie。
@@ -86,7 +86,37 @@ public enum CursorUsageFetcher {
         }
         if http.statusCode == 401 || http.statusCode == 403 { throw CursorUsageError.unauthorized }
         guard http.statusCode == 200 else { throw CursorUsageError.server(http.statusCode) }
-        return try parse(data)
+
+        let legacyUsage = await fetchLegacyRequestUsageIfAvailable(
+            cookieHeader: header,
+            session: session)
+        return try parse(data, legacyRequestUsage: legacyUsage).withSourceLabel("web")
+    }
+
+    private static func fetchLegacyRequestUsageIfAvailable(
+        cookieHeader: String,
+        session: URLSession) async -> LegacyRequestUsage?
+    {
+        guard let userID = cursorUserID(fromCookieHeader: cookieHeader),
+              var components = URLComponents(string: "https://cursor.com/api/usage")
+        else { return nil }
+        components.queryItems = [URLQueryItem(name: "user", value: userID)]
+        guard let url = components.url else { return nil }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  http.statusCode == 200
+            else { return nil }
+            return try parseLegacyRequestUsage(data)
+        } catch {
+            return nil
+        }
     }
 
     // MARK: - 解析
@@ -116,7 +146,41 @@ public enum CursorUsageFetcher {
         struct Team: Decodable { let onDemand: OnDemand?; let pooled: Cap? }
     }
 
-    static func parse(_ data: Data) throws -> UsageSnapshot {
+    private struct LegacyUsageResponse: Decodable {
+        let gpt4: LegacyModelUsage?
+
+        enum CodingKeys: String, CodingKey {
+            case gpt4 = "gpt-4"
+        }
+    }
+
+    private struct LegacyModelUsage: Decodable {
+        let numRequests: Int?
+        let numRequestsTotal: Int?
+        let maxRequestUsage: Int?
+    }
+
+    struct LegacyRequestUsage: Sendable, Equatable {
+        let used: Int
+        let limit: Int
+
+        var usedPercent: Double {
+            guard limit > 0 else { return 0 }
+            return Double(used) / Double(limit) * 100
+        }
+    }
+
+    static func parseLegacyRequestUsage(_ data: Data) throws -> LegacyRequestUsage? {
+        let response = try JSONDecoder().decode(LegacyUsageResponse.self, from: data)
+        guard let gpt4 = response.gpt4,
+              let limit = gpt4.maxRequestUsage,
+              limit > 0
+        else { return nil }
+        let used = gpt4.numRequestsTotal ?? gpt4.numRequests ?? 0
+        return LegacyRequestUsage(used: max(0, used), limit: limit)
+    }
+
+    static func parse(_ data: Data, legacyRequestUsage: LegacyRequestUsage? = nil) throws -> UsageSnapshot {
         let summary: Summary
         do { summary = try JSONDecoder().decode(Summary.self, from: data) }
         catch { throw CursorUsageError.invalidResponse }
@@ -155,19 +219,19 @@ public enum CursorUsageFetcher {
         let windowMinutes: Int? = (start != nil && end != nil)
             ? max(1, Int(end!.timeIntervalSince(start!) / 60)) : nil
 
-        // primary：计费周期总用量（CodexBar planPercentUsed）。
+        // primary：legacy request quota 优先；否则是计费周期总用量（CodexBar planPercentUsed）。
         let primary = RateWindow(
-            title: L("本期"),
-            usedPercent: percent,
+            title: legacyRequestUsage == nil ? L("本期") : "Requests",
+            usedPercent: legacyRequestUsage?.usedPercent ?? percent,
             windowMinutes: windowMinutes,
             resetsAt: end)
         // secondary / tertiary：Auto+Composer 与 API（命名模型）分车道百分比（CodexBar 同名窗）。
-        let secondary: RateWindow? = auto.map {
+        let secondary: RateWindow? = legacyRequestUsage == nil ? auto.map {
             RateWindow(title: "Auto", usedPercent: $0, windowMinutes: windowMinutes, resetsAt: end)
-        }
-        let tertiary: RateWindow? = api.map {
+        } : nil
+        let tertiary: RateWindow? = legacyRequestUsage == nil ? api.map {
             RateWindow(title: "API", usedPercent: $0, windowMinutes: windowMinutes, resetsAt: end)
-        }
+        } : nil
 
         // providerCost：on-demand / spend 美元用量（分→元）。优先个人 on-demand，其次团队 on-demand。
         // CodexBar 在 used>0 或 limit>0 时才组装（含首次消费前的预算上限）。
@@ -201,7 +265,7 @@ public enum CursorUsageFetcher {
             secondary: secondary,
             tertiary: tertiary,
             providerCost: providerCost,
-            planName: summary.membershipType)
+            planName: summary.membershipType.map(formatMembershipType))
     }
 
     private static func parseISO(_ s: String?) -> Date? {
@@ -209,5 +273,38 @@ public enum CursorUsageFetcher {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f.date(from: s) ?? ISO8601DateFormatter().date(from: s)
+    }
+
+    static func cursorUserID(fromCookieHeader header: String) -> String? {
+        for part in header.split(separator: ";") {
+            let pieces = part.split(separator: "=", maxSplits: 1).map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            guard pieces.count == 2,
+                  pieces[0] == "WorkosCursorSessionToken"
+            else { continue }
+            let decoded = pieces[1].removingPercentEncoding ?? pieces[1]
+            let sessionPieces = decoded.components(separatedBy: "::")
+            guard let userID = sessionPieces.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !userID.isEmpty
+            else { continue }
+            return userID
+        }
+        return nil
+    }
+
+    private static func formatMembershipType(_ type: String) -> String {
+        switch type.lowercased() {
+        case "enterprise":
+            return "Cursor Enterprise"
+        case "pro":
+            return "Cursor Pro"
+        case "hobby":
+            return "Cursor Hobby"
+        case "team":
+            return "Cursor Team"
+        default:
+            return "Cursor \(type.capitalized)"
+        }
     }
 }

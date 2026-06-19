@@ -14,23 +14,58 @@ final class ConfigStore: ObservableObject {
 
     private init() {
         config = loader.load()
-        UsageCredentials.apply(config)   // 启动即把应用内 provider 配置注入进程环境
+        if !persistResolvedCodexActiveAccountCorrectionIfNeeded() {
+            UsageCredentials.apply(config)   // 启动即把应用内 provider 配置注入进程环境
+        }
     }
 
     /// 重新从磁盘加载（手动触发；后续接文件监听做热更新）。
     func reload() {
         config = loader.load()
-        UsageCredentials.apply(config)
+        if !persistResolvedCodexActiveAccountCorrectionIfNeeded() {
+            UsageCredentials.apply(config)
+        }
+    }
+
+    /// 用户显式重载配置：解析失败要抛给 UI，避免静默回退默认配置。
+    func reloadFromDisk() throws {
+        config = try loader.loadStrict()
+        if !persistResolvedCodexActiveAccountCorrectionIfNeeded() {
+            UsageCredentials.apply(config)
+        }
     }
 
     /// 设置面板改配置：内存即时更新（@Published 驱动 UI）。
     func set(_ newConfig: AppConfig) {
         config = newConfig
+        _ = persistResolvedCodexActiveAccountCorrectionIfNeeded(saveToDisk: false)
         UsageCredentials.apply(config)
     }
 
     /// 把当前配置落盘到 config.yaml。
     func persist() {
         loader.save(config)
+    }
+
+    @discardableResult
+    func persistResolvedCodexActiveAccountCorrectionIfNeeded(saveToDisk: Bool = true) -> Bool {
+        guard var codexConfig = config.usage.providers["codex"],
+              let corrected = CodexActiveAccountResolver.correctedTokenAccountData(
+                  configured: codexConfig.tokenAccounts,
+                  discoveredAccounts: CodexManagedAccountDiscovery.tokenAccounts(
+                      env: UsageCredentials.providerDiscoveryEnvironment()))
+        else {
+            return false
+        }
+
+        codexConfig.tokenAccounts = corrected
+        var next = config
+        next.usage.providers["codex"] = codexConfig
+        config = next
+        UsageCredentials.apply(config)
+        if saveToDisk {
+            loader.save(config)
+        }
+        return true
     }
 }

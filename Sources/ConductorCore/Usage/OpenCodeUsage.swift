@@ -64,15 +64,18 @@ public enum OpenCodeUsageFetcher {
 
     // MARK: - 凭证（cookie）
 
-    /// 是否能从浏览器拿到 OpenCode 登录 cookie（含 auth/__Host-auth）。注意：会触发浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        cookieHeader() != nil
+    /// 是否已配置 OpenCode 手动 Cookie。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        guard let manual = UsageProviderRuntimeConfig.manualCookieHeader(providerID: "opencode", env: env) else {
+            return false
+        }
+        return CookieHeaderNormalizer.filteredHeader(from: manual, allowedNames: requiredCookieNames) != nil
     }
 
     /// 跨默认浏览器顺序取 opencode.ai 域 cookie，要求至少含一个 auth/__Host-auth，拼成 `name=value; ...` Cookie 头。
     static func cookieHeader(env: [String: String] = ProcessInfo.processInfo.environment) -> String? {
         if let manual = UsageProviderRuntimeConfig.manualCookieHeader(providerID: "opencode", env: env) {
-            return manual
+            return CookieHeaderNormalizer.filteredHeader(from: manual, allowedNames: requiredCookieNames)
         }
         guard UsageProviderRuntimeConfig.shouldReadBrowserCookies(providerID: "opencode", env: env) else {
             return nil
@@ -108,6 +111,7 @@ public enum OpenCodeUsageFetcher {
             cookieHeader: header,
             session: session)
         return try parseSubscription(text: subscriptionText, now: now)
+            .withSourceLabel("web")
     }
 
     // MARK: - workspace id

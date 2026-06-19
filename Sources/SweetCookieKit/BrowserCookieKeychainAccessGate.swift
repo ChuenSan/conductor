@@ -4,5 +4,6 @@ import Foundation
 /// Opt-in switch for disabling Keychain access in host apps.
 public enum BrowserCookieKeychainAccessGate {
     public nonisolated(unsafe) static var isDisabled: Bool = false
+    public nonisolated(unsafe) static var allowsSafeStoragePasswordRead: Bool = false
 }
 #endif

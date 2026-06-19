@@ -162,7 +162,7 @@ struct AgentToolsMCPWorkbenchView: View {
             AgentToolsWorkbenchBrand(
                 icon: "point.3.connected.trianglepath.dotted",
                 title: "MCP Manager",
-                subtitle: L("Servers / Clients"))
+                subtitle: L("服务 / 客户端"))
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -402,8 +402,14 @@ struct AgentToolsMCPWorkbenchView: View {
             .filter { selectedTargetIDs.contains($0.id) }
             .map(\.displayName)
         if names.isEmpty { return L("还没有选择安装应用") }
-        if names.count <= 3 { return L("安装到 %@", names.joined(separator: "、")) }
-        return L("安装到 %@ 等 %ld 个应用", names.prefix(3).joined(separator: "、"), names.count)
+        if names.count <= 3 { return L("安装到 %@", localizedNameList(names)) }
+        return L("安装到 %@ 等 %ld 个应用", localizedNameList(Array(names.prefix(3))), names.count)
+    }
+
+    private func localizedNameList(_ names: [String]) -> String {
+        let formatter = ListFormatter()
+        formatter.locale = AppLanguage.activeLocale
+        return formatter.string(from: names) ?? names.joined(separator: ", ")
     }
 
     private func targetApplicationList(compact: Bool) -> some View {

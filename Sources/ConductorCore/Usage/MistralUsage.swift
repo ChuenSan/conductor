@@ -33,10 +33,9 @@ public enum MistralUsageFetcher {
     // 照搬 CodexBar：mistral.ai / admin.mistral.ai / auth.mistral.ai 三域。
     private static let cookieDomains = ["mistral.ai", "admin.mistral.ai", "auth.mistral.ai"]
 
-    /// 是否能从浏览器拿到 Mistral 登录 cookie（要求至少含一个 `ory_session_*`）。
-    /// 注意：会触发一次浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        session() != nil
+    /// 是否已配置 Mistral 手动 Cookie。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        UsageProviderRuntimeConfig.manualCookieHeader(providerID: "mistral", env: env) != nil
     }
 
     /// 跨默认浏览器顺序取 mistral 域 cookie，要求含 `ory_session_*` 会话 cookie；

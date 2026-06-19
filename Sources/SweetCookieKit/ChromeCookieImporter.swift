@@ -215,15 +215,20 @@ enum ChromeCookieImporter {
         }
         self.chromeSafeStorageKeyLock.unlock()
 
+        if !BrowserCookieKeychainAccessGate.allowsSafeStoragePasswordRead {
+            throw ImportError.keychainDenied
+        }
+
         let labels = Self.safeStorageLabels(for: browser)
 
         if let context = Self.preflightSafeStoragePrompt(labels: labels, passwordLookup: passwordLookup) {
             BrowserCookieKeychainPromptHandler.handler?(context)
+            throw ImportError.keychainDenied
         }
 
         var password: String?
         for label in labels {
-            let result = passwordLookup(label.service, label.account, true)
+            let result = passwordLookup(label.service, label.account, false)
             if let p = result.password {
                 password = p
                 break
@@ -366,6 +371,7 @@ enum ChromeCookieImporter {
             let context = LAContext()
             context.interactionNotAllowed = true
             query[kSecUseAuthenticationContext] = context
+            query[kSecUseAuthenticationUI] = "u_AuthUIF" as CFString
         }
 
         var result: CFTypeRef?

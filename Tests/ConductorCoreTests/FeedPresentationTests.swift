@@ -11,7 +11,7 @@ final class FeedPresentationTests: XCTestCase {
         ])
         XCTAssertEqual(actions.map(\.role), [.allow, .allow, .allow, .deny])
         XCTAssertTrue(actions[1].label.contains("Bash"))
-        XCTAssertTrue(actions[2].label.contains("执行命令"))
+        XCTAssertTrue(actions[2].label.contains(FeedActionCategory.executeCommand.label))
         XCTAssertEqual(FeedPresentation.body(for: req), "git push")
         XCTAssertTrue(FeedPresentation.title(for: req).contains("Bash"))
     }

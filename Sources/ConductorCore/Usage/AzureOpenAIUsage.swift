@@ -144,6 +144,7 @@ public enum AzureOpenAIUsageFetcher {
             resetAt: Date().addingTimeInterval(30 * 24 * 3600),
             windowSeconds: 30 * 24 * 3600)
         return CodexUsageSnapshot(planType: nil, session: window, weekly: nil)
+            .withSourceLabel("deployment")
     }
 
     // MARK: - 端点路径（忠实摘自 CodexBar AzureOpenAIUsageFetcher）

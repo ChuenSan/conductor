@@ -1,5 +1,8 @@
 import Foundation
 import SweetCookieKit
+#if canImport(SQLite3)
+import SQLite3
+#endif
 
 /// OpenCode (Go)（opencode.ai 的 `opencode-go` 订阅）用量取数。忠实摘自 CodexBar `OpenCodeGo` provider 的
 /// 浏览器 cookie / Web 路径：从浏览器取 opencode.ai 域登录 cookie（必须含 `auth` 或 `__Host-auth`）→
@@ -71,15 +74,15 @@ public enum OpenCodeGoUsageFetcher {
 
     // MARK: - 凭证（cookie）
 
-    /// 是否能从浏览器拿到 OpenCode (Go) 登录 cookie（含 auth/__Host-auth）。注意：会触发浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        cookieHeader() != nil
+    /// 是否已有本地 OpenCode Go 数据、手动 Cookie 或安全缓存。配置探测不能读取浏览器 Cookie。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        OpenCodeGoLocalUsageReader.isDetected() || manualOrCachedCookieHeader(env: env) != nil
     }
 
     /// 跨默认浏览器顺序取 opencode.ai 域 cookie，要求至少含一个 auth/__Host-auth，拼成 `name=value; ...` Cookie 头。
     static func cookieHeader(env: [String: String] = ProcessInfo.processInfo.environment) -> String? {
         if let manual = UsageProviderRuntimeConfig.manualCookieHeader(providerID: "opencodego", env: env) {
-            return manual
+            return CookieHeaderNormalizer.filteredHeader(from: manual, allowedNames: requiredCookieNames)
         }
         guard UsageProviderRuntimeConfig.shouldReadBrowserCookies(providerID: "opencodego", env: env) else {
             return nil
@@ -100,6 +103,18 @@ public enum OpenCodeGoUsageFetcher {
         env: [String: String] = ProcessInfo.processInfo.environment,
         session: URLSession = .shared) async throws -> UsageSnapshot
     {
+        let source = UsageProviderRuntimeConfig.sourceMode(providerID: "opencodego", env: env) ?? "auto"
+        if source == "web" {
+            return try await fetchWeb(env: env, session: session)
+        }
+        do {
+            return try await fetchWeb(env: env, session: session)
+        } catch OpenCodeGoUsageError.invalidCredentials {
+            return try await fetchLocal(env: env, session: session)
+        }
+    }
+
+    private static func fetchWeb(env: [String: String], session: URLSession) async throws -> UsageSnapshot {
         guard let header = cookieHeader(env: env) else { throw OpenCodeGoUsageError.invalidCredentials }
         let now = Date()
 
@@ -123,6 +138,45 @@ public enum OpenCodeGoUsageFetcher {
             session: session)
 
         return subscription.toUsageSnapshot(zenBalanceUSD: zenBalance)
+            .withSourceLabel("web")
+    }
+
+    private static func fetchLocal(env: [String: String], session: URLSession) async throws -> UsageSnapshot {
+        var snapshot = try OpenCodeGoLocalUsageReader().fetch()
+        guard let header = manualOrCachedCookieHeader(env: env) else {
+            return snapshot.withSourceLabel("local")
+        }
+        let workspaceID: String?
+        if let override = normalizeWorkspaceID(env["CODEXBAR_OPENCODEGO_WORKSPACE_ID"]) {
+            workspaceID = override
+        } else {
+            workspaceID = try? await fetchWorkspaceID(cookieHeader: header, session: session)
+        }
+        guard let workspaceID else { return snapshot.withSourceLabel("local") }
+        let zenBalance = await fetchOptionalZenBalance(
+            workspaceID: workspaceID,
+            cookieHeader: header,
+            session: session)
+        if let zenBalance {
+            snapshot.providerCost = ProviderCostSnapshot(
+                used: zenBalance,
+                limit: 0,
+                currencyCode: "USD",
+                period: L("Zen 余额"))
+        }
+        return snapshot.withSourceLabel("local")
+    }
+
+    private static func manualOrCachedCookieHeader(env: [String: String]) -> String? {
+        if let manual = UsageProviderRuntimeConfig.manualCookieHeader(providerID: "opencodego", env: env) {
+            return CookieHeaderNormalizer.filteredHeader(from: manual, allowedNames: requiredCookieNames)
+        }
+        #if canImport(Security)
+        guard let cached = CookieHeaderCache.load(providerID: "opencodego") else { return nil }
+        return CookieHeaderNormalizer.filteredHeader(from: cached.cookieHeader, allowedNames: requiredCookieNames)
+        #else
+        return nil
+        #endif
     }
 
     // MARK: - workspace id
@@ -788,5 +842,309 @@ public enum OpenCodeGoUsageFetcher {
             if let parsed = makeISO8601Formatter().date(from: string) { return parsed }
         }
         return nil
+    }
+}
+
+public enum OpenCodeGoLocalUsageError: LocalizedError, Sendable, Equatable {
+    case notDetected
+    case historyUnavailable(String)
+    case sqliteFailed(String)
+    case notSupported
+
+    public var errorDescription: String? {
+        switch self {
+        case .notDetected:
+            L("未检测到 OpenCode Go，请先登录或在本机使用一次 OpenCode Go")
+        case let .historyUnavailable(message):
+            L("OpenCode Go 本地用量历史不可用：%@", message)
+        case let .sqliteFailed(message):
+            L("读取 OpenCode Go 本地用量 SQLite 失败：%@", message)
+        case .notSupported:
+            L("OpenCode Go 本地用量仅支持 macOS")
+        }
+    }
+}
+
+public struct OpenCodeGoLocalUsageReader: Sendable {
+    private static let fiveHours: TimeInterval = 5 * 60 * 60
+    private static let week: TimeInterval = 7 * 24 * 60 * 60
+    private static let limits = (session: 12.0, weekly: 30.0, monthly: 60.0)
+
+    private let authURL: URL
+    private let databaseURL: URL
+
+    public init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
+        let directory = homeDirectory
+            .appendingPathComponent(".local", isDirectory: true)
+            .appendingPathComponent("share", isDirectory: true)
+            .appendingPathComponent("opencode", isDirectory: true)
+        self.authURL = directory.appendingPathComponent("auth.json", isDirectory: false)
+        self.databaseURL = directory.appendingPathComponent("opencode.db", isDirectory: false)
+    }
+
+    public init(authURL: URL, databaseURL: URL) {
+        self.authURL = authURL
+        self.databaseURL = databaseURL
+    }
+
+    public static func isDetected(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
+        let reader = OpenCodeGoLocalUsageReader(homeDirectory: homeDirectory)
+        return hasAuthKey(at: reader.authURL) || FileManager.default.fileExists(atPath: reader.databaseURL.path)
+    }
+
+    public func fetch(now: Date = Date()) throws -> UsageSnapshot {
+        #if canImport(SQLite3)
+        let hasAuth = Self.hasAuthKey(at: authURL)
+        guard FileManager.default.fileExists(atPath: databaseURL.path) else {
+            if hasAuth {
+                throw OpenCodeGoLocalUsageError.historyUnavailable("database not found")
+            }
+            throw OpenCodeGoLocalUsageError.notDetected
+        }
+        let rows = try readRows()
+        guard hasAuth || !rows.isEmpty else {
+            throw OpenCodeGoLocalUsageError.notDetected
+        }
+        guard !rows.isEmpty else {
+            throw OpenCodeGoLocalUsageError.historyUnavailable("no local usage rows")
+        }
+        return Self.snapshot(rows: rows, now: now)
+        #else
+        throw OpenCodeGoLocalUsageError.notSupported
+        #endif
+    }
+
+    #if canImport(SQLite3)
+    private func readRows() throws -> [UsageRow] {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(databaseURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            let message = db.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
+            sqlite3_close(db)
+            throw OpenCodeGoLocalUsageError.sqliteFailed(message)
+        }
+        defer { sqlite3_close(db) }
+        sqlite3_busy_timeout(db, 250)
+
+        let sql = hasTable(named: "part", db: db) ? Self.messageAndPartUsageSQL : Self.messageUsageSQL
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            let message = db.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
+            throw OpenCodeGoLocalUsageError.sqliteFailed(message)
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        var rows: [UsageRow] = []
+        while true {
+            let step = sqlite3_step(stmt)
+            if step == SQLITE_DONE { break }
+            guard step == SQLITE_ROW else {
+                let message = db.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
+                throw OpenCodeGoLocalUsageError.sqliteFailed(message)
+            }
+            let createdMs = sqlite3_column_int64(stmt, 0)
+            let cost = sqlite3_column_double(stmt, 1)
+            guard createdMs > 0, cost >= 0, cost.isFinite else { continue }
+            rows.append(UsageRow(createdMs: createdMs, cost: cost))
+        }
+        return rows
+    }
+
+    private func hasTable(named name: String, db: OpaquePointer?) -> Bool {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(
+            db,
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+            -1,
+            &stmt,
+            nil) == SQLITE_OK
+        else { return false }
+        defer { sqlite3_finalize(stmt) }
+
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, name, -1, transient)
+        return sqlite3_step(stmt) == SQLITE_ROW
+    }
+
+    private static let messageUsageSQL = """
+        SELECT
+          CAST(COALESCE(json_extract(data, '$.time.created'), time_created) AS INTEGER) AS createdMs,
+          CAST(json_extract(data, '$.cost') AS REAL) AS cost
+        FROM message
+        WHERE json_valid(data)
+          AND json_extract(data, '$.providerID') = 'opencode-go'
+          AND json_extract(data, '$.role') = 'assistant'
+          AND json_type(data, '$.cost') IN ('integer', 'real')
+    """
+
+    private static let messageAndPartUsageSQL = """
+        WITH message_costs AS (
+          SELECT
+            id AS messageID,
+            CAST(COALESCE(json_extract(data, '$.time.created'), time_created) AS INTEGER) AS createdMs,
+            CAST(json_extract(data, '$.cost') AS REAL) AS cost
+          FROM message
+          WHERE json_valid(data)
+            AND json_extract(data, '$.providerID') = 'opencode-go'
+            AND json_extract(data, '$.role') = 'assistant'
+            AND json_type(data, '$.cost') IN ('integer', 'real')
+        )
+        SELECT createdMs, cost
+        FROM message_costs
+        UNION ALL
+        SELECT
+          CAST(COALESCE(json_extract(p.data, '$.time.created'), p.time_created, m.time_created) AS INTEGER)
+            AS createdMs,
+          CAST(json_extract(p.data, '$.cost') AS REAL) AS cost
+        FROM part p
+        JOIN message m ON m.id = p.message_id
+        WHERE json_valid(p.data)
+          AND json_valid(m.data)
+          AND json_extract(p.data, '$.type') = 'step-finish'
+          AND json_type(p.data, '$.cost') IN ('integer', 'real')
+          AND json_extract(m.data, '$.providerID') = 'opencode-go'
+          AND json_extract(m.data, '$.role') = 'assistant'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM message_costs
+            WHERE message_costs.messageID = p.message_id
+          )
+    """
+    #endif
+
+    private struct UsageRow {
+        let createdMs: Int64
+        let cost: Double
+    }
+
+    private static func hasAuthKey(at url: URL) -> Bool {
+        guard let data = try? Data(contentsOf: url),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let entry = object["opencode-go"] as? [String: Any],
+              let key = entry["key"] as? String
+        else {
+            return false
+        }
+        return !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private static func snapshot(rows: [UsageRow], now: Date) -> UsageSnapshot {
+        let nowMs = Int64(now.timeIntervalSince1970 * 1000)
+        let sessionStart = nowMs - Int64(fiveHours * 1000)
+        let weekStartMs = Int64(startOfUTCWeek(now: now).timeIntervalSince1970 * 1000)
+        let weekEndMs = weekStartMs + Int64(week * 1000)
+        let earliestMs = rows.map(\.createdMs).min()
+        let monthBounds = monthBounds(now: now, anchorMs: earliestMs)
+
+        let sessionCost = sum(rows: rows, startMs: sessionStart, endMs: nowMs)
+        let weeklyCost = sum(rows: rows, startMs: weekStartMs, endMs: weekEndMs)
+        let monthlyCost = sum(rows: rows, startMs: monthBounds.startMs, endMs: monthBounds.endMs)
+
+        return UsageSnapshot(
+            primary: RateWindow(
+                title: L("会话"),
+                usedPercent: percent(used: sessionCost, limit: limits.session),
+                windowMinutes: 5 * 60,
+                resetsAt: now.addingTimeInterval(TimeInterval(rollingReset(rows: rows, nowMs: nowMs)))),
+            secondary: RateWindow(
+                title: L("本周"),
+                usedPercent: percent(used: weeklyCost, limit: limits.weekly),
+                windowMinutes: 7 * 24 * 60,
+                resetsAt: Date(timeIntervalSince1970: TimeInterval(weekEndMs) / 1000)),
+            tertiary: RateWindow(
+                title: L("本月"),
+                usedPercent: percent(used: monthlyCost, limit: limits.monthly),
+                windowMinutes: 30 * 24 * 60,
+                resetsAt: Date(timeIntervalSince1970: TimeInterval(monthBounds.endMs) / 1000)),
+            updatedAt: now)
+    }
+
+    private static func sum(rows: [UsageRow], startMs: Int64, endMs: Int64) -> Double {
+        rows.reduce(0) { total, row in
+            guard row.createdMs >= startMs, row.createdMs < endMs else { return total }
+            return total + row.cost
+        }
+    }
+
+    private static func percent(used: Double, limit: Double) -> Double {
+        guard used.isFinite, limit > 0 else { return 0 }
+        let value = max(0, min(100, used / limit * 100))
+        return (value * 10).rounded() / 10
+    }
+
+    private static func rollingReset(rows: [UsageRow], nowMs: Int64) -> Int {
+        let sessionStart = nowMs - Int64(fiveHours * 1000)
+        let oldest = rows
+            .filter { $0.createdMs >= sessionStart && $0.createdMs < nowMs }
+            .map(\.createdMs)
+            .min() ?? nowMs
+        return max(0, Int((oldest + Int64(fiveHours * 1000) - nowMs) / 1000))
+    }
+
+    private static func startOfUTCWeek(now: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? TimeZone.current
+        calendar.firstWeekday = 2
+        calendar.minimumDaysInFirstWeek = 4
+        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)
+        return calendar.date(from: components) ?? now
+    }
+
+    private static func monthBounds(now: Date, anchorMs: Int64?) -> (startMs: Int64, endMs: Int64) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? TimeZone.current
+        guard let anchorMs else {
+            let start = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+            let end = calendar.date(byAdding: .month, value: 1, to: start) ?? start
+            return (Int64(start.timeIntervalSince1970 * 1000), Int64(end.timeIntervalSince1970 * 1000))
+        }
+
+        let anchor = Date(timeIntervalSince1970: TimeInterval(anchorMs) / 1000)
+        let anchorComponents = calendar.dateComponents([.day, .hour, .minute, .second, .nanosecond], from: anchor)
+        var startMonthComponents = calendar.dateComponents([.year, .month], from: now)
+        var start = anchoredMonth(calendar: calendar, month: startMonthComponents, anchor: anchorComponents)
+        if start > now,
+           let previous = calendar.date(byAdding: .month, value: -1, to: start)
+        {
+            startMonthComponents = calendar.dateComponents([.year, .month], from: previous)
+            start = anchoredMonth(calendar: calendar, month: startMonthComponents, anchor: anchorComponents)
+        }
+        let end = anchoredMonth(
+            calendar: calendar,
+            month: monthComponents(after: startMonthComponents, calendar: calendar),
+            anchor: anchorComponents)
+        return (Int64(start.timeIntervalSince1970 * 1000), Int64(end.timeIntervalSince1970 * 1000))
+    }
+
+    private static func monthComponents(after month: DateComponents, calendar: Calendar) -> DateComponents {
+        let monthStart = calendar.date(from: month) ?? Date()
+        let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? monthStart
+        return calendar.dateComponents([.year, .month], from: nextMonth)
+    }
+
+    private static func anchoredMonth(
+        calendar: Calendar,
+        month: DateComponents,
+        anchor: DateComponents
+    ) -> Date {
+        var components = DateComponents()
+        components.calendar = calendar
+        components.timeZone = calendar.timeZone
+        components.year = month.year
+        components.month = month.month
+        components.day = anchor.day
+        components.hour = anchor.hour
+        components.minute = anchor.minute
+        components.second = anchor.second
+        components.nanosecond = anchor.nanosecond
+        if let date = calendar.date(from: components),
+           calendar.component(.month, from: date) == month.month
+        {
+            return date
+        }
+        components.day = calendar.range(
+            of: .day,
+            in: .month,
+            for: calendar.date(from: month) ?? Date())?.count
+        return calendar.date(from: components) ?? Date()
     }
 }

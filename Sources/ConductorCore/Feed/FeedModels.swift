@@ -10,11 +10,11 @@ public enum FeedActionCategory: String, Codable, Sendable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .readFile: return "读文件"
-        case .writeFile: return "写文件"
-        case .executeCommand: return "执行命令"
-        case .network: return "网络访问"
-        case .other: return "其它"
+        case .readFile: return L("读文件")
+        case .writeFile: return L("写文件")
+        case .executeCommand: return L("执行命令")
+        case .network: return L("网络访问")
+        case .other: return L("其它")
         }
     }
 
@@ -104,9 +104,9 @@ public struct FeedRequest: Identifiable, Equatable, Sendable {
             if let d = detail, !d.isEmpty { return "\(tool) · \(category.label) · \(d)" }
             return "\(tool) · \(category.label)"
         case let .exitPlan(plan):
-            return "退出计划模式：\(plan.prefix(80))"
+            return L("退出计划模式：%@", String(plan.prefix(80)))
         case let .question(prompt, _):
-            return "提问：\(prompt.prefix(80))"
+            return L("提问：%@", String(prompt.prefix(80)))
         }
     }
 }

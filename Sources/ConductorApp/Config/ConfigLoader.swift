@@ -13,19 +13,23 @@ struct ConfigLoader {
     }
 
     func load() -> AppConfig {
+        do {
+            return try loadStrict()
+        } catch {
+            NSLog("[conductor] config.yaml 解析失败，使用默认配置：\(error)")
+            return .default
+        }
+    }
+
+    func loadStrict() throws -> AppConfig {
         let url = Self.configURL
         guard FileManager.default.fileExists(atPath: url.path) else {
             writeDefaultTemplate(to: url)
             return .default
         }
-        do {
-            let text = try String(contentsOf: url, encoding: .utf8)
-            let config = try YAMLDecoder().decode(AppConfig.self, from: text)
-            return config.validated()
-        } catch {
-            NSLog("[conductor] config.yaml 解析失败，使用默认配置：\(error)")
-            return .default
-        }
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let config = try YAMLDecoder().decode(AppConfig.self, from: text)
+        return config.validated()
     }
 
     /// 把配置写回 config.yaml（设置面板用）。YAMLEncoder 输出无注释，加一行头注释。
@@ -117,7 +121,24 @@ struct ConfigLoader {
 
     # 账号用量 provider 设置。默认空配置；在 CLI 面板里启用、填 key 或调整来源后会写入。
     usage:
+      # 配额告警默认关闭。开启后，session / weekly 会在剩余百分比跨过阈值时通知。
+      quotaWarningMarkersVisible: true
+      quotaWarnings:
+        enabled: false
+        soundEnabled: true
+        session:
+          enabled: true
+          thresholds: [50, 20]
+        weekly:
+          enabled: true
+          thresholds: [50, 20]
       providers: {}
+      # 可按 provider 覆盖：
+      # providers:
+      #   codex:
+      #     quotaWarnings:
+      #       session:
+      #         thresholds: [25, 10]
 
     """
 }

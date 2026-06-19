@@ -5,7 +5,8 @@ import SweetCookieKit
 #endif
 
 /// Windsurf 用量取数。忠实移植自 CodexBar `Windsurf` provider。该 provider 同时具备两条取数路径，
-/// 与源码一致；按 conductor 约定「本地优先」：
+/// 与 CodexBar 一致按 source planner 选择：
+/// `auto` 先 Web 再本地，显式 `web` 只读浏览器/手动会话，显式 `cli` 只读本地缓存。
 ///
 /// 1. **本地（local）**：读 `~/Library/Application Support/Windsurf/User/globalStorage/state.vscdb`
 ///    （SQLite，VSCode 风格 ItemTable）里 `windsurf.settings.cachedPlanInfo` 的缓存 JSON，
@@ -85,16 +86,10 @@ public enum WindsurfUsageFetcher {
         #endif
     }
 
-    /// 是否能从浏览器 localStorage 拿到 Windsurf 登录会话。注意：会触发浏览器本地存储读取。
+    /// Windsurf 浏览器会话只在显式刷新时导入；配置探测不能读取浏览器 localStorage。
     public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
-        guard UsageProviderRuntimeConfig.shouldReadBrowserCookies(providerID: "windsurf", env: env) else {
-            return false
-        }
-        #if os(macOS)
-        return importSession() != nil
-        #else
+        _ = env
         return false
-        #endif
     }
 
     // MARK: - 取数
@@ -104,17 +99,32 @@ public enum WindsurfUsageFetcher {
         session: URLSession = .shared
     ) async throws -> CodexUsageSnapshot {
         #if os(macOS)
-        // 本地优先：有本地缓存就用本地。
-        if UsageProviderRuntimeConfig.shouldUseLocalCredentials(providerID: "windsurf", env: env),
-           hasCredentials()
-        {
+        let source = UsageProviderRuntimeConfig.sourceMode(providerID: "windsurf", env: env) ?? "auto"
+        switch source {
+        case "cli":
             return try readLocalSnapshot()
-        }
-        // 否则走 cookie/web。
-        guard UsageProviderRuntimeConfig.shouldReadBrowserCookies(providerID: "windsurf", env: env) else {
+        case "web":
+            guard UsageProviderRuntimeConfig.shouldReadBrowserCookies(providerID: "windsurf", env: env) else {
+                throw WindsurfUsageError.noSession
+            }
+            return try await fetchWeb(session: session)
+        case "auto":
+            if UsageProviderRuntimeConfig.shouldReadBrowserCookies(providerID: "windsurf", env: env) {
+                do {
+                    return try await fetchWeb(session: session)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    // CodexBar falls through from web to local only in auto mode.
+                }
+            }
+            guard UsageProviderRuntimeConfig.shouldUseLocalCredentials(providerID: "windsurf", env: env) else {
+                throw WindsurfUsageError.notLoggedIn
+            }
+            return try readLocalSnapshot()
+        default:
             throw WindsurfUsageError.notLoggedIn
         }
-        return try await fetchWeb(session: session)
         #else
         throw WindsurfUsageError.notLoggedIn
         #endif
@@ -150,7 +160,7 @@ public enum WindsurfUsageFetcher {
         let cached: CachedPlanInfo
         do { cached = try JSONDecoder().decode(CachedPlanInfo.self, from: jsonData) }
         catch { throw WindsurfUsageError.invalidResponse }
-        return cached.toSnapshot()
+        return cached.toSnapshot().withSourceLabel("local")
     }
 
     private static func decodeSQLiteValue(stmt: OpaquePointer?, index: Int32) -> String? {
@@ -219,7 +229,7 @@ public enum WindsurfUsageFetcher {
         let plan: PlanStatus
         do { plan = try ProtoCodec.decodeResponse(data) }
         catch { throw WindsurfUsageError.invalidResponse }
-        return plan.toSnapshot()
+        return plan.toSnapshot().withSourceLabel("web")
     }
 
     // MARK: - 浏览器会话导入

@@ -51,9 +51,9 @@ public enum MiMoUsageFetcher {
         "api-platform_serviceToken", "userId", "api-platform_ph", "api-platform_slh",
     ]
 
-    /// 是否能从浏览器拿到小米 MiMo 登录 cookie。注意：会触发浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        cookieHeader() != nil
+    /// 是否已配置小米 MiMo 手动 Cookie。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        UsageProviderRuntimeConfig.manualCookieHeader(providerID: "mimo", env: env) != nil
     }
 
     /// 跨默认浏览器顺序取 xiaomimimo.com 的 cookie，拼成 Cookie 头；要求必含 api-platform_serviceToken + userId。
@@ -88,13 +88,16 @@ public enum MiMoUsageFetcher {
         }.joined(separator: "; ")
     }
 
-    public static func fetch(session: URLSession = .shared) async throws -> CodexUsageSnapshot {
-        guard let header = cookieHeader() else { throw MiMoUsageError.noSession }
+    public static func fetch(
+        session: URLSession = .shared,
+        env: [String: String] = ProcessInfo.processInfo.environment) async throws -> CodexUsageSnapshot
+    {
+        guard let header = cookieHeader(env: env) else { throw MiMoUsageError.noSession }
 
         // tokenPlan/usage 取额度用量，tokenPlan/detail 取套餐名与周期结束时间（缺失不致命）。
-        async let usageData = fetchAuthenticated(path: "tokenPlan/usage", cookie: header, session: session)
+        async let usageData = fetchAuthenticated(path: "tokenPlan/usage", cookie: header, session: session, env: env)
         let detailData: Data? = try? await fetchAuthenticated(
-            path: "tokenPlan/detail", cookie: header, session: session)
+            path: "tokenPlan/detail", cookie: header, session: session, env: env)
 
         let usage = try parseTokenPlanUsage(from: try await usageData)
         let detail: (planCode: String?, periodEnd: Date?) = {
@@ -110,9 +113,10 @@ public enum MiMoUsageFetcher {
     private static func fetchAuthenticated(
         path: String,
         cookie: String,
-        session: URLSession) async throws -> Data
+        session: URLSession,
+        env: [String: String]) async throws -> Data
     {
-        let url = URL(string: apiBase)!.appendingPathComponent(path)
+        let url = apiBaseURL(env: env).appendingPathComponent(path)
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 20
@@ -142,10 +146,21 @@ public enum MiMoUsageFetcher {
 
         switch http.statusCode {
         case 200: return data
+        case 300..<400: throw MiMoUsageError.loginRequired
         case 401: throw MiMoUsageError.loginRequired
         case 403: throw MiMoUsageError.unauthorized
         default: throw MiMoUsageError.server(http.statusCode)
         }
+    }
+
+    private static func apiBaseURL(env: [String: String]) -> URL {
+        if let raw = env["MIMO_API_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let url = URL(string: raw),
+           url.scheme?.isEmpty == false
+        {
+            return url
+        }
+        return URL(string: apiBase)!
     }
 
     // MARK: - 解析

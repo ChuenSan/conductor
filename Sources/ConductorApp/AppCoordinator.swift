@@ -676,7 +676,7 @@ final class AppCoordinator: ObservableObject {
     /// 启动后低优先级预扫一次 30 天用量并写缓存，让用量面板首次打开即有数据。
     private func prewarmUsageReport() {
         Task.detached(priority: .utility) {
-            let report = UsageScanner().scan(daysBack: 30)
+            let report = await CostUsageFetcher().loadReportOrFallback(daysBack: 30)
             UsageReportStore.save(report, daysBack: 30)
         }
     }

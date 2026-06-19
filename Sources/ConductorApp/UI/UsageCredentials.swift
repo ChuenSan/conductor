@@ -16,6 +16,7 @@ enum UsageCredentials {
         "alibabatokenplan",
         "augment",
         "commandcode",
+        "codex",
         "copilot",
         "cursor",
         "devin",
@@ -34,120 +35,7 @@ enum UsageCredentials {
 
     /// provider id → 主环境变量名（仅 API-key / token 型 provider）。
     /// cookie / OAuth / 本地登录文件型不在此（它们另有检测路径，不靠 env key）。
-    static let envVar: [String: String] = [
-        "glm": "Z_AI_API_KEY",
-        "minimax": "MINIMAX_API_KEY",
-        "qwen": "DASHSCOPE_API_KEY",
-        "openrouter": "OPENROUTER_API_KEY",
-        "deepseek": "DEEPSEEK_API_KEY",
-        "kimi": "KIMI_CODE_API_KEY",
-        "moonshot": "MOONSHOT_API_KEY",
-        "groq": "GROQ_API_KEY",
-        "openai": "OPENAI_ADMIN_KEY",
-        "amp": "AMP_API_KEY",
-        "azureopenai": "AZURE_OPENAI_API_KEY",
-        "devin": "DEVIN_BEARER_TOKEN",
-        "manus": "MANUS_SESSION_TOKEN",
-        "kilo": "KILO_API_KEY",
-        "kimik2": "KIMI_K2_API_KEY",
-        "codebuff": "CODEBUFF_API_KEY",
-        "synthetic": "SYNTHETIC_API_KEY",
-        "elevenlabs": "ELEVENLABS_API_KEY",
-        "doubao": "ARK_API_KEY",
-        "crof": "CROF_API_KEY",
-        "venice": "VENICE_API_KEY",
-        "commandcode": "COMMANDCODE_TOKEN",
-        "stepfun": "STEPFUN_TOKEN",
-        "llmproxy": "LLM_PROXY_API_KEY",
-        "deepgram": "DEEPGRAM_API_KEY",
-        "warp": "WARP_API_KEY",
-        "perplexity": "PERPLEXITY_SESSION_TOKEN",
-        "alibabatokenplan": "ALIBABA_TOKEN_PLAN_COOKIE",
-    ]
-
-    private static let apiKeyAliases: [String: [String]] = [
-        "glm": ["ZAI_API_KEY", "GLM_API_KEY"],
-        "minimax": ["MINIMAX_CODING_API_KEY"],
-        "qwen": ["ALIBABA_QWEN_API_KEY", "ALIBABA_CODING_PLAN_API_KEY"],
-        "deepseek": ["DEEPSEEK_KEY"],
-        "moonshot": ["MOONSHOT_KEY"],
-        "openai": ["OPENAI_API_KEY"],
-        "devin": ["DEVIN_AUTHORIZATION"],
-        "manus": ["MANUS_SESSION_ID", "MANUS_COOKIE"],
-        "kimik2": ["KIMI_API_KEY", "KIMI_KEY"],
-        "elevenlabs": ["XI_API_KEY"],
-        "doubao": ["VOLCENGINE_API_KEY", "DOUBAO_API_KEY"],
-        "crof": ["CROFAI_API_KEY"],
-        "venice": ["VENICE_KEY"],
-        "commandcode": ["COMMANDCODE_SESSION_TOKEN", "COMMANDCODE_COOKIE"],
-        "warp": ["WARP_TOKEN"],
-    ]
-
-    private static let baseURLEnvVar: [String: String] = [
-        "glm": "Z_AI_API_HOST",
-        "openrouter": "OPENROUTER_API_URL",
-        "kimi": "KIMI_CODE_BASE_URL",
-        "groq": "GROQ_API_URL",
-        "codebuff": "CODEBUFF_API_URL",
-        "azureopenai": "AZURE_OPENAI_ENDPOINT",
-        "llmproxy": "LLM_PROXY_BASE_URL",
-        "deepgram": "DEEPGRAM_API_URL",
-        "elevenlabs": "ELEVENLABS_API_URL",
-        "bedrock": "CODEXBAR_BEDROCK_API_URL",
-    ]
-
-    private static let projectEnvVars: [String: [String]] = [
-        "azureopenai": ["AZURE_OPENAI_DEPLOYMENT_NAME"],
-        "deepgram": ["DEEPGRAM_PROJECT_ID"],
-        "vertexai": ["GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT"],
-        "opencode": ["CODEXBAR_OPENCODE_WORKSPACE_ID"],
-        "opencodego": ["CODEXBAR_OPENCODEGO_WORKSPACE_ID"],
-        "openai": ["OPENAI_PROJECT_ID"],
-    ]
-
-    private static let organizationEnvVars: [String: [String]] = [
-        "devin": ["DEVIN_ORGANIZATION", "DEVIN_ORG"],
-        "openai": ["OPENAI_ORG_ID", "OPENAI_ORGANIZATION"],
-    ]
-
-    private static let cookieHeaderEnvVars: [String: [String]] = [
-        "alibabatokenplan": ["ALIBABA_TOKEN_PLAN_COOKIE"],
-        "commandcode": ["COMMANDCODE_SESSION_TOKEN", "COMMANDCODE_COOKIE", "COMMANDCODE_TOKEN"],
-        "perplexity": ["PERPLEXITY_COOKIE"],
-        "manus": ["MANUS_COOKIE"],
-    ]
-
-    private static let extraEnvVars: [String: [String: [String]]] = [
-        "azureopenai": [
-            "apiVersion": ["AZURE_OPENAI_API_VERSION"],
-        ],
-        "bedrock": [
-            "awsAccessKeyID": ["AWS_ACCESS_KEY_ID"],
-            "awsSecretAccessKey": ["AWS_SECRET_ACCESS_KEY"],
-            "awsSessionToken": ["AWS_SESSION_TOKEN"],
-            "awsRegion": ["AWS_REGION", "AWS_DEFAULT_REGION"],
-            "awsBudget": ["CODEXBAR_BEDROCK_BUDGET"],
-        ],
-        "glm": [
-            "quotaURL": ["Z_AI_QUOTA_URL"],
-        ],
-        "moonshot": [
-            "region": ["MOONSHOT_REGION"],
-        ],
-        "openrouter": [
-            "httpReferer": ["OPENROUTER_HTTP_REFERER"],
-            "clientTitle": ["OPENROUTER_X_TITLE"],
-        ],
-        "stepfun": [
-            "username": ["STEPFUN_USERNAME"],
-            "password": ["STEPFUN_PASSWORD"],
-        ],
-        "antigravity": [
-            "oauthCredentialsJSON": ["ANTIGRAVITY_OAUTH_CREDENTIALS_JSON"],
-            "oauthClientID": ["ANTIGRAVITY_OAUTH_CLIENT_ID"],
-            "oauthClientSecret": ["ANTIGRAVITY_OAUTH_CLIENT_SECRET"],
-        ],
-    ]
+    static let envVar = UsageProviderConfigCapabilities.apiKeyEnvironmentNames
 
     /// 该 provider 是否支持「应用内填 key」（即有可注入的环境变量）。
     static func acceptsAPIKey(_ id: String) -> Bool { self.envVar[id] != nil }
@@ -156,7 +44,7 @@ enum UsageCredentials {
     static func apply(_ config: AppConfig) {
         var nextManagedEnvNames: Set<String> = []
         for (id, providerConfig) in config.usage.providers {
-            guard providerConfig.enabled ?? true else { continue }
+            guard UsageProviderCatalog.entry(for: id)?.isEnabled(in: config) ?? false else { continue }
             applyProviderConfig(id: id, config: providerConfig, managedEnvNames: &nextManagedEnvNames)
         }
 
@@ -167,11 +55,22 @@ enum UsageCredentials {
         activeManagedEnvNames = nextManagedEnvNames
     }
 
-    /// provider 是否应在用量区显示：
-    /// 默认**全部显示**（像 CodexBar 那样把各渠道都列出来）；只有用户在设置里显式关掉才隐藏。
-    /// 配置好凭证的显示用量，没配的显示「未配置」。
+    static func providerDiscoveryEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        for name in activeManagedEnvNames {
+            if let original = originalEnvValues[name] {
+                environment[name] = original
+            } else if originallyMissingEnvNames.contains(name) {
+                environment.removeValue(forKey: name)
+            }
+        }
+        return environment
+    }
+
+    /// provider 是否应在用量区显示：跟随 CodexBar 的 provider defaultEnabled metadata，
+    /// 用户显式开关会覆盖默认值。
     static func isVisible(_ entry: UsageProviderEntry, config: AppConfig) -> Bool {
-        config.usage.providers[entry.id]?.enabled ?? true
+        entry.isEnabled(in: config)
     }
 
     /// Opening a usage drawer should not touch browser cookie stores, because Chromium
@@ -203,39 +102,26 @@ enum UsageCredentials {
         config: UsageProviderConfig,
         managedEnvNames: inout Set<String>
     ) {
-        if let value = normalized(config.apiKey), let primary = envVar[id] {
-            apply(value, to: [primary] + (apiKeyAliases[id] ?? []), managedEnvNames: &managedEnvNames)
+        var patch = UsageProviderConfigCapabilities.environmentPatch(providerID: id, config: config)
+        if let account = selectedTokenAccount(from: config.tokenAccounts) {
+            patch.merge(UsageProviderConfigCapabilities.environmentPatch(providerID: id, account: account))
         }
+        apply(patch, managedEnvNames: &managedEnvNames)
+    }
 
-        if let value = normalized(config.cookieHeader) {
-            apply(
-                value,
-                to: cookieHeaderEnvVars[id] ?? conductorCookieEnvNames(id),
-                managedEnvNames: &managedEnvNames)
-        }
+    private static func selectedTokenAccount(from data: UsageProviderTokenAccountData?) -> UsageProviderTokenAccount? {
+        guard let data, !data.accounts.isEmpty else { return nil }
+        return data.accounts[data.clampedActiveIndex()]
+    }
 
-        if let value = normalized(config.baseURL), let envName = baseURLEnvVar[id] {
-            apply(value, to: [envName], managedEnvNames: &managedEnvNames)
+    private static func apply(_ patch: UsageProviderEnvironmentPatch, managedEnvNames: inout Set<String>) {
+        for name in patch.unset where !name.isEmpty {
+            recordOriginalEnvValue(for: name)
+            unsetenv(name)
+            managedEnvNames.insert(name)
         }
-
-        if let value = normalized(config.projectID), let envNames = projectEnvVars[id] {
-            apply(value, to: envNames, managedEnvNames: &managedEnvNames)
-        }
-
-        if let value = normalized(config.organizationID), let envNames = organizationEnvVars[id] {
-            apply(value, to: envNames, managedEnvNames: &managedEnvNames)
-        }
-
-        if let value = normalized(config.sourceMode) {
-            apply(value, to: conductorSourceEnvNames(id), managedEnvNames: &managedEnvNames)
-        }
-        if let value = normalized(config.cookieSource) {
-            apply(value, to: conductorCookieSourceEnvNames(id), managedEnvNames: &managedEnvNames)
-        }
-
-        for (key, value) in config.extra {
-            guard let value = normalized(value) else { continue }
-            apply(value, to: extraEnvNames(providerID: id, key: key), managedEnvNames: &managedEnvNames)
+        for (name, value) in patch.set where !name.isEmpty {
+            apply(value, to: [name], managedEnvNames: &managedEnvNames)
         }
     }
 
@@ -285,8 +171,9 @@ enum UsageCredentials {
 
         var names: [String] = []
         if let primary = envVar[id] { names.append(primary) }
-        names += apiKeyAliases[id] ?? []
-        names += cookieHeaderEnvVars[id] ?? conductorCookieEnvNames(id)
+        names += UsageProviderConfigCapabilities.apiKeyAliases[id] ?? []
+        names += UsageProviderConfigCapabilities.cookieHeaderEnvironmentNames[id]
+            ?? UsageProviderConfigCapabilities.conductorCookieEnvironmentNames(id)
 
         return names.contains { envValue($0, env: env) != nil }
     }
@@ -298,7 +185,7 @@ enum UsageCredentials {
     ) -> Bool {
         let providerConfig = config.usage.providers[id]
         if let cookieSource = normalized(providerConfig?.cookieSource)
-            ?? envValue("CONDUCTOR_USAGE_\(envSafe(id))_COOKIE_SOURCE", env: env)
+            ?? envValue(UsageProviderConfigCapabilities.conductorCookieSourceEnvironmentNames(id)[0], env: env)
         {
             switch cookieSource.lowercased() {
             case "manual", "off":
@@ -309,7 +196,7 @@ enum UsageCredentials {
         }
 
         let sourceMode = normalized(providerConfig?.sourceMode)
-            ?? envValue("CONDUCTOR_USAGE_\(envSafe(id))_SOURCE", env: env)
+            ?? envValue(UsageProviderConfigCapabilities.conductorSourceEnvironmentNames(id)[0], env: env)
         switch sourceMode?.lowercased() {
         case "api", "cli", "file", "keychain", "manual", "oauth", "off", "token":
             return false
@@ -326,25 +213,4 @@ enum UsageCredentials {
         return normalized(String(cString: raw))
     }
 
-    private static func conductorCookieEnvNames(_ id: String) -> [String] {
-        ["CONDUCTOR_USAGE_\(envSafe(id))_COOKIE"]
-    }
-
-    private static func conductorSourceEnvNames(_ id: String) -> [String] {
-        ["CONDUCTOR_USAGE_\(envSafe(id))_SOURCE"]
-    }
-
-    private static func conductorCookieSourceEnvNames(_ id: String) -> [String] {
-        ["CONDUCTOR_USAGE_\(envSafe(id))_COOKIE_SOURCE"]
-    }
-
-    private static func extraEnvNames(providerID: String, key: String) -> [String] {
-        extraEnvVars[providerID]?[key] ?? ["CONDUCTOR_USAGE_\(envSafe(providerID))_\(envSafe(key))"]
-    }
-
-    private static func envSafe(_ raw: String) -> String {
-        raw.uppercased().map { ch in
-            ch.isLetter || ch.isNumber ? ch : "_"
-        }.reduce(into: "") { $0.append($1) }
-    }
 }

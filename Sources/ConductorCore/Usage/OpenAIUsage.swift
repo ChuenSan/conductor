@@ -182,6 +182,7 @@ public enum OpenAIUsageFetcher {
             resetsAt: nextExpiry)
 
         return UsageSnapshot(
+            sourceLabel: "billing-api",
             primary: primary,
             providerCost: providerCost,
             updatedAt: now)

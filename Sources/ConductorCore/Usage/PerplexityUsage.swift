@@ -57,10 +57,9 @@ public enum PerplexityUsageFetcher {
         let token: String
     }
 
-    /// 是否存在 Perplexity 会话凭证（env 或浏览器 cookie）。
-    /// 注意：无 env 时会触发一次浏览器 cookie 读取（可能弹钥匙串）。
+    /// 是否存在 Perplexity 手动/env 会话凭证。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
     public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
-        resolveSessionCookie(env: env) != nil
+        sessionCookieFromEnv(env: env) != nil
     }
 
     /// 解析会话凭证。优先 env（裸 token 或完整 Cookie 头），其次浏览器 cookie。

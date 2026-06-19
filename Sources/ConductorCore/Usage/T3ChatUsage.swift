@@ -45,9 +45,9 @@ public enum T3ChatUsageFetcher {
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
     private static let requestTimeoutSeconds: TimeInterval = 15
 
-    /// 是否能从浏览器拿到 T3 Chat 登录 cookie。注意：会触发浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        cookieHeader() != nil
+    /// 是否已配置 T3 Chat 手动 Cookie。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        UsageProviderRuntimeConfig.manualCookieHeader(providerID: "t3chat", env: env) != nil
     }
 
     /// 跨默认浏览器顺序取 t3.chat 域的 cookie，拼成 `name=value; ...` 的 Cookie 头。

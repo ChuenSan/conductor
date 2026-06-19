@@ -45,6 +45,7 @@ public enum KiroUsageFetcher {
         let account = try await ensureLoggedIn(env: env)
         let output = try await runUsageCommand(env: env)
         return try parse(output: output, planFallback: account.authMethod)
+            .withSourceLabel("cli")
     }
 
     // MARK: - 凭证 / 可执行文件查找

@@ -271,6 +271,6 @@ private func hooksInspectorTitle(_ entry: HookEntry) -> String {
     if entry.command.contains("#conductor:sound") { return L("完成提示音") }
     if entry.command.contains("#conductor:banner") { return L("系统横幅") }
     if entry.command.contains("#conductor:log") { return L("完成日志") }
-    if entry.managedByConductor { return L("Conductor hook") }
+    if entry.managedByConductor { return L("Conductor 管理的 Hook") }
     return L("自定义命令")
 }

@@ -39,9 +39,9 @@ public enum AbacusUsageFetcher {
     private static let billingInfoURL =
         URL(string: "https://apps.abacus.ai/api/_getBillingInfo")!
 
-    /// 是否能从浏览器拿到 Abacus 登录 cookie。注意：会触发浏览器 cookie 读取（可能弹钥匙串）。
-    public static func hasSession() -> Bool {
-        cookieHeader() != nil
+    /// 是否已配置 Abacus 手动 Cookie。配置探测不能读取浏览器 Cookie，避免打开用量页触发钥匙串。
+    public static func hasSession(env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        UsageProviderRuntimeConfig.manualCookieHeader(providerID: "abacus", env: env) != nil
     }
 
     /// 跨默认浏览器顺序取 abacus.ai 域的 cookie，拼成 Cookie 头；要求至少含一个会话类 cookie。

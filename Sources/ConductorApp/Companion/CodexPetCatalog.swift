@@ -102,6 +102,20 @@ enum CodexPetCatalog {
         cacheLock.withLock { cache[url] }
     }
 
+    static func trimCacheForMemoryPressure() -> (sheets: Int, frameSets: Int) {
+        let sheetCount = cacheLock.withLock {
+            let count = cache.count
+            cache.removeAll(keepingCapacity: false)
+            return count
+        }
+        let frameSetCount = sliceCacheLock.withLock {
+            let count = sliceCache.count
+            sliceCache.removeAll(keepingCapacity: false)
+            return count
+        }
+        return (sheetCount, frameSetCount)
+    }
+
     private static func loadSheetImage(at url: URL) -> CGImage? {
         let options: CFDictionary = [
             kCGImageSourceShouldCache: true,

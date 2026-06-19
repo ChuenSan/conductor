@@ -156,6 +156,34 @@ public enum BedrockUsageFetcher {
         return makeSnapshot(spend: spend, budget: budget)
     }
 
+    public static func fetchDailyReport(
+        env: [String: String] = ProcessInfo.processInfo.environment,
+        session: URLSession = .shared,
+        since: Date,
+        until: Date = Date()) async throws -> CostUsageDailyReport
+    {
+        guard authMode(env: env) == .keys else { throw BedrockUsageError.unsupported }
+        guard let accessKeyID = accessKeyID(env: env),
+              let secretAccessKey = secretAccessKey(env: env)
+        else {
+            throw BedrockUsageError.missingCredentials
+        }
+
+        let credentials = Credentials(
+            accessKeyID: accessKeyID,
+            secretAccessKey: secretAccessKey,
+            sessionToken: sessionToken(env: env))
+        let (startDate, endDate) = dailyRange(since: since, until: until)
+        let pages = try await callCostExplorerPages(
+            startDate: startDate,
+            endDate: endDate,
+            granularity: "DAILY",
+            credentials: credentials,
+            env: env,
+            session: session)
+        return try parseDailyReport(pages)
+    }
+
     /// 把本月消费 + 可选预算组装成富用量快照。
     /// - providerCost：忠实搬自 CodexBar `BedrockUsageStats` 的 `cost`（used=本月消费、limit=预算 ?? 0、
     ///   currencyCode="USD"、period="Monthly"、resetsAt=本月月末）；limit<=0 时只展示已用金额。
@@ -362,6 +390,56 @@ public enum BedrockUsageFetcher {
         return items
     }
 
+    private static func parseDailyReport(_ pages: [Data]) throws -> CostUsageDailyReport {
+        var costsByDate: [String: Double] = [:]
+        var breakdownsByDate: [String: [CostUsageDailyReport.ModelBreakdown]] = [:]
+        var modelsByDate: [String: Set<String>] = [:]
+
+        for page in pages {
+            for (service, cost, date) in try parseGroupedResults(page) {
+                let date = date.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !date.isEmpty, cost > 0 else { continue }
+                costsByDate[date, default: 0] += cost
+                modelsByDate[date, default: []].insert(service)
+                breakdownsByDate[date, default: []].append(
+                    CostUsageDailyReport.ModelBreakdown(
+                        source: .bedrock,
+                        modelName: service,
+                        costUSD: cost))
+            }
+        }
+
+        let entries = costsByDate.keys.sorted().map { date in
+            CostUsageDailyReport.Entry(
+                date: date,
+                inputTokens: nil,
+                outputTokens: nil,
+                totalTokens: nil,
+                costUSD: costsByDate[date],
+                modelsUsed: modelsByDate[date].map { Array($0).sorted() },
+                modelBreakdowns: sortedBedrockBreakdowns(breakdownsByDate[date] ?? []))
+        }
+        let totalCost = costsByDate.values.reduce(0, +)
+        let summary = entries.isEmpty ? nil : CostUsageDailyReport.Summary(
+            totalInputTokens: nil,
+            totalOutputTokens: nil,
+            totalTokens: nil,
+            totalCostUSD: totalCost)
+        return CostUsageDailyReport(data: entries, summary: summary)
+    }
+
+    private static func sortedBedrockBreakdowns(
+        _ breakdowns: [CostUsageDailyReport.ModelBreakdown]) -> [CostUsageDailyReport.ModelBreakdown]?
+    {
+        let sorted = breakdowns.sorted { lhs, rhs in
+            let lhsCost = lhs.costUSD ?? -1
+            let rhsCost = rhs.costUSD ?? -1
+            if lhsCost != rhsCost { return lhsCost > rhsCost }
+            return lhs.modelName < rhs.modelName
+        }
+        return sorted.isEmpty ? nil : sorted
+    }
+
     private static func isDataUnavailableResponse(statusCode: Int, data: Data) -> Bool {
         guard statusCode == 400,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -406,6 +484,15 @@ public enum BedrockUsageFetcher {
         let startOfToday = calendar.startOfDay(for: now)
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         return (formatter.string(from: startOfMonth), formatter.string(from: tomorrow))
+    }
+
+    static func dailyRange(since: Date, until: Date) -> (start: String, end: String) {
+        let calendar = utcCalendar()
+        let start = calendar.startOfDay(for: min(since, until))
+        let endDay = calendar.startOfDay(for: max(since, until))
+        let exclusiveEnd = calendar.date(byAdding: .day, value: 1, to: endDay)!
+        let formatter = dateFormatter()
+        return (formatter.string(from: start), formatter.string(from: exclusiveEnd))
     }
 
     private static func endOfCurrentMonth() -> Date? {

@@ -30,6 +30,11 @@ let package = Package(
             resources: [
                 .process("Resources/en.lproj"),
                 .process("Resources/zh-Hans.lproj"),
+            ],
+            linkerSettings: [
+                .linkedLibrary("sqlite3"),
+                .linkedFramework("AppKit"),
+                .linkedFramework("WebKit"),
             ]
         ),
         .testTarget(name: "ConductorCoreTests", dependencies: ["ConductorCore"]),
@@ -38,6 +43,7 @@ let package = Package(
             name: "ConductorCLI",
             dependencies: [
                 "ConductorCore",
+                .product(name: "Yams", package: "Yams"),
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v5),

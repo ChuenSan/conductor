@@ -58,7 +58,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// 文案统一清洗：标题截断；body 若是成段内容（agent 把整段回复经 OSC 塞进来）
     /// 则换成通用提示——内容本身留在终端和活动账本里，通知只负责提醒。
     func notify(paneID: String?, title rawTitle: String, body rawBody: String,
-                bodyFallback: String? = nil) {
+                bodyFallback: String? = nil, sound: Bool = true) {
         onNotify?(paneID, rawTitle, rawBody)   // 旁路：桌宠拿原始内容显示真实会话通知
         // 系统横幅：系统通知开则发；系统关但伙伴开且宠物隐藏 → 回退横幅别丢通知；都关 → 静默。
         let companion = ConfigStore.shared.config.companion
@@ -71,7 +71,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
-            content.sound = .default
+            if sound { content.sound = .default }
             if let paneID, !paneID.isEmpty { content.userInfo = ["paneID": paneID] }
             let request = UNNotificationRequest(
                 identifier: UUID().uuidString, content: content, trigger: nil)

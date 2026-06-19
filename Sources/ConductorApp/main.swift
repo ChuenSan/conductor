@@ -25,6 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var coordinator: AppCoordinator!
     private var companion: CompanionController?
     private var keyMonitor: Any?
+    private lazy var memoryPressureMonitor = MemoryPressureMonitor(trimAppCaches: { [weak self] in
+        self?.trimRebuildableCachesForMemoryPressure() ?? MemoryPressureCacheTrimSummary()
+    })
     /// 关窗时已确认过中断思考，applicationShouldTerminate 不再问第二遍。
     private var closeConfirmed = false
 
@@ -74,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         installKeyMonitor()
+        memoryPressureMonitor.start()
 
         // 桌面通知宠物：内置 Agent 状态的一张环境化的脸（订阅真实在线信号）。
         let pet = CompanionController(coordinator: coordinator, feedCenter: coordinator.feedCenter)
@@ -129,6 +133,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    private func trimRebuildableCachesForMemoryPressure() -> MemoryPressureCacheTrimSummary {
+        var summary = MemoryPressureCacheTrimSummary()
+        summary.cliToolLogos = CLIToolLogo.trimCacheForMemoryPressure()
+
+        let petCacheTrim = CodexPetCatalog.trimCacheForMemoryPressure()
+        summary.petSpriteSheets = petCacheTrim.sheets
+        summary.petFrameSets = petCacheTrim.frameSets
+
+        summary.sessionPreviewEntries = SessionPreviewCache.shared.trimCacheForMemoryPressure()
+        summary.sessionUsageEntries = SessionUsageCache.shared.trimCacheForMemoryPressure()
+        summary.webDebugLines =
+            OpenAIWebDebugLog.shared.trimForMemoryPressure() +
+            ClaudeWebDebugLog.shared.trimForMemoryPressure()
+        return summary
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     /// 误关保护：红绿灯关窗时有 agent 正在思考 → 先确认（窗口没了 app 也就退出了）。
@@ -143,6 +163,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        memoryPressureMonitor.stop()
+        MemoryPressureReliefScheduler.shared.cancel()
         coordinator.captureAllScrollbackForRestart()   // 内容快照（下次启动回放）
         coordinator.save()
         UpdateManager.shared.installPendingUpdateOnQuitIfNeeded()

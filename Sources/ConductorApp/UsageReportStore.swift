@@ -16,7 +16,15 @@ enum UsageReportStore {
         guard let data = try? Data(contentsOf: cacheURL(daysBack: daysBack)) else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(UsageReport.self, from: data)
+        guard var report = try? decoder.decode(UsageReport.self, from: data) else { return nil }
+        let now = Date()
+        report.sourceInfo = UsageReportSourceInfo(
+            source: .uiCache,
+            loadedAt: now,
+            cacheAgeSeconds: max(0, now.timeIntervalSince(report.generatedAt)),
+            cachePath: cacheURL(daysBack: daysBack).path,
+            reason: "panel restore")
+        return report
     }
 
     static func save(_ report: UsageReport, daysBack: Int) {
