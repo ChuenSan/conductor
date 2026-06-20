@@ -130,16 +130,20 @@ struct AgentToolsMCPWorkbenchView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-                .frame(width: 208)
-
-            VStack(spacing: 0) {
-                header
-                content
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 0) {
+            AgentToolsSectionTabs(
+                tabs: sectionTabs,
+                selectedID: selectedSection.rawValue) { id in
+                    if let section = AgentToolsMCPWorkbenchSection(rawValue: id) {
+                        withAnimation(AgentToolsMotion.route) { selectedSection = section }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            header
+            content
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .agentToolsPage()
         .overlay(alignment: .top) { AgentToolsNoticeBanner(text: store.mcpNotice) { store.mcpNotice = nil } }
         .sheet(isPresented: $showAddSheet) { addSheet }
@@ -157,56 +161,15 @@ struct AgentToolsMCPWorkbenchView: View {
         }
     }
 
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            AgentToolsWorkbenchBrand(
-                icon: "point.3.connected.trianglepath.dotted",
-                title: "MCP Manager",
-                subtitle: L("服务 / 客户端"))
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    AgentToolsWorkbenchRailSection("Servers") {
-                        railButton(.servers)
-                        railButton(.clients)
-                    }
-
-                    AgentToolsWorkbenchRailSection(L("维护")) {
-                        railButton(.diagnostics)
-                    }
-                }
-                .padding(.horizontal, 8)
-                .padding(.bottom, 10)
-            }
-            .scrollIndicators(.never)
-
-            Spacer(minLength: 0)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("MCP")
-                    .font(.system(size: 9.5, weight: .bold))
-                    .foregroundStyle(AppStyle.textTertiary)
-                HStack(spacing: 6) {
-                    ToolBadge(text: L("%ld Servers", store.mcpServers.count), color: AppStyle.textTertiary, style: .muted, height: 20)
-                    ToolBadge(text: L("%ld 目标", selectedTargetIDs.count), color: selectedTargetIDs.isEmpty ? AppStyle.waitAmber : AppStyle.accent, style: .muted, height: 20)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
+    /// 顶部分段 tab 的数据（替代旧的 208 侧栏 rail）。servers / clients / 诊断 三段。
+    private var sectionTabs: [AgentToolsSectionTab] {
+        [.servers, .clients, .diagnostics].map { section in
+            AgentToolsSectionTab(
+                id: section.rawValue,
+                title: section.title,
+                icon: section.icon,
+                badge: badge(for: section))
         }
-        .background(AppStyle.hoverFill.opacity(0.14))
-        .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-    }
-
-    private func railButton(_ section: AgentToolsMCPWorkbenchSection) -> some View {
-        AgentToolsWorkbenchRailButton(
-            icon: section.icon,
-            title: section.title,
-            subtitle: section.sidebarHint,
-            badge: badge(for: section),
-            selected: selectedSection == section) {
-                withAnimation(AgentToolsMotion.route) { selectedSection = section }
-            }
     }
 
     private func badge(for section: AgentToolsMCPWorkbenchSection) -> String? {

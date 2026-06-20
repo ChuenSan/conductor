@@ -155,8 +155,8 @@ final class GLMUsageTests: XCTestCase {
 
 private final class GLMUsageMockURLProtocol: URLProtocol {
     private static let lock = NSLock()
-    private static var responses: [String: [(statusCode: Int, body: String)]] = [:]
-    private static var requests: [URLRequest] = []
+    nonisolated(unsafe) private static var responses: [String: [(statusCode: Int, body: String)]] = [:]
+    nonisolated(unsafe) private static var requests: [URLRequest] = []
 
     static func reset() {
         lock.lock()

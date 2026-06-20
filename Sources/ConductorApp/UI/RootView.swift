@@ -42,7 +42,7 @@ struct RootView: View {
                 // 空状态插图的出现/消失就地动画；不放在根上——根级按 pane 数
                 // 触发动画会让整个 HStack 布局跟着 diff，殃及无关部分。
                 .animation(Motion.panel, value: showsQuickStartEmptyState)
-                StatusBarView(coordinator: coordinator, usageMonitor: coordinator.usageMonitor)
+                StatusBarView(coordinator: coordinator)
             }
             if coordinator.settingsPresentation.isPresented {
                 SettingsView(coordinator: coordinator, onClose: { coordinator.closeSettings() })

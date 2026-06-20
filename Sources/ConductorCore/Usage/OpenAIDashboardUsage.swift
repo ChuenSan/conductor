@@ -737,11 +737,16 @@ public enum OpenAIDashboardParser {
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             let service = (try? container.decode(String.self, forKey: .service)) ?? ""
-            let creditsUsed =
-                (try? container.decode(Double.self, forKey: .creditsUsed))
-                ?? (try? container.decode(Int.self, forKey: .creditsUsed)).map(Double.init)
-                ?? (try? container.decode(String.self, forKey: .creditsUsed)).map(parseCreditsUsed)
-                ?? 0
+            let creditsUsed: Double
+            if let value = try? container.decode(Double.self, forKey: .creditsUsed) {
+                creditsUsed = value
+            } else if let value = try? container.decode(Int.self, forKey: .creditsUsed) {
+                creditsUsed = Double(value)
+            } else if let value = try? container.decode(String.self, forKey: .creditsUsed) {
+                creditsUsed = parseCreditsUsed(value)
+            } else {
+                creditsUsed = 0
+            }
             self.model = OpenAIDashboardServiceUsage(service: service, creditsUsed: creditsUsed)
         }
     }

@@ -51,7 +51,9 @@ public enum CodexActiveAccountResolver {
         }
         let activeIndex: Int
         if let index = accounts.firstIndex(where: { representsSameAccount($0, resolvedAccount) }) {
-            accounts[index] = resolvedAccount
+            var resolved = resolvedAccount
+            resolved.addedAt = accounts[index].addedAt   // 同上：保留原 addedAt，别用 discovery 的新时间戳
+            accounts[index] = resolved
             activeIndex = index
         } else {
             accounts.append(resolvedAccount)
@@ -122,8 +124,14 @@ public enum CodexActiveAccountResolver {
     {
         guard !configured.isEmpty else { return discovered }
 
-        var merged = configured.map { configuredAccount in
-            discoveredAccount(matching: configuredAccount, in: discovered) ?? configuredAccount
+        var merged = configured.map { configuredAccount -> UsageProviderTokenAccount in
+            guard var match = discoveredAccount(matching: configuredAccount, in: discovered) else {
+                return configuredAccount
+            }
+            // 保留原账号的 addedAt——discovery 每次发现都盖 Date()，若覆盖会让修正值永远不同于
+            // 现存 → 反复写盘 → config 热更新死循环（CPU 飙高、codex 详情点开即崩的根因）。
+            match.addedAt = configuredAccount.addedAt
+            return match
         }
         for discoveredAccount in discovered where !merged.contains(where: { representsSameAccount($0, discoveredAccount) }) {
             merged.append(discoveredAccount)

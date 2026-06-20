@@ -64,14 +64,6 @@ enum AgentToolsConsoleLayout {
     static let railWidth: CGFloat = 174
     static let inspectorWidth: CGFloat = 248
 
-    struct Columns {
-        let sidePadding: CGFloat
-        let gap: CGFloat
-        let railWidth: CGFloat
-        let workspaceWidth: CGFloat
-        let inspectorWidth: CGFloat
-    }
-
     static func modalSize() -> CGSize {
         let visible = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1512, height: 982)
         let maxWidth = max(960, visible.width - 64)
@@ -83,37 +75,6 @@ enum AgentToolsConsoleLayout {
             height: min(preferredHeight, maxHeight))
     }
 
-    static func columns(for containerWidth: CGFloat) -> Columns {
-        let sidePadding = min(horizontalPadding, max(10, containerWidth * 0.018))
-        let contentWidth = max(0, containerWidth - (sidePadding * 2))
-        let compact = contentWidth < 1180
-        let rail = railWidth
-        let inspector = inspectorWidth
-        let gap = compact ? 8 : columnGap
-        let workspace = max(520, contentWidth - rail - inspector - (gap * 2))
-        return Columns(
-            sidePadding: sidePadding,
-            gap: gap,
-            railWidth: rail,
-            workspaceWidth: workspace,
-            inspectorWidth: inspector)
-    }
-
-    static func columns(for containerWidth: CGFloat, module: AgentToolsManagementModule) -> Columns {
-        let sidePadding = min(horizontalPadding, max(10, containerWidth * 0.018))
-        let contentWidth = max(0, containerWidth - (sidePadding * 2))
-        let compact = contentWidth < 1180
-        let gap = compact ? 8 : columnGap
-        if module == .skills {
-            return Columns(
-                sidePadding: sidePadding,
-                gap: gap,
-                railWidth: railWidth,
-                workspaceWidth: max(620, contentWidth - railWidth - gap),
-                inspectorWidth: 0)
-        }
-        return columns(for: containerWidth)
-    }
 }
 
 struct AgentToolsManagementConsoleView: View {
@@ -146,45 +107,26 @@ struct AgentToolsManagementConsoleView: View {
         let preferredSize = AgentToolsConsoleLayout.modalSize()
         VStack(spacing: 0) {
             header
-            GeometryReader { proxy in
-                let columns = AgentToolsConsoleLayout.columns(for: proxy.size.width, module: selectedModule)
-                let contentHeight = max(0, proxy.size.height - AgentToolsConsoleLayout.bottomPadding)
-                let railX = columns.sidePadding
-                let workspaceX = railX + columns.railWidth + columns.gap
-                let inspectorX = workspaceX + columns.workspaceWidth + columns.gap
-                ZStack(alignment: .topLeading) {
-                    moduleRail
-                        .frame(width: columns.railWidth)
-                        .frame(height: contentHeight)
-                        .clipped()
-                        .offset(x: railX, y: 0)
-                        .zIndex(3)
-
-                    workspace
-                        .id(selectedModule)
+            // 统一三栏：原本手搓 GeometryReader + 逐栏 .offset(x:) + zIndex/clipped 绝对定位，
+            // 换成原生 HStack——rail 定宽、workspace 弹性、inspector 定宽（skills 隐藏）。
+            HStack(spacing: AgentToolsConsoleLayout.columnGap) {
+                moduleRail
+                    .frame(width: AgentToolsConsoleLayout.railWidth)
+                workspace
+                    .id(selectedModule)
+                    .transition(AgentToolsMotion.contentTransition)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                if showInspector {
+                    inspector
+                        .id("inspector-\(selectedModule.rawValue)")
                         .transition(AgentToolsMotion.contentTransition)
-                        .frame(width: columns.workspaceWidth)
-                        .frame(height: contentHeight)
-                        .clipped()
-                        .offset(x: workspaceX, y: 0)
-                        .zIndex(1)
-
-                    if columns.inspectorWidth > 0 {
-                        inspector
-                            .id("inspector-\(selectedModule.rawValue)")
-                            .transition(AgentToolsMotion.contentTransition)
-                            .frame(width: columns.inspectorWidth)
-                            .frame(height: contentHeight)
-                            .clipped()
-                            .offset(x: inspectorX, y: 0)
-                            .zIndex(2)
-                    }
+                        .frame(width: AgentToolsConsoleLayout.inspectorWidth)
                 }
-                .frame(width: proxy.size.width, height: contentHeight, alignment: .topLeading)
-                .padding(.bottom, AgentToolsConsoleLayout.bottomPadding)
-                .clipped()
-                .animation(AgentToolsMotion.selection, value: selectedModule)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.horizontal, AgentToolsConsoleLayout.horizontalPadding)
+            .padding(.bottom, AgentToolsConsoleLayout.bottomPadding)
+            .animation(AgentToolsMotion.selection, value: selectedModule)
         }
         .frame(
             minWidth: 1120,
@@ -197,6 +139,9 @@ struct AgentToolsManagementConsoleView: View {
             withAnimation(AgentToolsMotion.selection) { selectedModule = module }
         }
     }
+
+    /// Skills 模块用全宽（它内嵌的 SkillsManagerView 自带详情），其余模块显示右侧检查器。
+    private var showInspector: Bool { selectedModule != .skills }
 
     private var header: some View {
         HStack(spacing: Space.sm) {

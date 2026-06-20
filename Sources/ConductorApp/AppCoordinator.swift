@@ -687,9 +687,12 @@ final class AppCoordinator: ObservableObject {
         // 完成通知 hook 默认就装好：**仅在未装全/脚本过期时**才安装。
         // 不再每次启动都"删→加"——那会和正在跑的会话抢配置、出现思考 hook 短暂消失（转圈丢）。
         if !HookInstaller.status().allDone { _ = try? HookInstaller.installAll() }
-        // 审批 hook（PreToolUse → Feed → 宠物就地批）同样默认装好，仅在未装全/脚本过期时装。
-        // 脚本只拦命令类工具（见 FeedHookInstaller.scriptBody 的 GATED）；socket 不可用一律 fail-open。
-        if !FeedHookInstaller.status().allDone { _ = try? FeedHookInstaller.installAll() }
+        // 审批 hook（PreToolUse → Feed → 宠物就地批）**默认不装**：它会拦每条命令、还会拦开发 agent 自己。
+        // 改成 opt-in——用户在「工具审批」开关里手动启用（见 CLIToolsView / FeedHookInstaller.installAll）。
+        // 但脚本（conductor-approve）若过期则静默刷新，保证已启用的人拿到带 GATED 过滤的新版。
+        if FeedHookInstaller.status().claudeConfigured, !FeedHookInstaller.status().scriptInstalled {
+            try? FeedHookInstaller.installScript()
+        }
         NotificationManager.shared.configure()
         NotificationManager.shared.onActivatePane = { [weak self] paneID in
             self?.revealPane(PaneID(paneID))

@@ -812,7 +812,7 @@
 "未填写" = "Not Set";
 "未配置账号" = "No Accounts";
 "%ld 个账号" = "%ld Account(s)";
-"%1$ld 个账号 · 当前 %@" = "%1$ld Account(s) · Current %@";
+"%1$ld 个账号 · 当前 %2$@" = "%1$ld Account(s) · Current %2$@";
 "%@ 启用状态" = "%@ Enabled State";
 "Token 或 Cookie" = "Token or Cookie";
 "账号 %ld" = "Account %ld";

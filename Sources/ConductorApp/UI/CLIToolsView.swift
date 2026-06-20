@@ -230,6 +230,8 @@ struct CLIToolsView: View {
     @State private var feedHookError: String?
     @State private var inspectorMode: CLIInspectorMode = .tools
     @State private var selectedProviderID: String?
+    /// 「未检测到」的 CLI 不常看，默认折叠，点标题展开。
+    @State private var showMissing = false
 
     private var installedTools: [CLIToolStatus] { results.filter(\.isInstalled) }
     private var missingTools: [CLIToolStatus] { results.filter { !$0.isInstalled } }
@@ -261,14 +263,14 @@ struct CLIToolsView: View {
         }
     }
 
+    /// 「工具」tab 只做一件事：**CLI 清单**（已安装 + 未检测到）。
+    /// 账号用量挪到「渠道」tab（不再两处都露）；工具审批是配置项，沉到最底、单独分隔。
     @ViewBuilder
     private var cliToolsWorkbench: some View {
         cliInventoryStrip
-        feedApprovalCard
         if results.isEmpty, detecting {
             loadingPlaceholder
         } else {
-            accountUsageSection
             if !installedTools.isEmpty {
                 ToolsSectionLabel(L("已安装"))
                 ForEach(installedTools) { tool in
@@ -284,10 +286,29 @@ struct CLIToolsView: View {
                 }
             }
             if !missingTools.isEmpty {
-                ToolsSectionLabel(L("未检测到"))
-                    .padding(.top, installedTools.isEmpty ? 0 : Space.xxs)
-                missingList
+                Button {
+                    withAnimation(Motion.snappy) { showMissing.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        ToolsSectionLabel(L("未检测到"))
+                        Text("\(missingTools.count)")
+                            .font(.system(size: 10, weight: .bold)).monospacedDigit()
+                            .foregroundStyle(AppStyle.textTertiary)
+                            .padding(.horizontal, 5).frame(height: 15)
+                            .background(Capsule().fill(AppStyle.subtleFill))
+                        Spacer(minLength: 0)
+                        Image(systemName: showMissing ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(AppStyle.textTertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, installedTools.isEmpty ? 0 : Space.xxs)
+                if showMissing { missingList }
             }
+            feedApprovalCard
+                .padding(.top, Space.sm)
         }
     }
 
@@ -295,7 +316,6 @@ struct CLIToolsView: View {
         HStack(spacing: 8) {
             cliInventoryMetric(L("已安装"), "\(installedTools.count)", icon: "checkmark.circle.fill", color: AppStyle.doneGreen)
             cliInventoryMetric(L("未检测到"), "\(missingTools.count)", icon: "circle.dashed", color: AppStyle.textTertiary)
-            cliInventoryMetric(L("可启动"), "\(installedTools.count)", icon: "play.fill", color: AppStyle.accent)
         }
     }
 
@@ -744,6 +764,9 @@ struct CLIToolLogoView: View {
     }
 }
 
+/// 已安装 CLI 的一行。只用于「已安装」组（未检测到走 missingList），所以**默认就是可用**——
+/// 不再把"已安装"编码三遍（pill + logo 绿点 + 左侧绿条），只留左侧一条细绿条做轻提示。
+/// 位置也只显示一次（底部完整路径，可复制），删掉 header 里那个粗粒度的 installRoot chip。
 private struct CLIToolRow: View {
     let tool: CLIToolStatus
     let onLaunch: () -> Void
@@ -752,8 +775,44 @@ private struct CLIToolRow: View {
     @State private var hovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            headerRow
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                CLIToolLogoView(tool: tool)
+                    .frame(width: 20, height: 20)
+                    .frame(width: 34, height: 34)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(AppStyle.accent.opacity(0.12)))
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(tool.name)
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundStyle(AppStyle.textPrimary)
+                            .lineLimit(1)
+                        if let version = tool.version {
+                            Text(version)
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundStyle(AppStyle.textTertiary)
+                                .lineLimit(1)
+                        }
+                    }
+                    CLIInfoChip(icon: "terminal", text: tool.command, monospaced: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let path = tool.path {
+                    IconOnlyButton(
+                        systemName: "doc.on.doc", help: L("复制路径"),
+                        size: 24, symbolSize: 10.5, weight: .semibold,
+                        tint: AppStyle.textTertiary) { onCopyPath(path) }
+                    IconOnlyButton(
+                        systemName: "folder", help: L("在 Finder 中显示"),
+                        size: 24, symbolSize: 10.5, weight: .semibold,
+                        tint: AppStyle.textTertiary) { onReveal(path) }
+                    ToolActionButton(
+                        title: L("启动"), systemImage: "play.fill", role: .primary,
+                        height: 25, fontSize: 11, horizontalPadding: 10,
+                        help: L("在新标签页启动 %@", tool.name), action: onLaunch)
+                }
+            }
             if let path = tool.path {
                 HStack(spacing: 7) {
                     Image(systemName: "folder")
@@ -768,7 +827,7 @@ private struct CLIToolRow: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 8)
-                .frame(height: 28)
+                .frame(height: 26)
                 .background(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(AppStyle.hoverFill.opacity(0.48)))
             }
@@ -779,7 +838,7 @@ private struct CLIToolRow: View {
                 .fill(hovering ? AppStyle.hoverFill : AppStyle.theme.isDark ? Color.white.opacity(0.045) : .white))
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(tool.isInstalled ? AppStyle.doneGreen : AppStyle.textTertiary.opacity(0.45))
+                .fill(AppStyle.doneGreen)
                 .frame(width: 3)
                 .padding(.vertical, 10)
         }
@@ -790,102 +849,6 @@ private struct CLIToolRow: View {
         .onHover { inside in
             withAnimation(Motion.hover) { hovering = inside }
         }
-    }
-
-    private var headerRow: some View {
-        HStack(spacing: 10) {
-            CLIToolLogoView(tool: tool)
-                .frame(width: 22, height: 22)
-                .frame(width: 38, height: 38)
-                .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill((tool.isInstalled ? AppStyle.accent : AppStyle.textTertiary).opacity(0.12)))
-                .overlay(alignment: .bottomTrailing) {
-                    Circle()
-                        .fill(tool.isInstalled ? AppStyle.doneGreen : AppStyle.textTertiary)
-                        .frame(width: 7, height: 7)
-                        .overlay(Circle().stroke(AppStyle.windowBackground, lineWidth: 1.5))
-                        .offset(x: 1, y: 1)
-                }
-
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    Text(tool.name)
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(AppStyle.textPrimary)
-                        .lineLimit(1)
-                    CLIToolStatusPill(installed: tool.isInstalled)
-                    if let version = tool.version {
-                        CLIInfoChip(icon: "number", text: version, monospaced: true)
-                    }
-                }
-                HStack(spacing: 5) {
-                    CLIInfoChip(icon: "terminal", text: tool.command, monospaced: true)
-                    if let path = tool.path {
-                        CLIInfoChip(icon: "externaldrive", text: installRootLabel(path))
-                    } else {
-                        CLIInfoChip(icon: "questionmark.folder", text: L("未检测到位置"))
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let path = tool.path {
-                IconOnlyButton(
-                    systemName: "doc.on.doc",
-                    help: L("复制路径"),
-                    size: 24,
-                    symbolSize: 10.5,
-                    weight: .semibold,
-                    tint: AppStyle.textTertiary) {
-                        onCopyPath(path)
-                    }
-                IconOnlyButton(
-                    systemName: "folder",
-                    help: L("在 Finder 中显示"),
-                    size: 24,
-                    symbolSize: 10.5,
-                    weight: .semibold,
-                    tint: AppStyle.textTertiary) {
-                        onReveal(path)
-                    }
-                ToolActionButton(
-                    title: L("启动"),
-                    systemImage: "play.fill",
-                    role: .primary,
-                    height: 25,
-                    fontSize: 11,
-                    horizontalPadding: 10,
-                    help: L("在新标签页启动 %@", tool.name),
-                    action: onLaunch)
-            } else {
-                ToolBadge(
-                    text: L("未安装"),
-                    color: AppStyle.textTertiary,
-                    style: .muted,
-                    height: 22)
-            }
-        }
-    }
-
-    private func installRootLabel(_ path: String) -> String {
-        if path.hasPrefix("/opt/homebrew") { return "Homebrew" }
-        if path.hasPrefix("/usr/local") { return "usr/local" }
-        if path.hasPrefix(NSHomeDirectory()) { return "~" + path.dropFirst(NSHomeDirectory().count) }
-        return URL(fileURLWithPath: path).deletingLastPathComponent().lastPathComponent
-    }
-}
-
-private struct CLIToolStatusPill: View {
-    let installed: Bool
-
-    var body: some View {
-        let color = installed ? AppStyle.doneGreen : AppStyle.textTertiary
-        ToolBadge(
-            text: installed ? L("可用") : L("缺失"),
-            color: color,
-            style: installed ? .soft : .muted,
-            height: 18)
     }
 }
 
