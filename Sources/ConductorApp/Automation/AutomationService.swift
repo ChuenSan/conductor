@@ -369,9 +369,13 @@ final class AutomationService {
     /// 需先用 app.open-tools 打开窗口并留出一帧布局时间。返回写出的文件路径。
     private func debugSnapshotWindow(coordinator c: AppCoordinator,
                                      params: [String: JSONValue]) throws -> JSONValue {
-        guard let window = c.agentToolsWindowController?.window,
+        // Skills/MCP/Hooks 已并入主窗口右侧面板，旧全屏窗口不再开——回退到主/键窗口截图。
+        // cacheDisplay 由 app 自渲染，不需要录屏权限。
+        guard let window = c.agentToolsWindowController?.window
+                ?? NSApp.keyWindow ?? NSApp.mainWindow
+                ?? NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }),
               let view = window.contentView else {
-            throw AutomationError.internalError("AgentTools 窗口未打开（先调用 app.open-tools）")
+            throw AutomationError.internalError("没有可截图的窗口（先打开主窗口或 app.open-tools）")
         }
         let bounds = view.bounds
         guard bounds.width > 1, bounds.height > 1,

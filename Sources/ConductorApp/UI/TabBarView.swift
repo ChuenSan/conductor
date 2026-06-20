@@ -119,14 +119,6 @@ struct TabBarView: View {
                             coordinator.toggleTaskCards()
                         }
                     IconOnlyButton(
-                        systemName: "rectangle.3.group",
-                        help: L("打开工具管理台"),
-                        size: 26,
-                        symbolSize: 12,
-                        tint: coordinator.agentToolsManagementPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary) {
-                            coordinator.openAgentToolsManagement()
-                        }
-                    IconOnlyButton(
                         systemName: "gearshape",
                         help: L("设置"),
                         size: 26,

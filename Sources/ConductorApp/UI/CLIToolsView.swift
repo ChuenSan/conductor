@@ -430,15 +430,6 @@ struct CLIToolsView: View {
             }
             Spacer()
             ToolActionButton(
-                title: L("管理台"),
-                systemImage: "rectangle.3.group",
-                height: 26,
-                fontSize: 11,
-                horizontalPadding: 9,
-                help: L("打开工具管理台")) {
-                    coordinator.openAgentToolsManagement(inspectorMode == .providers ? .usage : .cli)
-                }
-            ToolActionButton(
                 title: detecting ? L("检测中") : L("重新检测"),
                 systemImage: detecting ? nil : "arrow.clockwise",
                 height: 26,

@@ -5,17 +5,19 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     case cli
     case usage
     case skills
+    case mcp
     case hooks
     case snippets
     case coCreate
 
     var id: String { rawValue }
-    /// 右侧只保留快速查看/轻量工具；大型管理对象进入 Agent Tools 管理台。
-    static var panelTabs: [ToolsTab] { [.cli, .usage, .snippets] }
+    /// Skills / MCP / Hooks 也进右侧面板（之前要去全屏管理台，太重）。
+    static var panelTabs: [ToolsTab] { [.cli, .usage, .skills, .mcp, .hooks, .snippets] }
 
     var managementModule: AgentToolsManagementModule? {
         switch self {
         case .skills: return .skills
+        case .mcp: return .mcp
         case .hooks: return .hooks
         default: return nil
         }
@@ -26,6 +28,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .cli: return "CLI"
         case .usage: return L("用量")
         case .skills: return "Skills"
+        case .mcp: return "MCP"
         case .hooks: return "Hooks"
         case .snippets: return L("片段")
         case .coCreate: return L("共创")
@@ -36,6 +39,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
         case .cli: return "terminal"
         case .usage: return "chart.bar.xaxis"
         case .skills: return "wand.and.stars"
+        case .mcp: return "point.3.connected.trianglepath.dotted"
         case .hooks: return "link"
         case .snippets: return "text.badge.star"
         case .coCreate: return "text.bubble"
@@ -49,6 +53,9 @@ struct ToolsPanelView: View {
     var onClose: () -> Void = {}
     /// 主题变 → 重渲染（AppStyle 跟随）。不观察的话切主题后面板会停在旧配色。
     @ObservedObject private var configStore = ConfigStore.shared
+    /// Skills / MCP / Hooks 直接在面板里渲染，需要一份扫描 store（取代全屏管理台的那份）。
+    @StateObject private var agentToolsStore = AgentToolsConsoleStore()
+    @State private var skillsReloadID = UUID()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -57,6 +64,7 @@ struct ToolsPanelView: View {
         }
         .frame(maxHeight: .infinity)
         .background(.clear)   // 透明：用根底统一磨砂
+        .onAppear { agentToolsStore.start() }
     }
 
     private var header: some View {
@@ -130,18 +138,34 @@ struct ToolsPanelView: View {
             UsageStatsView {
                 coordinator.openAgentToolsManagement(.usage)
             }
-        case .skills, .hooks:
-            Color.clear
-                .onAppear {
-                    if let module = coordinator.toolsTab.managementModule {
-                        coordinator.openAgentToolsManagement(module)
-                    }
-                    coordinator.toolsTab = .cli
-                }
+        case .skills:
+            AgentToolsSkillsView(
+                store: agentToolsStore,
+                initialSection: "library",
+                reloadID: skillsReloadID,
+                onOpenModule: { openPanelModule($0) })
+        case .mcp:
+            AgentToolsMCPWorkbenchView(store: agentToolsStore)
+        case .hooks:
+            AgentToolsHooksWorkbenchView(store: agentToolsStore)
         case .snippets:
             SnippetsManagerView(coordinator: coordinator)
         case .coCreate:
             CoCreateView()
         }
+    }
+
+    /// 视图内「打开某模块」→ 切到对应的面板 tab（不再弹全屏管理台）。
+    private func openPanelModule(_ module: AgentToolsManagementModule) {
+        let tab: ToolsTab?
+        switch module {
+        case .cli: tab = .cli
+        case .usage: tab = .usage
+        case .skills: tab = .skills
+        case .mcp: tab = .mcp
+        case .hooks: tab = .hooks
+        default: tab = nil   // overview / snippets / activity 无对应面板 tab
+        }
+        if let tab { withAnimation(Motion.snappy) { coordinator.toolsTab = tab } }
     }
 }

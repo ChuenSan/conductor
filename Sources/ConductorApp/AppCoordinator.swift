@@ -444,26 +444,26 @@ final class AppCoordinator: ObservableObject {
         cliToolsPresentation.open()
     }
 
-    /// 打开工具面板到指定分段。
+    /// 打开工具面板到指定分段（Skills/MCP/Hooks 现也在面板里，不再去全屏管理台）。
     func openTools(_ tab: ToolsTab) {
-        if let module = tab.managementModule {
-            settingsPresentation.close()
-            sessionPresentation.close()
-            cliToolsPresentation.close()
-            openAgentToolsManagement(module)
-            return
-        }
         toolsTab = tab
         settingsPresentation.close()
         sessionPresentation.close()
         cliToolsPresentation.open()
     }
 
-    /// 打开完整 Agent Tools 管理台到指定模块（独立窗口）。
+    /// 旧「全屏管理台」入口：已并入右侧工具面板——打开面板并切到对应 tab，不再开独立窗口。
     func openAgentToolsManagement(_ module: AgentToolsManagementModule = .overview) {
-        agentToolsManagementModule = module
-        agentToolsManagementPresentation.open()
-        showAgentToolsWindow()
+        let tab: ToolsTab
+        switch module {
+        case .cli: tab = .cli
+        case .usage: tab = .usage
+        case .skills: tab = .skills
+        case .mcp: tab = .mcp
+        case .hooks: tab = .hooks
+        default: tab = .cli   // overview / 其它 → 默认 CLI
+        }
+        openTools(tab)
     }
 
     func closeAgentToolsManagement() {

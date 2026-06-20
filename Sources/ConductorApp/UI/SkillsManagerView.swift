@@ -14,19 +14,25 @@ private enum SkillUI {
     static let controlHeight: CGFloat = 26
     static let chipHeight: CGFloat = 22
 
-    static var railFill: Color { AppStyle.hoverFill.opacity(0.14) }
-    static var softFill: Color { AppStyle.hoverFill.opacity(0.46) }
-    static var softerFill: Color { AppStyle.hoverFill.opacity(0.36) }
-    static var selectedFill: Color { AppStyle.activeFill.opacity(0.62) }
-    static var selectedStroke: Color { AppStyle.accent.opacity(0.30) }
-    static var subtleStroke: Color { AppStyle.separator.opacity(0.12) }
+    static var railFill: Color { Color.clear }
+    static var softFill: Color { AppStyle.theme.isDark ? Color.white.opacity(0.045) : Color.black.opacity(0.028) }
+    static var softerFill: Color { AppStyle.theme.isDark ? Color.white.opacity(0.03) : Color.black.opacity(0.02) }
+    static var selectedFill: Color { AppStyle.accent.opacity(0.12) }
+    static var selectedStroke: Color { AppStyle.accent.opacity(0.0) }
+    static var subtleStroke: Color { AppStyle.separator.opacity(0.14) }
+
+    /// 扁平分组面板填充（对标 AgentToolsFormGroup / MCP·Hooks 的干净实底，去玻璃）。
+    static var flatPanelFill: Color { AppStyle.theme.isDark ? Color.white.opacity(0.04) : Color.black.opacity(0.025) }
 }
 
 @MainActor
 private extension View {
     func skillPanelSurface() -> some View {
-        // 去白卡片：浅色下不再用不透明白卡，统一走通透表面（深色=磨砂玻璃，浅色=极淡描边）。
-        agentToolsGlass(cornerRadius: SkillUI.panelRadius)
+        // 扁平化：去玻璃（无 material / 无渐变 rim），统一走干净实底 + 发丝描边，和 MCP·Hooks 一致。
+        background(RoundedRectangle(cornerRadius: SkillUI.panelRadius, style: .continuous)
+            .fill(SkillUI.flatPanelFill))
+        .overlay(RoundedRectangle(cornerRadius: SkillUI.panelRadius, style: .continuous)
+            .strokeBorder(AppStyle.separator.opacity(0.14), lineWidth: 1))
     }
 
     func skillRailSurface() -> some View {
@@ -55,28 +61,19 @@ private extension View {
 
     func skillIconSurface(color: Color,
                           shape: SkillIconSurfaceShape = .rounded) -> some View {
-        background {
-            switch shape {
-            case .circle:
-                Circle().fill(color.opacity(0.11))
-            case .rounded:
-                RoundedRectangle(cornerRadius: SkillUI.iconRadius, style: .continuous)
-                    .fill(color.opacity(0.11))
-            }
-        }
+        // 扁平化：去掉彩色圆角图标方块（admin 模板味），图标单色内联即可。
+        self
     }
 
     func skillRowSurface(active: Bool = false,
                          selected: Bool = false,
                          hovering: Bool = false,
                          tint: Color? = nil) -> some View {
-        let resolvedTint = tint ?? AppStyle.accent
-        return background(RoundedRectangle(cornerRadius: SkillUI.rowRadius, style: .continuous)
-            .fill(active || selected
-                ? SkillUI.selectedFill
-                : AppStyle.hoverFill.opacity(hovering ? 0.58 : 0.42)))
-        .overlay(RoundedRectangle(cornerRadius: SkillUI.rowRadius, style: .continuous)
-            .stroke(active || selected ? resolvedTint.opacity(0.30) : SkillUI.subtleStroke, lineWidth: 1))
+        // 扁平化：去彩色行卡 + 描边。平时通透，仅选中/悬停给一层淡底，和 MCP·Hooks 行一致。
+        let fill: Color = active || selected
+            ? SkillUI.selectedFill
+            : (hovering ? AppStyle.hoverFill.opacity(0.5) : Color.clear)
+        return background(RoundedRectangle(cornerRadius: SkillUI.rowRadius, style: .continuous).fill(fill))
     }
 
     func skillRailItemSurface(selected: Bool) -> some View {
@@ -118,7 +115,8 @@ private struct SkillModalShell<Rail: View, Header: View, Content: View>: View {
                 content
             }
         }
-        .background(AppStyle.windowBackground)
+        // 透明：让宿主提供底（右侧面板=磨砂、全屏管理台=纯色），不自带不透明底。
+        .background(.clear)
     }
 }
 
@@ -628,15 +626,12 @@ struct SkillsManagerView: View {
     }
 
     private var workbenchBody: some View {
-        GeometryReader { proxy in
-            SkillModalShell(railWidth: workbenchRailWidth(for: proxy.size.width)) {
-                workbenchSidebar
-            } header: {
-                header
-            } content: {
-                content
-            }
+        VStack(spacing: 0) {
+            workbenchTopNav
+            header
+            content
         }
+        .background(.clear)
         .onAppear {
             normalizeSelectedSection()
             if engine == nil { reload() }
@@ -727,6 +722,55 @@ struct SkillsManagerView: View {
         if width < 860 { return 188 }
         if width < 980 { return 204 }
         return SkillUI.railWidth
+    }
+
+    /// 顶部 section 导航（取代左侧 rail）：窄面板里横向滚动，和右侧面板自身的 tab 栏同一视觉语言。
+    /// 这样 Skills 与 MCP/Hooks 统一成「顶栏 + 单列内容」，不再栏中栏。
+    private var workbenchNavSections: [SkillManagerSection] {
+        agentFocused
+            ? [.workspace, .agents]
+            : [.library, .discover, .workspace, .deploy, .projects, .agents, .maintain, .activity]
+    }
+
+    private var workbenchTopNav: some View {
+        let theme = AppStyle.theme
+        return ScrollView(.horizontal) {
+            HStack(spacing: 2) {
+                ForEach(workbenchNavSections) { section in
+                    let selected = selectedSection == section
+                    Button {
+                        withAnimation(AgentToolsMotion.selection) { selectedSection = section }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: section.icon)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+                            Text(section.title)
+                                .font(.system(size: 11.5, weight: selected ? .semibold : .medium))
+                                .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+                                .fixedSize()
+                        }
+                        .padding(.horizontal, 9)
+                        .frame(height: 26)
+                        .background {
+                            if selected {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(theme.elevated)
+                                    .shadow(color: .black.opacity(theme.isDark ? 0.35 : 0.10), radius: 3, y: 1)
+                            }
+                        }
+                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(3)
+        }
+        .scrollIndicators(.never)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(AppStyle.hoverFill))
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
     }
 
     private var header: some View {

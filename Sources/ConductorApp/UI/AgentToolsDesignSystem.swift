@@ -346,6 +346,85 @@ struct AgentToolsSectionTabs: View {
     }
 }
 
+// MARK: - 分组表单（弹窗内用）：实底圆角块 + 发丝分行，对标 macOS 系统设置的 inset grouped；
+// 不是玻璃（无 material / 无渐变 rim），只一层干净浅填充，给表单字段「结构感」，避免裸字段飘在底上。
+
+struct AgentToolsFormGroup<Content: View>: View {
+    let content: Content
+    init(@ViewBuilder content: () -> Content) { self.content = content() }
+    var body: some View {
+        let fill: Color = AppStyle.theme.isDark ? Color.white.opacity(0.045) : Color.black.opacity(0.028)
+        return VStack(spacing: 0) { content }
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(fill))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(AppStyle.separator.opacity(0.16), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// 分组块内的发丝分行（左侧缩进，对齐内容）。
+struct AgentToolsFormDivider: View {
+    var body: some View {
+        Rectangle().fill(AppStyle.separator.opacity(0.16)).frame(height: 1).padding(.leading, 12)
+    }
+}
+
+/// 分组块内的可勾选行：前导对勾圈 + 标题（+副文），整行可点。
+struct AgentToolsCheckRow: View {
+    let title: String
+    var subtitle: String?
+    let isOn: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack(spacing: 10) {
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(isOn ? AppStyle.accent : AppStyle.textTertiary.opacity(0.65))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(AppStyle.textPrimary)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 10, weight: .regular, design: .monospaced))
+                            .foregroundStyle(AppStyle.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// 弹窗里的小节标题行：大写小标题 +（可选）右侧动作。
+struct AgentToolsFormLabel<Trailing: View>: View {
+    let title: String
+    let trailing: Trailing
+    init(_ title: String, @ViewBuilder trailing: () -> Trailing = { EmptyView() }) {
+        self.title = title
+        self.trailing = trailing()
+    }
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 10.5, weight: .semibold))
+                .tracking(0.5)
+                .textCase(.uppercase)
+                .foregroundStyle(AppStyle.textTertiary)
+            Spacer(minLength: 0)
+            trailing
+        }
+    }
+}
+
 extension View {
     func agentToolsPage() -> some View {
         modifier(AgentToolsPageModifier())
