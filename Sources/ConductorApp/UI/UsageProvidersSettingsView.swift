@@ -91,8 +91,6 @@ struct UsageProvidersSettingsView: View {
             header
             searchAndSortControls
             ProviderStatusStrip(providers: providers, states: states)
-            providerOrderHint
-            GlobalQuotaWarningSettingsCard(onApplyConfig: onApplyConfig)
             VStack(alignment: .leading, spacing: Space.xs) {
                 if filteredProviders.isEmpty {
                     ProviderSettingsEmptyState(query: query)
@@ -129,6 +127,9 @@ struct UsageProvidersSettingsView: View {
                 }
             }
             .animation(Motion.panel, value: filteredProviders.map(\.id))
+            // 全局配额告警是配置项，沉到列表末尾、单独分隔，不再插在列表顶部 chrome 里。
+            GlobalQuotaWarningSettingsCard(onApplyConfig: onApplyConfig)
+                .padding(.top, Space.sm)
         }
         .onChange(of: providersSortedAlphabetically) { _, _ in
             draggingProviderID = nil
@@ -221,24 +222,6 @@ struct UsageProvidersSettingsView: View {
             : L("按字母排序渠道（启用渠道优先）"))
         .accessibilityLabel(L("按字母排序渠道"))
         .accessibilityValue(isOn ? L("已启用") : L("已停用"))
-    }
-
-    private var providerOrderHint: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(AppStyle.textTertiary)
-                .frame(width: 16)
-            Text(providersSortedAlphabetically
-                ? L("当前按字母排序展示，启用渠道优先；点击排序按钮可切回自定义顺序。")
-                : L("拖拽把手调整顺序；状态栏、用量页和 CLI 会使用同一渠道顺序。"))
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(AppStyle.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 2)
-        .accessibilityElement(children: .combine)
     }
 
     private func enabledBinding(for provider: UsageProviderEntry) -> Binding<Bool> {
@@ -394,13 +377,6 @@ private struct ProviderStatusStrip: View {
         }.count
     }
 
-    private var manualCount: Int {
-        providers.filter {
-            if case .manual = states[$0.id] { return true }
-            return false
-        }.count
-    }
-
     private var errorCount: Int {
         providers.filter {
             if case .error = states[$0.id] { return true }
@@ -421,10 +397,8 @@ private struct ProviderStatusStrip: View {
             alignment: .leading,
             spacing: 7
         ) {
-            metric(L("全部"), "\(providers.count)", icon: "square.grid.2x2", color: AppStyle.textSecondary)
             metric(L("启用"), "\(enabledCount)", icon: "power", color: AppStyle.accent)
             metric(L("已取数"), "\(readyCount)", icon: "chart.bar.fill", color: AppStyle.doneGreen)
-            metric(L("待刷新"), "\(manualCount)", icon: "arrow.clockwise", color: AppStyle.accent)
             metric(L("待配置"), "\(setupCount)", icon: "key", color: AppStyle.waitAmber)
             if errorCount > 0 {
                 metric(L("错误"), "\(errorCount)", icon: "exclamationmark.triangle.fill", color: AppStyle.errorRed)
@@ -499,62 +473,38 @@ private struct ProviderSettingsListRow: View {
                     .accessibilityHidden(true)
             }
             Button(action: onOpen) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 10) {
-                        ProviderBrandIcon(provider: provider)
-                            .frame(width: 22, height: 22)
-                            .frame(width: 38, height: 38)
-                            .background(
-                                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .fill(status.color.opacity(status.isStrong ? 0.17 : 0.10)))
-                            .overlay(alignment: .bottomTrailing) {
-                                Circle()
-                                    .fill(enabled ? status.color : AppStyle.textTertiary)
-                                    .frame(width: 7, height: 7)
-                                    .overlay(Circle().stroke(AppStyle.windowBackground, lineWidth: 1.4))
-                                    .offset(x: 1, y: 1)
-                            }
-                            .overlay(alignment: .topTrailing) {
-                                ProviderQuotaWarningMarker(flash: warningFlash, compact: true)
-                                    .offset(x: 2, y: -2)
-                            }
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 6) {
-                                Text(provider.name)
-                                    .font(.system(size: 12.5, weight: .semibold))
-                                    .foregroundStyle(AppStyle.textPrimary)
-                                    .lineLimit(1)
-                                ProviderStatusPill(label: status.label, color: status.color)
-                                if let warningFlash {
-                                    ProviderQuotaWarningPill(flash: warningFlash)
-                                }
-                            }
-                            Text(rowSubtitle)
-                                .font(.system(size: 10))
-                                .foregroundStyle(hasWarning ? AppStyle.errorRed : AppStyle.textTertiary)
+                HStack(spacing: 10) {
+                    ProviderBrandIcon(provider: provider)
+                        .frame(width: 22, height: 22)
+                        .frame(width: 38, height: 38)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(status.color.opacity(status.isStrong ? 0.17 : 0.10)))
+                        .overlay(alignment: .topTrailing) {
+                            ProviderQuotaWarningMarker(flash: warningFlash, compact: true)
+                                .offset(x: 2, y: -2)
+                        }
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(provider.name)
+                                .font(.system(size: 12.5, weight: .semibold))
+                                .foregroundStyle(AppStyle.textPrimary)
                                 .lineLimit(1)
+                            ProviderStatusPill(label: status.label, color: status.color)
+                            if let warningFlash {
+                                ProviderQuotaWarningPill(flash: warningFlash)
+                            }
                         }
-                        Spacer(minLength: 4)
-                        ProviderMiniUsage(state: state)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(AppStyle.textTertiary)
+                        Text(rowSubtitle)
+                            .font(.system(size: 10))
+                            .foregroundStyle(hasWarning ? AppStyle.errorRed : AppStyle.textTertiary)
+                            .lineLimit(1)
                     }
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 92), spacing: 5, alignment: .leading)],
-                        alignment: .leading,
-                        spacing: 5
-                    ) {
-                        ProviderMetaChip(icon: "tag", text: profile.category)
-                        ProviderMetaChip(icon: "point.3.connected.trianglepath.dotted", text: sourceLabel)
-                        ProviderMetaChip(icon: "key", text: profile.credentialKind)
-                        if let version = tool?.version {
-                            ProviderMetaChip(icon: "number", text: version, monospaced: true)
-                        } else if tool?.isInstalled == false {
-                            ProviderMetaChip(icon: "terminal", text: L("CLI 未检测到"))
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer(minLength: 4)
+                    ProviderMiniUsage(state: state)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(AppStyle.textTertiary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -601,12 +551,6 @@ private struct ProviderSettingsListRow: View {
                 enabled.toggle()
             }
         }
-    }
-
-    private var sourceLabel: String {
-        let config = configStore.config.usage.providers[provider.id]
-        let selected = config?.sourceMode ?? profile.sourceOptions.first?.id ?? "auto"
-        return profile.sourceOptions.first { $0.id == selected }?.title ?? selected
     }
 
     private var rowSubtitle: String {
@@ -993,22 +937,36 @@ private struct ProviderSettingsDetailView: View {
 
     private var compactDetailPanel: some View {
         VStack(spacing: 0) {
-            ProviderDetailSubsection(title: L("概览"), icon: "info.circle") {
+            // 用量：打开渠道最想看的，放最前。
+            ProviderDetailSubsection(title: L("用量"), icon: "chart.bar.xaxis", collapsible: true) {
+                usageSummary
+            }
+
+            // 未配置 / 出错时的修复动作，紧跟用量。
+            if shouldShowSetupHint {
+                ProviderPanelDivider()
+                ProviderDetailSubsection(title: L("处理"), icon: "exclamationmark.triangle", collapsible: true) {
+                    ProviderRepairActionsList(actions: visibleRepairActions, color: status.color)
+                }
+            }
+
+            // 配置：Key / 来源 / 各种控件。
+            ProviderPanelDivider()
+            ProviderDetailSubsection(title: L("配置"), icon: "slider.horizontal.3", collapsible: true) {
+                VStack(alignment: .leading, spacing: 12) {
+                    ProviderKeyValueRow(label: L("说明"), value: profile.credentialHint)
+                    configurationControls
+                }
+            }
+
+            // 概览：只留 header 的 meta chips 没覆盖的几项（来源/凭证/更新/CLI版本 已在 header，不再重复）。
+            ProviderPanelDivider()
+            ProviderDetailSubsection(title: L("概览"), icon: "info.circle", collapsible: true, defaultExpanded: false) {
                 VStack(spacing: 0) {
-                    ProviderKeyValueRow(label: L("状态"), value: enabled.wrappedValue ? L("已启用") : L("已停用"), valueColor: status.color)
                     ProviderKeyValueRow(label: L("认证"), value: authLabel, valueColor: status.color)
                     if provider.statusURL != nil {
                         ProviderKeyValueRow(label: L("服务状态"), value: serviceStatusLabel, valueColor: serviceStatusColor)
                     }
-                    ProviderKeyValueRow(label: L("渠道 ID"), value: provider.id, monospaced: true)
-                    ProviderKeyValueRow(label: L("类别"), value: profile.category)
-                    ProviderKeyValueRow(label: L("凭证"), value: profile.credentialKind)
-                    ProviderKeyValueRow(label: L("来源"), value: sourceLabel)
-                    ProviderKeyValueRow(label: L("更新"), value: updatedLabel)
-                    ProviderKeyValueRow(
-                        label: L("历史样本"),
-                        value: "\(history.sampleCount(for: provider.id, snapshot: loadedSnapshot, config: configStore.config))",
-                        monospaced: true)
                     if let account = loadedSnapshot?.accountLabel, !account.isEmpty {
                         ProviderKeyValueRow(
                             label: L("账号"),
@@ -1019,14 +977,19 @@ private struct ProviderSettingsDetailView: View {
                     if let plan = loadedSnapshot?.planName, !plan.isEmpty {
                         ProviderKeyValueRow(label: L("套餐"), value: plan)
                     }
-                    ProviderKeyValueRow(label: L("CLI 版本"), value: tool?.version ?? L("未检测到"), monospaced: tool?.version != nil)
+                    ProviderKeyValueRow(label: L("渠道 ID"), value: provider.id, monospaced: true)
                     ProviderKeyValueRow(label: L("CLI 路径"), value: tool?.path ?? L("未检测到位置"), monospaced: tool?.path != nil)
                 }
             }
 
+            ProviderPanelDivider()
+            ProviderDetailSubsection(title: L("配额告警"), icon: "bell.badge", collapsible: true, defaultExpanded: false) {
+                ProviderQuotaWarningSettings(providerID: provider.id, onApplyConfig: onApplyConfig)
+            }
+
             if configStore.config.usage.providerStorageFootprintsEnabled {
                 ProviderPanelDivider()
-                ProviderDetailSubsection(title: L("本地存储"), icon: "externaldrive") {
+                ProviderDetailSubsection(title: L("本地存储"), icon: "externaldrive", collapsible: true, defaultExpanded: false) {
                     ProviderStorageFootprintBlock(
                         footprint: storageFootprint,
                         providerName: provider.name,
@@ -1034,41 +997,16 @@ private struct ProviderSettingsDetailView: View {
                 }
             }
 
-            if shouldShowSetupHint {
-                ProviderPanelDivider()
-                ProviderDetailSubsection(title: L("处理"), icon: "exclamationmark.triangle") {
-                    ProviderRepairActionsList(actions: visibleRepairActions, color: status.color)
-                }
-            }
-
-            ProviderPanelDivider()
-            ProviderDetailSubsection(title: L("用量"), icon: "chart.bar.xaxis") {
-                usageSummary
-            }
-
-            ProviderPanelDivider()
-            ProviderDetailSubsection(title: L("配额告警"), icon: "bell.badge") {
-                ProviderQuotaWarningSettings(providerID: provider.id, onApplyConfig: onApplyConfig)
-            }
-
-            ProviderPanelDivider()
-            ProviderDetailSubsection(title: L("配置"), icon: "slider.horizontal.3") {
-                VStack(alignment: .leading, spacing: 12) {
-                    ProviderKeyValueRow(label: L("说明"), value: profile.credentialHint)
-                    configurationControls
-                }
-            }
-
             if hasProviderWebDebugPanel {
                 ProviderPanelDivider()
-                ProviderDetailSubsection(title: providerWebDebugTitle, icon: "globe") {
+                ProviderDetailSubsection(title: providerWebDebugTitle, icon: "globe", collapsible: true, defaultExpanded: false) {
                     openAIWebDebugPanel
                 }
             }
 
             if !profile.toggles.isEmpty {
                 ProviderPanelDivider()
-                ProviderDetailSubsection(title: L("选项"), icon: "switch.2") {
+                ProviderDetailSubsection(title: L("选项"), icon: "switch.2", collapsible: true, defaultExpanded: false) {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(profile.toggles) { toggle in
                             ProviderToggleRow(
@@ -1523,7 +1461,9 @@ private struct ProviderSettingsDetailView: View {
         }
         guard !tokenAccounts.isEmpty else { return L("未配置账号") }
         guard let activeTokenAccount else { return L("%ld 个账号", tokenAccounts.count) }
-        return L("%1$ld 个账号 · 当前 %@",
+        // 占位符必须全用位置号：混用 %1$ld 和裸 %@ 会让 NSString 格式解析错位，
+        // 把 Int 当对象指针 respondsToSelector → 野指针崩（点 codex 渠道详情即崩的真凶）。
+        return L("%1$ld 个账号 · 当前 %2$@",
                  tokenAccounts.count,
                  activeTokenAccount.displayName)
     }
@@ -2767,25 +2707,53 @@ private struct ProviderMiniUsage: View {
 private struct ProviderDetailSubsection<Content: View>: View {
     let title: String
     let icon: String
+    var collapsible = false
     @ViewBuilder var content: Content
+    @State private var expanded: Bool
+
+    init(title: String, icon: String, collapsible: Bool = false, defaultExpanded: Bool = true,
+         @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.icon = icon
+        self.collapsible = collapsible
+        self.content = content()
+        _expanded = State(initialValue: collapsible ? defaultExpanded : true)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 7) {
-                Image(systemName: icon)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(AppStyle.accent)
-                    .frame(width: 14)
-                Text(title)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppStyle.textPrimary)
-                Spacer(minLength: 0)
+            if collapsible {
+                Button { withAnimation(Motion.snappy) { expanded.toggle() } } label: {
+                    headerRow(showChevron: true)
+                }
+                .buttonStyle(.plain)
+            } else {
+                headerRow(showChevron: false)
             }
-            content
+            if expanded { content }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func headerRow(showChevron: Bool) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(AppStyle.accent)
+                .frame(width: 14)
+            Text(title)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppStyle.textPrimary)
+            Spacer(minLength: 0)
+            if showChevron {
+                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(AppStyle.textTertiary)
+            }
+        }
+        .contentShape(Rectangle())
     }
 }
 
@@ -3443,9 +3411,10 @@ private struct ProviderUsageCompactDetail: View {
                 }
 
                 if samples.count >= 2 {
+                    // 不要再套 .frame(height: 74)——compact:false 的图内部是 120pt + 脚注，
+                    // 压成 74 会居中溢出、上面盖住上一条额度行（"重置于…"被图轴叠住）。让它用本来的高度。
                     UsageTrendChart(samples: samples, compact: false)
-                        .frame(height: 74)
-                        .padding(.top, 2)
+                        .padding(.top, 4)
                 }
             }
         }
@@ -4029,8 +3998,10 @@ private struct ProviderUsageInlineBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                VStack(alignment: .leading, spacing: 1) {
+            // 顶对齐（不用 firstTextBaseline——「基础」胶囊是框死高度的，没有文字基线，
+            // 会把右侧百分比的垂直位置算歪导致叠字）。左块吃满宽度先截断，右侧百分比 fixedSize 钉住。
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
                         Text(title)
                             .font(.system(size: 11, weight: .semibold))
@@ -4050,12 +4021,14 @@ private struct ProviderUsageInlineBar: View {
                         .foregroundStyle(AppStyle.textTertiary)
                         .lineLimit(1)
                 }
-                Spacer(minLength: 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Text(percentText)
-                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(AppStyle.textSecondary)
                     .lineLimit(1)
+                    .fixedSize()
+                    .layoutPriority(1)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -4092,14 +4065,9 @@ private struct ProviderUsageInlineBar: View {
     }
 
     private var percentText: String {
-        if showUsed {
-            return L("已用 %ld%% · 剩 %ld%%",
-                     Int(window.usedPercent.rounded()),
-                     Int(window.remainingPercent.rounded()))
-        }
-        return L("剩 %ld%% · 已用 %ld%%",
-                 Int(window.remainingPercent.rounded()),
-                 Int(window.usedPercent.rounded()))
+        // 单个数即可——条形本身已表达占比，不再「剩X% · 已用Y%」挤成一长串。
+        if showUsed { return L("已用 %ld%%", Int(window.usedPercent.rounded())) }
+        return L("剩 %ld%%", Int(window.remainingPercent.rounded()))
     }
 
     private var accessibilityValue: String {

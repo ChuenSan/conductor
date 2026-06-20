@@ -151,8 +151,8 @@ final class CursorUsageTests: XCTestCase {
 
 private final class CursorUsageMockURLProtocol: URLProtocol {
     private static let lock = NSLock()
-    private static var responses: [String: [(statusCode: Int, body: String)]] = [:]
-    private static var requests: [URLRequest] = []
+    nonisolated(unsafe) private static var responses: [String: [(statusCode: Int, body: String)]] = [:]
+    nonisolated(unsafe) private static var requests: [URLRequest] = []
 
     static func reset() {
         lock.lock()

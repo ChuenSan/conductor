@@ -949,7 +949,7 @@ struct AgentToolsOverviewView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             toolbar
-            metricStrip
+            domainHealthCards
             capabilityMatrix
             quickActions
         }
@@ -985,74 +985,97 @@ struct AgentToolsOverviewView: View {
         }
     }
 
-    private var metricStrip: some View {
-        HStack(alignment: .center, spacing: 0) {
-            statBlock(
-                value: "\(store.installedCLICount)",
-                title: L("CLI 已安装"),
-                sub: L("%ld 未检测", store.missingCLICount),
-                valueColor: AppStyle.textPrimary,
-                module: .cli)
-            statDivider
-            statBlock(
-                value: "\(store.configuredProviderCount)",
-                title: L("渠道已配置"),
-                sub: L("%ld 个可见渠道", store.providers.count),
-                valueColor: AppStyle.textPrimary,
-                module: .usage)
-            statDivider
-            statBlock(
-                value: "\(store.loadedProviderCount)",
-                title: L("用量已取数"),
-                sub: store.usageReport.map { L("本地 %@", UsageRelative.text($0.generatedAt)) } ?? L("本地未扫描"),
-                valueColor: AppStyle.textPrimary,
-                module: .usage)
-            statDivider
-            statBlock(
-                value: "\(store.attentionCount)",
+    /// 各域健康卡：一排可点的卡，每张 = 一个域（图标 + 大数字 + 状态 + 进入）。
+    /// 替代原来一条内联的「15 CLI已装 | 4 渠道 | …」数字带——一眼看全局健康，点卡进对应模块。
+    private var domainHealthCards: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 156), spacing: 10, alignment: .top)],
+            spacing: 10
+        ) {
+            domainCard(
+                icon: "terminal", title: "CLI",
+                value: "\(store.installedCLICount)", unit: L("已安装"),
+                hint: store.missingCLICount > 0 ? L("%ld 个未检测到", store.missingCLICount) : L("全部就绪"),
+                tint: AppStyle.accent, attention: false, module: .cli)
+            domainCard(
+                icon: "chart.bar.xaxis", title: L("渠道 / 用量"),
+                value: "\(store.configuredProviderCount)", unit: L("已配置"),
+                hint: L("%1$ld 已取数 · 共 %2$ld 渠道", store.loadedProviderCount, store.providers.count),
+                tint: AppStyle.accent, attention: false, module: .usage)
+            domainCard(
+                icon: "point.3.connected.trianglepath.dotted", title: "MCP",
+                value: "\(store.mcpServers.count)", unit: L("服务器"),
+                hint: store.mcpServers.isEmpty ? L("未配置") : L("已发现"),
+                tint: AppStyle.accent, attention: false, module: .mcp)
+            domainCard(
+                icon: "link", title: "Hooks",
+                value: "\(store.hookEntries.count)", unit: L("条"),
+                hint: store.hookEntries.isEmpty ? L("未配置") : L("已配置"),
+                tint: AppStyle.accent, attention: false, module: .hooks)
+            domainCard(
+                icon: "wand.and.stars", title: "Skills",
+                value: "\(store.skillTools.count)", unit: L("个"),
+                hint: L("中央库"),
+                tint: AppStyle.accent, attention: false, module: .skills)
+            domainCard(
+                icon: store.attentionCount == 0 ? "checkmark.seal.fill" : "exclamationmark.triangle.fill",
                 title: L("待处理"),
-                sub: store.attentionCount == 0 ? L("基础状态正常") : L("查看右侧详情"),
-                valueColor: store.attentionCount == 0 ? AppStyle.textPrimary : AppStyle.waitAmber,
-                module: .overview)
-            Spacer(minLength: 0)
+                value: "\(store.attentionCount)", unit: L("项"),
+                hint: store.attentionCount == 0 ? L("一切就绪") : L("需要你处理"),
+                tint: store.attentionCount == 0 ? AppStyle.doneGreen : AppStyle.waitAmber,
+                attention: store.attentionCount > 0, module: .overview)
         }
-        .padding(.horizontal, 2)
     }
 
-    /// 分隔数字块的呼吸：极淡竖向渐隐线（非硬线，两端淡出）。
-    private var statDivider: some View {
-        LinearGradient(
-            colors: [.clear, AppStyle.separator.opacity(0.55), .clear],
-            startPoint: .top, endPoint: .bottom)
-            .frame(width: 1, height: 14)
-            .padding(.horizontal, 16)
-    }
-
-    /// 编辑化数字块：大号数值 + 小标签，坐在概览卡里（与 app 其他面板同款 toolsCard 表面）。
-    private func statBlock(
-        value: String,
-        title: String,
-        sub: String,
-        valueColor: Color,
-        module: AgentToolsManagementModule
+    private func domainCard(
+        icon: String, title: String, value: String, unit: String, hint: String,
+        tint: Color, attention: Bool, module: AgentToolsManagementModule
     ) -> some View {
-        Button {
-            if module != .overview { onOpenModule(module) }
+        let interactive = module != .overview
+        return Button {
+            if interactive { onOpenModule(module) }
         } label: {
-            HStack(spacing: 6) {
-                Text(value)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(valueColor)
-                Text(title)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(AppStyle.textSecondary)
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
+                    Image(systemName: icon)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(tint)
+                        .frame(width: 28, height: 28)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tint.opacity(0.13)))
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppStyle.textSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if interactive {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(AppStyle.textTertiary)
+                    }
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(value)
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(attention ? tint : AppStyle.textPrimary)
+                    Text(unit)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppStyle.textTertiary)
+                }
+                Text(hint)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(attention ? tint : AppStyle.textTertiary)
+                    .lineLimit(1)
             }
-            .contentShape(Rectangle())
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .agentToolsGlass()
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
+                    .strokeBorder(attention ? tint.opacity(0.4) : Color.clear, lineWidth: 1))
         }
         .buttonStyle(PressScaleStyle())
-        .help(sub)
-        .disabled(module == .overview)
+        .disabled(!interactive)
     }
 
     private var capabilityMatrix: some View {
@@ -1213,7 +1236,7 @@ struct AgentToolsOverviewInspector: View {
 
     private var defaultState: some View {
         VStack(alignment: .leading, spacing: 12) {
-            inspectorSection(L("数据状态")) {
+            AgentToolsSection(L("数据状态")) {
                 infoRow(L("CLI 缓存"), store.cliDetectedAt.map { UsageFormatting.agoText($0) } ?? L("无缓存"))
                 infoRow(L("账号渠道"), L("%ld 个可见", store.providers.count))
                 infoRow(L("已配置"), "\(store.configuredProviderCount)")
@@ -1250,7 +1273,7 @@ struct AgentToolsOverviewInspector: View {
                 }
             }
 
-            inspectorSection(L("基础信息")) {
+            AgentToolsSection(L("基础信息")) {
                 infoRow(L("命令"), row.command)
                 infoRow("CLI", row.cliSignal.shortLabel)
                 if let version = row.tool?.version { infoRow(L("版本"), version) }
@@ -1258,7 +1281,7 @@ struct AgentToolsOverviewInspector: View {
             }
 
             if let path = row.tool?.path {
-                inspectorSection(L("路径")) {
+                AgentToolsSection(L("路径")) {
                     Text(path)
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(AppStyle.textSecondary)
@@ -1268,7 +1291,7 @@ struct AgentToolsOverviewInspector: View {
                 }
             }
 
-            inspectorSection(L("能力")) {
+            AgentToolsSection(L("能力")) {
                 signalRow("CLI", row.cliSignal)
                 signalRow(L("凭证"), row.credentialSignal)
                 signalRow("Usage", row.usageSignal)
@@ -1316,29 +1339,10 @@ struct AgentToolsOverviewInspector: View {
         }
     }
 
-    private func inspectorSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.6)
-                .textCase(.uppercase)
-                .foregroundStyle(AppStyle.textTertiary)
-            content()
-        }
-    }
-
+    /// 收口到共享组件（原来手搓的 inspectorSection / infoRow 与 AgentToolsSection / AgentToolsInfoRow
+    /// 完全同构）。signalRow 是 Overview 专有（渲 AgentToolsSignal），保留。
     private func infoRow(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(AppStyle.textTertiary)
-            Spacer(minLength: 0)
-            Text(value)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(AppStyle.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
+        AgentToolsInfoRow(label: label, value: value)
     }
 
     private func signalRow(_ label: String, _ signal: AgentToolsSignal) -> some View {

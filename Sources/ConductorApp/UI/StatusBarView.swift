@@ -5,10 +5,6 @@ import SwiftUI
 /// 底部状态栏（自绘，跟主题）：当前 pane 的 cwd 全路径 + git 分支 + 实时时间。
 struct StatusBarView: View {
     @ObservedObject var coordinator: AppCoordinator
-    @ObservedObject var usageMonitor: UsageMonitor
-    @ObservedObject private var configStore = ConfigStore.shared
-    @ObservedObject private var warningCenter = UsageQuotaWarningCenter.shared
-    @State private var showingProviderSwitcher = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -35,45 +31,7 @@ struct StatusBarView: View {
                 }
             }
             Spacer(minLength: 8)
-            if let flash = standaloneWarningFlash {
-                QuotaWarningFlashChip(
-                    flash: flash,
-                    hidePersonalInfo: configStore.config.usage.hidePersonalInfo)
-                {
-                    coordinator.openTools(.usage)
-                }
-            }
-            if usageMonitor.providerOverview.hasContent {
-                ProviderUsageOverviewChip(
-                    overview: usageMonitor.providerOverview,
-                    isPreparing: usageMonitor.isPreparingProviderOverview,
-                    usageBarsShowUsed: configStore.config.usage.usageBarsShowUsed)
-                {
-                    showingProviderSwitcher = true
-                } onRefresh: {
-                    usageMonitor.refreshConfiguredProviders()
-                }
-                .popover(isPresented: $showingProviderSwitcher, arrowEdge: .bottom) {
-                    ProviderUsageSwitcherPopover(
-                        items: usageMonitor.providerSwitcherItems,
-                        isPreparing: usageMonitor.isPreparingProviderOverview,
-                        isScanningStorage: usageMonitor.isScanningProviderStorage,
-                        usageBarsShowUsed: configStore.config.usage.usageBarsShowUsed,
-                        onRefresh: { usageMonitor.refreshConfiguredProviders() },
-                        onOpenUsage: {
-                            showingProviderSwitcher = false
-                            coordinator.openTools(.usage)
-                        })
-                }
-            }
-            CodexUsageChip(
-                snapshot: usageMonitor.codex,
-                warningFlash: warningCenter.activeFlashes["codex"],
-                usageBarsShowUsed: configStore.config.usage.usageBarsShowUsed,
-                resetTimesShowAbsolute: configStore.config.usage.resetTimesShowAbsolute)
-            {
-                coordinator.openTools(.usage)
-            }
+            // 右下角用量指示已移除（用户：功能不需要）。用量仍可在「渠道/用量」面板查看。
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 Text(ctx.date.formatted(date: .omitted, time: .shortened))
                     .font(.system(size: 10.5, weight: .medium, design: .rounded))
@@ -85,23 +43,6 @@ struct StatusBarView: View {
         .frame(height: 21)
         .frame(maxWidth: .infinity)
         .background(.clear)   // 透明：用根底统一磨砂
-        .onAppear {
-            usageMonitor.prepareProviderOverview()
-            usageMonitor.startProviderSmartRefresh()
-        }
-        .onChange(of: configStore.config) { _, _ in
-            usageMonitor.prepareProviderOverview(force: true)
-            usageMonitor.restartProviderSmartRefresh()
-        }
-    }
-
-    private var standaloneWarningFlash: UsageQuotaWarningFlash? {
-        let now = Date()
-        return warningCenter.activeFlashes.values
-            .filter { flash in
-                flash.until > now && (flash.providerID != "codex" || usageMonitor.codex == nil)
-            }
-            .max { $0.postedAt < $1.postedAt }
     }
 
     private func item(_ icon: String, _ text: String, accent: Bool = false) -> some View {

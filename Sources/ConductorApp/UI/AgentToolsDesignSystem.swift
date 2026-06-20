@@ -283,115 +283,66 @@ struct AgentToolsLinkButton: View {
     }
 }
 
-struct AgentToolsWorkbenchBrand: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    var tint: Color = AppStyle.accent
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: Radius.sm + 1, style: .continuous).fill(tint.opacity(0.12)))
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(AppStyle.textPrimary)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.system(size: 9.5, weight: .medium))
-                    .foregroundStyle(AppStyle.textTertiary)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 14)
-        .padding(.bottom, 10)
-    }
-}
-
-struct AgentToolsWorkbenchRailSection<Content: View>: View {
-    let title: String
-    let content: Content
-
-    init(_ title: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(.system(size: 9.5, weight: .bold))
-                .foregroundStyle(AppStyle.textTertiary)
-                .padding(.horizontal, 9)
-                .textCase(.uppercase)
-            content
-        }
-    }
-}
-
-struct AgentToolsWorkbenchRailButton: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    var badge: String?
-    let selected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
-                    .frame(width: 18)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.system(size: 11.5, weight: selected ? .bold : .semibold))
-                        .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
-                        .lineLimit(1)
-                    Text(subtitle)
-                        .font(.system(size: 8.8, weight: .medium))
-                        .foregroundStyle(AppStyle.textTertiary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 4)
-
-                if let badge {
-                    Text(badge)
-                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.horizontal, 9)
-            .frame(height: 38)
-            .background(
-                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                    .fill(selected ? AppStyle.accent.opacity(0.12) : Color.clear))
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                    .stroke(selected ? AppStyle.accent.opacity(0.28) : Color.clear, lineWidth: 1))
-            .contentShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
-        }
-        .buttonStyle(PressScaleStyle())
-        .help(subtitle)
-    }
-}
-
 private struct AgentToolsPageModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(AgentToolsChrome.pagePadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+/// 一段 workspace 分段 tab。替代 MCP/Hooks 各自的第二条 208 侧栏（消灭"栏中栏"），
+/// 让所有模块统一成「rail → workspace(顶部分段 + 内容) → inspector」一套导航。
+struct AgentToolsSectionTab: Identifiable {
+    let id: String
+    let title: String
+    let icon: String
+    var badge: String?
+}
+
+/// 顶部分段控件（视觉与 CLIToolsView 的 inspectorModePicker 一致，全 app 同一语言）。
+struct AgentToolsSectionTabs: View {
+    let tabs: [AgentToolsSectionTab]
+    let selectedID: String
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(tabs) { tab in
+                let selected = tab.id == selectedID
+                Button { onSelect(tab.id) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(tab.title)
+                            .font(.system(size: 12, weight: selected ? .semibold : .medium))
+                        if let badge = tab.badge {
+                            Text(badge)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(AppStyle.textSecondary)
+                                .padding(.horizontal, 4)
+                                .frame(minWidth: 14, minHeight: 14)
+                                .background(Capsule().fill(AppStyle.subtleFill))
+                        }
+                    }
+                    .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+                    .padding(.horizontal, 12)
+                    .frame(height: 30)
+                    .background {
+                        if selected {
+                            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                                .fill(AppStyle.elevated)
+                                .shadow(color: .black.opacity(AppStyle.theme.isDark ? 0.3 : 0.08), radius: 3, y: 1)
+                        }
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(3)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(AppStyle.hoverFill))
     }
 }
 

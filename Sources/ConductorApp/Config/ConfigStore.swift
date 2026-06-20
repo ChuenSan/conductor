@@ -53,7 +53,11 @@ final class ConfigStore: ObservableObject {
               let corrected = CodexActiveAccountResolver.correctedTokenAccountData(
                   configured: codexConfig.tokenAccounts,
                   discoveredAccounts: CodexManagedAccountDiscovery.tokenAccounts(
-                      env: UsageCredentials.providerDiscoveryEnvironment()))
+                      env: UsageCredentials.providerDiscoveryEnvironment())),
+              // 幂等护栏：修正值与现存一致就别写——否则每次 reload 都"修正"+写盘，
+              // 触发 ConfigWatcher → reloadConfig → reload → 又写，形成 ~0.4s 的热更新死循环
+              // （CPU 飙高 + codex 详情被反复重渲，是 codex 渠道点开即崩的根因）。
+              codexConfig.tokenAccounts != corrected
         else {
             return false
         }

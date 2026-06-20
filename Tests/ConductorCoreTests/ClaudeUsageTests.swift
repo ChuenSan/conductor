@@ -687,8 +687,8 @@ private final class ClaudeUsageMockURLProtocol: URLProtocol {
     }
 
     private static let lock = NSLock()
-    private static var responses: [String: [Response]] = [:]
-    private static var requests: [URLRequest] = []
+    nonisolated(unsafe) private static var responses: [String: [Response]] = [:]
+    nonisolated(unsafe) private static var requests: [URLRequest] = []
 
     static func reset() {
         lock.lock()
