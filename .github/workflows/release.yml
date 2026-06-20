@@ -47,11 +47,12 @@ jobs:
           {
             echo "## Highlights"
             echo
-            echo "- Added a desktop Companion pet that ambiently reflects agent state — thinking, done, needs-approval, error — in the screen corner."
-            echo "- Inline approve/deny right from the pet's bubble, sharing the same Feed approval engine as the side panel."
-            echo "- Companion settings: enable, nickname, dock corner, speech bubbles, and separate Companion / System notification toggles (config-driven, no hook install needed)."
-            echo "- Codex Pets sprite-sheet support: drop an 8x9 pet bundle into ~/.config/conductor/pets/ (openpets-compatible), plus built-in pets."
-            echo "- Full English/Chinese localization for the Companion surface."
+            echo "- Agent Tools — Skills, MCP and Hooks — now live in the right-hand panel; the separate management window is gone."
+            echo "- Unified flat redesign across all three, each shaped to how it actually works: MCP as a server list with per-app install lights, Hooks as a lifecycle-event timeline with per-agent lights, Skills as a top-nav single column."
+            echo "- New Hooks builder lets one automation target multiple lifecycle events at once."
+            echo "- macOS System Settings–style grouped forms for the add / new dialogs."
+            echo "- Usage tracking aligned with CodexBar; fixed the Codex provider crash and the config hot-reload loop."
+            echo "- Auto-update now installs and restarts after download."
             echo
             echo "## Assets"
             echo
