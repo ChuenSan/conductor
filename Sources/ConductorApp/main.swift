@@ -78,6 +78,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         installKeyMonitor()
         memoryPressureMonitor.start()
+        DispatchQueue.main.async { [weak self] in
+            self?.coordinator?.presentOnboardingIfNeeded()
+        }
 
         // 桌面通知宠物：内置 Agent 状态的一张环境化的脸（订阅真实在线信号）。
         let pet = CompanionController(coordinator: coordinator, feedCenter: coordinator.feedCenter)
@@ -95,6 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let petItem = NSMenuItem(title: L("桌面伙伴"), action: #selector(toggleCompanion), keyEquivalent: "")
         petItem.target = self
         appMenu.addItem(petItem)
+        let introItem = ClosureMenuItem(L("认识 Conductor"), systemImage: "sparkles") { [weak self] in
+            self?.coordinator?.openOnboarding()
+        }
+        appMenu.addItem(introItem)
         let taskCardsItem = ClosureMenuItem(L("任务卡片"), systemImage: "checklist") { [weak self] in
             self?.coordinator?.openTaskCards()
         }

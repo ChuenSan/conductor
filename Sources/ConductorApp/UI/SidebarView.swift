@@ -9,6 +9,12 @@ enum SidebarListMode: String {
     case folders
 }
 
+enum WorkspaceReorderDragPolicy {
+    static let rowStartsDrag = true
+    static let handleStartsDrag = true
+    static let handleWidth: CGFloat = 20
+}
+
 /// 左侧工作区栏（自绘，深色 Craft 风）：列出工作区；点击切换，`+` 选目录新建，active 高亮。
 /// 分区头可切到「文件夹」模式：家目录文件夹树，点击展开下级、右键/悬停按钮在该目录开终端。
 /// 右键菜单可重命名（行内编辑）/ 删除工作区。
@@ -156,6 +162,7 @@ struct SidebarView: View {
                 let sessionsCollapsed: Bool? = sessionRecords.isEmpty
                     ? nil
                     : collapsedSessionLists.contains(ws.id.value)
+                let canReorder = workspaces.count > 1 && editingWorkspace == nil
                 let row = WorkspaceRow(
                     name: ws.name,
                     summary: summary,
@@ -167,6 +174,7 @@ struct SidebarView: View {
                     sessionsCollapsed: sessionsCollapsed,
                     draft: $draftName,
                     focused: $renameFocused,
+                    reorderWorkspaceID: canReorder ? ws.id.value : nil,
                     onSelect: { if editingWorkspace == nil { coordinator.selectWorkspace(ws.id) } },
                     onCommit: { commitRename() },
                     onToggleSessions: {
@@ -226,8 +234,8 @@ struct SidebarView: View {
                     .disabled(workspaces.count <= 1)
                 }
 
-                // 仅多个工作区时才挂拖拽重排（单个无处可排，且避免与点击争手势）
-                if workspaces.count > 1, editingWorkspace == nil {
+                // 仅多个工作区时才允许拖拽重排；整行可拖，右侧把手作为提示，避免排序入口藏太深。
+                if canReorder {
                     row
                         .draggable(ws.id.value)
                         .dropDestination(for: String.self) { dropped, _ in
@@ -644,6 +652,23 @@ struct SidebarView: View {
     }
 }
 
+private struct WorkspaceReorderHandle: View {
+    let workspaceID: String
+    let isVisible: Bool
+
+    var body: some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(AppStyle.textTertiary)
+            .frame(width: WorkspaceReorderDragPolicy.handleWidth, height: 24)
+            .contentShape(Rectangle())
+            .opacity(isVisible ? 0.72 : 0.20)
+            .help(L("拖动重排工作区"))
+            .onTapGesture { }
+            .draggable(workspaceID)
+    }
+}
+
 private struct SidebarSessionRow: View {
     let record: AgentSessionRecord
     let coordinator: AppCoordinator
@@ -761,6 +786,7 @@ private struct WorkspaceRow: View {
     let sessionsCollapsed: Bool?
     @Binding var draft: String
     var focused: FocusState<Bool>.Binding
+    let reorderWorkspaceID: String?
     let onSelect: () -> Void
     let onCommit: () -> Void
     let onToggleSessions: () -> Void
@@ -856,9 +882,15 @@ private struct WorkspaceRow: View {
                         }
                         .foregroundStyle(AppStyle.accent)
                         .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
+                }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !isEditing, let reorderWorkspaceID {
+                    WorkspaceReorderHandle(workspaceID: reorderWorkspaceID, isVisible: hovering || selected)
+                        .padding(.top, 15)
+                        .transition(.opacity)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: isCollapsed ? .center : .leading)

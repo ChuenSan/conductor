@@ -81,6 +81,8 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var settingsPresentation = SettingsPresentationState()
     /// 主窗口内工具面板展示状态（CLI / 用量 / Skills / Hooks，与设置面板互斥）。
     @Published private(set) var cliToolsPresentation = SettingsPresentationState()
+    /// 首启 / 大版本介绍浮层。
+    @Published private(set) var onboardingPresentation = OnboardingPresentationState(pageCount: OnboardingCatalog.pages.count)
     /// Agent 会话管理面板展示状态（与设置 / 工具面板互斥）。
     @Published private(set) var sessionPresentation = SettingsPresentationState()
     /// 会话面板筛选范围（工作区路径或 pane cwd）；nil 表示全部。
@@ -172,6 +174,7 @@ final class AppCoordinator: ObservableObject {
     let agentSessionBindings: AgentSessionBindingStore
     /// 通用 surface resume binding（tmux/自定义 shell 恢复），低于 agent session 优先级。
     let surfaceResumeBindings: SurfaceResumeBindingStore
+    private let onboardingLaunchPolicy = OnboardingLaunchPolicy()
     /// 本轮启动时记录的净化后 agent 启动命令，hook 上报 session 后合并进账本。
     var paneLaunchCommands: [PaneID: AgentLaunchCommandSnapshot] = [:]
     /// Socket/CLI 启动的 agent job。完成状态由该 pane 后续 activity/done 记录归约。
@@ -436,6 +439,34 @@ final class AppCoordinator: ObservableObject {
 
     func closeSettings() {
         settingsPresentation.close()
+    }
+
+    func presentOnboardingIfNeeded() {
+        guard onboardingLaunchPolicy.shouldPresent() else { return }
+        openOnboarding()
+    }
+
+    func openOnboarding() {
+        onboardingPresentation.open()
+    }
+
+    func closeOnboarding(markSeen: Bool = true) {
+        if markSeen {
+            onboardingLaunchPolicy.markSeen()
+        }
+        onboardingPresentation.close()
+    }
+
+    func nextOnboardingPage() {
+        onboardingPresentation.next()
+    }
+
+    func previousOnboardingPage() {
+        onboardingPresentation.previous()
+    }
+
+    func selectOnboardingPage(_ index: Int) {
+        onboardingPresentation.selectPage(index)
     }
 
     /// 是否有右侧侧栏面板（设置 / CLI 工具 / 会话）正在展示。用于让快捷操作面板让位。

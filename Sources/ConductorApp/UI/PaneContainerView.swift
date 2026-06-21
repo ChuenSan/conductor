@@ -66,6 +66,22 @@ enum PaneHeaderActionPresentation {
     }
 }
 
+enum PaneHeaderChromePolicy {
+    static let activeHeaderTintOpacity: CGFloat = 0.045
+    static let controlsCornerRadius: CGFloat = 8
+    static let controlsBackdropBorderOpacity: CGFloat = 0.08
+
+    static func controlOpacity(isActive: Bool, isHovering: Bool) -> CGFloat {
+        if isHovering { return 0.94 }
+        return isActive ? 0.70 : 0.26
+    }
+
+    static func controlsBackdropOpacity(isActive: Bool, isHovering: Bool) -> CGFloat {
+        if isHovering { return 0.12 }
+        return isActive ? 0.055 : 0
+    }
+}
+
 struct PaneHeaderControlLayout: Equatable {
     let buttonFrames: [NSRect]
     let buttonSize: CGFloat
@@ -776,7 +792,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
 @MainActor
 final class PaneHeaderView: NSView {
     var title = L("终端") { didSet { needsDisplay = true } }
-    var isActive = false { didSet { restyleButtons(); needsDisplay = true } }
+    var isActive = false { didSet { updateHeaderChrome(); needsDisplay = true } }
     /// 头条左侧的 Agent logo（如该 pane 在跑 codex/claude…）。
     var agentLogo: NSImage? { didSet { needsDisplay = true } }
     /// Agent 思考起点：非 nil 时头条右侧画活计时「2:31」，每秒重绘；置 nil 即收。
@@ -814,6 +830,8 @@ final class PaneHeaderView: NSView {
     var onClick: (() -> Void)?
     var onAction: ((PaneContextAction) -> Void)?
     private var dragStarted = false
+    private var hovering = false { didSet { updateHeaderChrome() } }
+    private var trackingArea: NSTrackingArea?
     private let controls = NSView()
     private var controlButtons: [PaneHeaderButton] = []
     private let zoomBadge = PaneZoomBadge()
@@ -849,6 +867,28 @@ final class PaneHeaderView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         syncThinkingTimer()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        hovering = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hovering = false
     }
 
     private func syncThinkingTimer() {
@@ -939,7 +979,7 @@ final class PaneHeaderView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         // 无分隔线、无底色（与卡片融为一体）；仅活动态极淡 accent 染色。
         if isActive {
-            NSColor(AppStyle.accent).withAlphaComponent(0.08).setFill()
+            NSColor(AppStyle.accent).withAlphaComponent(PaneHeaderChromePolicy.activeHeaderTintOpacity).setFill()
             bounds.fill()
         }
         var titleX: CGFloat = 11
@@ -987,6 +1027,9 @@ final class PaneHeaderView: NSView {
     private func setupControls() {
         controls.wantsLayer = true
         controls.layer?.masksToBounds = true
+        controls.layer?.cornerRadius = PaneHeaderChromePolicy.controlsCornerRadius
+        controls.layer?.cornerCurve = .continuous
+        controls.layer?.borderWidth = 1
 
         for action in PaneHeaderActionPresentation.primaryActions {
             let button = PaneHeaderButton(
@@ -1003,10 +1046,17 @@ final class PaneHeaderView: NSView {
         controls.addSubview(moreButton)
         controlButtons.append(moreButton)
         addSubview(controls)
-        restyleButtons()
+        updateHeaderChrome()
     }
 
-    private func restyleButtons() {
+    private func updateHeaderChrome() {
+        controls.alphaValue = PaneHeaderChromePolicy.controlOpacity(isActive: isActive, isHovering: hovering)
+        controls.layer?.backgroundColor = NSColor(AppStyle.hoverFill)
+            .withAlphaComponent(PaneHeaderChromePolicy.controlsBackdropOpacity(isActive: isActive, isHovering: hovering))
+            .cgColor
+        controls.layer?.borderColor = NSColor(AppStyle.textPrimary)
+            .withAlphaComponent((isActive || hovering) ? PaneHeaderChromePolicy.controlsBackdropBorderOpacity : 0)
+            .cgColor
         for button in controlButtons {
             button.isPaneActive = isActive
         }
@@ -1114,7 +1164,7 @@ private final class PaneHeaderButton: NSView {
     }
 
     private func updateAppearance() {
-        let activeOpacity = isPaneActive ? 0.72 : 0.46
+        let activeOpacity = isPaneActive ? 0.88 : 0.74
         imageView.contentTintColor = NSColor(isPaneActive ? AppStyle.textSecondary : AppStyle.textTertiary)
             .withAlphaComponent(hovering ? 0.95 : activeOpacity)
         layer?.backgroundColor = (hovering || pressing)

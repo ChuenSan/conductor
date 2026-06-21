@@ -12,6 +12,33 @@ struct RootView: View {
     @ObservedObject private var panelWidths = PanelWidthStore.shared
 
     var body: some View {
+        ZStack {
+            mainLayout
+            if coordinator.onboardingPresentation.isPresented {
+                onboardingOverlay
+            }
+        }
+        .id(localization.value)   // 语言切换 → 重建子树（TerminalAreaView 复用同一 NSView，终端不受影响）
+        .background {
+            // 光晕主题 → 暗底 + 彩色 radial 光晕（不透桌面）；纯色/玻璃主题 → 统一磨砂基底（露出背衬模糊）。
+            ThemeBackdrop(theme: AppStyle.theme)
+        }
+        .ignoresSafeArea()
+        .animation(Motion.panel, value: coordinator.sidebarPresentation.isCollapsed)
+        .animation(Motion.panel, value: coordinator.settingsPresentation.isPresented)
+        .animation(Motion.panel, value: coordinator.cliToolsPresentation.isPresented)
+        .animation(Motion.panel, value: coordinator.sessionPresentation.isPresented)
+        .animation(Motion.panel, value: coordinator.onboardingPresentation.isPresented)
+        .animation(Motion.snappy, value: coordinator.onboardingPresentation.pageIndex)
+        // Agent Tools 管理台改为独立 NSWindow（见 AppCoordinator+AgentToolsWindow），不再用模态 sheet。
+        // 这些动画会逐帧改终端区宽度；冻结期间终端只随层拉伸，结束后一次性 resize。
+        .onChange(of: coordinator.sidebarPresentation.isCollapsed) { freezeTerminalResizeForPanelAnimation() }
+        .onChange(of: coordinator.settingsPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
+        .onChange(of: coordinator.cliToolsPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
+        .onChange(of: coordinator.sessionPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
+    }
+
+    private var mainLayout: some View {
         HStack(spacing: 0) {
             SidebarView(coordinator: coordinator)
                 .frame(width: coordinator.sidebarPresentation.isCollapsed ? AppStyle.sidebarCollapsedWidth : panelWidths.sidebar)
@@ -75,22 +102,24 @@ struct RootView: View {
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .id(localization.value)   // 语言切换 → 重建子树（TerminalAreaView 复用同一 NSView，终端不受影响）
-        .background {
-            // 光晕主题 → 暗底 + 彩色 radial 光晕（不透桌面）；纯色/玻璃主题 → 统一磨砂基底（露出背衬模糊）。
-            ThemeBackdrop(theme: AppStyle.theme)
+    }
+
+    private var onboardingOverlay: some View {
+        ZStack {
+            Color.black.opacity(AppStyle.theme.isDark ? 0.62 : 0.46)
+                .ignoresSafeArea()
+            OnboardingView(
+                state: coordinator.onboardingPresentation,
+                pages: OnboardingCatalog.pages,
+                onPrevious: { coordinator.previousOnboardingPage() },
+                onNext: { coordinator.nextOnboardingPage() },
+                onSelectPage: { coordinator.selectOnboardingPage($0) },
+                onSkip: { coordinator.closeOnboarding() },
+                onDone: { coordinator.closeOnboarding() }
+            )
+            .transition(.scale(scale: 0.96).combined(with: .opacity))
         }
-        .ignoresSafeArea()
-        .animation(Motion.panel, value: coordinator.sidebarPresentation.isCollapsed)
-        .animation(Motion.panel, value: coordinator.settingsPresentation.isPresented)
-        .animation(Motion.panel, value: coordinator.cliToolsPresentation.isPresented)
-        .animation(Motion.panel, value: coordinator.sessionPresentation.isPresented)
-        // Agent Tools 管理台改为独立 NSWindow（见 AppCoordinator+AgentToolsWindow），不再用模态 sheet。
-        // 这些动画会逐帧改终端区宽度；冻结期间终端只随层拉伸，结束后一次性 resize。
-        .onChange(of: coordinator.sidebarPresentation.isCollapsed) { freezeTerminalResizeForPanelAnimation() }
-        .onChange(of: coordinator.settingsPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
-        .onChange(of: coordinator.cliToolsPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
-        .onChange(of: coordinator.sessionPresentation.isPresented) { freezeTerminalResizeForPanelAnimation() }
+        .transition(.opacity)
     }
 
     /// Motion.panel（spring response 0.28）视觉上约 0.4s 收敛；冻结到动画结束再统一 resize。

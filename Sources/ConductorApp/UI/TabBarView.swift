@@ -2,6 +2,33 @@ import AppKit
 import ConductorCore
 import SwiftUI
 
+enum GlobalToolbarAction: Equatable {
+    case update
+    case appearance
+    case automation
+    case tasks
+    case settings
+}
+
+enum GlobalToolbarActionPresentation {
+    static let groups: [[GlobalToolbarAction]] = [
+        [.update],
+        [.appearance],
+        [.automation, .tasks],
+        [.settings],
+    ]
+}
+
+enum GlobalToolbarChromePolicy {
+    static let buttonSize: CGFloat = 26
+    static let symbolSize: CGFloat = 12
+    static let buttonSpacing: CGFloat = 2
+    static let groupSpacing: CGFloat = 5
+    static let capsulePadding: CGFloat = 3
+    static let cornerRadius: CGFloat = 13
+    static let separatorHeight: CGFloat = 15
+}
+
 /// 顶部 Tab 栏（自绘，深色 Craft 风）：当前工作区的 tab，胶囊样式；点击切换，`+` 新建，active 高亮。
 /// 分屏后的 tab 自动呈现为"分组"胶囊（分屏图标 + 数量角标），悬停可看真实预览。
 /// Tab 重排通过右键菜单完成，顶部保留干净的点击/重命名/窗口拖拽交互。
@@ -91,47 +118,7 @@ struct TabBarView: View {
             .frame(minWidth: 56, maxWidth: .infinity)   // tab 再多也给窗口拖拽留一块
             .frame(height: WindowDragZoomRegion.preferredHeight)
             .layoutPriority(1)
-            HStack(spacing: 6) {
-                UpdateButton()
-
-                // 右侧快捷按钮组（软圆角容器，对标 Craft 的按钮组）
-                HStack(spacing: 2) {
-                    IconOnlyButton(
-                        systemName: AppStyle.theme.isDark ? "moon.stars.fill" : "sun.max.fill",
-                        help: L("切换深/浅主题"),
-                        size: 26,
-                        symbolSize: 12) {
-                            coordinator.toggleTheme()
-                        }
-                    IconOnlyButton(
-                        systemName: "wand.and.stars",
-                        help: L("检测命令行工具"),
-                        size: 26,
-                        symbolSize: 12,
-                        tint: coordinator.cliToolsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary) {
-                            coordinator.toggleCLITools()
-                        }
-                    IconOnlyButton(
-                        systemName: "checklist",
-                        help: L("任务卡片"),
-                        size: 26,
-                        symbolSize: 12) {
-                            coordinator.toggleTaskCards()
-                        }
-                    IconOnlyButton(
-                        systemName: "gearshape",
-                        help: L("设置"),
-                        size: 26,
-                        symbolSize: 12,
-                        tint: coordinator.settingsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary) {
-                            coordinator.openSettings()
-                        }
-                }
-                .padding(3)
-                .background(
-                    RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                        .fill(AppStyle.hoverFill))
-            }
+            globalToolbar
         }
         .animation(Motion.snappy, value: activeTab)   // 选中指示器滑动
         .animation(Motion.panel, value: tabs.count)   // 增删 tab 缩放淡入
@@ -143,6 +130,57 @@ struct TabBarView: View {
         .onChange(of: renameFocused) { _, focused in
             if !focused, editingTab != nil { commitRename() }
         }
+    }
+
+    private var globalToolbar: some View {
+        HStack(spacing: GlobalToolbarChromePolicy.groupSpacing) {
+            UpdateButton()
+            GlobalToolbarDivider()
+            IconOnlyButton(
+                systemName: AppStyle.theme.isDark ? "moon.stars.fill" : "sun.max.fill",
+                help: L("切换深/浅主题"),
+                size: GlobalToolbarChromePolicy.buttonSize,
+                symbolSize: GlobalToolbarChromePolicy.symbolSize) {
+                    coordinator.toggleTheme()
+                }
+            GlobalToolbarDivider()
+            HStack(spacing: GlobalToolbarChromePolicy.buttonSpacing) {
+                IconOnlyButton(
+                    systemName: "wand.and.stars",
+                    help: L("检测命令行工具"),
+                    size: GlobalToolbarChromePolicy.buttonSize,
+                    symbolSize: GlobalToolbarChromePolicy.symbolSize,
+                    tint: coordinator.cliToolsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary) {
+                        coordinator.toggleCLITools()
+                    }
+                IconOnlyButton(
+                    systemName: "checklist",
+                    help: L("任务卡片"),
+                    size: GlobalToolbarChromePolicy.buttonSize,
+                    symbolSize: GlobalToolbarChromePolicy.symbolSize) {
+                        coordinator.toggleTaskCards()
+                    }
+            }
+            GlobalToolbarDivider()
+            IconOnlyButton(
+                systemName: "gearshape",
+                help: L("设置"),
+                size: GlobalToolbarChromePolicy.buttonSize,
+                symbolSize: GlobalToolbarChromePolicy.symbolSize,
+                tint: coordinator.settingsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary) {
+                    coordinator.openSettings()
+                }
+        }
+        .padding(GlobalToolbarChromePolicy.capsulePadding)
+        .background {
+            RoundedRectangle(cornerRadius: GlobalToolbarChromePolicy.cornerRadius, style: .continuous)
+                .fill(AppStyle.theme.isDark ? Color.white.opacity(0.045) : Color.black.opacity(0.032))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: GlobalToolbarChromePolicy.cornerRadius, style: .continuous)
+                .strokeBorder(AppStyle.theme.isDark ? Color.white.opacity(0.075) : Color.black.opacity(0.055), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(AppStyle.theme.isDark ? 0.22 : 0.07), radius: 5, y: 2)
     }
 
     private func beginRename(_ tab: ConductorCore.Tab) {
@@ -208,6 +246,16 @@ struct TabBarView: View {
         agentMenuCloseWorkItem?.cancel()
         agentMenuOpenWorkItem = nil
         agentMenuCloseWorkItem = nil
+    }
+}
+
+private struct GlobalToolbarDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(AppStyle.theme.isDark ? Color.white.opacity(0.085) : Color.black.opacity(0.075))
+            .frame(width: 1, height: GlobalToolbarChromePolicy.separatorHeight)
+            .padding(.horizontal, 1)
+            .accessibilityHidden(true)
     }
 }
 

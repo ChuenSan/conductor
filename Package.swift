@@ -70,6 +70,7 @@ let package = Package(
             dependencies: ["ConductorCore", "GhosttyKit", .product(name: "Yams", package: "Yams")],
             resources: [
                 .copy("Resources/Logos"),
+                .copy("Resources/Onboarding"),
                 .process("Resources/en.lproj"),
                 .process("Resources/zh-Hans.lproj"),
             ],
