@@ -2,18 +2,41 @@
 import XCTest
 
 final class CommandDeckMenuLayerTests: XCTestCase {
-    func testWorkspaceContextActionsStayWorkspaceOrAgentScoped() {
+    func testWorkspaceContextActionsMatchMenuOrder() {
         XCTAssertEqual(
-            WorkspaceContextActionPresentation.staticActions.map(\.deckLayer),
-            [.workspace, .workspace, .workspace, .workspace, .workspace, .workspace]
+            WorkspaceContextAction.allCases,
+            [
+                .rename,
+                .revealInFinder,
+                .copyPath,
+                .reauthorizeDirectory,
+                .saveLayout,
+                .restoreLayout,
+                .deleteLayout,
+                .choreographyRules,
+                .removeWorkspace,
+            ]
         )
-        XCTAssertEqual(WorkspaceContextActionPresentation.agentLaunchLayer, .agent)
+
+        XCTAssertEqual(WorkspaceContextActionPresentation.allMenuActions, WorkspaceContextAction.allCases)
+    }
+
+    func testWorkspaceContextActionGroupsReflectConditionalLayoutEntries() {
+        XCTAssertEqual(
+            WorkspaceContextActionPresentation.staticActions,
+            [.rename, .revealInFinder, .copyPath, .reauthorizeDirectory, .saveLayout, .choreographyRules, .removeWorkspace]
+        )
+        XCTAssertEqual(WorkspaceContextActionPresentation.conditionalLayoutActions, [.restoreLayout, .deleteLayout])
     }
 
     func testWorkspaceContextActionsDoNotContainGlobalOrCapabilityActions() {
         let forbidden: Set<CommandDeckLayer> = [.global, .capability]
 
-        XCTAssertTrue(WorkspaceContextActionPresentation.staticActions.allSatisfy { !forbidden.contains($0.deckLayer) })
+        XCTAssertTrue(WorkspaceContextActionPresentation.allMenuActions.allSatisfy { !forbidden.contains($0.deckLayer) })
+    }
+
+    func testWorkspaceContextAgentLaunchesAreAgentScoped() {
+        XCTAssertEqual(WorkspaceContextActionPresentation.agentLaunchLayer, .agent)
     }
 
     func testPaneMoreMenuContainsOnlyPaneScopedActions() {
