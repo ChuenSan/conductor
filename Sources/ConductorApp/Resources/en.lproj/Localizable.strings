@@ -1640,6 +1640,7 @@
 "管理" = "Manage";
 "管理应用" = "Manage Apps";
 "还没有任务卡片" = "No task cards yet";
+"还没有可指派的任务" = "No assignable tasks yet";
 "还没有选择安装应用" = "No install apps selected";
 "恢复时自动续聊 Agent" = "Automatically resume Agents on restore";
 "会安装到 %@" = "Will install to %@";
@@ -1667,6 +1668,7 @@
 "启用工具审批" = "Enable Tool Approval";
 "启用失败：%@" = "Enable failed: %@";
 "启用中" = "Enabled";
+"输入命令或提示词创建一张任务卡片，再把它拖到目标面板。" = "Create a task card from a command or prompt, then drag it to the target pane.";
 "清单" = "Manifest";
 "请先选择要安装到的应用" = "Select the apps to install to first";
 "趋势样本" = "Trend Samples";
@@ -1676,6 +1678,7 @@
 "任务启动失败：%@" = "Task launch failed: %@";
 "任务已交给 %@" = "Task sent to %@";
 "任务已在 Shell 中执行" = "Task executed in Shell";
+"拖到某个面板，交给 Shell 或 Agent 执行" = "Drag to a pane and let Shell or an Agent run it";
 "删除任务" = "Delete Task";
 "尚未执行" = "Not run yet";
 "审计和清理已写入的 hooks" = "Audit and clean written hooks";

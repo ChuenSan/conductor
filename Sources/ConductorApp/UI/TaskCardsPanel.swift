@@ -16,6 +16,14 @@ private struct TaskRunRequest {
     var paneID: PaneID?
 }
 
+enum TaskCardCommandDeckCopy {
+    static let deckLayer: CommandDeckLayer = .task
+    static var title: String { L("任务卡片") }
+    static var subtitle: String { L("拖到某个面板，交给 Shell 或 Agent 执行") }
+    static var emptyTitle: String { L("还没有可指派的任务") }
+    static var emptyDetail: String { L("输入命令或提示词创建一张任务卡片，再把它拖到目标面板。") }
+}
+
 /// 只让标题栏移动窗口：mouseDown 时发起 performDrag。背景拖动整体关掉，
 /// 这样拖任务牌（系统拖拽）绝不会误移窗口，两者物理隔离。
 private struct WindowDragHandle: NSViewRepresentable {
@@ -181,9 +189,15 @@ struct TaskCardsPanelView: View {
                 Image(systemName: "bolt.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(AppStyle.accent)
-                Text(L("任务卡片"))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppStyle.textPrimary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(TaskCardCommandDeckCopy.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppStyle.textPrimary)
+                    Text(TaskCardCommandDeckCopy.subtitle)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
                 Spacer()
                 IconOnlyButton(systemName: "xmark", help: L("关闭 (Esc)"), size: 26, symbolSize: 11, weight: .bold) {
                     onClose()
@@ -420,10 +434,10 @@ struct TaskCardsPanelView: View {
                 .font(.system(size: 26, weight: .regular))
                 .foregroundStyle(AppStyle.textTertiary)
             if trimmedQuery.isEmpty {
-                Text(L("还没有任务卡片"))
+                Text(TaskCardCommandDeckCopy.emptyTitle)
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundStyle(AppStyle.textPrimary)
-                Text(L("在上面写一条命令按 ↵ 就存成任务。点牌在当前终端跑，或把牌拖进某个终端在那跑。"))
+                Text(TaskCardCommandDeckCopy.emptyDetail)
                     .font(.system(size: 11.5, weight: .regular))
                     .foregroundStyle(AppStyle.textTertiary)
                     .multilineTextAlignment(.center)
