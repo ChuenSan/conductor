@@ -102,54 +102,54 @@ struct OnboardingPage: Identifiable, Equatable {
 enum OnboardingCatalog {
     static let pages: [OnboardingPage] = [
         OnboardingPage(
-            id: "command-center",
+            id: "stage",
             screenshotName: "onboarding-workspace",
             screenshotFocus: .workspace,
             accent: .blue,
-            eyebrow: "欢迎来到 Conductor",
-            title: "把终端变成 Agent 指挥台",
-            body: "Conductor 不只是打开 shell。它把终端、AI 会话、任务状态和项目上下文放到同一个可控空间里。",
-            beats: ["一个窗口管理多个工作区", "命令、会话、工具统一入口", "从第一分钟就能继续工作"]
+            eyebrow: "工作区",
+            title: "从一个项目舞台开始",
+            body: "每个工作区都是一个项目现场：目录、标签、分屏、最近会话和布局都围绕这个现场组织。",
+            beats: ["选择项目舞台", "保留分屏现场", "恢复最近上下文"]
         ),
         OnboardingPage(
-            id: "workspace",
+            id: "voices",
             screenshotName: "onboarding-workspace",
             screenshotFocus: .workspace,
             accent: .violet,
-            eyebrow: "空间感",
-            title: "Tab、分屏和布局都记得你在做什么",
-            body: "每个项目可以保留自己的分屏树、标签和当前目录。你切换的不是窗口，而是一整个工作现场。",
-            beats: ["左右/上下分屏", "恢复最近关闭", "保存常用布局"]
+            eyebrow: "面板",
+            title: "把每个面板当成一个声部",
+            body: "面板负责具体执行：Shell、Agent、命令记录、搜索、分屏和放大都留在当前声部里。",
+            beats: ["分屏组织工作", "面板本地控制", "双击放大/还原"]
         ),
         OnboardingPage(
-            id: "agents",
+            id: "assign",
             screenshotName: "onboarding-tools",
             screenshotFocus: .rightPanel,
             accent: .mint,
-            eyebrow: "Agent 协作",
-            title: "让不同 Agent 像团队成员一样排队干活",
-            body: "会话可以续聊，任务可以排队，完成状态会回到通知和任务卡里。你不用盯着每个 pane 等结果。",
-            beats: ["续聊历史会话", "任务队列", "完成提醒和活动记录"]
+            eyebrow: "任务",
+            title: "把任务甩给正确的执行者",
+            body: "任务卡片是一段可复用的乐谱。拖到某个面板，就交给那个 Shell 或 Agent 执行。",
+            beats: ["拖到面板执行", "变量按需填写", "当前上下文运行"]
         ),
         OnboardingPage(
-            id: "tools",
+            id: "attention",
+            screenshotName: "onboarding-workspace",
+            screenshotFocus: .workspace,
+            accent: .rose,
+            eyebrow: "注意力",
+            title: "只看真正需要你指挥的地方",
+            body: "完成、等待、审批和后台运行都会回到状态栏、工作区、标签或伙伴层，提醒你下一步该看哪里。",
+            beats: ["完成未读", "活动记录", "跳回相关面板"]
+        ),
+        OnboardingPage(
+            id: "capabilities",
             screenshotName: "onboarding-tools",
             screenshotFocus: .rightPanel,
             accent: .amber,
-            eyebrow: "工具台",
-            title: "Skills、Hooks、MCP 放在一个控制面板里",
-            body: "Conductor 把 Agent 能力拆成可管理的工具面板：配置、启停、检查、修复，都不用离开主窗口。",
-            beats: ["Skills 管理", "MCP Workbench", "Hooks 自动化"]
-        ),
-        OnboardingPage(
-            id: "visibility",
-            screenshotName: "onboarding-settings",
-            screenshotFocus: .settingsPanel,
-            accent: .rose,
-            eyebrow: "可见性",
-            title: "知道谁在工作、花了多少、哪里卡住了",
-            body: "状态栏、用量面板和活动中心会把后台运行、成本趋势、完成记录变成可扫读的信息。",
-            beats: ["用量与成本", "状态栏信号", "通知中心"]
+            eyebrow: "能力库",
+            title: "把能力收进能力库",
+            body: "CLI、Skills、MCP、Hooks 和供应商用量都归到能力库。这里管理能力，工作区和面板只使用能力。",
+            beats: ["Skills / MCP / Hooks", "CLI 检测", "供应商与用量"]
         ),
     ]
 }
