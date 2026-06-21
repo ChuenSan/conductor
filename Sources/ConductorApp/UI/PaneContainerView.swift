@@ -25,6 +25,16 @@ enum PaneContextAction: Equatable {
     case exportText                      // 屏幕+回滚文本存盘
     case commandLog                      // ② 命令记录（退出码/耗时/失败甩给 agent）
     case close
+
+    var deckLayer: CommandDeckLayer {
+        switch self {
+        case .copy, .paste, .selectAll, .clear,
+             .splitRight, .splitDown, .zoom,
+             .copyCwd, .openInFinder,
+             .exportText, .commandLog, .close:
+            return .pane
+        }
+    }
 }
 
 enum PaneHeaderActionPresentation {

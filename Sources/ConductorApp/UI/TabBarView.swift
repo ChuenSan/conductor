@@ -5,18 +5,30 @@ import SwiftUI
 enum GlobalToolbarAction: Equatable {
     case update
     case appearance
-    case automation
+    case capability
     case tasks
     case settings
+
+    var deckLayer: CommandDeckLayer {
+        switch self {
+        case .update, .appearance, .settings: return .global
+        case .capability: return .capability
+        case .tasks: return .task
+        }
+    }
 }
 
 enum GlobalToolbarActionPresentation {
     static let groups: [[GlobalToolbarAction]] = [
         [.update],
         [.appearance],
-        [.automation, .tasks],
+        [.capability, .tasks],
         [.settings],
     ]
+
+    static var actions: [GlobalToolbarAction] {
+        groups.flatMap { $0 }
+    }
 }
 
 enum GlobalToolbarChromePolicy {

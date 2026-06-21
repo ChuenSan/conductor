@@ -11,4 +11,11 @@ final class PaneHeaderActionPresentationTests: XCTestCase {
             PaneHeaderActionPresentation.moreActions,
             [.copy, .paste, .selectAll, .clear, .copyCwd, .openInFinder, .commandLog, .exportText])
     }
+
+    func testPaneHeaderActionsArePaneScoped() {
+        let actions = PaneHeaderActionPresentation.primaryActions + PaneHeaderActionPresentation.moreActions
+
+        XCTAssertFalse(actions.isEmpty)
+        XCTAssertTrue(actions.allSatisfy { $0.deckLayer == .pane })
+    }
 }
