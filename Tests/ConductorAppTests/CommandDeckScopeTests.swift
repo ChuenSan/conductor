@@ -47,4 +47,16 @@ final class CommandDeckScopeTests: XCTestCase {
         XCTAssertEqual(CommandDeckLayer.capability.title, "能力")
         XCTAssertEqual(CommandDeckLayer.task.title, "任务")
     }
+
+    func testPalettePresentationIncludesCommandLayer() {
+        let item = PaletteItem(
+            id: "cmd:taskCards",
+            icon: "command",
+            title: "Task Cards",
+            subtitle: "",
+            layerTitle: CommandDeckLayer.task.title
+        ) {}
+
+        XCTAssertEqual(item.layerTitle, "任务")
+    }
 }

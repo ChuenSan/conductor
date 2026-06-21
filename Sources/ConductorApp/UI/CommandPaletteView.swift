@@ -6,7 +6,24 @@ struct PaletteItem: Identifiable {
     let icon: String
     let title: String
     let subtitle: String
+    let layerTitle: String?
     let run: () -> Void
+
+    init(
+        id: String,
+        icon: String,
+        title: String,
+        subtitle: String,
+        layerTitle: String? = nil,
+        run: @escaping () -> Void
+    ) {
+        self.id = id
+        self.icon = icon
+        self.title = title
+        self.subtitle = subtitle
+        self.layerTitle = layerTitle
+        self.run = run
+    }
 }
 
 /// 最近执行过的面板条目 id（MRU 去重置顶，最多 6 条），UserDefaults 持久化。
@@ -148,6 +165,16 @@ struct CommandPaletteView: View {
                 }
             }
             Spacer(minLength: 0)
+            if let layerTitle = item.layerTitle {
+                Text(layerTitle)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .padding(.horizontal, 6)
+                    .frame(height: 18)
+                    .background(
+                        Capsule().fill(AppStyle.theme.isDark ? Color.white.opacity(0.045) : Color.black.opacity(0.035))
+                    )
+            }
             if recent {
                 Image(systemName: "clock.arrow.circlepath")
                     .font(.system(size: 10, weight: .medium))
