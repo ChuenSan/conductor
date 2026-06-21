@@ -34,3 +34,4 @@ Vendor/GhosttyKit.xcframework/
 # Misc
 *.log
 dist/
+.worktrees/
