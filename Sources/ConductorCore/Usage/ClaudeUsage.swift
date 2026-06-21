@@ -1097,7 +1097,27 @@ public enum ClaudeUsageFetcher {
                 .withSourceLabel("cli")
         } catch {
             if error is CancellationError { throw error }
-            if shouldAttemptCLIPTYFallback(after: error) {
+            let initialError = error
+            if let retryTimeout, shouldRetryCLIProbe(after: initialError) {
+                do {
+                    return try await fetchDirectCLIUsageOnce(
+                        binary: binary,
+                        env: env,
+                        timeout: retryTimeout)
+                        .withSourceLabel("cli")
+                } catch {
+                    if error is CancellationError { throw error }
+                    if shouldAttemptCLIPTYFallback(after: error) {
+                        return try await fetchDirectCLITTYUsageOnce(
+                            binary: binary,
+                            env: env,
+                            timeout: retryTimeout)
+                            .withSourceLabel("cli")
+                    }
+                    throw error
+                }
+            }
+            if shouldAttemptCLIPTYFallback(after: initialError) {
                 do {
                     return try await fetchDirectCLITTYUsageOnce(
                         binary: binary,
@@ -1114,9 +1134,7 @@ public enum ClaudeUsageFetcher {
                         .withSourceLabel("cli")
                 }
             }
-            guard let retryTimeout, shouldRetryCLIProbe(after: error) else { throw error }
-            return try await fetchDirectCLIUsageOnce(binary: binary, env: env, timeout: retryTimeout)
-                .withSourceLabel("cli")
+            throw initialError
         }
     }
 
@@ -1225,7 +1243,10 @@ public enum ClaudeUsageFetcher {
             primary: session,
             secondary: weekly,
             tertiary: modelSpecific,
-            planName: stringValue(object["plan"]) ?? stringValue(object["plan_type"]),
+            planName: stringValue(object["plan"])
+                ?? stringValue(object["plan_type"])
+                ?? stringValue(object["login_method"])
+                ?? stringValue(object["loginMethod"]),
             accountLabel: accountLabel(
                 email: stringValue(object["account_email"]),
                 organization: stringValue(object["account_org"])),
@@ -2118,8 +2139,8 @@ public enum ClaudeUsageFetcher {
     }
 
     private static func urlFormEncode(_ value: String) -> String {
-        var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: ":#[]@!$&'()*+,;=")
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 

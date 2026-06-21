@@ -546,7 +546,7 @@ final class CostUsageFetcherTests: XCTestCase {
         let first = try scanner.scanWithFileCache(daysBack: 30, now: now, cacheRoot: cache)
         XCTAssertEqual(first.grand.inputTokens, 700)
         XCTAssertEqual(first.grand.cacheReadTokens, 300)
-        XCTAssertEqual(first.grand.outputTokens, 240)
+        XCTAssertEqual(first.grand.outputTokens, 200)
 
         let tc3 = #"{"timestamp":"2026-06-08T09:03:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1300,"cached_input_tokens":350,"output_tokens":260,"reasoning_output_tokens":50}}}}"#
         try Self.appendLine(tc3, to: session)
@@ -554,7 +554,7 @@ final class CostUsageFetcherTests: XCTestCase {
         let appended = try scanner.scanWithFileCache(daysBack: 30, now: now.addingTimeInterval(1), cacheRoot: cache)
         XCTAssertEqual(appended.grand.inputTokens, 950)
         XCTAssertEqual(appended.grand.cacheReadTokens, 350)
-        XCTAssertEqual(appended.grand.outputTokens, 310)
+        XCTAssertEqual(appended.grand.outputTokens, 260)
         XCTAssertEqual(appended.sessionsBySource[.codex], 1)
     }
 

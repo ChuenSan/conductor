@@ -23,9 +23,7 @@ struct HookEvent {
 final class HooksInbox {
     /// 收件箱目录（与 conductor-notify 脚本约定一致）。
     static var directory: URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        ConductorPaths.appSupportDirectory()
             .appendingPathComponent("hooks-inbox", isDirectory: true)
     }
 

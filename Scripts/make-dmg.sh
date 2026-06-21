@@ -54,6 +54,23 @@ assemble_app() {
     [ -d "$bundle" ] && cp -R "$bundle" "$app/Contents/Resources/"
   done
 
+  # ghostty shell 集成脚本（自包含，启用 OSC 133 命令/cwd 语义提示；不依赖外部 Ghostty.app）
+  if [ -d "$ROOT/Vendor/ghostty-shell-integration" ]; then
+    mkdir -p "$app/Contents/Resources/ghostty"
+    cp -R "$ROOT/Vendor/ghostty-shell-integration" "$app/Contents/Resources/ghostty/shell-integration"
+  fi
+
+  # 第三方许可说明。Ghostty shell integration 以 GPL-3.0-or-later 分发；
+  # release bundle 需要随 app 带上 notice 和完整许可证文本。
+  if [ -f "$ROOT/docs/THIRD_PARTY_NOTICES.md" ]; then
+    mkdir -p "$app/Contents/Resources/Legal"
+    cp "$ROOT/docs/THIRD_PARTY_NOTICES.md" "$app/Contents/Resources/Legal/THIRD_PARTY_NOTICES.md"
+  fi
+  if [ -d "$ROOT/docs/licenses" ]; then
+    mkdir -p "$app/Contents/Resources/Legal/licenses"
+    cp -R "$ROOT/docs/licenses/." "$app/Contents/Resources/Legal/licenses/"
+  fi
+
   # 应用图标
   cp "$ROOT/Assets/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 

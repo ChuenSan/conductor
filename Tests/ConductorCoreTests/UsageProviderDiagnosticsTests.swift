@@ -243,7 +243,17 @@ final class UsageProviderDiagnosticsTests: XCTestCase {
         XCTAssertTrue(settings.environmentHints.sourceMode.contains("CONDUCTOR_USAGE_GEMINI_SOURCE"))
     }
 
-    func testTextRendererIncludesProviderMetadataAndEnvironmentHints() {
+    func testTextRendererIncludesProviderMetadataAndEnvironmentHints() throws {
+        let storage = UsageProviderDiagnosticStorageSummary(footprint: ProviderStorageFootprint(
+            providerID: "codex",
+            totalBytes: 2048,
+            paths: [NSHomeDirectory() + "/.codex"],
+            missingPaths: [NSHomeDirectory() + "/.codex/missing"],
+            unreadablePaths: [NSHomeDirectory() + "/.codex/token=abc1234567890"],
+            components: [
+                .init(path: NSHomeDirectory() + "/.codex/sessions", totalBytes: 2048),
+            ],
+            updatedAt: Date(timeIntervalSince1970: 0)))
         let diagnostic = UsageProviderDiagnosticExport(
             schemaVersion: "1.0",
             generatedAt: Date(timeIntervalSince1970: 0),
@@ -266,16 +276,7 @@ final class UsageProviderDiagnosticsTests: XCTestCase {
                 dashboardURL: "https://modelstudio.console.alibabacloud.com/ap-southeast-1/?tab=coding-plan#/efm/coding_plan",
                 changelogURL: nil),
             usage: nil,
-            storage: UsageProviderDiagnosticStorageSummary(footprint: ProviderStorageFootprint(
-                providerID: "codex",
-                totalBytes: 2048,
-                paths: [NSHomeDirectory() + "/.codex"],
-                missingPaths: [NSHomeDirectory() + "/.codex/missing"],
-                unreadablePaths: [NSHomeDirectory() + "/.codex/token=abc1234567890"],
-                components: [
-                    .init(path: NSHomeDirectory() + "/.codex/sessions", totalBytes: 2048),
-                ],
-                updatedAt: Date(timeIntervalSince1970: 0))),
+            storage: storage,
             fetchAttempts: [],
             error: nil,
             repairActions: [],
@@ -288,13 +289,16 @@ final class UsageProviderDiagnosticsTests: XCTestCase {
         XCTAssertTrue(output.contains("dashboard: https://modelstudio.console.alibabacloud.com"))
         XCTAssertTrue(output.contains("api key env: ALIBABA_CODING_PLAN_API_KEY"))
         XCTAssertTrue(output.contains("source env: CONDUCTOR_USAGE_QWEN_SOURCE"))
-        XCTAssertTrue(output.contains("storage: 2 KB across 1 paths"))
+        let storageByteCount = storage.byteCountText
+        let componentByteCount = try XCTUnwrap(storage.topComponents.first?.byteCountText)
+        let cleanupByteCount = try XCTUnwrap(storage.cleanupRecommendations.first?.byteCountText)
+        XCTAssertTrue(output.contains("storage: \(storageByteCount) across 1 paths"), output)
         XCTAssertTrue(output.contains("storage missing paths: 1"))
         XCTAssertTrue(output.contains("storage missing path: ~/.codex/missing"))
         XCTAssertTrue(output.contains("storage unreadable paths: 1"))
         XCTAssertTrue(output.contains("storage unreadable path: ~/.codex/token=<redacted>"))
-        XCTAssertTrue(output.contains("storage component: sessions 2 KB - ~/.codex/sessions"))
-        XCTAssertTrue(output.contains("cleanup: Manual cleanup: sessions 2 KB - ~/.codex/sessions"))
+        XCTAssertTrue(output.contains("storage component: sessions \(componentByteCount) - ~/.codex/sessions"), output)
+        XCTAssertTrue(output.contains("cleanup: Manual cleanup: sessions \(cleanupByteCount) - ~/.codex/sessions"), output)
     }
 
     func testDiagnosticReportsActualSourceSeparatelyFromRequestedSourceMode() async {

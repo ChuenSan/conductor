@@ -39,7 +39,7 @@ public enum HookSource: String, Sendable, CaseIterable, Codable, Identifiable {
 
     /// 该 agent 的 hook 配置文件路径。
     public var configURL: URL {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = ConductorPaths.agentHomeDirectory()
         switch self {
         case .claude: return home.appendingPathComponent(".claude/settings.json")
         case .codex: return home.appendingPathComponent(".codex/hooks.json")

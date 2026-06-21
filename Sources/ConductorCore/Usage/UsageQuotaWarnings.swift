@@ -18,9 +18,10 @@ public enum QuotaWarningThresholds {
     public static let allowedRange = 0...99
 
     public static func sanitized(_ raw: [Int]?) -> [Int] {
-        let unique = Set(raw ?? defaults)
-        let cleaned = unique
+        let cleaned = Set(
+            (raw ?? defaults)
             .map { min(max($0, allowedRange.lowerBound), allowedRange.upperBound) }
+        )
             .sorted(by: >)
         return cleaned.isEmpty ? defaults : cleaned
     }

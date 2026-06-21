@@ -170,7 +170,7 @@ final class UsageProviderCatalogTests: XCTestCase {
 
     func testAPIOnlyProvidersWarnOnCookieConfiguration() throws {
         let config = AppConfig(usage: UsageConfig(providers: [
-            "openai": UsageProviderConfig(cookieHeader: "session=unused", cookieSource: "manual"),
+            "openai": UsageProviderConfig(cookieSource: "manual", cookieHeader: "session=unused"),
         ]))
 
         let issues = UsageProviderConfigValidator.issues(for: "openai", in: config)
@@ -258,12 +258,12 @@ final class UsageProviderCatalogTests: XCTestCase {
     func testProviderSelectionUsesConfigOrderForCollections() throws {
         let config = AppConfig(
             usage: UsageConfig(
+                providerOrder: ["qwen", "claude", "codex", "copilot"],
                 providers: [
                     "claude": UsageProviderConfig(enabled: true),
                     "qwen": UsageProviderConfig(enabled: true),
                     "codex": UsageProviderConfig(enabled: false),
-                ],
-                providerOrder: ["qwen", "claude", "codex", "copilot"]))
+                ]))
 
         XCTAssertEqual(
             try UsageProviderCatalog.entries(for: nil, config: config).map(\.id),

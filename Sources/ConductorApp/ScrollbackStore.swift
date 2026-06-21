@@ -7,9 +7,8 @@ import Foundation
 @MainActor
 enum ScrollbackStore {
     private static var directory: URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor/scrollback", isDirectory: true)
+        ConductorPaths.appSupportDirectory()
+            .appendingPathComponent("scrollback", isDirectory: true)
     }
 
     private static func fileURL(for pane: PaneID) -> URL {
@@ -46,7 +45,7 @@ enum ScrollbackStore {
     /// 必须放在**无空格路径**（~/.conductor）：ghostty 的 command 按空格切词，
     /// 放 "Application Support" 会被切碎 → exec 失败 → 子进程秒退 → pane 被连锁关闭。
     static func ensureWrapperScript() -> String? {
-        let url = FileManager.default.homeDirectoryForCurrentUser
+        let url = ConductorPaths.agentHomeDirectory()
             .appendingPathComponent(".conductor/restore-shell.sh")
         // 防御：路径仍含空格（如用户名带空格）→ 放弃回放，退回普通 shell 启动。
         guard !url.path.contains(" ") else { return nil }

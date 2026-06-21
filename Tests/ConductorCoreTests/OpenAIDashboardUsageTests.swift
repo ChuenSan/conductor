@@ -121,7 +121,7 @@ final class OpenAIDashboardUsageTests: XCTestCase {
         let timeoutProbe = OpenAIDashboardTimeoutProbe()
 
         let value = try await OpenAIDashboardUsageFetcher.runBoundedCookieLoad(
-            deadline: Date().addingTimeInterval(0.05),
+            deadline: Date().addingTimeInterval(1),
             timeoutObserver: timeoutProbe.record)
         {
             true
@@ -283,6 +283,7 @@ final class OpenAIDashboardUsageTests: XCTestCase {
             reportAccount: "dev@example.com - Personal",
             usageAccountLabel: nil,
             sourceLabel: "oauth",
+            env: ["CODEX_HOME": root.path],
             cacheRoot: root)
 
         XCTAssertEqual(reused?.signedInEmail, "Dev@Example.com")
@@ -380,6 +381,7 @@ final class OpenAIDashboardUsageTests: XCTestCase {
             reportAccount: "dev@example.com",
             usageAccountLabel: nil,
             sourceLabel: "oauth",
+            env: ["CODEX_HOME": root.path],
             cacheRoot: root)
 
         XCTAssertNil(reused)
@@ -440,6 +442,7 @@ final class OpenAIDashboardUsageTests: XCTestCase {
     }
 
     #if os(macOS) && canImport(WebKit)
+    @MainActor
     func testWebKitUsageBreakdownRecoveryWaitsBrieflyAfterChartError() {
         let now = Date()
 

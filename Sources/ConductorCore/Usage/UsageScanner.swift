@@ -197,6 +197,7 @@ public struct UsageScanner: Sendable {
         let modificationUnixMs: Int64
         let size: Int64
         let fileIdentity: String?
+        let contentSignature: String?
     }
     private struct FileCacheEntry: Sendable, Codable {
         let kind: FileKind
@@ -520,7 +521,7 @@ public struct UsageScanner: Sendable {
         var work: [FileWorkItem] = []
         for (index, file) in files.enumerated() {
             try checkCancellation?()
-            let path = file.path
+            let path = fileCacheKey(file)
             retainedPaths.insert(path)
             guard let stamp = fileStamp(file) else { continue }
             if let cached = cache.files[path],
@@ -553,7 +554,7 @@ public struct UsageScanner: Sendable {
         try checkCancellation?()
         for result in results {
             parts[result.index] = result.processed.partial
-            cache.files[result.file.path] = FileCacheEntry(
+            cache.files[fileCacheKey(result.file)] = FileCacheEntry(
                 kind: result.kind,
                 stamp: result.stamp,
                 partial: result.processed.partial,
@@ -572,8 +573,14 @@ public struct UsageScanner: Sendable {
               cached.kind == kind,
               parsedBytes > 0,
               parsedBytes <= newStamp.size,
-              newStamp.size >= cached.stamp.size
+              newStamp.size > cached.stamp.size
         else { return nil }
+        if let oldIdentity = cached.stamp.fileIdentity,
+           let newIdentity = newStamp.fileIdentity,
+           oldIdentity != newIdentity
+        {
+            return nil
+        }
         switch kind {
         case .claude:
             return cached
@@ -712,8 +719,12 @@ public struct UsageScanner: Sendable {
     }
 
     private static func stableHash(_ text: String) -> UInt64 {
+        stableHash(Data(text.utf8))
+    }
+
+    private static func stableHash(_ data: Data) -> UInt64 {
         var hash: UInt64 = 0xcbf29ce484222325
-        for byte in text.utf8 {
+        for byte in data {
             hash ^= UInt64(byte)
             hash &*= 0x100000001b3
         }
@@ -1545,6 +1556,7 @@ public struct UsageScanner: Sendable {
         var sessionID: String?
         var forkedFromID: String?
         var forkTimestamp: String?
+        var lastTokenDay: String?
         var split = CodexModeSplit()
         var deltaRecords: [UsageRecord] = []
         var lineCounter = 0
@@ -1604,6 +1616,9 @@ public struct UsageScanner: Sendable {
                 }
                 if (payload?["type"] as? String) == "token_count",
                    let info = payload?["info"] as? [String: Any] {
+                    lastTokenDay = dayString(fromISO: obj["timestamp"] as? String)
+                        ?? dayString(fromISO: payload?["timestamp"] as? String)
+                        ?? lastTokenDay
                     let usage = (info["total_token_usage"] as? [String: Any]).map(codexTokenUsage)
                     if let usage {
                         lastRawUsage = usage
@@ -1688,7 +1703,7 @@ public struct UsageScanner: Sendable {
                     isForked: forkedFromID != nil))
         }
 
-        let day = metaDay ?? dayString(fromCodexPath: file) ?? dayString(date: fileModified(file))
+        let day = lastTokenDay ?? metaDay ?? dayString(fromCodexPath: file) ?? dayString(date: fileModified(file))
         let session = Self.sessionKey(file: file, explicit: sessionID)
         let finalModel = currentModel.isEmpty ? fallbackModel : currentModel
         if forkedFromID == nil, !deltaRecords.isEmpty {
@@ -2976,7 +2991,31 @@ public struct UsageScanner: Sendable {
         return FileStamp(
             modificationUnixMs: metadata.modificationUnixMs,
             size: metadata.size,
-            fileIdentity: fileSystemIdentity(url))
+            fileIdentity: fileSystemIdentity(url),
+            contentSignature: fileContentSignature(url, size: metadata.size))
+    }
+
+    private func fileCacheKey(_ url: URL) -> String {
+        url.standardizedFileURL.path
+    }
+
+    private func fileContentSignature(_ url: URL, size: Int64) -> String? {
+        guard size > 0 else { return "empty" }
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let sampleBytes = 4096
+        var sample = Data()
+        if let head = try? handle.read(upToCount: sampleBytes) {
+            sample.append(head)
+        }
+        if size > Int64(sampleBytes) {
+            let tailOffset = UInt64(max(0, size - Int64(sampleBytes)))
+            try? handle.seek(toOffset: tailOffset)
+            if let tail = try? handle.readToEnd() {
+                sample.append(tail)
+            }
+        }
+        return "\(size)-\(String(format: "%016llx", Self.stableHash(sample)))"
     }
 
     private func parsedJSONLBytes(

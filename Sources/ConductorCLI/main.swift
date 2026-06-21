@@ -1717,24 +1717,28 @@ func withTemporaryEnvironment<T>(
     _ patch: UsageProviderEnvironmentPatch,
     operation: () async -> T) async -> T
 {
-    let restore = applyTemporaryEnvironment(patch)
-    let result = await operation()
-    restoreTemporaryEnvironment(restore)
-    return result
+    await UsageEnvironmentMutationLock.shared.withAsyncLock {
+        let restore = applyTemporaryEnvironment(patch)
+        let result = await operation()
+        restoreTemporaryEnvironment(restore)
+        return result
+    }
 }
 
 func withTemporaryEnvironmentThrowing<T>(
     _ patch: UsageProviderEnvironmentPatch,
     operation: () async throws -> T) async throws -> T
 {
-    let restore = applyTemporaryEnvironment(patch)
-    do {
-        let result = try await operation()
-        restoreTemporaryEnvironment(restore)
-        return result
-    } catch {
-        restoreTemporaryEnvironment(restore)
-        throw error
+    try await UsageEnvironmentMutationLock.shared.withAsyncLock {
+        let restore = applyTemporaryEnvironment(patch)
+        do {
+            let result = try await operation()
+            restoreTemporaryEnvironment(restore)
+            return result
+        } catch {
+            restoreTemporaryEnvironment(restore)
+            throw error
+        }
     }
 }
 
@@ -1982,6 +1986,7 @@ struct CLIConfigStore {
             try save(.default)
             return .default
         }
+        try? ConfigFileSecurity.secureConfigFile(at: fileURL)
         let text = try String(contentsOf: fileURL, encoding: .utf8)
         return try YAMLDecoder().decode(AppConfig.self, from: text).validated()
     }
@@ -1990,9 +1995,11 @@ struct CLIConfigStore {
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true)
+        try? ConfigFileSecurity.secureConfigDirectory(at: fileURL.deletingLastPathComponent())
         let yaml = try YAMLEncoder().encode(config.validated())
         let header = "# conductor config managed by conductorctl\n\n"
         try (header + yaml).write(to: fileURL, atomically: true, encoding: .utf8)
+        try ConfigFileSecurity.secureConfigFile(at: fileURL)
     }
 
     private static func defaultConfigURL() -> URL {

@@ -1,3 +1,4 @@
+import ConductorCore
 import Foundation
 
 /// CLI 检测结果的磁盘缓存（含检测时间戳）。面板打开时直接读缓存，避免每次都跑昂贵的 shell 探测；
@@ -9,9 +10,7 @@ struct CLIDetectionCache: Codable {
 
 enum CLIDetectionStore {
     private static var fileURL: URL {
-        let appSupport = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        let appSupport = ConductorPaths.appSupportDirectory()
         try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
         return appSupport.appendingPathComponent("cli-detection.json")
     }

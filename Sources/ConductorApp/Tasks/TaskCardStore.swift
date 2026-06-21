@@ -40,6 +40,45 @@ struct TaskCard: Identifiable, Codable, Equatable, Sendable {
     var updatedAt: Date
     var lastRunAt: Date?
     var runCount: Int
+    var pinned: Bool = false
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, prompt, workspaceID, executor, createdAt, updatedAt, lastRunAt, runCount, pinned
+    }
+
+    /// 宽容解码：老的 task-cards.json 没有 pinned（以后新增字段同理），缺了就给默认，
+    /// 绝不能因为多一个字段就整盘解码失败把用户卡片清空。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        prompt = try c.decode(String.self, forKey: .prompt)
+        workspaceID = try c.decodeIfPresent(String.self, forKey: .workspaceID)
+        executor = try c.decode(TaskCardExecutor.self, forKey: .executor)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        lastRunAt = try c.decodeIfPresent(Date.self, forKey: .lastRunAt)
+        runCount = (try? c.decode(Int.self, forKey: .runCount)) ?? 0
+        pinned = (try? c.decode(Bool.self, forKey: .pinned)) ?? false
+    }
+
+    init(id: String, title: String, prompt: String, workspaceID: String?,
+         executor: TaskCardExecutor, createdAt: Date, updatedAt: Date,
+         lastRunAt: Date?, runCount: Int, pinned: Bool = false) {
+        self.id = id
+        self.title = title
+        self.prompt = prompt
+        self.workspaceID = workspaceID
+        self.executor = executor
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.lastRunAt = lastRunAt
+        self.runCount = runCount
+        self.pinned = pinned
+    }
+
+    /// prompt 里的 {{变量}}（去重、保序）。
+    var variableNames: [String] { TaskCardTemplate.variables(in: prompt) }
 
     var displayTitle: String {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -66,9 +105,58 @@ struct TaskCard: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+/// {{变量}} 模板工具：从 prompt 抽变量名、用填好的值替换。
+enum TaskCardTemplate {
+    private static let pattern = try! NSRegularExpression(pattern: "\\{\\{\\s*([^{}]+?)\\s*\\}\\}")
+
+    static func variables(in text: String) -> [String] {
+        let ns = text as NSString
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for match in pattern.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let name = ns.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, !seen.contains(name) else { continue }
+            seen.insert(name)
+            ordered.append(name)
+        }
+        return ordered
+    }
+
+    static func substitute(_ text: String, values: [String: String]) -> String {
+        var out = text
+        for (name, value) in values {
+            // 替换 {{ name }}（容忍内部空格）。
+            let escaped = NSRegularExpression.escapedPattern(for: name)
+            if let re = try? NSRegularExpression(pattern: "\\{\\{\\s*\(escaped)\\s*\\}\\}") {
+                let ns = out as NSString
+                out = re.stringByReplacingMatches(
+                    in: out, range: NSRange(location: 0, length: ns.length),
+                    withTemplate: NSRegularExpression.escapedTemplate(for: value))
+            }
+        }
+        return out
+    }
+}
+
+/// 把任务牌甩到某个终端 pane 上、且该任务含 {{变量}} 时，用这个信号让（仍开着的）任务面板弹出填值，
+/// 填完在该 pane 跑。cross 组件（pane 落点在主窗、填值 UI 在浮动面板）靠它搭桥。
+struct TaskDropFillRequest: Equatable {
+    let cardID: String
+    let paneID: String
+    let nonce: Int
+}
+
 @MainActor
 final class TaskCardStore: ObservableObject {
     @Published private(set) var cards: [TaskCard] = []
+    /// 落点为某 pane 的变量任务待填值（面板观察它来弹填值条）。
+    @Published var pendingDropFill: TaskDropFillRequest?
+    private var dropFillNonce = 0
+
+    func requestDropFill(cardID: String, paneID: String) {
+        dropFillNonce += 1
+        pendingDropFill = TaskDropFillRequest(cardID: cardID, paneID: paneID, nonce: dropFillNonce)
+    }
 
     private let fileURL: URL
 
@@ -100,6 +188,13 @@ final class TaskCardStore: ObservableObject {
 
     func delete(_ id: String) {
         cards.removeAll { $0.id == id }
+        persist()
+    }
+
+    func togglePin(_ id: String) {
+        guard let index = cards.firstIndex(where: { $0.id == id }) else { return }
+        cards[index].pinned.toggle()
+        cards[index].updatedAt = Date()
         persist()
     }
 
@@ -135,9 +230,7 @@ final class TaskCardStore: ObservableObject {
     }
 
     nonisolated private static var defaultFileURL: URL {
-        let appSupport = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        let appSupport = ConductorPaths.appSupportDirectory()
         return appSupport.appendingPathComponent("task-cards.json")
     }
 

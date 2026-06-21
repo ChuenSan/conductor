@@ -207,6 +207,78 @@ extension AppCoordinator {
         return text ?? ""
     }
 
+    // MARK: - ② 命令记录
+
+    func automationCommandLog(paneRef: String?) throws -> JSONValue {
+        let pane = try automationFindPane(paneRef)
+        let items: [JSONValue] = paneCommands(pane).map { record in
+            var obj: [String: JSONValue] = [
+                "id": .int(record.id),
+                "failed": .bool(record.failed),
+                "durationMs": .int(record.durationMillis),
+            ]
+            obj["exitCode"] = record.exitCode.map { JSONValue.int($0) } ?? JSONValue.null
+            obj["cwd"] = record.cwd.map { JSONValue.string($0) } ?? JSONValue.null
+            return JSONValue.object(obj)
+        }
+        return .array(items)
+    }
+
+    func automationOpenCommandLog(paneRef: String?) throws {
+        let pane = try automationFindPane(paneRef)
+        openCommandLog(for: pane)
+    }
+
+    // MARK: - ③ 联动规则
+
+    func automationChoreographyList() -> JSONValue {
+        let items: [JSONValue] = choreographyRules.map { rule in
+            JSONValue.object([
+                "id": .string(rule.id.uuidString),
+                "enabled": .bool(rule.enabled),
+                "trigger": .string(rule.trigger.rawValue),
+                "desc": .string(describeChoreography(rule)),
+            ])
+        }
+        return .array(items)
+    }
+
+    func automationChoreographyAdd(trigger: String, source: String?, action: String,
+                                   target: String?, command: String?) throws -> JSONValue {
+        guard let trig = ChoreoTrigger(rawValue: trigger) else {
+            throw AutomationError.badRequest("未知触发：\(trigger)（anyFinish/success/failure）")
+        }
+        let src: PaneID?
+        if let source, !source.isEmpty {
+            src = try automationFindPane(source)
+        } else {
+            src = nil
+        }
+        let act: ChoreoAction
+        switch action {
+        case "notify": act = .notify
+        case "focus", "focusSource": act = .focusSource
+        case "run", "runCommand":
+            guard let target, !target.isEmpty else { throw AutomationError.badRequest("缺少参数：target") }
+            let trimmed = (command ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { throw AutomationError.badRequest("缺少参数：command") }
+            act = .runCommand(target: try automationFindPane(target), command: trimmed)
+        default: throw AutomationError.badRequest("未知动作：\(action)（notify/focus/run）")
+        }
+        let rule = ChoreographyRule(trigger: trig, source: src, action: act)
+        addChoreographyRule(rule)
+        return .object(["id": .string(rule.id.uuidString), "desc": .string(describeChoreography(rule))])
+    }
+
+    func automationChoreographyRemove(id: String) throws {
+        guard let uuid = UUID(uuidString: id) else { throw AutomationError.badRequest("无效 id：\(id)") }
+        removeChoreographyRule(uuid)
+    }
+
+    func automationOpenChoreography() {
+        NotificationCenter.default.post(name: .conductorOpenChoreography, object: nil)
+    }
+
     // MARK: - surface resume
 
     func automationSetSurfaceResume(

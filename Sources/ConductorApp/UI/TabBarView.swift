@@ -266,6 +266,22 @@ private struct TabPill: View {
     private var isGroup: Bool { tab.isGroup }
     private var showClose: Bool { (hovering || selected) && !isEditing }
 
+    // 标签样式：活动标签 = 实心 accent 胶囊（白字白图标），非活动 = 纯文字、悬停淡底。
+    private var tabTitleColor: Color { selected ? .white : AppStyle.textSecondary }
+    /// 胶囊里的图标/角标/× 在 accent 底上的前景色。
+    private var onPillColor: Color { selected ? .white : AppStyle.textTertiary }
+    /// × 的圆底：活动胶囊上用淡白（仅 hover 显形），非活动沿用原 hover accent / 淡底。
+    private var closeBackground: AnyShapeStyle {
+        if selected { return AnyShapeStyle(Color.white.opacity(closeHovering ? 0.24 : 0.001)) }
+        return AnyShapeStyle(closeHovering ? AppStyle.accent.opacity(0.9) : AppStyle.hoverFill)
+    }
+
+    @ViewBuilder private var tabActiveBackground: some View {
+        RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+            .fill(selected ? AnyShapeStyle(AppStyle.accent)
+                           : (hovering ? AnyShapeStyle(AppStyle.hoverFill) : AnyShapeStyle(Color.clear)))
+    }
+
     /// 悬停提示：⌘N 直达键位 + 完成未读说明（有则附）。
     private var pillHelp: String {
         var parts: [String] = []
@@ -372,15 +388,15 @@ private struct TabPill: View {
                         maxWidth: TabPillLayout.maxTitleWidth,
                         alignment: .leading
                     )
-                    .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+                    .foregroundStyle(tabTitleColor)
             }
             if isGroup, !isEditing {
                 Text("\(tab.paneCount)")
                     .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppStyle.theme.primarySolidText)
+                    .foregroundStyle(selected ? AnyShapeStyle(AppStyle.accent) : AnyShapeStyle(AppStyle.theme.primarySolidText))
                     .contentTransition(.numericText())
                     .frame(minWidth: 16, minHeight: 16)
-                    .background(Circle().fill(Color(AppStyle.accent).opacity(selected ? 1 : 0.7)))
+                    .background(Circle().fill(selected ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color(AppStyle.accent).opacity(0.7))))
                     .transition(.scale(scale: 0.3).combined(with: .opacity))
             }
             Color.clear.frame(width: 15, height: 15)   // 预留 X 位
@@ -388,15 +404,7 @@ private struct TabPill: View {
         .animation(.spring(response: 0.4, dampingFraction: 0.62), value: tab.paneCount)
         .padding(.horizontal, 11)
         .padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .fill(selected ? AnyShapeStyle(AppStyle.accent.opacity(0.14))
-                               : (hovering ? AnyShapeStyle(AppStyle.hoverFill) : AnyShapeStyle(Color.clear)))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                .strokeBorder(selected ? AppStyle.accent.opacity(0.38) : Color.clear, lineWidth: 1)
-        )
+        .background(tabActiveBackground)
         .contentShape(Rectangle())
     }
 
@@ -408,19 +416,19 @@ private struct TabPill: View {
                 if CLIToolLogo.isMonochrome(agent.logo) {
                     Image(nsImage: logo)
                         .resizable().renderingMode(.template).interpolation(.high).scaledToFit()
-                        .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+                        .foregroundStyle(selected ? Color.white : AppStyle.textSecondary)
                 } else {
                     Image(nsImage: logo).resizable().interpolation(.high).scaledToFit()
                 }
             } else {
                 Image(systemName: agent.fallbackSystemImage)
                     .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+                    .foregroundStyle(onPillColor)
             }
         } else {
             Image(systemName: isGroup ? "rectangle.split.2x1" : "terminal")
                 .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
+                .foregroundStyle(onPillColor)
         }
     }
 
@@ -428,9 +436,9 @@ private struct TabPill: View {
         Button(action: { coordinator.closeTab(tab.id) }) {
             Image(systemName: "xmark")
                 .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(closeHovering ? AppStyle.theme.primarySolidText : AppStyle.textSecondary)
+                .foregroundStyle(selected ? Color.white : (closeHovering ? AppStyle.theme.primarySolidText : AppStyle.textSecondary))
                 .frame(width: 16, height: 16)
-                .background(Circle().fill(closeHovering ? AppStyle.accent.opacity(0.9) : AppStyle.hoverFill))
+                .background(Circle().fill(closeBackground))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

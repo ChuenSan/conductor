@@ -11,6 +11,9 @@ enum BridgeServer {
     private static let maxPayloadBytes = PayloadLimit.maxBytes
 
     static func run(host: String, port: Int, interval: Double) throws {
+        guard host == "127.0.0.1" else {
+            throw CLIError("bridge binds to 127.0.0.1 only")
+        }
         let server = socket(AF_INET, SOCK_STREAM, 0)
         guard server >= 0 else { throw CLIError("socket() failed: \(errnoText())") }
         var reuse: Int32 = 1
@@ -60,6 +63,32 @@ enum BridgeServer {
         defer { close(fd) }
         do {
             let request = try HTTPRequest.read(from: fd)
+            if let error = HTTPRequest.loopbackHostValidationError(request.hostHeaders) {
+                let status: String
+                let message: String
+                switch error {
+                case .missing, .duplicate:
+                    status = "400 Bad Request"
+                    message = "invalid request"
+                case .invalid, .disallowed:
+                    status = "403 Forbidden"
+                    message = "forbidden host"
+                }
+                try writeHTTP(fd: fd, status: status, body: jsonData(.object([
+                    "ok": .bool(false),
+                    "error": .string(message),
+                ])))
+                return
+            }
+            if let error = HTTPRequest.loopbackOriginValidationError(request.headers["origin"]) {
+                let status = error == .invalid ? "400 Bad Request" : "403 Forbidden"
+                let message = error == .invalid ? "invalid request" : "forbidden origin"
+                try writeHTTP(fd: fd, status: status, body: jsonData(.object([
+                    "ok": .bool(false),
+                    "error": .string(message),
+                ])))
+                return
+            }
             if request.method == "OPTIONS" {
                 try writeHTTP(fd: fd, status: "204 No Content", body: Data())
                 return
@@ -196,7 +225,6 @@ enum BridgeServer {
             "Upgrade: websocket",
             "Connection: Upgrade",
             "Sec-WebSocket-Accept: \(accept)",
-            "Access-Control-Allow-Origin: *",
             "",
             "",
         ].joined(separator: "\r\n")
@@ -439,10 +467,6 @@ enum BridgeServer {
             "Content-Type: \(contentType)",
             "Content-Length: \(body.count)",
             "Connection: close",
-            "Access-Control-Allow-Origin: *",
-            "Access-Control-Allow-Headers: Content-Type, Authorization",
-            "Access-Control-Allow-Methods: GET, POST, OPTIONS",
-            "Access-Control-Allow-Private-Network: true",
             "",
             "",
         ].joined(separator: "\r\n")
@@ -455,7 +479,6 @@ enum BridgeServer {
             "Content-Type: text/event-stream",
             "Cache-Control: no-cache",
             "Connection: keep-alive",
-            "Access-Control-Allow-Origin: *",
             "",
             "",
         ].joined(separator: "\r\n")
@@ -637,6 +660,12 @@ enum UsageHTTPServer {
                     status = "403 Forbidden"
                     message = "forbidden host"
                 }
+                try writeJSON(fd: fd, status: status, payload: ErrorPayload(error: message))
+                return
+            }
+            if let error = HTTPRequest.loopbackOriginValidationError(request.headers["origin"]) {
+                let status = error == .invalid ? "400 Bad Request" : "403 Forbidden"
+                let message = error == .invalid ? "invalid request" : "forbidden origin"
                 try writeJSON(fd: fd, status: status, payload: ErrorPayload(error: message))
                 return
             }
@@ -2184,10 +2213,6 @@ enum UsageHTTPServer {
             "Content-Type: \(contentType)",
             "Content-Length: \(body.count)",
             "Connection: close",
-            "Access-Control-Allow-Origin: *",
-            "Access-Control-Allow-Headers: Content-Type, Authorization",
-            "Access-Control-Allow-Methods: GET, POST, OPTIONS",
-            "Access-Control-Allow-Private-Network: true",
             "",
             "",
         ].joined(separator: "\r\n")
@@ -3118,7 +3143,7 @@ private struct HTTPRequest {
         return length
     }
 
-    enum HostValidationError {
+    enum HostValidationError: Equatable {
         case missing
         case duplicate
         case invalid
@@ -3129,6 +3154,25 @@ private struct HTTPRequest {
         guard let host = hosts.first else { return .missing }
         guard hosts.count == 1 else { return .duplicate }
         return isAllowedLoopbackHost(host) ? nil : .disallowed
+    }
+
+    static func loopbackOriginValidationError(_ origin: String?) -> HostValidationError? {
+        guard let origin = origin?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !origin.isEmpty
+        else {
+            return nil
+        }
+        guard origin.lowercased() != "null" else { return .disallowed }
+        guard let components = URLComponents(string: origin),
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https", "ws", "wss"].contains(scheme),
+              let host = components.host,
+              components.user == nil,
+              components.password == nil
+        else {
+            return .invalid
+        }
+        return isAllowedLoopbackOriginHost(host) ? nil : .disallowed
     }
 
     private static func isAllowedLoopbackHost(_ host: String) -> Bool {
@@ -3156,6 +3200,15 @@ private struct HTTPRequest {
 
         switch hostWithoutPort.lowercased() {
         case "127.0.0.1", "localhost", "localhost.", "[::1]":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isAllowedLoopbackOriginHost(_ host: String) -> Bool {
+        switch host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "127.0.0.1", "localhost", "localhost.", "::1":
             return true
         default:
             return false

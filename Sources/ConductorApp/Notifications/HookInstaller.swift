@@ -23,7 +23,7 @@ enum HookInstaller {
         var errorDescription: String? { switch self { case .write(let m): return m } }
     }
 
-    private static var home: URL { FileManager.default.homeDirectoryForCurrentUser }
+    private static var home: URL { ConductorPaths.agentHomeDirectory() }
     static var scriptURL: URL { home.appendingPathComponent(".conductor/bin/conductor-notify") }
 
     /// 写入 Stop hook 的命令（网关 + 哨兵）：完成通知 + 熄灭思考动效。
@@ -118,7 +118,7 @@ enum HookInstaller {
         #   conductor-notify          Stop hook：完成通知 + 熄灭思考动效（点击通知跳回对应 pane）
         #   conductor-notify busy     UserPromptSubmit hook：点亮思考动效，不发通知
         #   conductor-notify session-start  SessionStart hook：记录原生 session id，不发通知
-        INBOX="$HOME/Library/Application Support/conductor/hooks-inbox"
+        INBOX="${CONDUCTOR_HOOKS_INBOX:-$HOME/Library/Application Support/conductor/hooks-inbox}"
         mkdir -p "$INBOX"
         PANE="${CONDUCTOR_PANE_ID:-}"
         AGENT="${CONDUCTOR_AGENT_ID:-}"

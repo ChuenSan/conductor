@@ -25,9 +25,7 @@ public struct HookParkingStore: Sendable {
     }
 
     public static var defaultURL: URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        let base = ConductorPaths.appSupportDirectory()
         return base.appendingPathComponent("hooks-disabled.json", isDirectory: false)
     }
 

@@ -8,8 +8,7 @@ import Yams
 /// - 成功 → `validated()` 夹紧非法值后返回。
 struct ConfigLoader {
     static var configURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/conductor/config.yaml")
+        ConductorPaths.configURL()
     }
 
     func load() -> AppConfig {
@@ -27,6 +26,7 @@ struct ConfigLoader {
             writeDefaultTemplate(to: url)
             return .default
         }
+        try? ConfigFileSecurity.secureConfigFile(at: url)
         let text = try String(contentsOf: url, encoding: .utf8)
         let config = try YAMLDecoder().decode(AppConfig.self, from: text)
         return config.validated()
@@ -38,9 +38,11 @@ struct ConfigLoader {
         do {
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? ConfigFileSecurity.secureConfigDirectory(at: url.deletingLastPathComponent())
             let yaml = try YAMLEncoder().encode(config)
             let header = "# conductor 配置（部分由设置面板写入，可手编，改完即生效）\n\n"
             try (header + yaml).write(to: url, atomically: true, encoding: .utf8)
+            try ConfigFileSecurity.secureConfigFile(at: url)
         } catch {
             NSLog("[conductor] 写 config.yaml 失败：\(error)")
         }
@@ -50,7 +52,9 @@ struct ConfigLoader {
         do {
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? ConfigFileSecurity.secureConfigDirectory(at: url.deletingLastPathComponent())
             try Self.defaultTemplate.write(to: url, atomically: true, encoding: .utf8)
+            try ConfigFileSecurity.secureConfigFile(at: url)
             NSLog("[conductor] 已生成默认配置：\(url.path)")
         } catch {
             NSLog("[conductor] 写默认 config.yaml 失败：\(error)")

@@ -148,7 +148,15 @@ public enum UsageProviderRepairActions {
         }
 
         if category == "auth" || containsAny(lower, Self.authKeywords) {
-            if prefersAPIKeyRepair(providerID: providerID, source: source) {
+            if shouldPreferCatalogSignIn(providerID: providerID, source: source, messageLower: messageLower),
+               let command = signInCommand(providerID: providerID)
+            {
+                add(
+                    .signIn,
+                    title: L("重新登录 %@ CLI", providerName),
+                    detail: L("本机登录态失效或缺失；运行命令后回到管理台刷新。"),
+                    command: command)
+            } else if prefersAPIKeyRepair(providerID: providerID, source: source) {
                 add(
                     .configureCredential,
                     title: L("更新 API Key / Token"),
@@ -562,6 +570,28 @@ public enum UsageProviderRepairActions {
             return false
         }
         return UsageProviderConfigCapabilities.apiKeyEnvironmentNames[providerID] != nil
+    }
+
+    private static func shouldPreferCatalogSignIn(
+        providerID: String,
+        source: String,
+        messageLower: String
+    ) -> Bool {
+        guard signInCommand(providerID: providerID) != nil else { return false }
+        let loweredSource = source.lowercased()
+        if loweredSource.contains("api") { return false }
+        if loweredSource.contains("browser") ||
+            loweredSource.contains("web") ||
+            loweredSource.contains("cookie") ||
+            loweredSource.contains("dashboard")
+        {
+            return false
+        }
+        if loweredSource.contains("cli") || loweredSource.contains("local") { return true }
+        return containsAny(messageLower, [
+            "session", "login", "log in", "sign in", "sign-in", "oauth", "device auth",
+            "会话", "登录态",
+        ])
     }
 
     private static func prefersCookieRepair(source: String) -> Bool {

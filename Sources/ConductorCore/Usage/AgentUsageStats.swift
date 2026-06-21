@@ -807,12 +807,34 @@ public struct UsageReport: Sendable, Equatable, Codable {
         self.byMonth = try container.decodeIfPresent([MonthlyUsage].self, forKey: .byMonth) ?? []
         self.bySession = try container.decodeIfPresent([SessionUsage].self, forKey: .bySession) ?? []
         self.byProject = try container.decodeIfPresent([ProjectUsage].self, forKey: .byProject) ?? []
-        self.bySource = try container.decodeIfPresent([UsageSource: UsageTotals].self, forKey: .bySource) ?? [:]
+        self.bySource = (try? container.decodeIfPresent([UsageSource: UsageTotals].self, forKey: .bySource)) ?? Self.decodeUsageTotalsBySource(from: container) ?? [:]
         self.sessionsScanned = try container.decodeIfPresent(Int.self, forKey: .sessionsScanned) ?? 0
-        self.sessionsBySource = try container.decodeIfPresent([UsageSource: Int].self, forKey: .sessionsBySource) ?? [:]
+        self.sessionsBySource = (try? container.decodeIfPresent([UsageSource: Int].self, forKey: .sessionsBySource)) ?? Self.decodeIntBySource(from: container) ?? [:]
         self.daysBack = try container.decodeIfPresent(Int.self, forKey: .daysBack) ?? 0
         self.generatedAt = try container.decodeIfPresent(Date.self, forKey: .generatedAt) ?? Date()
         self.sourceInfo = try container.decodeIfPresent(UsageReportSourceInfo.self, forKey: .sourceInfo)
+    }
+
+    private static func decodeUsageTotalsBySource(
+        from container: KeyedDecodingContainer<CodingKeys>) -> [UsageSource: UsageTotals]?
+    {
+        guard let raw = try? container.decodeIfPresent([String: UsageTotals].self, forKey: .bySource) else {
+            return nil
+        }
+        return Dictionary(uniqueKeysWithValues: raw.compactMap { key, value in
+            UsageSource(rawValue: key).map { ($0, value) }
+        })
+    }
+
+    private static func decodeIntBySource(
+        from container: KeyedDecodingContainer<CodingKeys>) -> [UsageSource: Int]?
+    {
+        guard let raw = try? container.decodeIfPresent([String: Int].self, forKey: .sessionsBySource) else {
+            return nil
+        }
+        return Dictionary(uniqueKeysWithValues: raw.compactMap { key, value in
+            UsageSource(rawValue: key).map { ($0, value) }
+        })
     }
 
     public func encode(to encoder: Encoder) throws {

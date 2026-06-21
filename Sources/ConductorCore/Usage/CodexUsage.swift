@@ -1478,13 +1478,20 @@ private final class CodexCLIUsageRPCClient: @unchecked Sendable {
             }
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(max(0.1, seconds) * 1_000_000_000))
-                self.shutdown()
                 throw CodexRPCError.timeout(self.withDiagnostics(method))
             }
-            let result = try await group.next()
-            group.cancelAll()
-            guard let result else { throw CodexRPCError.timeout(withDiagnostics(method)) }
-            return result
+            do {
+                let result = try await group.next()
+                group.cancelAll()
+                guard let result else { throw CodexRPCError.timeout(withDiagnostics(method)) }
+                return result
+            } catch {
+                group.cancelAll()
+                if case .timeout = error as? CodexRPCError {
+                    self.shutdown()
+                }
+                throw error
+            }
         }
     }
 

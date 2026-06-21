@@ -1,5 +1,20 @@
 # Third Party Notices
 
+## Ghostty Shell Integration
+
+Conductor bundles Ghostty shell integration scripts so embedded terminals can
+emit shell semantic markers such as current working directory, prompt, and
+command completion metadata without requiring `/Applications/Ghostty.app`.
+
+- Project: `ghostty-org/ghostty`
+- URL: https://github.com/ghostty-org/ghostty/tree/main/src/shell-integration
+- License: GPL-3.0-or-later
+
+The vendored copy lives under `Vendor/ghostty-shell-integration/`; individual
+files retain their upstream license headers. The full GPL-3.0 license text is
+included at `docs/licenses/GPL-3.0.txt` and is copied into release app bundles
+under `Contents/Resources/Legal/licenses/`.
+
 ## Skills Manager
 
 Portions of the Skill Manager tool adapter model, default agent path table,

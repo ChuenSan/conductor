@@ -7,19 +7,11 @@ import Foundation
 public enum AutomationProtocol {
     /// 协议版本：破坏性改动时 +1，CLI 据此提示升级。
     public static let version = 1
-    public static let socketPathEnvKey = "CONDUCTOR_SOCKET_PATH"
+    public static let socketPathEnvKey = ConductorPaths.socketPathEnvKey
 
     /// Conductor app and CLI share one local automation socket.
     public static var defaultSocketURL: URL {
-        if let override = ProcessInfo.processInfo.environment[socketPathEnvKey]?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !override.isEmpty {
-            return URL(fileURLWithPath: (override as NSString).expandingTildeInPath)
-        }
-        return FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
-            .appendingPathComponent("automation.sock", isDirectory: false)
+        ConductorPaths.automationSocketURL()
     }
 }
 
@@ -45,6 +37,10 @@ public enum AutomationMethod {
     public static let workspaceLogAppend = "workspace.log.append"
     public static let workspaceLogList = "workspace.log.list"
     public static let workspaceLogClear = "workspace.log.clear"
+    public static let workspaceLayoutSave = "workspace.layout.save"
+    public static let workspaceLayoutList = "workspace.layout.list"
+    public static let workspaceLayoutRestore = "workspace.layout.restore"
+    public static let workspaceLayoutDelete = "workspace.layout.delete"
 
     public static let tabList = "tab.list"
     public static let tabCreate = "tab.create"
@@ -63,6 +59,13 @@ public enum AutomationMethod {
     public static let paneResumeSet = "pane.resume.set"
     public static let paneResumeShow = "pane.resume.show"
     public static let paneResumeClear = "pane.resume.clear"
+    public static let paneCommands = "pane.commands"
+    public static let paneCommandLogOpen = "pane.commandlog.open"
+
+    public static let choreographyList = "choreography.list"
+    public static let choreographyAdd = "choreography.add"
+    public static let choreographyRemove = "choreography.remove"
+    public static let choreographyOpen = "choreography.open"
 
     public static let agentSend = "agent.send"
     public static let agentRun = "agent.run"
@@ -83,9 +86,11 @@ public enum AutomationMethod {
         workspaceList, workspaceCurrent, workspaceSelect, workspaceCreate, workspaceRename, workspaceClose,
         workspaceTree, workspaceStatusSet, workspaceStatusList, workspaceStatusClear,
         workspaceProgressSet, workspaceProgressClear, workspaceLogAppend, workspaceLogList, workspaceLogClear,
+        workspaceLayoutSave, workspaceLayoutList, workspaceLayoutRestore, workspaceLayoutDelete,
         tabList, tabCreate, tabSelect, tabRename, tabClose,
         paneList, paneCreate, paneSplit, paneFocus, paneClose, paneRead, paneKeys, paneNotify,
-        paneResumeSet, paneResumeShow, paneResumeClear,
+        paneResumeSet, paneResumeShow, paneResumeClear, paneCommands, paneCommandLogOpen,
+        choreographyList, choreographyAdd, choreographyRemove, choreographyOpen,
         agentSend, agentRun, agentStatus, agentResult,
         activityList, eventsRecent,
         feedRequest, feedList, feedApprove, feedDeny, feedAnswer,

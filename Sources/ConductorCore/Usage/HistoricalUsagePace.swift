@@ -258,10 +258,7 @@ public actor HistoricalUsageHistoryStore {
     }
 
     public nonisolated static func defaultFileURL() -> URL {
-        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.homeDirectoryForCurrentUser
-        return root
-            .appendingPathComponent("conductor", isDirectory: true)
+        ConductorPaths.appSupportDirectory()
             .appendingPathComponent("codex-historical-usage.jsonl")
     }
 

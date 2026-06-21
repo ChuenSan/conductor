@@ -25,10 +25,10 @@ final class ZedUsageTests: XCTestCase {
 
         XCTAssertEqual(snapshot.planName, "Zed Pro")
         XCTAssertEqual(snapshot.accountLabel, "octocat · Octo Cat")
-        XCTAssertEqual(snapshot.primary?.title, L("Edit predictions"))
+        XCTAssertEqual(snapshot.primary?.title, L("编辑预测"))
         XCTAssertEqual(snapshot.primary?.usedPercent ?? -1, 25, accuracy: 0.001)
-        XCTAssertEqual(snapshot.primary?.resetDescription, L("%1$ld / %2$ld predictions", 25, 100))
-        XCTAssertEqual(snapshot.secondary?.title, L("Billing cycle"))
+        XCTAssertEqual(snapshot.primary?.resetDescription, L("%1$ld / %2$ld 次预测", 25, 100))
+        XCTAssertEqual(snapshot.secondary?.title, L("账单周期"))
         XCTAssertEqual(snapshot.secondary?.usedPercent ?? -1, 50, accuracy: 0.001)
         XCTAssertEqual(snapshot.extraRateWindows.count, 0)
     }
@@ -53,9 +53,9 @@ final class ZedUsageTests: XCTestCase {
         XCTAssertEqual(snapshot.planName, "Zed Business")
         XCTAssertEqual(snapshot.accountLabel, "dev")
         XCTAssertEqual(snapshot.primary?.usedPercent ?? -1, 100, accuracy: 0.001)
-        XCTAssertEqual(snapshot.primary?.resetDescription, L("%1$ld / %2$ld predictions", 100, 100))
+        XCTAssertEqual(snapshot.primary?.resetDescription, L("%1$ld / %2$ld 次预测", 100, 100))
         XCTAssertEqual(snapshot.extraRateWindows.first?.id, "zed.overdue-invoices")
-        XCTAssertEqual(snapshot.extraRateWindows.first?.window.resetDescription, L("Overdue invoices"))
+        XCTAssertEqual(snapshot.extraRateWindows.first?.window.resetDescription, L("逾期账单"))
     }
 
     func testParseUnlimitedLimit() throws {
@@ -78,6 +78,6 @@ final class ZedUsageTests: XCTestCase {
         XCTAssertEqual(snapshot.planName, "Zed Student")
         XCTAssertEqual(snapshot.accountLabel, "student")
         XCTAssertEqual(snapshot.primary?.usedPercent ?? -1, 0, accuracy: 0.001)
-        XCTAssertEqual(snapshot.primary?.resetDescription, L("Unlimited"))
+        XCTAssertEqual(snapshot.primary?.resetDescription, L("无限制"))
     }
 }

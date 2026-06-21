@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import ConductorCore
 import SwiftUI
 
@@ -16,6 +17,10 @@ struct SidebarView: View {
     @ObservedObject private var configStore = ConfigStore.shared   // 主题变 → 重渲染（AppStyle 跟随）
     @ObservedObject private var sessionStore = SessionManagerStore.shared
     @State private var editingWorkspace: WorkspaceID?
+    /// 非 nil＝正在为该工作区「存为布局」（驱动命名 + 每 pane 启动命令的 sheet）。
+    @State private var layoutSaveWS: WorkspaceID?
+    /// ③ 联动规则编辑面板开关（规则是窗口级，不分工作区）。
+    @State private var showChoreography = false
     @State private var draftName: String = ""
     @FocusState private var renameFocused: Bool
     @State private var hoverRecord: AgentSessionRecord?
@@ -107,6 +112,29 @@ struct SidebarView: View {
             if collapsed, editingWorkspace != nil { commitRename() }
         }
         .clipShape(Rectangle())
+        .sheet(isPresented: Binding(
+            get: { layoutSaveWS != nil },
+            set: { if !$0 { layoutSaveWS = nil } })) {
+            if let wsID = layoutSaveWS {
+                LayoutSaveSheet(coordinator: coordinator, workspaceID: wsID) { layoutSaveWS = nil }
+            }
+        }
+        .sheet(isPresented: $showChoreography) {
+            ChoreographyRulesSheet(coordinator: coordinator) { showChoreography = false }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .conductorOpenChoreography)) { _ in
+            showChoreography = true
+        }
+        .onAppear {
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["CDR_DEBUG_LAYOUT"] == "save" {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { layoutSaveWS = coordinator.store.activeWorkspace }
+            }
+            if ProcessInfo.processInfo.environment["CDR_DEBUG_CHOREO"] == "1" {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { showChoreography = true }
+            }
+            #endif
+        }
     }
 
     private var workspaceList: some View {
@@ -167,6 +195,29 @@ struct SidebarView: View {
                     }
                     Button { reauthorizeWorkspace(ws) } label: {
                         Label(L("重新授权目录"), systemImage: "lock.open")
+                    }
+                    Divider()
+                    Button { layoutSaveWS = ws.id } label: {
+                        Label(L("存为布局…"), systemImage: "square.grid.2x2")
+                    }
+                    if !coordinator.layoutStore.layouts.isEmpty {
+                        Menu {
+                            ForEach(coordinator.layoutStore.sorted) { layout in
+                                Button(L("%@（%ld 标签）", layout.name, layout.tabs.count)) {
+                                    coordinator.restoreLayout(layout)
+                                }
+                            }
+                        } label: { Label(L("复原布局"), systemImage: "arrow.uturn.backward") }
+                        Menu {
+                            ForEach(coordinator.layoutStore.sorted) { layout in
+                                Button(layout.name, role: .destructive) {
+                                    coordinator.layoutStore.delete(layout.id)
+                                }
+                            }
+                        } label: { Label(L("删除布局"), systemImage: "trash.slash") }
+                    }
+                    Button { showChoreography = true } label: {
+                        Label(L("联动规则…"), systemImage: "bolt.horizontal")
                     }
                     Divider()
                     Button(role: .destructive) { confirmRemoveWorkspace(ws) } label: {

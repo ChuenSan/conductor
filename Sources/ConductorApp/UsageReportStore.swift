@@ -4,8 +4,7 @@ import Foundation
 /// 用量报告磁盘缓存：按 daysBack 各存一份，面板打开时先显示缓存（秒开），再后台重扫更新。
 enum UsageReportStore {
     private static var dir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        ConductorPaths.appSupportDirectory()
     }
 
     private static func cacheURL(daysBack: Int) -> URL {

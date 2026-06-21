@@ -53,6 +53,12 @@ final class GhosttySurface: TerminalSurface {
     var onDesktopNotification: ((_ title: String, _ body: String) -> Void)?
     /// OSC 9;4 进度上报（percent 为 nil 表示未给百分比）。
     var onProgressReport: ((_ state: PaneProgressState, _ percent: Int?) -> Void)?
+    /// shell 集成（OSC 133）：一条命令跑完——退出码（nil=未上报）+ 运行时长（纳秒）。
+    var onCommandFinished: ((_ exitCode: Int?, _ durationNanos: UInt64) -> Void)?
+
+    func handleCommandFinished(exitCode: Int?, durationNanos: UInt64) {
+        onCommandFinished?(exitCode, durationNanos)
+    }
 
     func requestFocus() { onRequestFocus?() }
     func beginPaneDrag(_ event: NSEvent) { onBeginPaneDrag?(event) }
@@ -217,7 +223,9 @@ final class GhosttySurface: TerminalSurface {
                 }
             }
         }
-        command.withCString { createSurface(commandPointer: $0) }
+        UsageCredentials.withManagedProcessEnvironmentRestored {
+            command.withCString { createSurface(commandPointer: $0) }
+        }
 
         guard let surface else {
             userdata.release()
@@ -331,6 +339,12 @@ final class GhosttySurface: TerminalSurface {
             loginPATH: loginPATH)
         if !effectivePATH.isEmpty {
             env["PATH"] = effectivePATH
+        }
+        if ConductorPaths.isStateDirectoryOverridden(environment: processEnv) {
+            env["HOME"] = ConductorPaths.agentHomeDirectory(environment: processEnv).path
+        }
+        for (key, value) in UsageCredentials.terminalEnvironmentScrubPairs() {
+            env[key] = value
         }
         for (key, value) in extraEnvironment where !key.isEmpty {
             env[key] = value

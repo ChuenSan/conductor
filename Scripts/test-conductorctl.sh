@@ -278,8 +278,15 @@ def test_bridge_http():
             conn.request("OPTIONS", "/rpc", headers={"Origin": "http://localhost:3000"})
             resp = conn.getresponse()
             assert resp.status == 204, resp.status
-            assert resp.getheader("Access-Control-Allow-Origin") == "*", resp.getheaders()
+            assert resp.getheader("Access-Control-Allow-Origin") is None, resp.getheaders()
             assert resp.read() == b""
+
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("POST", "/rpc", body=b'{"id":1,"method":"app.ping"}', headers={"Origin": "https://evil.example"})
+            resp = conn.getresponse()
+            rejected = json.loads(resp.read().decode())
+            assert resp.status == 403, (resp.status, rejected)
+            assert rejected["error"] == "forbidden origin", rejected
 
             conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
             conn.request("GET", "/methods")
@@ -401,9 +408,16 @@ usage:
             conn.request("OPTIONS", "/cache/clear", headers={"Origin": "http://localhost:3000"})
             resp = conn.getresponse()
             assert resp.status == 204, resp.status
-            assert resp.getheader("Access-Control-Allow-Origin") == "*", resp.getheaders()
-            assert "POST" in resp.getheader("Access-Control-Allow-Methods"), resp.getheaders()
+            assert resp.getheader("Access-Control-Allow-Origin") is None, resp.getheaders()
+            assert resp.getheader("Access-Control-Allow-Methods") is None, resp.getheaders()
             assert resp.read() == b""
+
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("POST", "/cache/clear", body=b"{}", headers={"Origin": "https://evil.example"})
+            resp = conn.getresponse()
+            rejected = json.loads(resp.read().decode())
+            assert resp.status == 403, (resp.status, rejected)
+            assert rejected["error"] == "forbidden origin", rejected
 
             conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
             conn.request("GET", "/openapi.json")

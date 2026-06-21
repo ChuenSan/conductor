@@ -1,3 +1,4 @@
+import ConductorCore
 import Foundation
 
 /// 一台被停用的 MCP server。停用＝把它从对应 client 的配置文件里移走、原样存到这里，
@@ -24,9 +25,7 @@ struct AgentToolsMCPParkingStore {
     }
 
     static var defaultURL: URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        ConductorPaths.appSupportDirectory()
             .appendingPathComponent("mcp-disabled.json", isDirectory: false)
     }
 

@@ -29,9 +29,7 @@ final class SessionManagerStore: ObservableObject {
     }
 
     init() {
-        cacheURL = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        cacheURL = ConductorPaths.appSupportDirectory()
             .appendingPathComponent("sessions-cache.json")
         pinnedIDs = Set(UserDefaults.standard.stringArray(forKey: Self.pinnedKey) ?? [])
         loadCache()

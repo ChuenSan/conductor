@@ -9,6 +9,8 @@ import Foundation
 /// 字段翻译成各 fetcher 已经支持的环境变量，避免 UI 设置只是“看起来能填”。
 enum UsageCredentials {
     private static var activeManagedEnvNames: Set<String> = []
+    private static var activeManagedSetValues: [String: String] = [:]
+    private static var activeManagedUnsetNames: Set<String> = []
     private static var originalEnvValues: [String: String] = [:]
     private static var originallyMissingEnvNames: Set<String> = []
     private static let browserCredentialProviderIDs: Set<String> = [
@@ -42,29 +44,69 @@ enum UsageCredentials {
 
     /// 把应用内配置写进进程环境，使 fetcher 能取到。幂等，可重复调用。
     static func apply(_ config: AppConfig) {
-        var nextManagedEnvNames: Set<String> = []
-        for (id, providerConfig) in config.usage.providers {
-            guard UsageProviderCatalog.entry(for: id)?.isEnabled(in: config) ?? false else { continue }
-            applyProviderConfig(id: id, config: providerConfig, managedEnvNames: &nextManagedEnvNames)
-        }
+        UsageEnvironmentMutationLock.shared.withLock {
+            var nextManagedEnvNames: Set<String> = []
+            var nextManagedSetValues: [String: String] = [:]
+            var nextManagedUnsetNames: Set<String> = []
+            for (id, providerConfig) in config.usage.providers {
+                guard UsageProviderCatalog.entry(for: id)?.isEnabled(in: config) ?? false else { continue }
+                applyProviderConfig(
+                    id: id,
+                    config: providerConfig,
+                    managedEnvNames: &nextManagedEnvNames,
+                    managedSetValues: &nextManagedSetValues,
+                    managedUnsetNames: &nextManagedUnsetNames)
+            }
 
-        if config.usage.providers["claude"]?.flags["avoidKeychainPrompts"] == true {
-            apply("1", to: ["CONDUCTOR_CLAUDE_AVOID_KEYCHAIN"], managedEnvNames: &nextManagedEnvNames)
+            if config.usage.providers["claude"]?.flags["avoidKeychainPrompts"] == true {
+                apply(
+                    "1",
+                    to: ["CONDUCTOR_CLAUDE_AVOID_KEYCHAIN"],
+                    managedEnvNames: &nextManagedEnvNames,
+                    managedSetValues: &nextManagedSetValues,
+                    managedUnsetNames: &nextManagedUnsetNames)
+            }
+            restoreInactiveManagedEnvNames(keeping: nextManagedEnvNames)
+            activeManagedEnvNames = nextManagedEnvNames
+            activeManagedSetValues = nextManagedSetValues
+            activeManagedUnsetNames = nextManagedUnsetNames
         }
-        restoreInactiveManagedEnvNames(keeping: nextManagedEnvNames)
-        activeManagedEnvNames = nextManagedEnvNames
     }
 
     static func providerDiscoveryEnvironment() -> [String: String] {
-        var environment = ProcessInfo.processInfo.environment
-        for name in activeManagedEnvNames {
-            if let original = originalEnvValues[name] {
-                environment[name] = original
-            } else if originallyMissingEnvNames.contains(name) {
-                environment.removeValue(forKey: name)
+        UsageEnvironmentMutationLock.shared.withLock {
+            var environment = ProcessInfo.processInfo.environment
+            for name in activeManagedEnvNames {
+                if let original = originalEnvValues[name] {
+                    environment[name] = original
+                } else if originallyMissingEnvNames.contains(name) {
+                    environment.removeValue(forKey: name)
+                }
             }
+            return environment
         }
-        return environment
+    }
+
+    /// Run a synchronous spawn while app-managed usage credentials are removed from the process env.
+    ///
+    /// Several usage fetchers still read `ProcessInfo.processInfo.environment`, so `apply(_:)` keeps
+    /// the legacy process-env bridge. Terminal children should not inherit those app-stored secrets.
+    static func withManagedProcessEnvironmentRestored<T>(_ body: () throws -> T) rethrows -> T {
+        try UsageEnvironmentMutationLock.shared.withLock {
+            let setValues = activeManagedSetValues
+            let unsetNames = activeManagedUnsetNames
+            let names = activeManagedEnvNames
+            restoreOriginalValues(for: names)
+            defer { applyManagedValues(setValues: setValues, unsetNames: unsetNames) }
+            return try body()
+        }
+    }
+
+    /// Explicit ghostty env overrides that blank managed credential names if the embedder merges env vars.
+    static func terminalEnvironmentScrubPairs() -> [(key: String, value: String)] {
+        UsageEnvironmentMutationLock.shared.withLock {
+            activeManagedEnvNames.sorted().map { (key: $0, value: "") }
+        }
     }
 
     /// provider 是否应在用量区显示：跟随 CodexBar 的 provider defaultEnabled metadata，
@@ -100,13 +142,19 @@ enum UsageCredentials {
     private static func applyProviderConfig(
         id: String,
         config: UsageProviderConfig,
-        managedEnvNames: inout Set<String>
+        managedEnvNames: inout Set<String>,
+        managedSetValues: inout [String: String],
+        managedUnsetNames: inout Set<String>
     ) {
         var patch = UsageProviderConfigCapabilities.environmentPatch(providerID: id, config: config)
         if let account = selectedTokenAccount(from: config.tokenAccounts) {
             patch.merge(UsageProviderConfigCapabilities.environmentPatch(providerID: id, account: account))
         }
-        apply(patch, managedEnvNames: &managedEnvNames)
+        apply(
+            patch,
+            managedEnvNames: &managedEnvNames,
+            managedSetValues: &managedSetValues,
+            managedUnsetNames: &managedUnsetNames)
     }
 
     private static func selectedTokenAccount(from data: UsageProviderTokenAccountData?) -> UsageProviderTokenAccount? {
@@ -114,22 +162,42 @@ enum UsageCredentials {
         return data.accounts[data.clampedActiveIndex()]
     }
 
-    private static func apply(_ patch: UsageProviderEnvironmentPatch, managedEnvNames: inout Set<String>) {
+    private static func apply(
+        _ patch: UsageProviderEnvironmentPatch,
+        managedEnvNames: inout Set<String>,
+        managedSetValues: inout [String: String],
+        managedUnsetNames: inout Set<String>
+    ) {
         for name in patch.unset where !name.isEmpty {
             recordOriginalEnvValue(for: name)
             unsetenv(name)
             managedEnvNames.insert(name)
+            managedSetValues.removeValue(forKey: name)
+            managedUnsetNames.insert(name)
         }
         for (name, value) in patch.set where !name.isEmpty {
-            apply(value, to: [name], managedEnvNames: &managedEnvNames)
+            apply(
+                value,
+                to: [name],
+                managedEnvNames: &managedEnvNames,
+                managedSetValues: &managedSetValues,
+                managedUnsetNames: &managedUnsetNames)
         }
     }
 
-    private static func apply(_ value: String, to names: [String], managedEnvNames: inout Set<String>) {
+    private static func apply(
+        _ value: String,
+        to names: [String],
+        managedEnvNames: inout Set<String>,
+        managedSetValues: inout [String: String],
+        managedUnsetNames: inout Set<String>
+    ) {
         for name in names where !name.isEmpty {
             recordOriginalEnvValue(for: name)
             setenv(name, value, 1)
             managedEnvNames.insert(name)
+            managedSetValues[name] = value
+            managedUnsetNames.remove(name)
         }
     }
 
@@ -141,6 +209,25 @@ enum UsageCredentials {
             } else {
                 unsetenv(name)
             }
+        }
+    }
+
+    private static func restoreOriginalValues(for names: Set<String>) {
+        for name in names {
+            if let original = originalEnvValues[name] {
+                setenv(name, original, 1)
+            } else {
+                unsetenv(name)
+            }
+        }
+    }
+
+    private static func applyManagedValues(setValues: [String: String], unsetNames: Set<String>) {
+        for (name, value) in setValues {
+            setenv(name, value, 1)
+        }
+        for name in unsetNames {
+            unsetenv(name)
         }
     }
 

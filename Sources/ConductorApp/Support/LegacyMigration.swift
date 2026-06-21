@@ -1,4 +1,5 @@
 import Foundation
+import ConductorCore
 
 /// cmux → Conductor 改名后的一次性旧数据迁移（新路径不存在且旧路径存在时才拷贝）：
 /// - `~/Library/Application Support/cmux` → `.../conductor`（工作区布局、会话缓存、回放快照）
@@ -7,6 +8,7 @@ import Foundation
 /// 在「Hooks 管理」面板重新安装即可。
 enum LegacyMigration {
     static func migrateIfNeeded(fileManager fm: FileManager = .default) {
+        guard shouldRun() else { return }
         let home = fm.homeDirectoryForCurrentUser
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
 
@@ -18,6 +20,10 @@ enum LegacyMigration {
             from: home.appendingPathComponent(".config/cmux/config.yaml"),
             to: home.appendingPathComponent(".config/conductor/config.yaml"),
             fm: fm)
+    }
+
+    static func shouldRun(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        !ConductorPaths.isStateDirectoryOverridden(environment: environment)
     }
 
     private static func copyIfMissing(from old: URL, to new: URL, fm: FileManager) {

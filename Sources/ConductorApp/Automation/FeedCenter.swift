@@ -8,9 +8,7 @@ struct FeedPolicyStore {
     let url: URL?
 
     static var standard: FeedPolicyStore {
-        let dir = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        let dir = ConductorPaths.appSupportDirectory()
         return FeedPolicyStore(url: dir.appendingPathComponent("feed-policy.json"))
     }
 

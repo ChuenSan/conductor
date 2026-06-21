@@ -157,9 +157,7 @@ final class UsageQuotaWarningCenter: ObservableObject {
     }
 
     private static var stateURL: URL {
-        let directory = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        let directory = ConductorPaths.appSupportDirectory()
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appendingPathComponent("usage-quota-warning-state.json")
     }

@@ -2,6 +2,7 @@
 import ConductorCore
 import XCTest
 
+@MainActor
 final class UsageMonitorAntigravitySignalTests: XCTestCase {
     func testAntigravityAutomaticSignalIgnoresLegacyLanesWithoutQuotaSummary() throws {
         let provider = try XCTUnwrap(UsageProviderCatalog.entry(for: "antigravity"))

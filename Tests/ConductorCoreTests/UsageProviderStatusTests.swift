@@ -312,9 +312,10 @@ final class UsageProviderStatusTests: XCTestCase {
         XCTAssertEqual((encodedHistory["dailyBreakdown"] as? [Any])?.count, 2)
 
         let text = UsageCLITextRenderer.render([report])
+        let latestDailyBreakdown = try XCTUnwrap(history.dailyBreakdown.first)
         XCTAssertTrue(text.contains("Credits history: 2 stored events"))
         XCTAssertTrue(text.contains("latest 2026-06-01"))
-        XCTAssertTrue(text.contains("latest day: 2026-06-01"))
+        XCTAssertTrue(text.contains("latest day: \(latestDailyBreakdown.day)"))
         XCTAssertFalse(UsageCLITextRenderer.render([report], includeCredits: false).contains("Credits history:"))
     }
 

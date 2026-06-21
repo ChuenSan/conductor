@@ -106,7 +106,9 @@ final class CodexActiveAccountResolverTests: XCTestCase {
             configured: [configuredManaged],
             discovered: [discoveredManaged, live])
 
-        XCTAssertEqual(merged, [discoveredManaged, live])
+        var expectedManaged = discoveredManaged
+        expectedManaged.addedAt = configuredManaged.addedAt
+        XCTAssertEqual(merged, [expectedManaged, live])
     }
 
     func testCorrectedTokenAccountDataClampsActiveIndex() {
@@ -140,7 +142,9 @@ final class CodexActiveAccountResolverTests: XCTestCase {
             configured: UsageProviderTokenAccountData(accounts: [configured], activeIndex: 0),
             discoveredAccounts: [live])
 
-        XCTAssertEqual(corrected, Optional(UsageProviderTokenAccountData(accounts: [live], activeIndex: 0)))
+        var expectedLive = live
+        expectedLive.addedAt = configured.addedAt
+        XCTAssertEqual(corrected, Optional(UsageProviderTokenAccountData(accounts: [expectedLive], activeIndex: 0)))
     }
 
     func testCorrectedTokenAccountDataPersistsMissingManagedFallbackToLive() {

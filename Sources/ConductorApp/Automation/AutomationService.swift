@@ -118,6 +118,38 @@ final class AutomationService {
             return .bool(true)
         case AutomationMethod.workspaceTree:
             return try c.automationTree(workspaceRef: str("workspace"))
+        case AutomationMethod.workspaceLayoutSave:
+            let wsID: WorkspaceID?
+            if let workspaceRef = str("workspace"), !workspaceRef.isEmpty {
+                wsID = try c.automationFindWorkspace(workspaceRef).id
+            } else {
+                wsID = nil
+            }
+            guard let layout = c.saveLayout(named: try requireStr("name"), workspaceID: wsID) else {
+                throw AutomationError.internalError("没有可保存的工作区")
+            }
+            return .object([
+                "id": .string(layout.id), "name": .string(layout.name),
+                "tabs": .int(layout.tabs.count), "panes": .int(layout.paneCount),
+            ])
+        case AutomationMethod.workspaceLayoutList:
+            return .array(c.layoutStore.sorted.map { layout in
+                .object([
+                    "id": .string(layout.id), "name": .string(layout.name),
+                    "tabs": .int(layout.tabs.count), "panes": .int(layout.paneCount),
+                    "template": .bool(layout.isTemplate),
+                ])
+            })
+        case AutomationMethod.workspaceLayoutRestore:
+            let id = try requireStr("id")
+            guard let layout = c.layoutStore.layout(id) else {
+                throw AutomationError.badRequest("没有该布局：\(id)")
+            }
+            c.restoreLayout(layout)
+            return .object(["restored": .string(layout.name), "tabs": .int(layout.tabs.count)])
+        case AutomationMethod.workspaceLayoutDelete:
+            c.layoutStore.delete(try requireStr("id"))
+            return .bool(true)
         case AutomationMethod.workspaceStatusSet:
             let workspace = try c.automationFindWorkspace(str("workspace"))
             c.workspaceMetadata.setStatus(workspace: workspace.id,
@@ -253,6 +285,28 @@ final class AutomationService {
         case AutomationMethod.paneResumeClear:
             let removed = try c.automationClearSurfaceResume(paneRef: str("pane"))
             return removed.map { c.automationDescribe(binding: $0) } ?? .null
+        case AutomationMethod.paneCommands:
+            return try c.automationCommandLog(paneRef: str("pane"))
+        case AutomationMethod.paneCommandLogOpen:
+            try c.automationOpenCommandLog(paneRef: str("pane"))
+            return .bool(true)
+
+        // —— ③ 联动规则 ——
+        case AutomationMethod.choreographyList:
+            return c.automationChoreographyList()
+        case AutomationMethod.choreographyAdd:
+            return try c.automationChoreographyAdd(
+                trigger: str("trigger") ?? "failure",
+                source: str("source"),
+                action: try requireStr("action"),
+                target: str("target"),
+                command: str("command"))
+        case AutomationMethod.choreographyRemove:
+            try c.automationChoreographyRemove(id: try requireStr("id"))
+            return .bool(true)
+        case AutomationMethod.choreographyOpen:
+            c.automationOpenChoreography()
+            return .bool(true)
 
         // —— 通知 ——
         case AutomationMethod.paneNotify:

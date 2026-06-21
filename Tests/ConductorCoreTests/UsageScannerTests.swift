@@ -1550,7 +1550,7 @@ final class UsageScannerTests: XCTestCase {
         let data = try Data(contentsOf: cacheURL)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let files = try XCTUnwrap(object["files"] as? [String: Any])
-        return try XCTUnwrap(files[file.path] as? [String: Any])
+        return try XCTUnwrap(files[file.standardizedFileURL.path] as? [String: Any])
     }
 
     private func cachedParsedBytes(_ entry: [String: Any]) throws -> Int64 {

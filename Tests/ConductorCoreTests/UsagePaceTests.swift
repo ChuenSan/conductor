@@ -44,7 +44,7 @@ final class UsagePaceTests: XCTestCase {
 
     func testWeeklyPaceCanUseWorkDays() throws {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = .current
         let start = calendar.date(from: DateComponents(
             timeZone: calendar.timeZone,
             year: 2026,

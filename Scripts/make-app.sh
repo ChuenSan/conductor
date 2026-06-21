@@ -35,6 +35,24 @@ for bundle in "$BIN_DIR"/Conductor_*.bundle; do
   [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
 
+# ghostty shell 集成脚本（自包含，不再依赖外部 /Applications/Ghostty.app）：
+# 启用 OSC 133 语义提示（命令开始/结束/退出码/cwd），供命令块、cwd 跟踪等使用。
+if [ -d "$ROOT/Vendor/ghostty-shell-integration" ]; then
+  mkdir -p "$APP/Contents/Resources/ghostty"
+  cp -R "$ROOT/Vendor/ghostty-shell-integration" "$APP/Contents/Resources/ghostty/shell-integration"
+fi
+
+# 第三方许可说明。Ghostty shell integration 以 GPL-3.0-or-later 分发；
+# release bundle 需要随 app 带上 notice 和完整许可证文本。
+if [ -f "$ROOT/docs/THIRD_PARTY_NOTICES.md" ]; then
+  mkdir -p "$APP/Contents/Resources/Legal"
+  cp "$ROOT/docs/THIRD_PARTY_NOTICES.md" "$APP/Contents/Resources/Legal/THIRD_PARTY_NOTICES.md"
+fi
+if [ -d "$ROOT/docs/licenses" ]; then
+  mkdir -p "$APP/Contents/Resources/Legal/licenses"
+  cp -R "$ROOT/docs/licenses/." "$APP/Contents/Resources/Legal/licenses/"
+fi
+
 # 应用图标
 cp "$ROOT/Assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 

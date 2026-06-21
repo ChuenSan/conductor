@@ -23,9 +23,16 @@ final class GhosttyRuntime {
 
         Self.configureManagedTerminalEnvironment()
 
-        let resources = "/Applications/Ghostty.app/Contents/Resources/ghostty"
-        if FileManager.default.fileExists(atPath: resources + "/shell-integration/zsh/.zshenv") {
+        // shell 集成资源（OSC 133 语义提示）：优先用 conductor 自带的（自包含），
+        // 回退到外部安装的 Ghostty.app。找到带 zsh/.zshenv 的那个就设 GHOSTTY_RESOURCES_DIR。
+        let resourceCandidates = [
+            Bundle.main.resourcePath.map { $0 + "/ghostty" },
+            "/Applications/Ghostty.app/Contents/Resources/ghostty",
+        ].compactMap { $0 }
+        for resources in resourceCandidates
+        where FileManager.default.fileExists(atPath: resources + "/shell-integration/zsh/.zshenv") {
             setenv("GHOSTTY_RESOURCES_DIR", resources, 1)
+            break
         }
 
         guard ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == GHOSTTY_SUCCESS else {
@@ -323,6 +330,16 @@ final class GhosttyRuntime {
             Task { @MainActor in
                 GhosttySurface.fromGhosttySurface(surfaceHandle)?
                     .handleProgressReport(state: state, percent: percent)
+            }
+            return true
+        case GHOSTTY_ACTION_COMMAND_FINISHED:
+            // shell 集成（OSC 133）：一条命令跑完 → 退出码 + 时长。命令块切块 + 联动触发的底座。
+            let finished = action.action.command_finished
+            let exit = finished.exit_code >= 0 ? Int(finished.exit_code) : nil
+            let durationNanos = finished.duration
+            Task { @MainActor in
+                GhosttySurface.fromGhosttySurface(surfaceHandle)?
+                    .handleCommandFinished(exitCode: exit, durationNanos: durationNanos)
             }
             return true
         case GHOSTTY_ACTION_COLOR_CHANGE:

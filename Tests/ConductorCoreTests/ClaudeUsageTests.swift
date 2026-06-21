@@ -580,7 +580,7 @@ final class ClaudeUsageTests: XCTestCase {
         let attempts = try String(contentsOf: marker)
             .components(separatedBy: .newlines)
             .filter { !$0.isEmpty }
-        XCTAssertEqual(attempts, ["arg", "pty"])
+        XCTAssertEqual(attempts, ["arg", "arg", "pty"])
     }
 
     func testClaudeDirectCLIPersistentPTYSessionReusesInteractiveProcess() async throws {
@@ -647,7 +647,7 @@ final class ClaudeUsageTests: XCTestCase {
         let attempts = try String(contentsOf: marker)
             .components(separatedBy: .newlines)
             .filter { !$0.isEmpty }
-        XCTAssertEqual(attempts, ["arg", "start", "pty", "arg", "pty"])
+        XCTAssertEqual(attempts, ["arg", "arg", "start", "pty", "arg", "arg", "pty"])
     }
 
     func testParsesClaudeCLIUsageTextAsRemainingPercent() throws {
@@ -725,8 +725,12 @@ private final class ClaudeUsageMockURLProtocol: URLProtocol {
 
     override func startLoading() {
         let url = request.url?.absoluteString ?? ""
+        var capturedRequest = request
+        if capturedRequest.httpBody == nil, let bodyStream = request.httpBodyStream {
+            capturedRequest.httpBody = Self.readBody(from: bodyStream)
+        }
         let response: Response? = Self.lock.withClaudeUsageLock {
-            Self.requests.append(request)
+            Self.requests.append(capturedRequest)
             guard let key = Self.responseKey(for: url),
                   var queue = Self.responses[key],
                   !queue.isEmpty
@@ -751,6 +755,22 @@ private final class ClaudeUsageMockURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+
+    private static func readBody(from stream: InputStream) -> Data {
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count > 0 {
+                data.append(buffer, count: count)
+            } else {
+                break
+            }
+        }
+        return data
+    }
 
     private static func responseKey(for url: String) -> String? {
         if let exact = responses[url], !exact.isEmpty { return url }

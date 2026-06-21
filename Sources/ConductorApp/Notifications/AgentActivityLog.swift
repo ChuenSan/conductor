@@ -39,9 +39,7 @@ final class AgentActivityLog: ObservableObject {
     private static let limit = 50
 
     private static var fileURL: URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        ConductorPaths.appSupportDirectory()
             .appendingPathComponent("activity.json")
     }
 

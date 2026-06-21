@@ -76,9 +76,17 @@ enum UsageProviderAppFetchBridge {
         _ patch: UsageProviderEnvironmentPatch,
         operation: () async throws -> T
     ) async throws -> T {
-        let restore = applyTemporaryEnvironment(patch)
-        defer { restoreTemporaryEnvironment(restore) }
-        return try await operation()
+        try await UsageEnvironmentMutationLock.shared.withAsyncLock {
+            let restore = applyTemporaryEnvironment(patch)
+            do {
+                let result = try await operation()
+                restoreTemporaryEnvironment(restore)
+                return result
+            } catch {
+                restoreTemporaryEnvironment(restore)
+                throw error
+            }
+        }
     }
 
     private static func applyTemporaryEnvironment(_ patch: UsageProviderEnvironmentPatch) -> TemporaryEnvironmentRestore {

@@ -101,8 +101,7 @@ public enum UsageCacheCleaner {
     }
 
     public static func defaultApplicationSupportRoot() -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        ConductorPaths.appSupportDirectory()
     }
 
     @discardableResult

@@ -22,7 +22,8 @@ final class HistoricalUsagePaceTests: XCTestCase {
             }
         }
 
-        let dataset = try XCTUnwrap(await store.loadCodexDataset(accountKey: accountKey))
+        let loadedDataset = await store.loadCodexDataset(accountKey: accountKey)
+        let dataset = try XCTUnwrap(loadedDataset)
         XCTAssertEqual(dataset.weeks.count, 3)
 
         let currentReset = start.addingTimeInterval(duration * 4)
@@ -58,14 +59,15 @@ final class HistoricalUsagePaceTests: XCTestCase {
             cursor = Calendar.current.date(byAdding: .day, value: 1, to: cursor)!
         }
 
-        let dataset = try XCTUnwrap(await store.backfillCodexWeeklyFromUsageBreakdown(
+        let backfilledDataset = await store.backfillCodexWeeklyFromUsageBreakdown(
             days,
             referenceWindow: RateWindow(
                 usedPercent: 50,
                 windowMinutes: 10080,
                 resetsAt: currentReset),
             now: now,
-            accountKey: accountKey))
+            accountKey: accountKey)
+        let dataset = try XCTUnwrap(backfilledDataset)
 
         XCTAssertGreaterThanOrEqual(dataset.weeks.count, 3)
         XCTAssertLessThanOrEqual(dataset.weeks.count, 8)

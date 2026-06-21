@@ -282,9 +282,7 @@ public final class UsageHistoryStore: ObservableObject {
     // MARK: - 磁盘
 
     private static var fileURL: URL {
-        let dir = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        let dir = ConductorPaths.appSupportDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("usage-history.json")
     }

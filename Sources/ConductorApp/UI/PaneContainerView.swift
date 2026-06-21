@@ -23,12 +23,13 @@ enum PaneContextAction: Equatable {
     case splitRight, splitDown, zoom     // 布局
     case copyCwd, openInFinder           // 当前目录
     case exportText                      // 屏幕+回滚文本存盘
+    case commandLog                      // ② 命令记录（退出码/耗时/失败甩给 agent）
     case close
 }
 
 enum PaneHeaderActionPresentation {
     static let primaryActions: [PaneContextAction] = [.splitRight, .splitDown, .zoom, .close]
-    static let moreActions: [PaneContextAction] = [.copy, .paste, .selectAll, .clear, .copyCwd, .openInFinder, .exportText]
+    static let moreActions: [PaneContextAction] = [.copy, .paste, .selectAll, .clear, .copyCwd, .openInFinder, .commandLog, .exportText]
 
     static func title(for action: PaneContextAction) -> String {
         switch action {
@@ -42,6 +43,7 @@ enum PaneHeaderActionPresentation {
         case .copyCwd: return L("复制路径")
         case .openInFinder: return L("在 Finder 中显示")
         case .exportText: return L("导出输出为文本…")
+        case .commandLog: return L("命令记录…")
         case .close: return L("关闭面板")
         }
     }
@@ -58,6 +60,7 @@ enum PaneHeaderActionPresentation {
         case .copyCwd: return "doc.text"
         case .openInFinder: return "folder"
         case .exportText: return "square.and.arrow.down"
+        case .commandLog: return "list.bullet.rectangle.portrait"
         case .close: return "xmark"
         }
     }
@@ -123,11 +126,15 @@ struct PaneHeaderControlLayout: Equatable {
 @MainActor
 final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     static let paneType = NSPasteboard.PasteboardType("com.conductor.pane")
+    /// 任务卡片拖到终端：面板里的牌用同名 typeIdentifier 写入，落到此 pane → 在这跑。
+    static let taskType = NSPasteboard.PasteboardType("com.conductor.taskcard")
 
     let paneID: PaneID
     let hostView: NSView
 
     var onMove: ((_ moving: PaneID, _ target: PaneID, _ edge: PaneDropEdge) -> Void)?
+    /// 任务牌甩到本 pane：回调任务 id + 本 pane id。
+    var onDropTask: ((_ taskID: String, _ pane: PaneID) -> Void)?
     var onFocus: ((PaneID) -> Void)?
     var onContextAction: ((PaneContextAction) -> Void)?
     /// 滚动条拖动 → 按像素滚动终端。
@@ -171,6 +178,10 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     private let header = PaneHeaderView()
     /// 拖放落点高亮（独立覆盖层，frameView 的兄弟、非终端兄弟 → 不破坏 Metal）。
     private let dropOverlay = NSView()
+    /// 任务牌落点时，居中显示"将由谁执行"（→ Claude / → Shell），把"让什么执行"摆到动作当下。
+    private let dropLabel = NSTextField(labelWithString: "")
+    /// 本 pane 当前由谁跑（agent 标题或 Shell）；由 coordinator 跟随 paneAgents 设置。
+    var runnerLabel = "Shell"
     /// 自绘滚动条（card 的兄弟，贴右缘；非 Metal 兄弟，安全）。
     private let scrollbar = PaneScrollbar()
     /// ⌘F 搜索条（懒创建；card 的兄弟，浮在右上角，非 Metal 兄弟，安全）。
@@ -233,7 +244,14 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         dropOverlay.isHidden = true
         addSubview(dropOverlay)   // 顶层，frameView 的兄弟
 
-        registerForDraggedTypes([Self.paneType])
+        dropLabel.font = .systemFont(ofSize: 13, weight: .bold)
+        dropLabel.textColor = NSColor(AppStyle.accent)
+        dropLabel.alignment = .center
+        dropLabel.isHidden = true
+        dropLabel.autoresizingMask = [.width, .minYMargin, .maxYMargin]
+        dropOverlay.addSubview(dropLabel)
+
+        registerForDraggedTypes([Self.paneType, Self.taskType])
     }
 
     @available(*, unavailable)
@@ -637,6 +655,13 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     override func draggingEnded(_ sender: NSDraggingInfo) { hideDropOverlay() }
 
     private func dropOperation(_ sender: NSDraggingInfo) -> NSDragOperation {
+        // 任务牌：整块 pane 作落点（不分左右上下半区），高亮全卡。
+        // 注意：SwiftUI .onDrag 的数据是懒加载，draggingEntered 时 data(forType:) 还读不到，
+        // 所以这里靠「类型是否存在」判定（同步可知），真正取 id 留到松手时。
+        if hasTaskDrag(sender) {
+            showFullDropOverlay()
+            return .copy
+        }
         guard let s = sender.draggingPasteboard.string(forType: Self.paneType), PaneID(s) != paneID else {
             hideDropOverlay()
             return []
@@ -645,9 +670,46 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         return .move
     }
 
+    private func hasTaskDrag(_ sender: NSDraggingInfo) -> Bool {
+        sender.draggingPasteboard.availableType(from: [Self.taskType]) != nil
+    }
+
+    /// 松手时取任务 id：落下时 data(forType:) 会强制把 promise 落地，同步即可读到。
+    private func taskID(from sender: NSDraggingInfo) -> String? {
+        let pb = sender.draggingPasteboard
+        if let data = pb.data(forType: Self.taskType), let id = String(data: data, encoding: .utf8), !id.isEmpty { return id }
+        if let s = pb.string(forType: Self.taskType), !s.isEmpty { return s }
+        for item in pb.pasteboardItems ?? [] {
+            if let data = item.data(forType: Self.taskType), let id = String(data: data, encoding: .utf8), !id.isEmpty { return id }
+            if let s = item.string(forType: Self.taskType), !s.isEmpty { return s }
+        }
+        return nil
+    }
+
+    /// 任务牌落点：整卡高亮 + 居中标注「将由谁执行」（区别于 pane 重排的半区高亮）。
+    private func showFullDropOverlay() {
+        let target = frameView.frame.insetBy(dx: 4, dy: 4)
+        let firstShow = dropOverlay.isHidden
+        if firstShow {
+            dropOverlay.isHidden = false
+            dropOverlay.alphaValue = 0
+            dropOverlay.frame = target
+        }
+        dropLabel.stringValue = "→ " + runnerLabel
+        dropLabel.frame = NSRect(x: 0, y: (target.height - 24) / 2, width: target.width, height: 24)
+        dropLabel.isHidden = false
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = firstShow ? 0.15 : 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            dropOverlay.animator().alphaValue = 1
+            dropOverlay.animator().frame = target
+        }
+    }
+
     /// 在落点半区画高亮，提示松手后这个 pane 会去到目标的哪一侧（左/右=并排，上/下=堆叠）。
     /// 首次淡入；在不同落点之间平滑滑动（不再硬切）。
     private func showDropOverlay(_ edge: PaneDropEdge) {
+        dropLabel.isHidden = true   // 半区高亮（pane 重排）不显示执行者标签
         let r = frameView.frame
         let half: NSRect
         switch edge {
@@ -684,6 +746,10 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         hideDropOverlay()
+        if hasTaskDrag(sender) {
+            if let tid = taskID(from: sender) { onDropTask?(tid, paneID) }
+            return true
+        }
         guard let s = sender.draggingPasteboard.string(forType: Self.paneType) else { return false }
         let moving = PaneID(s)
         guard moving != paneID else { return false }

@@ -1,3 +1,4 @@
+import ConductorCore
 import Foundation
 
 /// 一条命令片段：一键发到当前终端，免去反复敲长命令。
@@ -52,9 +53,7 @@ final class SnippetStore: ObservableObject {
     @Published private(set) var snippets: [Snippet] = []
 
     private static var fileURL: URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("conductor", isDirectory: true)
+        ConductorPaths.appSupportDirectory()
             .appendingPathComponent("snippets.json")
     }
 
