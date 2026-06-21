@@ -20,6 +20,7 @@ enum AppLanguage {
 
     private static let appleLanguagesKey = "AppleLanguages"
     private static let choiceKey = "conductor.languageChoice"
+    static let didChangeNotification = Notification.Name("ConductorAppLanguageDidChange")
 
     @MainActor static let revision = LocalizationRevision()
 
@@ -63,6 +64,7 @@ enum AppLanguage {
         }
         applyRuntime(choice)
         revision.value += 1
+        NotificationCenter.default.post(name: didChangeNotification, object: nil)
         // 会话缓存里的默认标题（如“Claude 会话”）是扫描时生成的，重扫一遍换语言
         SessionManagerStore.shared.refresh(force: true)
     }

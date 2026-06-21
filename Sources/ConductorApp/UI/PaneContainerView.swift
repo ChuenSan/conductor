@@ -250,6 +250,11 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         // 头条与终端正文共用同一套右键菜单（各建一份实例，避免菜单被两个视图共享）。
         header.menu = buildContextMenu()
         hostView.menu = buildContextMenu()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(localizationDidChange),
+            name: AppLanguage.didChangeNotification,
+            object: nil)
 
         scrollbar.onScroll = { [weak self] dy in self?.onScroll?(dy) }
 
@@ -280,8 +285,17 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         registerForDraggedTypes([Self.paneType, Self.taskType])
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func localizationDidChange() {
+        header.menu = buildContextMenu()
+        hostView.menu = buildContextMenu()
+    }
 
     func setTitle(_ title: String) { header.title = title }
 
