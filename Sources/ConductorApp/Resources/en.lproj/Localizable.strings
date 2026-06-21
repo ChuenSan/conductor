@@ -3,7 +3,9 @@
 /* ===== 通用 ===== */
 "设置" = "Settings";
 "终端" = "Terminal";
+"全局" = "Global";
 "工作区" = "Workspaces";
+"面板" = "Pane";
 "会话" = "Sessions";
 "全部" = "All";
 "新标签" = "New Tab";
