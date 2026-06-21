@@ -341,6 +341,8 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         }
     }
 
+    // Pane 菜单只放当前面板的文本、布局、路径、会话和 Agent 协作动作。
+    // 全局设置、能力库配置、工作区管理不进入这里。
     private func buildContextMenu() -> NSMenu {
         let menu = NSMenu()
         func add(_ title: String, _ image: String, _ action: PaneContextAction) {

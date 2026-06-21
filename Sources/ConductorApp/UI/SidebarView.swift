@@ -15,6 +15,35 @@ enum WorkspaceReorderDragPolicy {
     static let handleWidth: CGFloat = 20
 }
 
+enum WorkspaceContextAction: Equatable {
+    case rename
+    case revealInFinder
+    case copyPath
+    case reauthorizeDirectory
+    case saveLayout
+    case removeWorkspace
+
+    var deckLayer: CommandDeckLayer {
+        switch self {
+        case .rename, .revealInFinder, .copyPath, .reauthorizeDirectory, .saveLayout, .removeWorkspace:
+            return .workspace
+        }
+    }
+}
+
+enum WorkspaceContextActionPresentation {
+    static let staticActions: [WorkspaceContextAction] = [
+        .rename,
+        .revealInFinder,
+        .copyPath,
+        .reauthorizeDirectory,
+        .saveLayout,
+        .removeWorkspace,
+    ]
+
+    static let agentLaunchLayer: CommandDeckLayer = .agent
+}
+
 /// 左侧工作区栏（自绘，深色 Craft 风）：列出工作区；点击切换，`+` 选目录新建，active 高亮。
 /// 分区头可切到「文件夹」模式：家目录文件夹树，点击展开下级、右键/悬停按钮在该目录开终端。
 /// 右键菜单可重命名（行内编辑）/ 删除工作区。
@@ -181,6 +210,8 @@ struct SidebarView: View {
                         withAnimation(Motion.panel) { toggleSessionListCollapsed(ws.id) }
                     }
                 )
+                // 工作区菜单只放工作区动作与工作区范围内的 Agent 启动动作；
+                // 全局设置和能力库入口必须留在顶栏/命令面板，避免每一层都长出自己的工具箱。
                 .contextMenu {
                     ForEach(coordinator.launchableAgents) { agent in
                         Button {
