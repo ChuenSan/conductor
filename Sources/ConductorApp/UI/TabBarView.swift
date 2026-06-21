@@ -147,7 +147,7 @@ struct TabBarView: View {
             HStack(spacing: GlobalToolbarChromePolicy.buttonSpacing) {
                 IconOnlyButton(
                     systemName: "wand.and.stars",
-                    help: L("检测命令行工具"),
+                    help: CapabilityLibraryPresentation.toolbarHelp,
                     size: GlobalToolbarChromePolicy.buttonSize,
                     symbolSize: GlobalToolbarChromePolicy.symbolSize,
                     tint: coordinator.cliToolsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary) {

@@ -102,6 +102,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.coordinator?.openOnboarding()
         }
         appMenu.addItem(introItem)
+        let capabilityItem = ClosureMenuItem(CapabilityLibraryPresentation.title, systemImage: "wand.and.stars") { [weak self] in
+            self?.coordinator?.openTools(.cli)
+        }
+        appMenu.addItem(capabilityItem)
         let taskCardsItem = ClosureMenuItem(L("任务卡片"), systemImage: "checklist") { [weak self] in
             self?.coordinator?.openTaskCards()
         }

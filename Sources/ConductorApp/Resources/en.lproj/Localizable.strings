@@ -2221,3 +2221,9 @@
 "状态栏信号" = "Status Bar Signals";
 "通知中心" = "Notification Center";
 "拖动重排工作区" = "Drag to reorder workspaces";
+
+/* ===== Capability Library ===== */
+"能力库" = "Capability Library";
+"打开能力库" = "Open Capability Library";
+"管理 CLI、Skills、MCP、Hooks 和供应商能力" = "Manage CLI, Skills, MCP, Hooks, and provider capabilities";
+"供应商与用量" = "Providers & Usage";
