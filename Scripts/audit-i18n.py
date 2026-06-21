@@ -24,12 +24,15 @@ TECHNICAL_LITERALS = {
     "OAuth / auth.json",
     "Quota URL",
     "SKILL.md",
+    "Stop",
     "skills.sh",
     "Token",
 }
 
 VISIBLE_LITERAL_ALLOWLIST = {
     "≈",
+    "·",
+    "ms",
     "skills.sh",
     "https://github.com/org/repo.git",
     "branch / tag / sha",
@@ -93,7 +96,7 @@ def likely_visible_bare_strings(scope_path):
         text = path.read_text(encoding="utf-8", errors="ignore")
         for match in call_pattern.finditer(text):
             literal = next(group for group in match.groups() if group is not None)
-            if literal in VISIBLE_LITERAL_ALLOWLIST:
+            if literal.strip() in VISIBLE_LITERAL_ALLOWLIST:
                 continue
             if any(regex.match(literal) for regex in ignores):
                 continue
