@@ -47,12 +47,11 @@ jobs:
           {
             echo "## Highlights"
             echo
-            echo "- Agent Tools — Skills, MCP and Hooks — now live in the right-hand panel; the separate management window is gone."
-            echo "- Unified flat redesign across all three, each shaped to how it actually works: MCP as a server list with per-app install lights, Hooks as a lifecycle-event timeline with per-agent lights, Skills as a top-nav single column."
-            echo "- New Hooks builder lets one automation target multiple lifecycle events at once."
-            echo "- macOS System Settings–style grouped forms for the add / new dialogs."
-            echo "- Usage tracking aligned with CodexBar; fixed the Codex provider crash and the config hot-reload loop."
-            echo "- Auto-update now installs and restarts after download."
+            echo "- Command Deck phase one: commands, workspaces, panes, agents, capabilities and tasks now share a clearer layer model."
+            echo "- Capability Library: CLI, Skills, MCP, Hooks, snippets and provider usage are grouped under one right-hand control surface."
+            echo "- Command palette rows now show their command-deck layer so actions feel less like a grab bag."
+            echo "- Onboarding now explains Conductor as a workspace stage with panes, task assignment, attention signals and capabilities."
+            echo "- Pane right-click menus now refresh correctly after runtime language changes."
             echo
             echo "## Assets"
             echo
