@@ -1,13 +1,28 @@
 import AppKit
 import ConductorCore
 
-/// 一条可执行命令：稳定 id、标题、内置默认键位、执行体。
+/// 一条可执行命令：稳定 id、标题、内置默认键位、命令归属层、执行体。
 /// 命令面板/键位帮助/自定义键位都读这张表（高扩展）。
 struct AppCommand {
     let id: String
     let title: String
     let defaultKeybinding: String?
+    let scope: CommandDeckLayer
     let run: () -> Void
+
+    init(
+        id: String,
+        title: String,
+        defaultKeybinding: String?,
+        scope: CommandDeckLayer? = nil,
+        run: @escaping () -> Void
+    ) {
+        self.id = id
+        self.title = title
+        self.defaultKeybinding = defaultKeybinding
+        self.scope = scope ?? CommandDeckCommandScope.scope(forCommandID: id)
+        self.run = run
+    }
 }
 
 /// 命令注册表：持有命令 + 维护 `[KeyChord: AppCommand]` 索引，键位分发 **O(1)**。

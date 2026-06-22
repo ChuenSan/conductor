@@ -25,6 +25,16 @@ enum PaneContextAction: Equatable {
     case exportText                      // 屏幕+回滚文本存盘
     case commandLog                      // ② 命令记录（退出码/耗时/失败甩给 agent）
     case close
+
+    var deckLayer: CommandDeckLayer {
+        switch self {
+        case .copy, .paste, .selectAll, .clear,
+             .splitRight, .splitDown, .zoom,
+             .copyCwd, .openInFinder,
+             .exportText, .commandLog, .close:
+            return .pane
+        }
+    }
 }
 
 enum PaneHeaderActionPresentation {
@@ -240,6 +250,11 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         // 头条与终端正文共用同一套右键菜单（各建一份实例，避免菜单被两个视图共享）。
         header.menu = buildContextMenu()
         hostView.menu = buildContextMenu()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(localizationDidChange),
+            name: AppLanguage.didChangeNotification,
+            object: nil)
 
         scrollbar.onScroll = { [weak self] dy in self?.onScroll?(dy) }
 
@@ -270,8 +285,17 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         registerForDraggedTypes([Self.paneType, Self.taskType])
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func localizationDidChange() {
+        header.menu = buildContextMenu()
+        hostView.menu = buildContextMenu()
+    }
 
     func setTitle(_ title: String) { header.title = title }
 
@@ -331,6 +355,8 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         }
     }
 
+    // Pane 菜单只放当前面板的文本、布局、路径、会话和 Agent 协作动作。
+    // 全局设置、能力库配置、工作区管理不进入这里。
     private func buildContextMenu() -> NSMenu {
         let menu = NSMenu()
         func add(_ title: String, _ image: String, _ action: PaneContextAction) {

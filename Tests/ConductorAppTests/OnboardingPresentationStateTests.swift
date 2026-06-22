@@ -51,4 +51,16 @@ final class OnboardingPresentationStateTests: XCTestCase {
         policy = OnboardingLaunchPolicy(currentVersion: "intro-v2")
         XCTAssertTrue(policy.shouldPresent(using: defaults))
     }
+
+    func testOnboardingPagesTeachCommandDeckLoop() {
+        XCTAssertEqual(
+            OnboardingCatalog.pages.map(\.id),
+            ["stage", "voices", "assign", "attention", "capabilities"]
+        )
+
+        XCTAssertEqual(OnboardingCatalog.pages.first?.title, "从一个项目舞台开始")
+        XCTAssertEqual(OnboardingCatalog.pages.last?.title, "把能力收进能力库")
+        XCTAssertTrue(OnboardingCatalog.pages.flatMap(\.beats).contains("拖到面板执行"))
+        XCTAssertTrue(OnboardingCatalog.pages.flatMap(\.beats).contains("Skills / MCP / Hooks"))
+    }
 }

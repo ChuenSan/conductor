@@ -242,11 +242,11 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "toggleZoom", title: L("放大/还原面板"), defaultKeybinding: "cmd+enter") { [weak self] in self?.toggleZoom() },
             AppCommand(id: "commandPalette", title: L("命令面板"), defaultKeybinding: "cmd+k") { [weak self] in self?.openCommandPalette() },
             AppCommand(id: "shortcutCheatSheet", title: L("键位速查"), defaultKeybinding: "cmd+/") { [weak self] in self?.openShortcutCheatSheet() },
-            AppCommand(id: "missionControl", title: L("任务总览"), defaultKeybinding: "cmd+shift+m") { [weak self] in self?.openMissionControl() },
-            AppCommand(id: "queuePrompt", title: L("任务队列（当前面板）"), defaultKeybinding: "cmd+shift+enter") { [weak self] in self?.openQueuePanel() },
-            AppCommand(id: "taskCards", title: L("任务卡片"), defaultKeybinding: "cmd+shift+k") { [weak self] in self?.openTaskCards() },
-            AppCommand(id: "openSnippets", title: L("命令片段库"), defaultKeybinding: nil) { [weak self] in self?.openTools(.snippets) },
-            AppCommand(id: "coCreate", title: L("共创计划"), defaultKeybinding: nil) { [weak self] in self?.openTools(.coCreate) },
+            AppCommand(id: "missionControl", title: L("任务总览"), defaultKeybinding: "cmd+shift+m", scope: .agent) { [weak self] in self?.openMissionControl() },
+            AppCommand(id: "queuePrompt", title: L("任务队列（当前面板）"), defaultKeybinding: "cmd+shift+enter", scope: .agent) { [weak self] in self?.openQueuePanel() },
+            AppCommand(id: "taskCards", title: L("任务卡片"), defaultKeybinding: "cmd+shift+k", scope: .task) { [weak self] in self?.openTaskCards() },
+            AppCommand(id: "openSnippets", title: L("命令片段库"), defaultKeybinding: nil, scope: .capability) { [weak self] in self?.openTools(.snippets) },
+            AppCommand(id: "coCreate", title: L("共创计划"), defaultKeybinding: nil, scope: .capability) { [weak self] in self?.openTools(.coCreate) },
             AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+ctrl+e") { [weak self] in self?.equalizeSplits() },
             AppCommand(id: "nextTab", title: L("下一标签"), defaultKeybinding: "cmd+shift+rightbrace") { [weak self] in self?.cycleTab(forward: true) },
             AppCommand(id: "prevTab", title: L("上一标签"), defaultKeybinding: "cmd+shift+leftbrace") { [weak self] in self?.cycleTab(forward: false) },
@@ -398,25 +398,45 @@ final class AppCoordinator: ObservableObject {
         var items: [PaletteItem] = []
         for c in commandRegistry.commands where c.id != "commandPalette" {
             let kb = commandRegistry.effectiveKeybinding(for: c.id) ?? ""
-            items.append(PaletteItem(id: "cmd:\(c.id)", icon: "command", title: c.title, subtitle: kb, run: c.run))
+            items.append(PaletteItem(
+                id: "cmd:\(c.id)",
+                icon: "command",
+                title: c.title,
+                subtitle: kb,
+                layerTitle: c.scope.title,
+                run: c.run))
         }
         for ws in visibleWorkspaces {
             let id = ws.id
-            items.append(PaletteItem(id: "ws:\(id.value)", icon: "folder", title: L("工作区：%@", ws.name),
-                                     subtitle: ws.path) { [weak self] in self?.selectWorkspace(id) })
+            items.append(PaletteItem(
+                id: "ws:\(id.value)",
+                icon: "folder",
+                title: L("工作区：%@", ws.name),
+                subtitle: ws.path,
+                layerTitle: CommandDeckLayer.workspace.title
+            ) { [weak self] in self?.selectWorkspace(id) })
         }
         if let ws = activeWorkspace() {
             for tab in ws.tabs {
                 let tid = tab.id
                 let t = tab.customTitle ?? (paneTitles[tab.activePane] ?? L("终端"))
-                items.append(PaletteItem(id: "tab:\(tid.value)", icon: "macwindow", title: L("标签：%@", t),
-                                         subtitle: "") { [weak self] in self?.selectTab(tid) })
+                items.append(PaletteItem(
+                    id: "tab:\(tid.value)",
+                    icon: "macwindow",
+                    title: L("标签：%@", t),
+                    subtitle: "",
+                    layerTitle: CommandDeckLayer.workspace.title
+                ) { [weak self] in self?.selectTab(tid) })
             }
         }
         for snippet in SnippetStore.shared.snippets {
-            items.append(PaletteItem(id: "snippet:\(snippet.id)", icon: snippet.autoRun ? "bolt" : "text.cursor",
-                                     title: L("片段：%@", snippet.name),
-                                     subtitle: snippet.command) { [weak self] in self?.sendSnippet(snippet) })
+            items.append(PaletteItem(
+                id: "snippet:\(snippet.id)",
+                icon: snippet.autoRun ? "bolt" : "text.cursor",
+                title: L("片段：%@", snippet.name),
+                subtitle: snippet.command,
+                layerTitle: CommandDeckLayer.capability.title
+            ) { [weak self] in self?.sendSnippet(snippet) })
         }
         // 最近会话：回车在新标签续聊。副标题带 agent + 目录，可按路径搜。
         let home = NSHomeDirectory()
@@ -425,7 +445,8 @@ final class AppCoordinator: ObservableObject {
             items.append(PaletteItem(
                 id: "session:\(record.id)", icon: "bubble.left.and.text.bubble.right",
                 title: L("续聊：%@", record.title),
-                subtitle: dir.map { "\(record.agent) · \($0)" } ?? record.agent
+                subtitle: dir.map { "\(record.agent) · \($0)" } ?? record.agent,
+                layerTitle: CommandDeckLayer.agent.title
             ) { [weak self] in self?.resumeSession(record, inPane: nil) })
         }
         return items

@@ -8,9 +8,15 @@ final class ToolbarChromePolicyTests: XCTestCase {
             [
                 [.update],
                 [.appearance],
-                [.automation, .tasks],
+                [.capability, .tasks],
                 [.settings],
             ])
+    }
+
+    func testGlobalToolbarContainsOnlyGlobalOrTaskCapabilityEntrypoints() {
+        let allowedLayers = GlobalToolbarActionPresentation.actions.map(\.deckLayer)
+
+        XCTAssertEqual(allowedLayers, [.global, .global, .capability, .task, .global])
     }
 
     func testPaneHeaderControlsStayQuietUntilActiveOrHovered() {

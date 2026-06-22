@@ -47,7 +47,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     }
 }
 
-/// 右侧快速工具面板：只放 CLI、用量和片段；Skills / Agents / Hooks 走完整管理台。
+/// 能力库右侧面板：CLI、Skills、MCP、Hooks、供应商用量与片段统一归在一个能力入口。
 struct ToolsPanelView: View {
     let coordinator: AppCoordinator
     var onClose: () -> Void = {}
@@ -60,6 +60,9 @@ struct ToolsPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            segmented
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
             content
         }
         .frame(maxHeight: .infinity)
@@ -69,7 +72,15 @@ struct ToolsPanelView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            segmented
+            VStack(alignment: .leading, spacing: 2) {
+                Text(CapabilityLibraryPresentation.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppStyle.textPrimary)
+                Text(CapabilityLibraryPresentation.subtitle)
+                    .font(.system(size: 10.5, weight: .regular))
+                    .foregroundStyle(AppStyle.textTertiary)
+                    .lineLimit(1)
+            }
             Spacer(minLength: 8)
             IconOnlyButton(
                 systemName: "xmark",
@@ -81,7 +92,7 @@ struct ToolsPanelView: View {
         }
         .padding(.horizontal, 12)
         .padding(.top, 14)
-        .padding(.bottom, 10)
+        .padding(.bottom, 7)
     }
 
     /// 分段控件：凹槽容器 + 选中片「抬起」（白片/亮片 + 柔阴影），对标系统分段而非彩色按钮。
@@ -89,7 +100,8 @@ struct ToolsPanelView: View {
         let theme = AppStyle.theme
         return ScrollView(.horizontal) {
             HStack(spacing: 2) {
-                ForEach(ToolsTab.panelTabs) { tab in
+                ForEach(CapabilityLibrarySection.panelTabs) { section in
+                    let tab = section.toolsTab!
                     let selected = coordinator.toolsTab == tab
                     Button {
                         withAnimation(Motion.snappy) {
@@ -97,10 +109,10 @@ struct ToolsPanelView: View {
                         }
                     } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: tab.icon)
+                            Image(systemName: section.systemImage)
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(selected ? AppStyle.accent : AppStyle.textTertiary)
-                            Text(tab.title)
+                            Text(section.title)
                                 .font(.system(size: 11, weight: selected ? .semibold : .medium))
                                 .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
                                 .lineLimit(1)

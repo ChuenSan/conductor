@@ -3,7 +3,9 @@
 /* ===== 通用 ===== */
 "设置" = "Settings";
 "终端" = "Terminal";
+"全局" = "Global";
 "工作区" = "Workspaces";
+"面板" = "Pane";
 "会话" = "Sessions";
 "全部" = "All";
 "新标签" = "New Tab";
@@ -615,7 +617,7 @@
 /* ===== 任务总览（Mission Control） ===== */
 "任务总览" = "Mission Control";
 "思考中" = "thinking";
-"完成未读" = "done unseen";
+"完成未读" = "Unread completions";
 "%ld 个终端" = "%ld terminal(s)";
 "（空闲）" = "(idle)";
 "已完成" = "Done";
@@ -1258,7 +1260,7 @@
 "当前没有需要处理的 Skill 问题" = "There are no Skill issues that need attention.";
 "维护队列" = "Maintenance Queue";
 "正常" = "OK";
-"活动记录" = "Activity";
+"活动记录" = "Activity record";
 "部署模板" = "Deploy Templates";
 "显示" = "Reveal";
 "查看" = "View";
@@ -1638,6 +1640,7 @@
 "管理" = "Manage";
 "管理应用" = "Manage Apps";
 "还没有任务卡片" = "No task cards yet";
+"还没有可指派的任务" = "No assignable tasks yet";
 "还没有选择安装应用" = "No install apps selected";
 "恢复时自动续聊 Agent" = "Automatically resume Agents on restore";
 "会安装到 %@" = "Will install to %@";
@@ -1665,6 +1668,7 @@
 "启用工具审批" = "Enable Tool Approval";
 "启用失败：%@" = "Enable failed: %@";
 "启用中" = "Enabled";
+"输入命令或提示词创建一张任务卡片，再把它拖到目标面板。" = "Create a task card from a command or prompt, then drag it to the target pane.";
 "清单" = "Manifest";
 "请先选择要安装到的应用" = "Select the apps to install to first";
 "趋势样本" = "Trend Samples";
@@ -1674,6 +1678,7 @@
 "任务启动失败：%@" = "Task launch failed: %@";
 "任务已交给 %@" = "Task sent to %@";
 "任务已在 Shell 中执行" = "Task executed in Shell";
+"拖到某个面板，交给 Shell 或 Agent 执行" = "Drag to a pane and let Shell or an Agent run it";
 "删除任务" = "Delete Task";
 "尚未执行" = "Not run yet";
 "审计和清理已写入的 hooks" = "Audit and clean written hooks";
@@ -2219,3 +2224,30 @@
 "状态栏信号" = "Status Bar Signals";
 "通知中心" = "Notification Center";
 "拖动重排工作区" = "Drag to reorder workspaces";
+"从一个项目舞台开始" = "Start from a project stage";
+"每个工作区都是一个项目现场：目录、标签、分屏、最近会话和布局都围绕这个现场组织。" = "Each workspace is a project stage: folders, tabs, splits, recent sessions, and layouts are organized around it.";
+"选择项目舞台" = "Choose a project stage";
+"保留分屏现场" = "Keep split layouts";
+"恢复最近上下文" = "Restore recent context";
+"把每个面板当成一个声部" = "Treat each pane as a voice";
+"面板负责具体执行：Shell、Agent、命令记录、搜索、分屏和放大都留在当前声部里。" = "Panes handle execution: Shell, Agents, command logs, search, splits, and zoom stay with the current voice.";
+"分屏组织工作" = "Organize work with splits";
+"面板本地控制" = "Pane-local controls";
+"双击放大/还原" = "Double-click to zoom or restore";
+"把任务甩给正确的执行者" = "Assign tasks to the right performer";
+"任务卡片是一段可复用的乐谱。拖到某个面板，就交给那个 Shell 或 Agent 执行。" = "A task card is a reusable score fragment. Drag it to a pane and that Shell or Agent runs it.";
+"拖到面板执行" = "Drag to a pane to run";
+"变量按需填写" = "Fill variables only when needed";
+"当前上下文运行" = "Run in the current context";
+"只看真正需要你指挥的地方" = "Watch only what needs direction";
+"完成、等待、审批和后台运行都会回到状态栏、工作区、标签或伙伴层，提醒你下一步该看哪里。" = "Done, waiting, approvals, and background work return to the status bar, workspaces, tabs, or companion layer so you know where to look next.";
+"跳回相关面板" = "Jump back to the relevant pane";
+"把能力收进能力库" = "Collect capabilities in the library";
+"CLI、Skills、MCP、Hooks 和供应商用量都归到能力库。这里管理能力，工作区和面板只使用能力。" = "CLI, Skills, MCP, Hooks, and provider usage belong in the Capability Library. Capabilities are managed here and used by workspaces and panes.";
+"CLI 检测" = "CLI detection";
+
+/* ===== Capability Library ===== */
+"能力库" = "Capability Library";
+"打开能力库" = "Open Capability Library";
+"管理 CLI、Skills、MCP、Hooks 和供应商能力" = "Manage CLI, Skills, MCP, Hooks, and provider capabilities";
+"供应商与用量" = "Providers & Usage";
