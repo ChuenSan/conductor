@@ -633,7 +633,7 @@ final class AppCoordinator: ObservableObject {
                         pendingRestoreFiles[pane] = file
                     }
                     registry.apply([.createSurface(pane: pane, cwd: cwd)])
-                    // 上次这里跑着 agent → 按配置自动续聊，或把 resume 命令预输入到提示符。
+                    // 上次这里跑着 agent → 把 resume 命令预输入到提示符，等用户确认再发送。
                     let session = agentSessionBindings.ref(for: pane.value)
                         ?? result.state.paneSessions[pane.value]
                     if !stageSessionRestore(session, for: pane) {
@@ -1990,22 +1990,13 @@ final class AppCoordinator: ObservableObject {
         return ref
     }
 
-    /// 恢复 agent session：退出时还在跑且配置允许 → 自动续聊；否则只预输入命令等用户确认。
+    /// 恢复 agent session：只预输入命令，等用户确认后按 Enter 续聊。
     @discardableResult
     func stageSessionRestore(_ ref: AgentSessionRef?, for pane: PaneID) -> Bool {
         guard let command = ref?.resumeCommand else { return false }
         let launch = launchCommand(command, pane: pane, agentID: ref?.agent)
         guard let surface = registry.surface(for: pane) as? GhosttySurface else { return false }
-        let shouldAutoRun = ConfigStore.shared.config.terminal.autoResumeAgentSessions
-            && ref?.wasRunning == true
-        if shouldAutoRun {
-            surface.enqueueCommand(launch)
-            if let agent = ref?.agent {
-                tagPaneAgent(pane, agentID: agent)
-            }
-        } else {
-            surface.enqueueTypedText(launch)
-        }
+        surface.enqueueTypedText(launch)
         return true
     }
 
@@ -2539,6 +2530,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     private func handlePaneExited(_ pane: PaneID) {
+        guard paneExists(pane) else { return }
         NSLog("[conductor] pane exited (child process gone): \(pane.value)")
         // 聚焦再关闭：聚焦用轻量路径避免 rebuild。
         focusOnly(pane)

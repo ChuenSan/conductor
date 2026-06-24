@@ -1642,7 +1642,6 @@
 "还没有任务卡片" = "No task cards yet";
 "还没有可指派的任务" = "No assignable tasks yet";
 "还没有选择安装应用" = "No install apps selected";
-"恢复时自动续聊 Agent" = "Automatically resume Agents on restore";
 "会安装到 %@" = "Will install to %@";
 "键是 server 名称，值是 command/args/env 或 url —— 直接贴 / 改这段 JSON。" = "Keys are server names; values are command/args/env or url. Paste or edit this JSON directly.";
 "将从 %@ 的 %@ 事件删除该 hook，不可撤销。如只想临时关闭，请改用「停用」。" = "This will delete the hook from %@'s %@ event and cannot be undone. Use Disable if you only want to turn it off temporarily.";

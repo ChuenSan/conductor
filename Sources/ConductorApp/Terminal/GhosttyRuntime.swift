@@ -241,43 +241,45 @@ final class GhosttyRuntime {
             }
         }
         let surfaceHandle = target.target.surface
+        // Resolve userdata while libghostty is still in the callback; the raw
+        // surface handle may be freed before an async MainActor task runs.
+        let surfaceOwner = GhosttySurface.fromGhosttySurface(surfaceHandle)
 
         switch action.tag {
         case GHOSTTY_ACTION_SET_TITLE:
             guard let titlePointer = action.action.set_title.title else { return false }
             let title = String(cString: titlePointer)
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleSetTitle(title)
+                surfaceOwner?.handleSetTitle(title)
             }
             return true
         case GHOSTTY_ACTION_SCROLLBAR:
             let sb = action.action.scrollbar
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?
-                    .handleScrollbar(total: sb.total, offset: sb.offset, len: sb.len)
+                surfaceOwner?.handleScrollbar(total: sb.total, offset: sb.offset, len: sb.len)
             }
             return true
         case GHOSTTY_ACTION_PWD:
             guard let pwdPointer = action.action.pwd.pwd else { return true }
             let pwd = String(cString: pwdPointer)
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?.handlePwd(pwd)
+                surfaceOwner?.handlePwd(pwd)
             }
             return true
         case GHOSTTY_ACTION_START_SEARCH:
             let needle = action.action.start_search.needle.map { String(cString: $0) } ?? ""
-            Task { @MainActor in GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleSearchStart(needle) }
+            Task { @MainActor in surfaceOwner?.handleSearchStart(needle) }
             return true
         case GHOSTTY_ACTION_END_SEARCH:
-            Task { @MainActor in GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleSearchEnd() }
+            Task { @MainActor in surfaceOwner?.handleSearchEnd() }
             return true
         case GHOSTTY_ACTION_SEARCH_TOTAL:
             let total = Int(action.action.search_total.total)
-            Task { @MainActor in GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleSearchTotal(total) }
+            Task { @MainActor in surfaceOwner?.handleSearchTotal(total) }
             return true
         case GHOSTTY_ACTION_SEARCH_SELECTED:
             let sel = Int(action.action.search_selected.selected)
-            Task { @MainActor in GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleSearchSelected(sel) }
+            Task { @MainActor in surfaceOwner?.handleSearchSelected(sel) }
             return true
         case GHOSTTY_ACTION_OPEN_URL:
             guard let urlPointer = action.action.open_url.url else { return false }
@@ -297,18 +299,18 @@ final class GhosttyRuntime {
                 url = nil
             }
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleMouseOverLink(url)
+                surfaceOwner?.handleMouseOverLink(url)
             }
             return true
         case GHOSTTY_ACTION_MOUSE_SHAPE:
             let shape = action.action.mouse_shape
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleMouseShape(shape)
+                surfaceOwner?.handleMouseShape(shape)
             }
             return true
         case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleChildExited()
+                surfaceOwner?.handleChildExited()
             }
             return true
         case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
@@ -318,8 +320,7 @@ final class GhosttyRuntime {
             let body = notification.body.map { String(cString: $0) } ?? ""
             guard !(title.isEmpty && body.isEmpty) else { return true }
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?
-                    .handleDesktopNotification(title: title, body: body)
+                surfaceOwner?.handleDesktopNotification(title: title, body: body)
             }
             return true
         case GHOSTTY_ACTION_PROGRESS_REPORT:
@@ -328,8 +329,7 @@ final class GhosttyRuntime {
             let percent = report.progress >= 0 ? Int(report.progress) : nil
             let state = PaneProgressState(report.state)
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?
-                    .handleProgressReport(state: state, percent: percent)
+                surfaceOwner?.handleProgressReport(state: state, percent: percent)
             }
             return true
         case GHOSTTY_ACTION_COMMAND_FINISHED:
@@ -338,24 +338,23 @@ final class GhosttyRuntime {
             let exit = finished.exit_code >= 0 ? Int(finished.exit_code) : nil
             let durationNanos = finished.duration
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?
-                    .handleCommandFinished(exitCode: exit, durationNanos: durationNanos)
+                surfaceOwner?.handleCommandFinished(exitCode: exit, durationNanos: durationNanos)
             }
             return true
         case GHOSTTY_ACTION_COLOR_CHANGE:
             let change = action.action.color_change
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleColorChange(change)
+                surfaceOwner?.handleColorChange(change)
             }
             return true
         case GHOSTTY_ACTION_CONFIG_CHANGE:
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?.handleConfigChange()
+                surfaceOwner?.handleConfigChange()
             }
             return true
         case GHOSTTY_ACTION_RELOAD_CONFIG:
             Task { @MainActor in
-                GhosttySurface.fromGhosttySurface(surfaceHandle)?.reloadConfig()
+                surfaceOwner?.reloadConfig()
             }
             return true
         default:

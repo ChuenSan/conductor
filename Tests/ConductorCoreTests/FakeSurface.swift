@@ -7,6 +7,7 @@ final class FakeSurface: TerminalSurface {
     private(set) var startedCwd: URL?
     private(set) var focusCount = 0
     private(set) var closed = false
+    var exitWhenClosed = false
 
     var onTitleChange: ((String) -> Void)?
     var onCwdChange: ((URL) -> Void)?
@@ -14,7 +15,10 @@ final class FakeSurface: TerminalSurface {
 
     func start(cwd: URL) { startedCwd = cwd }
     func focus() { focusCount += 1 }
-    func close() { closed = true }
+    func close() {
+        closed = true
+        if exitWhenClosed { onExit?(0) }
+    }
 
     func simulateTitleChange(_ title: String) { onTitleChange?(title) }
     func simulateCwdChange(_ url: URL) { onCwdChange?(url) }

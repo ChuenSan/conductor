@@ -47,11 +47,10 @@ jobs:
           {
             echo "## Highlights"
             echo
-            echo "- Command Deck phase one: commands, workspaces, panes, agents, capabilities and tasks now share a clearer layer model."
-            echo "- Capability Library: CLI, Skills, MCP, Hooks, snippets and provider usage are grouped under one right-hand control surface."
-            echo "- Command palette rows now show their command-deck layer so actions feel less like a grab bag."
-            echo "- Onboarding now explains Conductor as a workspace stage with panes, task assignment, attention signals and capabilities."
-            echo "- Pane right-click menus now refresh correctly after runtime language changes."
+            echo "- Fixed intermittent crashes when closing or switching tabs by suppressing exit callbacks from intentional terminal closes."
+            echo "- Fixed a Ghostty action routing race that could crash during live theme switches."
+            echo "- Restored AI sessions now prefill resume commands without auto-submitting them."
+            echo "- Removed the obsolete auto-resume Agent setting and config field."
             echo
             echo "## Assets"
             echo

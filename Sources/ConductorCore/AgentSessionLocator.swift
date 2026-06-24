@@ -11,7 +11,7 @@ public struct AgentSessionRef: Codable, Equatable, Sendable {
     public var transcriptPath: String?
     /// hook 最后一次确认这个会话的时间。
     public var updatedAt: Date?
-    /// 退出时该 pane 是否还在跑 agent。true 时可按配置自动续聊；false/nil 时只预填命令。
+    /// 退出时该 pane 是否还在跑 agent。恢复时只预填命令，等用户确认再发送。
     public var wasRunning: Bool?
     /// hook 生命周期：running / idle / needsInput / unknown。用于恢复策略与未来休眠。
     public var lifecycle: AgentSessionLifecycle?

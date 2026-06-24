@@ -29,8 +29,11 @@ public final class SessionRegistry {
             surfaces[pane] = surface
             surface.start(cwd: URL(fileURLWithPath: cwd))
         case let .closeSurface(pane):
-            surfaces[pane]?.close()
-            surfaces[pane] = nil
+            guard let surface = surfaces.removeValue(forKey: pane) else { return }
+            surface.onTitleChange = nil
+            surface.onCwdChange = nil
+            surface.onExit = nil
+            surface.close()
         case let .focusSurface(pane):
             surfaces[pane]?.focus()
         }

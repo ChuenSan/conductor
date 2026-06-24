@@ -39,6 +39,22 @@ final class SessionRegistryTests: XCTestCase {
         XCTAssertNil(registry.surface(for: PaneID("p1")))
     }
 
+    func testCloseEffectSuppressesExitCallbackFromIntentionalClose() {
+        var made: [PaneID: FakeSurface] = [:]
+        var exited: [PaneID] = []
+        let registry = SessionRegistry(factory: { pane in
+            let s = FakeSurface(); made[pane] = s; return s
+        }, onPaneExited: { exited.append($0) })
+        registry.apply([.createSurface(pane: PaneID("p1"), cwd: "/proj")])
+        made[PaneID("p1")]?.exitWhenClosed = true
+
+        registry.apply([.closeSurface(pane: PaneID("p1"))])
+
+        XCTAssertTrue(made[PaneID("p1")]?.closed ?? false)
+        XCTAssertNil(registry.surface(for: PaneID("p1")))
+        XCTAssertTrue(exited.isEmpty)
+    }
+
     func testSurfaceExitInvokesOnPaneExited() {
         var made: [PaneID: FakeSurface] = [:]
         var exited: [PaneID] = []

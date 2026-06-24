@@ -119,7 +119,7 @@
 | 启动恢复窗口/tab/pane 布局+cwd | ✅ restoreLayoutOnLaunch | ✅ | ✅ |
 | 恢复 scrollback 内容 | ✅（裁到 4K 行） | ✅ best-effort | ✅ |
 | 记录并续聊 claude/codex 会话 | ✅ 自动预填 `--resume`/`resume` | ✅ 同 + 15 种 agent | ✅ 云同步对话 |
-| auto-resume 开关 | ✅ | ✅ terminal.autoResumeAgentSessions | — |
+| auto-resume 开关 | ❌（只预填，不自动发送） | ✅ terminal.autoResumeAgentSessions | — |
 | 通用 surface resume 绑定（tmux/自定义 shell） | ✅ SurfaceResumeBinding + 信任模型 | ✅ surface resume set/show/clear | — |
 | 误关恢复 | ✅ ⌘⇧T | ✅ ⌘⇧T + 浏览器面板 | ✅ ⇧⌘T |
 | 会话目录定位/transcript 解析 | ✅ AgentSessionCatalog/Locator/Preview | ✅ | ✅ |

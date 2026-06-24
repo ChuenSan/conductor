@@ -597,18 +597,15 @@ public struct TerminalConfig: Codable, Equatable, Sendable {
     public var scrollback: Int
     public var copyOnSelect: Bool
     public var confirmCloseRunning: Bool
-    public var autoResumeAgentSessions: Bool
     public var aiAgents: [AIAgentConfig]
 
     public init(shell: String? = nil, scrollback: Int = 60000,
                 copyOnSelect: Bool = false, confirmCloseRunning: Bool = true,
-                autoResumeAgentSessions: Bool = true,
                 aiAgents: [AIAgentConfig] = []) {
         self.shell = shell
         self.scrollback = scrollback
         self.copyOnSelect = copyOnSelect
         self.confirmCloseRunning = confirmCloseRunning
-        self.autoResumeAgentSessions = autoResumeAgentSessions
         self.aiAgents = aiAgents
     }
 
@@ -619,7 +616,6 @@ public struct TerminalConfig: Codable, Equatable, Sendable {
         scrollback = c.value(.scrollback, d.scrollback)
         copyOnSelect = c.value(.copyOnSelect, d.copyOnSelect)
         confirmCloseRunning = c.value(.confirmCloseRunning, d.confirmCloseRunning)
-        autoResumeAgentSessions = c.value(.autoResumeAgentSessions, d.autoResumeAgentSessions)
         aiAgents = c.value(.aiAgents, d.aiAgents)
     }
 

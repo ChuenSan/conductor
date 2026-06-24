@@ -69,7 +69,7 @@ final class GhosttySurface: TerminalSurface {
         TerminalResizeFreeze.shared.register(self)
     }
 
-    static func fromGhosttySurface(_ handle: ghostty_surface_t?) -> GhosttySurface? {
+    nonisolated static func fromGhosttySurface(_ handle: ghostty_surface_t?) -> GhosttySurface? {
         guard let handle, let userdata = ghostty_surface_userdata(handle) else { return nil }
         return Unmanaged<GhosttySurface>.fromOpaque(userdata).takeUnretainedValue()
     }
@@ -155,6 +155,7 @@ final class GhosttySurface: TerminalSurface {
     }
 
     func close() {
+        clearCallbacks()
         guard let surface else { return }
         self.surface = nil           // 立刻断开：后续 syncGeometry/输入都会 no-op
         hostView.owner = nil
@@ -166,6 +167,23 @@ final class GhosttySurface: TerminalSurface {
             ghostty_surface_free(surface)
             userdata?.release()
         }
+    }
+
+    private func clearCallbacks() {
+        onTitleChange = nil
+        onCwdChange = nil
+        onExit = nil
+        onRequestFocus = nil
+        onBeginPaneDrag = nil
+        onScrollbar = nil
+        onSearchStart = nil
+        onSearchTotal = nil
+        onSearchSelected = nil
+        onSearchEnd = nil
+        onLinkHover = nil
+        onDesktopNotification = nil
+        onProgressReport = nil
+        onCommandFinished = nil
     }
 
     // MARK: - Attach / geometry (host view 调用)
