@@ -36,7 +36,7 @@ enum BrowserCookieHelperClient {
             "--browser", browser.rawValue,
             "--domains", domains.joined(separator: ","),
         ]
-        var childEnvironment = env
+        var childEnvironment = UsageProviderProcessEnvironment.scrubbedChildEnvironment(from: env)
         childEnvironment["CONDUCTOR_BROWSER_COOKIE_HELPER_CHILD"] = "1"
         process.environment = childEnvironment
 

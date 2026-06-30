@@ -11,7 +11,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     case coCreate
 
     var id: String { rawValue }
-    /// Skills / MCP / Hooks 也进右侧面板（之前要去全屏管理台，太重）。
+    /// Skills / MCP / Hooks 也归入能力库。
     static var panelTabs: [ToolsTab] { [.cli, .usage, .skills, .mcp, .hooks, .snippets] }
 
     var managementModule: AgentToolsManagementModule? {
@@ -47,7 +47,7 @@ enum ToolsTab: String, CaseIterable, Identifiable {
     }
 }
 
-/// 能力库右侧面板：CLI、Skills、MCP、Hooks、供应商用量与片段统一归在一个能力入口。
+/// 能力库紧凑视图：CLI、Skills、MCP、Hooks、供应商用量与片段统一归在一个能力入口。
 struct ToolsPanelView: View {
     let coordinator: AppCoordinator
     var onClose: () -> Void = {}

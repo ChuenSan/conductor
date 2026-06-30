@@ -13,9 +13,16 @@ final class CommandDeckScopeTests: XCTestCase {
             "splitRight": .pane,
             "splitDown": .pane,
             "closePane": .pane,
+            "copyPane": .pane,
+            "pastePane": .pane,
+            "selectAllPane": .pane,
+            "clearPane": .pane,
+            "copyPaneCwd": .pane,
+            "openPaneInFinder": .pane,
+            "exportPaneText": .pane,
+            "openPaneCommandLog": .pane,
             "toggleZoom": .pane,
             "findInTerminal": .pane,
-            "taskCards": .task,
             "openSnippets": .capability,
             "coCreate": .capability,
             "queuePrompt": .agent,
@@ -45,18 +52,17 @@ final class CommandDeckScopeTests: XCTestCase {
         XCTAssertEqual(CommandDeckLayer.pane.title, "面板")
         XCTAssertEqual(CommandDeckLayer.agent.title, "Agent")
         XCTAssertEqual(CommandDeckLayer.capability.title, "能力")
-        XCTAssertEqual(CommandDeckLayer.task.title, "任务")
     }
 
     func testPalettePresentationIncludesCommandLayer() {
         let item = PaletteItem(
-            id: "cmd:taskCards",
+            id: "cmd:openSnippets",
             icon: "command",
-            title: "Task Cards",
+            title: "Open Snippets",
             subtitle: "",
-            layerTitle: CommandDeckLayer.task.title
+            layerTitle: CommandDeckLayer.capability.title
         ) {}
 
-        XCTAssertEqual(item.layerTitle, "任务")
+        XCTAssertEqual(item.layerTitle, "能力")
     }
 }

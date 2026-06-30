@@ -154,7 +154,52 @@ final class UsageProviderRuntimeConfigTests: XCTestCase {
         XCTAssertFalse(BrowserCookieAccessGate.shouldAttempt(.chrome, now: now.addingTimeInterval(1)))
         BrowserCookieAccessGate.resetForTesting()
     }
+
+    func testBrowserCookieAccessGateCookiesThrowsBeforeDeniedChromiumAccess() {
+        BrowserCookieAccessGate.resetForTesting()
+        let now = Date(timeIntervalSince1970: 10)
+        BrowserCookieAccessGate.recordDenied(for: .chrome, now: now)
+        defer { BrowserCookieAccessGate.resetForTesting() }
+
+        XCTAssertThrowsError(try BrowserCookieAccessGate.cookies(
+            client: BrowserCookieClient(),
+            matching: BrowserCookieQuery(domains: ["example.test"]),
+            in: .chrome,
+            now: now.addingTimeInterval(1))) { error in
+            XCTAssertTrue(error is BrowserCookieStoreAccessSuppressedError)
+        }
+    }
     #endif
+
+    func testDeepgramRejectsUntrustedAPIBaseURL() {
+        XCTAssertEqual(
+            DeepgramUsageFetcher.apiURL(env: ["DEEPGRAM_API_URL": "http://evil.example/v1"]),
+            URL(string: "https://api.deepgram.com/v1")!)
+        XCTAssertEqual(
+            DeepgramUsageFetcher.apiURL(env: ["DEEPGRAM_API_URL": "https://api.deepgram.com/v1"]),
+            URL(string: "https://api.deepgram.com/v1")!)
+    }
+
+    func testMiMoRejectsUntrustedAPIBaseURL() {
+        XCTAssertEqual(
+            MiMoUsageFetcher.apiBaseURLForTesting(env: ["MIMO_API_URL": "https://evil.example/api/v1"]),
+            URL(string: "https://platform.xiaomimimo.com/api/v1")!)
+        XCTAssertEqual(
+            MiMoUsageFetcher.apiBaseURLForTesting(env: ["MIMO_API_URL": "https://platform.xiaomimimo.com/api/v1"]),
+            URL(string: "https://platform.xiaomimimo.com/api/v1")!)
+    }
+
+    func testQwenRejectsUntrustedEndpointOverridesByDefault() {
+        XCTAssertThrowsError(try QwenUsageFetcher.quotaURL(
+            region: "intl",
+            env: ["ALIBABA_CODING_PLAN_HOST": "https://evil.example"]))
+    }
+
+    func testMiniMaxRejectsUntrustedEndpointOverridesByDefault() {
+        XCTAssertThrowsError(try MiniMaxUsageFetcher.apiRemainsURLs(env: [
+            "MINIMAX_HOST": "https://evil.example",
+        ]))
+    }
 
     func testWebTimeoutUsesProviderScopedEnv() {
         XCTAssertEqual(UsageProviderRuntimeConfig.webTimeout(

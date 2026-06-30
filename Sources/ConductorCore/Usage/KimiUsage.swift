@@ -254,7 +254,7 @@ public enum KimiUsageFetcher {
         let client = BrowserCookieClient()
         let query = BrowserCookieQuery(domains: cookieDomains)
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             if let token = cookies.first(where: { $0.name == "kimi-auth" })?.value,
                !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             {

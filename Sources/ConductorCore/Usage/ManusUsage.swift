@@ -83,7 +83,7 @@ public enum ManusUsageFetcher {
         let client = BrowserCookieClient()
         let query = BrowserCookieQuery(domains: cookieDomains)
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             for cookie in cookies where cookie.name.caseInsensitiveCompare(sessionCookieName) == .orderedSame {
                 let token = cookie.value.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !token.isEmpty { return token }

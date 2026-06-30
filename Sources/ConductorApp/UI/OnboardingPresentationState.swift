@@ -122,16 +122,6 @@ enum OnboardingCatalog {
             beats: ["分屏组织工作", "面板本地控制", "双击放大/还原"]
         ),
         OnboardingPage(
-            id: "assign",
-            screenshotName: "onboarding-tools",
-            screenshotFocus: .rightPanel,
-            accent: .mint,
-            eyebrow: "任务",
-            title: "把任务甩给正确的执行者",
-            body: "任务卡片是一段可复用的乐谱。拖到某个面板，就交给那个 Shell 或 Agent 执行。",
-            beats: ["拖到面板执行", "变量按需填写", "当前上下文运行"]
-        ),
-        OnboardingPage(
             id: "attention",
             screenshotName: "onboarding-workspace",
             screenshotFocus: .workspace,

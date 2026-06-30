@@ -70,7 +70,7 @@ public enum FactoryUsageFetcher {
         let query = BrowserCookieQuery(domains: cookieDomains)
         var fallback: [HTTPCookie]?
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             if cookies.contains(where: { sessionCookieNames.contains($0.name) }) {
                 return cookies
             }

@@ -92,7 +92,7 @@ public enum GrokUsageFetcher {
         let client = BrowserCookieClient()
         let query = BrowserCookieQuery(domains: cookieDomains)
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             guard cookies.contains(where: { sessionCookieNames.contains($0.name) }) else { continue }
             return cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
         }
@@ -569,7 +569,9 @@ private final class GrokCLIUsageRPCClient: @unchecked Sendable {
         self.stdoutLines = AsyncStream<Data> { continuation = $0 }
         self.stdoutContinuation = continuation
 
-        var resolvedEnv = env
+        var resolvedEnv = UsageProviderProcessEnvironment.scrubbedChildEnvironment(
+            from: env,
+            preservingProviderID: "grok")
         resolvedEnv["PATH"] = PathBuilder.effectivePATH(
             purposes: [.rpc],
             env: resolvedEnv,

@@ -75,7 +75,7 @@ public enum AugmentUsageFetcher {
         let client = BrowserCookieClient()
         let query = BrowserCookieQuery(domains: cookieDomains)
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             let hasNamed = cookies.contains { sessionCookieNames.contains($0.name) }
             // 优先返回含已知会话名的那组；否则也返回（让 API 去校验）。
             if hasNamed || browser == Browser.defaultImportOrder.last {
@@ -84,7 +84,7 @@ public enum AugmentUsageFetcher {
         }
         // 兜底：任意浏览器的 augment 域 cookie。
         for browser in Browser.defaultImportOrder {
-            if let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty {
+            if let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty {
                 return cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
             }
         }
@@ -353,7 +353,9 @@ public enum AugmentUsageFetcher {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = arguments
-        process.environment = environment
+        process.environment = UsageProviderProcessEnvironment.scrubbedChildEnvironment(
+            from: environment,
+            preservingProviderID: "augment")
         let stdout = Pipe()
         let stderr = Pipe()
         process.standardOutput = stdout

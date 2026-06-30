@@ -44,4 +44,23 @@ final class UsageCredentialsIsolationTests: XCTestCase {
         XCTAssertEqual(scrub["OPENAI_ADMIN_KEY"], "")
         XCTAssertEqual(scrub["OPENAI_API_KEY"], "")
     }
+
+    func testChildProcessEnvironmentRemovesManagedCredentialsAndKeepsExplicitOverrides() {
+        unsetenv("OPENAI_ADMIN_KEY")
+        unsetenv("OPENAI_API_KEY")
+
+        var config = AppConfig.default
+        config.usage.providers["openai"] = UsageProviderConfig(enabled: true, apiKey: "app-secret")
+
+        UsageCredentials.apply(config)
+
+        let environment = UsageCredentials.childProcessEnvironment(extra: [
+            "CONDUCTOR_BUILTIN_AGENT": "1",
+            "OPENAI_API_KEY": "explicit-session-key",
+        ])
+
+        XCTAssertNil(environment["OPENAI_ADMIN_KEY"])
+        XCTAssertEqual(environment["OPENAI_API_KEY"], "explicit-session-key")
+        XCTAssertEqual(environment["CONDUCTOR_BUILTIN_AGENT"], "1")
+    }
 }

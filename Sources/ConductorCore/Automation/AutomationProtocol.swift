@@ -20,7 +20,6 @@ public enum AutomationMethod {
     public static let appStatus = "app.status"
     public static let appMethods = "app.methods"
     public static let appOpenTools = "app.open-tools"
-    public static let appOpenTaskCards = "app.open-task-cards"
 
     public static let workspaceList = "workspace.list"
     public static let workspaceCurrent = "workspace.current"
@@ -82,7 +81,7 @@ public enum AutomationMethod {
     public static let feedAnswer = "feed.answer"
 
     public static let all: [String] = [
-        appPing, appStatus, appMethods, appOpenTools, appOpenTaskCards,
+        appPing, appStatus, appMethods, appOpenTools,
         workspaceList, workspaceCurrent, workspaceSelect, workspaceCreate, workspaceRename, workspaceClose,
         workspaceTree, workspaceStatusSet, workspaceStatusList, workspaceStatusClear,
         workspaceProgressSet, workspaceProgressClear, workspaceLogAppend, workspaceLogList, workspaceLogClear,

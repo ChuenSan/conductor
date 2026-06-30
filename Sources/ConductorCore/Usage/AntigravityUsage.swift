@@ -258,8 +258,11 @@ private final class AntigravityCLIHTTPClient: @unchecked Sendable {
         process.executableURL = resolved
         process.arguments = []
         process.currentDirectoryURL = URL(fileURLWithPath: env["HOME"] ?? NSHomeDirectory(), isDirectory: true)
+        let childEnvironment = UsageProviderProcessEnvironment.scrubbedChildEnvironment(
+            from: env,
+            preservingProviderID: "antigravity")
         process.environment = TTYCommandRunner.enrichedEnvironment(
-            baseEnv: env,
+            baseEnv: childEnvironment,
             home: env["HOME"] ?? NSHomeDirectory())
         process.standardInput = secondaryHandle
         process.standardOutput = secondaryHandle
@@ -689,7 +692,9 @@ public enum AntigravityUsageFetcher {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = []
-        var commandEnv = env
+        var commandEnv = UsageProviderProcessEnvironment.scrubbedChildEnvironment(
+            from: env,
+            preservingProviderID: "antigravity")
         commandEnv["PATH"] = PathBuilder.effectivePATH(
             purposes: [.tty, .nodeTooling],
             env: env,
@@ -999,6 +1004,7 @@ public enum AntigravityUsageFetcher {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = arguments
+        process.environment = UsageProviderProcessEnvironment.scrubbedChildEnvironment()
         let stdout = Pipe()
         let stderr = Pipe()
         process.standardOutput = stdout

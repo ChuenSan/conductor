@@ -37,132 +37,22 @@ enum PaneContextAction: Equatable {
     }
 }
 
-enum PaneHeaderActionPresentation {
-    static let primaryActions: [PaneContextAction] = [.splitRight, .splitDown, .zoom, .close]
-    static let moreActions: [PaneContextAction] = [.copy, .paste, .selectAll, .clear, .copyCwd, .openInFinder, .commandLog, .exportText]
-
-    static func title(for action: PaneContextAction) -> String {
-        switch action {
-        case .copy: return L("复制")
-        case .paste: return L("粘贴")
-        case .selectAll: return L("全选")
-        case .clear: return L("清屏")
-        case .splitRight: return L("向右分屏")
-        case .splitDown: return L("向下分屏")
-        case .zoom: return L("放大 / 还原")
-        case .copyCwd: return L("复制路径")
-        case .openInFinder: return L("在 Finder 中显示")
-        case .exportText: return L("导出输出为文本…")
-        case .commandLog: return L("命令记录…")
-        case .close: return L("关闭面板")
-        }
-    }
-
-    static func systemImage(for action: PaneContextAction) -> String {
-        switch action {
-        case .copy: return "doc.on.doc"
-        case .paste: return "clipboard"
-        case .selectAll: return "checklist"
-        case .clear: return "eraser"
-        case .splitRight: return "rectangle.split.2x1"
-        case .splitDown: return "rectangle.split.1x2"
-        case .zoom: return "arrow.up.left.and.arrow.down.right"
-        case .copyCwd: return "doc.text"
-        case .openInFinder: return "folder"
-        case .exportText: return "square.and.arrow.down"
-        case .commandLog: return "list.bullet.rectangle.portrait"
-        case .close: return "xmark"
-        }
-    }
-}
-
-enum PaneHeaderChromePolicy {
-    static let activeHeaderTintOpacity: CGFloat = 0.045
-    static let controlsCornerRadius: CGFloat = 8
-    static let controlsBackdropBorderOpacity: CGFloat = 0.08
-
-    static func controlOpacity(isActive: Bool, isHovering: Bool) -> CGFloat {
-        if isHovering { return 0.94 }
-        return isActive ? 0.70 : 0.26
-    }
-
-    static func controlsBackdropOpacity(isActive: Bool, isHovering: Bool) -> CGFloat {
-        if isHovering { return 0.12 }
-        return isActive ? 0.055 : 0
-    }
-}
-
-struct PaneHeaderControlLayout: Equatable {
-    let buttonFrames: [NSRect]
-    let buttonSize: CGFloat
-    let spacing: CGFloat
-    let trailingInset: CGFloat
-
-    static func layout(headerWidth: CGFloat, controlCount: Int) -> PaneHeaderControlLayout {
-        guard controlCount > 0, headerWidth > 0 else {
-            return PaneHeaderControlLayout(buttonFrames: [], buttonSize: 0, spacing: 0, trailingInset: 0)
-        }
-
-        let desiredButton: CGFloat = 20
-        let desiredSpacing: CGFloat = 3
-        let desiredInset: CGFloat = 8
-        let minButton: CGFloat = 9
-        let minSpacing: CGFloat = 1
-        let minInset: CGFloat = 2
-        let count = CGFloat(controlCount)
-
-        let desiredWidth = count * desiredButton + (count - 1) * desiredSpacing + desiredInset * 2
-        let buttonSize: CGFloat
-        let spacing: CGFloat
-        let inset: CGFloat
-
-        if headerWidth >= desiredWidth {
-            buttonSize = desiredButton
-            spacing = desiredSpacing
-            inset = desiredInset
-        } else {
-            inset = minInset
-            spacing = minSpacing
-            let available = max(0, headerWidth - inset * 2 - (count - 1) * spacing)
-            buttonSize = max(minButton, floor(available / count))
-        }
-
-        let totalWidth = count * buttonSize + (count - 1) * spacing
-        let originX = max(0, headerWidth - inset - totalWidth)
-        let frames = (0..<controlCount).map { index in
-            NSRect(
-                x: originX + CGFloat(index) * (buttonSize + spacing),
-                y: 0,
-                width: buttonSize,
-                height: buttonSize
-            )
-        }
-        return PaneHeaderControlLayout(
-            buttonFrames: frames,
-            buttonSize: buttonSize,
-            spacing: spacing,
-            trailingInset: inset
-        )
-    }
-}
-
 /// 包裹一个终端 hostView。**关键：hostView 必须是唯一子视图，且本视图不 wantsLayer、不重写 draw()**——
 /// 否则给 CAMetalLayer 的终端视图加普通 layer-backed 兄弟/做 CPU 绘制会破坏 Metal 呈现（非聚焦 pane 白屏）。
 /// 焦点环用 hostView 自身的 CAMetalLayer 边框；拖拽发起由终端 ⌘+拖 触发。
 @MainActor
 final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     static let paneType = NSPasteboard.PasteboardType("com.conductor.pane")
-    /// 任务卡片拖到终端：面板里的牌用同名 typeIdentifier 写入，落到此 pane → 在这跑。
-    static let taskType = NSPasteboard.PasteboardType("com.conductor.taskcard")
 
     let paneID: PaneID
     let hostView: NSView
 
     var onMove: ((_ moving: PaneID, _ target: PaneID, _ edge: PaneDropEdge) -> Void)?
-    /// 任务牌甩到本 pane：回调任务 id + 本 pane id。
-    var onDropTask: ((_ taskID: String, _ pane: PaneID) -> Void)?
     var onFocus: ((PaneID) -> Void)?
     var onContextAction: ((PaneContextAction) -> Void)?
+    var shortcutProvider: ((PaneContextAction) -> String?)? {
+        didSet { header.shortcutProvider = shortcutProvider }
+    }
     /// 滚动条拖动 → 按像素滚动终端。
     var onScroll: ((Double) -> Void)?
     /// 右键「新建终端运行」子菜单：动态提供当前可启动的 Agent。
@@ -204,10 +94,6 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     private let header = PaneHeaderView()
     /// 拖放落点高亮（独立覆盖层，frameView 的兄弟、非终端兄弟 → 不破坏 Metal）。
     private let dropOverlay = NSView()
-    /// 任务牌落点时，居中显示"将由谁执行"（→ Claude / → Shell），把"让什么执行"摆到动作当下。
-    private let dropLabel = NSTextField(labelWithString: "")
-    /// 本 pane 当前由谁跑（agent 标题或 Shell）；由 coordinator 跟随 paneAgents 设置。
-    var runnerLabel = "Shell"
     /// 自绘滚动条（card 的兄弟，贴右缘；非 Metal 兄弟，安全）。
     private let scrollbar = PaneScrollbar()
     /// ⌘F 搜索条（懒创建；card 的兄弟，浮在右上角，非 Metal 兄弟，安全）。
@@ -275,14 +161,7 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         dropOverlay.isHidden = true
         addSubview(dropOverlay)   // 顶层，frameView 的兄弟
 
-        dropLabel.font = .systemFont(ofSize: 13, weight: .bold)
-        dropLabel.textColor = NSColor(AppStyle.accent)
-        dropLabel.alignment = .center
-        dropLabel.isHidden = true
-        dropLabel.autoresizingMask = [.width, .minYMargin, .maxYMargin]
-        dropOverlay.addSubview(dropLabel)
-
-        registerForDraggedTypes([Self.paneType, Self.taskType])
+        registerForDraggedTypes([Self.paneType])
     }
 
     deinit {
@@ -697,13 +576,6 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
     override func draggingEnded(_ sender: NSDraggingInfo) { hideDropOverlay() }
 
     private func dropOperation(_ sender: NSDraggingInfo) -> NSDragOperation {
-        // 任务牌：整块 pane 作落点（不分左右上下半区），高亮全卡。
-        // 注意：SwiftUI .onDrag 的数据是懒加载，draggingEntered 时 data(forType:) 还读不到，
-        // 所以这里靠「类型是否存在」判定（同步可知），真正取 id 留到松手时。
-        if hasTaskDrag(sender) {
-            showFullDropOverlay()
-            return .copy
-        }
         guard let s = sender.draggingPasteboard.string(forType: Self.paneType), PaneID(s) != paneID else {
             hideDropOverlay()
             return []
@@ -712,46 +584,9 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
         return .move
     }
 
-    private func hasTaskDrag(_ sender: NSDraggingInfo) -> Bool {
-        sender.draggingPasteboard.availableType(from: [Self.taskType]) != nil
-    }
-
-    /// 松手时取任务 id：落下时 data(forType:) 会强制把 promise 落地，同步即可读到。
-    private func taskID(from sender: NSDraggingInfo) -> String? {
-        let pb = sender.draggingPasteboard
-        if let data = pb.data(forType: Self.taskType), let id = String(data: data, encoding: .utf8), !id.isEmpty { return id }
-        if let s = pb.string(forType: Self.taskType), !s.isEmpty { return s }
-        for item in pb.pasteboardItems ?? [] {
-            if let data = item.data(forType: Self.taskType), let id = String(data: data, encoding: .utf8), !id.isEmpty { return id }
-            if let s = item.string(forType: Self.taskType), !s.isEmpty { return s }
-        }
-        return nil
-    }
-
-    /// 任务牌落点：整卡高亮 + 居中标注「将由谁执行」（区别于 pane 重排的半区高亮）。
-    private func showFullDropOverlay() {
-        let target = frameView.frame.insetBy(dx: 4, dy: 4)
-        let firstShow = dropOverlay.isHidden
-        if firstShow {
-            dropOverlay.isHidden = false
-            dropOverlay.alphaValue = 0
-            dropOverlay.frame = target
-        }
-        dropLabel.stringValue = "→ " + runnerLabel
-        dropLabel.frame = NSRect(x: 0, y: (target.height - 24) / 2, width: target.width, height: 24)
-        dropLabel.isHidden = false
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = firstShow ? 0.15 : 0.2
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            dropOverlay.animator().alphaValue = 1
-            dropOverlay.animator().frame = target
-        }
-    }
-
     /// 在落点半区画高亮，提示松手后这个 pane 会去到目标的哪一侧（左/右=并排，上/下=堆叠）。
     /// 首次淡入；在不同落点之间平滑滑动（不再硬切）。
     private func showDropOverlay(_ edge: PaneDropEdge) {
-        dropLabel.isHidden = true   // 半区高亮（pane 重排）不显示执行者标签
         let r = frameView.frame
         let half: NSRect
         switch edge {
@@ -788,10 +623,6 @@ final class PaneContainerView: NSView, NSDraggingSource, NSMenuDelegate {
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         hideDropOverlay()
-        if hasTaskDrag(sender) {
-            if let tid = taskID(from: sender) { onDropTask?(tid, paneID) }
-            return true
-        }
         guard let s = sender.draggingPasteboard.string(forType: Self.paneType) else { return false }
         let moving = PaneID(s)
         guard moving != paneID else { return false }
@@ -855,22 +686,22 @@ final class PaneHeaderView: NSView {
     var onDragStart: ((NSEvent) -> Void)?
     var onClick: (() -> Void)?
     var onAction: ((PaneContextAction) -> Void)?
+    var shortcutProvider: ((PaneContextAction) -> String?)? {
+        didSet { actionStrip.shortcutProvider = shortcutProvider }
+    }
     private var dragStarted = false
     private var hovering = false { didSet { updateHeaderChrome() } }
     private var trackingArea: NSTrackingArea?
-    private let controls = NSView()
-    private var controlButtons: [PaneHeaderButton] = []
+    private let actionStrip = PaneHeaderActionStrip()
+    private let hoverTipPresenter = PaneHeaderHoverTipPresenter()
+    private var pendingHoverTip: PaneHeaderActionHoverTip?
+    private var hoverTipWorkItem: DispatchWorkItem?
     private let zoomBadge = PaneZoomBadge()
-    private let moreButton = PaneHeaderButton(
-        symbolName: "ellipsis",
-        label: L("更多操作"),
-        action: nil
-    )
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        setupControls()
+        setupActions()
         zoomBadge.isHidden = true
         zoomBadge.onPress = { [weak self] in self?.onAction?(.zoom) }
         addSubview(zoomBadge)
@@ -893,6 +724,11 @@ final class PaneHeaderView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         syncThinkingTimer()
+        if window == nil {
+            hideHoverTip()
+        } else {
+            hoverTipPresenter.reposition(from: self)
+        }
     }
 
     override func updateTrackingAreas() {
@@ -915,6 +751,8 @@ final class PaneHeaderView: NSView {
 
     override func mouseExited(with event: NSEvent) {
         hovering = false
+        actionStrip.dismissHoverTip()
+        hideHoverTip()
     }
 
     private func syncThinkingTimer() {
@@ -975,30 +813,26 @@ final class PaneHeaderView: NSView {
         super.layout()
         let layout = PaneHeaderControlLayout.layout(
             headerWidth: bounds.width,
-            controlCount: controlButtons.count)
-        let controlsFrame = layout.buttonFrames.reduce(NSRect.null) { partial, frame in
-            partial.union(frame)
-        }
-        controls.frame = NSRect(
+            controlCount: actionStrip.buttonCount)
+        let controlsFrame = layout.controlsFrame
+        actionStrip.frame = NSRect(
             x: controlsFrame.isNull ? bounds.width : controlsFrame.minX,
             y: controlsFrame.isNull ? 0 : (bounds.height - controlsFrame.height) / 2,
             width: controlsFrame.isNull ? 0 : controlsFrame.width,
             height: controlsFrame.isNull ? 0 : controlsFrame.height
         )
-        for (button, frame) in zip(controlButtons, layout.buttonFrames) {
-            button.frame = frame.offsetBy(dx: -controls.frame.minX, dy: 0)
-            button.symbolPointSize = max(8, frame.width - 6)
-        }
+        actionStrip.applyLayout(layout)
         // 「已放大」徽标贴在控制按钮组左侧
         if !zoomBadge.isHidden {
             let badgeWidth = zoomBadge.fittingWidth
             zoomBadge.frame = NSRect(
-                x: max(0, controls.frame.minX - badgeWidth - 7),
+                x: max(0, actionStrip.frame.minX - badgeWidth - 7),
                 y: (bounds.height - PaneZoomBadge.height) / 2,
                 width: badgeWidth,
                 height: PaneZoomBadge.height
             )
         }
+        hoverTipPresenter.reposition(from: self)
         needsDisplay = true
     }
 
@@ -1020,7 +854,7 @@ final class PaneHeaderView: NSView {
             .foregroundColor: NSColor(isActive ? AppStyle.textSecondary : AppStyle.textTertiary),
         ])
         // 标题在状态徽标（思考计时/队列）、放大徽标（若亮）或控制按钮组前截断
-        var titleLimit = zoomBadge.isHidden ? controls.frame.minX : zoomBadge.frame.minX
+        var titleLimit = zoomBadge.isHidden ? actionStrip.frame.minX : zoomBadge.frame.minX
         // 思考计时每秒重绘走表
         if let since = thinkingSince {
             titleLimit = drawStatusChip(Self.thinkingText(since: since),
@@ -1050,42 +884,54 @@ final class PaneHeaderView: NSView {
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    private func setupControls() {
-        controls.wantsLayer = true
-        controls.layer?.masksToBounds = true
-        controls.layer?.cornerRadius = PaneHeaderChromePolicy.controlsCornerRadius
-        controls.layer?.cornerCurve = .continuous
-        controls.layer?.borderWidth = 1
-
-        for action in PaneHeaderActionPresentation.primaryActions {
-            let button = PaneHeaderButton(
-                symbolName: PaneHeaderActionPresentation.systemImage(for: action),
-                label: PaneHeaderActionPresentation.title(for: action),
-                action: action
-            )
-            button.onPress = { [weak self] in self?.onAction?(action) }
-            controls.addSubview(button)
-            controlButtons.append(button)
+    private func setupActions() {
+        actionStrip.shortcutProvider = shortcutProvider
+        actionStrip.onAction = { [weak self] action in
+            self?.hideHoverTip()
+            self?.onAction?(action)
         }
-
-        moreButton.onPress = { [weak self] in self?.showMoreMenu(from: self?.moreButton) }
-        controls.addSubview(moreButton)
-        controlButtons.append(moreButton)
-        addSubview(controls)
+        actionStrip.onMore = { [weak self] sender in
+            self?.hideHoverTip()
+            self?.showMoreMenu(from: sender)
+        }
+        actionStrip.onHoverTip = { [weak self] tip in
+            self?.scheduleHoverTip(tip)
+        }
+        addSubview(actionStrip)
         updateHeaderChrome()
     }
 
     private func updateHeaderChrome() {
-        controls.alphaValue = PaneHeaderChromePolicy.controlOpacity(isActive: isActive, isHovering: hovering)
-        controls.layer?.backgroundColor = NSColor(AppStyle.hoverFill)
-            .withAlphaComponent(PaneHeaderChromePolicy.controlsBackdropOpacity(isActive: isActive, isHovering: hovering))
-            .cgColor
-        controls.layer?.borderColor = NSColor(AppStyle.textPrimary)
-            .withAlphaComponent((isActive || hovering) ? PaneHeaderChromePolicy.controlsBackdropBorderOpacity : 0)
-            .cgColor
-        for button in controlButtons {
-            button.isPaneActive = isActive
+        actionStrip.isPaneActive = isActive
+        actionStrip.isHeaderHovering = hovering
+    }
+
+    private func scheduleHoverTip(_ tip: PaneHeaderActionHoverTip?) {
+        hoverTipWorkItem?.cancel()
+        pendingHoverTip = tip
+        guard let tip else {
+            hideHoverTip()
+            return
         }
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.pendingHoverTip == tip else { return }
+            self.showHoverTip(tip)
+        }
+        hoverTipWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + PaneHeaderHoverTipPresentation.delay,
+            execute: workItem
+        )
+    }
+
+    private func showHoverTip(_ tip: PaneHeaderActionHoverTip) {
+        hoverTipPresenter.show(tip, from: self)
+    }
+
+    private func hideHoverTip() {
+        hoverTipWorkItem?.cancel()
+        pendingHoverTip = nil
+        hoverTipPresenter.hide()
     }
 
     private func showMoreMenu(from sender: PaneHeaderButton?) {
@@ -1100,118 +946,6 @@ final class PaneHeaderView: NSView {
             })
         }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.minY - 3), in: sender)
-    }
-}
-
-@MainActor
-private final class PaneHeaderButton: NSView {
-    let paneAction: PaneContextAction?
-    var onPress: (() -> Void)?
-    var isPaneActive = false { didSet { updateAppearance() } }
-    var symbolPointSize: CGFloat = 14 { didSet { updateSymbol() } }
-    private var hovering = false { didSet { updateAppearance() } }
-    private var pressing = false { didSet { updateAppearance() } }
-    private var trackingArea: NSTrackingArea?
-    private let symbolName: String
-    private let label: String
-    private let imageView = NSImageView()
-
-    init(symbolName: String, label: String, action: PaneContextAction?) {
-        self.symbolName = symbolName
-        self.label = label
-        self.paneAction = action
-        super.init(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
-        wantsLayer = true
-        layer?.cornerRadius = 6
-        layer?.cornerCurve = .continuous
-        toolTip = label
-        setAccessibilityLabel(label)
-        imageView.imageScaling = .scaleProportionallyDown
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(imageView)
-        updateSymbol()
-        updateAppearance()
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var intrinsicContentSize: NSSize { NSSize(width: 20, height: 20) }
-
-    override func layout() {
-        super.layout()
-        let inset = max(2, floor(bounds.width * 0.18))
-        imageView.frame = bounds.insetBy(dx: inset, dy: inset)
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingArea {
-            removeTrackingArea(trackingArea)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self
-        )
-        addTrackingArea(area)
-        trackingArea = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        hovering = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        hovering = false
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        pressing = true
-        animateScale(0.86)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        let shouldFire = bounds.contains(point)
-        clearInteractionState()
-        animateScale(1)
-        if shouldFire { onPress?() }
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window == nil { clearInteractionState() }
-    }
-
-    private func clearInteractionState() {
-        pressing = false
-        hovering = false
-    }
-
-    private func updateAppearance() {
-        let activeOpacity = isPaneActive ? 0.88 : 0.74
-        imageView.contentTintColor = NSColor(isPaneActive ? AppStyle.textSecondary : AppStyle.textTertiary)
-            .withAlphaComponent(hovering ? 0.95 : activeOpacity)
-        layer?.backgroundColor = (hovering || pressing)
-            ? NSColor(AppStyle.hoverFill).cgColor
-            : NSColor.clear.cgColor
-    }
-
-    private func updateSymbol() {
-        let config = NSImage.SymbolConfiguration(pointSize: symbolPointSize, weight: .medium)
-        imageView.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: label)?
-            .withSymbolConfiguration(config)
-        needsLayout = true
-    }
-
-    private func animateScale(_ scale: CGFloat) {
-        guard let layer else { return }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = scale == 1 ? 0.16 : 0.08
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            layer.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
-        }
     }
 }
 

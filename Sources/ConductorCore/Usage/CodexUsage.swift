@@ -139,6 +139,7 @@ public enum CodexUsageError: LocalizedError, Sendable {
 
 public enum CodexUsageFetcher {
     private static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
+    private static let defaultChatGPTBaseURL = "https://chatgpt.com/backend-api/"
     private static let rateLimitResetCreditsPath = "/wham/rate-limit-reset-credits"
     private static let refreshURL = URL(string: "https://auth.openai.com/oauth/token")!
     private static let oauthClientID = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -324,19 +325,19 @@ public enum CodexUsageFetcher {
 
     private static func chatGPTBaseURL(env: [String: String], configContents: String?) -> String {
         if let configContents, let parsed = parseChatGPTBaseURL(from: configContents) {
-            return parsed
+            return trustedChatGPTBaseURL(parsed)
         }
         if let contents = loadCodexConfigContents(env: env),
            let parsed = parseChatGPTBaseURL(from: contents)
         {
-            return parsed
+            return trustedChatGPTBaseURL(parsed)
         }
-        return "https://chatgpt.com/backend-api/"
+        return defaultChatGPTBaseURL
     }
 
     private static func normalizedChatGPTBaseURL(_ raw: String) -> String {
         var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.isEmpty { value = "https://chatgpt.com/backend-api/" }
+        if value.isEmpty { value = defaultChatGPTBaseURL }
         while value.hasSuffix("/") {
             value.removeLast()
         }
@@ -346,6 +347,18 @@ public enum CodexUsageFetcher {
             value += "/backend-api"
         }
         return value
+    }
+
+    private static func trustedChatGPTBaseURL(_ raw: String) -> String {
+        let normalized = normalizedChatGPTBaseURL(raw)
+        guard let url = URL(string: normalized),
+              UsageEndpointPolicy.isTrustedHTTPSURL(
+                url,
+                allowedHosts: ["chatgpt.com", "chat.openai.com"])
+        else {
+            return defaultChatGPTBaseURL
+        }
+        return normalized
     }
 
     private static func parseChatGPTBaseURL(from contents: String) -> String? {
@@ -647,8 +660,11 @@ public enum CodexUsageFetcher {
         json["last_refresh"] = ISO8601DateFormatter().string(from: Date())
 
         let data = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let parent = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        try ConfigFileSecurity.secureConfigDirectory(at: parent)
         try data.write(to: url, options: .atomic)
+        try ConfigFileSecurity.secureConfigFile(at: url)
     }
 
     private static func refreshCredentials(
@@ -1656,7 +1672,9 @@ private final class CodexRPCProcessTransport: CodexRPCTransport, @unchecked Send
         self.stdoutLines = AsyncStream<Data> { continuation = $0 }
         self.stdoutContinuation = continuation
 
-        var resolvedEnv = env
+        var resolvedEnv = UsageProviderProcessEnvironment.scrubbedChildEnvironment(
+            from: env,
+            preservingProviderID: "codex")
         let loginPATH = LoginShellPathCache.shared.currentOrCapture()
         resolvedEnv["PATH"] = PathBuilder.effectivePATH(
             purposes: [.rpc, .nodeTooling],

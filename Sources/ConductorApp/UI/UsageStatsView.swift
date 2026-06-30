@@ -2,6 +2,43 @@ import AppKit
 import ConductorCore
 import SwiftUI
 
+enum UsageStatsRefreshPresentation {
+    static let revealAnimationDuration: Double = 0.42
+    static let barRevealAnimationDuration: Double = 0.92
+    static let loadingSkeletonMetricTileCount = 3
+    static let loadingSkeletonChartBarCount = 12
+
+    static var revealAnimation: Animation {
+        .easeOut(duration: revealAnimationDuration)
+    }
+
+    static var barRevealAnimation: Animation {
+        .spring(response: barRevealAnimationDuration, dampingFraction: 0.82, blendDuration: 0.08)
+    }
+
+    static func skeletonFillOpacity(isPulsing: Bool) -> Double {
+        isPulsing ? 0.30 : 0.16
+    }
+
+    static func chartBarStaggerDelay(dayIndex: Int, dayCount: Int) -> Double {
+        guard dayIndex > 0, dayCount > 1 else { return 0 }
+        let normalized = min(max(Double(dayIndex) / Double(max(dayCount - 1, 1)), 0), 1)
+        return min(0.24, normalized * 0.24)
+    }
+
+    static var reportTransition: AnyTransition {
+        .opacity.combined(with: .offset(y: 8))
+    }
+
+    static func showsLoadingSurface(isLoading: Bool, hasReport: Bool) -> Bool {
+        isLoading
+    }
+
+    static func showsReport(isLoading: Bool, hasReport: Bool) -> Bool {
+        hasReport && !isLoading
+    }
+}
+
 /// Token 用量仪表盘：扫描 Claude / Codex 会话日志，按天 / 模型 / 项目聚合 token 与估算成本。
 struct UsageStatsView: View {
     var onOpenManagement: () -> Void = {}
@@ -17,6 +54,10 @@ struct UsageStatsView: View {
     @State private var contentHeightCache: [String: CGFloat] = [:]
     /// 按 CLI 过滤（nil = 全部）。所有区块跟随。
     @State private var sourceFilter: UsageSource?
+    @State private var loadingPulse = false
+    @State private var reportRevealID = 0
+    @State private var reportRevealProgress: CGFloat = 1
+    @State private var chartRevealProgress: CGFloat = 1
 
     private static let claudeColor = Color(red: 0.85, green: 0.45, blue: 0.18)
     private static let codexColor = Color(red: 0.22, green: 0.62, blue: 0.40)
@@ -73,7 +114,6 @@ struct UsageStatsView: View {
             "scale=\(Self.contentHeightTextScaleToken())",
             "days=\(daysBack)",
             "source=\(sourceFilter?.rawValue ?? "all")",
-            "loading=\(loading ? 1 : 0)",
         ]
         guard let r else {
             parts.append("report=nil")
@@ -99,19 +139,16 @@ struct UsageStatsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 rangePicker
-                if loading && report == nil {
-                    loadingRow
-                } else if let report {
-                    sourcePicker(report)
-                    summaryTiles(report)
-                    if !report.byDay.isEmpty { dailyChart(report) }
-                    if !report.monthSummaries.isEmpty { monthSection(report) }
-                    if !report.bySession.isEmpty { sessionSection(report) }
-                    tokenComposition(report)
-                    if sourceFilter == nil { sourceBreakdown(report) }
-                    projectSection(report)
-                    modelTable(report)
-                    footnote(report)
+                if UsageStatsRefreshPresentation.showsLoadingSurface(isLoading: loading, hasReport: report != nil) {
+                    loadingSurface
+                        .transition(.opacity)
+                } else if let report,
+                          UsageStatsRefreshPresentation.showsReport(isLoading: loading, hasReport: true) {
+                    reportContent(report)
+                        .id(reportRevealID)
+                        .opacity(reportRevealProgress)
+                        .offset(y: (1 - reportRevealProgress) * 8)
+                        .transition(UsageStatsRefreshPresentation.reportTransition)
                 } else {
                     emptyRow
                 }
@@ -132,6 +169,20 @@ struct UsageStatsView: View {
             contentWidthToken = newValue
         }
         .onAppear { if report == nil { reload() } }
+    }
+
+    @ViewBuilder
+    private func reportContent(_ report: UsageReport) -> some View {
+        sourcePicker(report)
+        summaryTiles(report)
+        if !report.byDay.isEmpty { dailyChart(report) }
+        if !report.monthSummaries.isEmpty { monthSection(report) }
+        if !report.bySession.isEmpty { sessionSection(report) }
+        tokenComposition(report)
+        if sourceFilter == nil { sourceBreakdown(report) }
+        projectSection(report)
+        modelTable(report)
+        footnote(report)
     }
 
     // MARK: - 按 CLI 过滤
@@ -175,9 +226,7 @@ struct UsageStatsView: View {
     private func sourceChip(_ src: UsageSource?, label: String, cost: Double) -> some View {
         let selected = sourceFilter == src
         return Button {
-            sourceFilter = src
-            selectedDay = nil
-            hoveredDay = nil
+            setSourceFilter(src)
         } label: {
             HStack(spacing: 4) {
                 if let src {
@@ -188,6 +237,8 @@ struct UsageStatsView: View {
                 Text("$" + UsageNumber.money(cost))
                     .font(.system(size: 9.5, weight: .medium))
                     .opacity(0.75)
+                    .contentTransition(.numericText())
+                    .animation(UsageStatsRefreshPresentation.revealAnimation, value: cost)
             }
             .foregroundStyle(selected ? AppStyle.theme.primarySolidText : AppStyle.textSecondary)
             .padding(.horizontal, 9)
@@ -195,6 +246,26 @@ struct UsageStatsView: View {
             .background(Capsule().fill(selected ? AppStyle.accent : AppStyle.hoverFill))
         }
         .buttonStyle(PressScaleStyle())
+    }
+
+    private func setSourceFilter(_ src: UsageSource?) {
+        guard sourceFilter != src else { return }
+        withAnimation(UsageStatsRefreshPresentation.revealAnimation) {
+            sourceFilter = src
+            selectedDay = nil
+            hoveredDay = nil
+        }
+        replayChartReveal()
+    }
+
+    private func replayChartReveal() {
+        guard report != nil else { return }
+        chartRevealProgress = 0
+        DispatchQueue.main.async {
+            withAnimation(UsageStatsRefreshPresentation.barRevealAnimation) {
+                chartRevealProgress = 1
+            }
+        }
     }
 
     // MARK: - 区间选择
@@ -343,6 +414,8 @@ struct UsageStatsView: View {
                 .font(.system(size: 19, weight: .bold, design: .rounded))
                 .foregroundStyle(highlight ? AppStyle.accent : AppStyle.textPrimary)
                 .lineLimit(1).minimumScaleFactor(0.6)
+                .contentTransition(.numericText())
+                .animation(UsageStatsRefreshPresentation.revealAnimation, value: value)
             Text(label)
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(AppStyle.textTertiary)
@@ -385,13 +458,19 @@ struct UsageStatsView: View {
                                 .allowsHitTesting(false)
                         }
                         HStack(alignment: .bottom, spacing: spacing) {
-                            ForEach(days) { day in
+                            ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
                                 dayBar(
                                     day,
                                     maxCost: maxCost,
                                     activeDayKey: activeDayKey,
                                     isPeak: day.day == peakDayKey)
                                     .frame(width: barWidth)
+                                    .animation(
+                                        UsageStatsRefreshPresentation.barRevealAnimation.delay(
+                                            UsageStatsRefreshPresentation.chartBarStaggerDelay(
+                                                dayIndex: index,
+                                                dayCount: days.count)),
+                                        value: chartRevealProgress)
                             }
                         }
                         .frame(width: contentWidth, height: Self.dailyChartHeight, alignment: .bottomLeading)
@@ -521,7 +600,9 @@ struct UsageStatsView: View {
     private func dayBar(_ day: DailyUsage, maxCost: Double, activeDayKey: String?, isPeak: Bool) -> some View {
         let dayTotals = filteredDay(day)
         let scale = Self.dailyBarMaxHeight / maxCost
-        let totalHeight = max(dayTotals.costUSD * scale, dayTotals.costUSD > 0 ? 1.5 : 0)
+        let revealProgress = max(0, min(1, chartRevealProgress))
+        let totalHeight = max(dayTotals.costUSD * scale * Double(revealProgress),
+                              dayTotals.costUSD > 0 ? 1.5 * Double(revealProgress) : 0)
         let isSelected = selectedDay == day.day
         let isHovered = hoveredDay == day.day
         let isActive = activeDayKey == day.day
@@ -536,7 +617,8 @@ struct UsageStatsView: View {
                         let cost = day.bySource[source]?.costUSD ?? 0
                         RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                             .fill(Self.color(for: source))
-                            .frame(height: max(cost * scale, cost > 0 ? 1.5 : 0))
+                            .frame(height: max(cost * scale * Double(revealProgress),
+                                               cost > 0 ? 1.5 * Double(revealProgress) : 0))
                     }
                 }
                 if dayTotals.costUSD == 0 {
@@ -1056,8 +1138,7 @@ struct UsageStatsView: View {
                 let t = r.bySource[src] ?? UsageTotals()
                 let share = r.grand.costUSD > 0 ? t.costUSD / r.grand.costUSD : 0
                 Button {
-                    sourceFilter = src
-                    selectedDay = nil
+                    setSourceFilter(src)
                 } label: {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 5) {
@@ -1301,6 +1382,8 @@ struct UsageStatsView: View {
             .lineLimit(1)
             .minimumScaleFactor(0.8)
             .frame(minWidth: 48, alignment: .trailing)
+            .contentTransition(.numericText())
+            .animation(UsageStatsRefreshPresentation.revealAnimation, value: cost)
     }
 
     private func footnote(_ r: UsageReport) -> some View {
@@ -1330,6 +1413,142 @@ struct UsageStatsView: View {
         }.padding(.vertical, 20)
     }
 
+    private var loadingSurface: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            loadingStatusRow
+            ViewThatFits(in: .horizontal) {
+                skeletonSourceChips
+                    .fixedSize(horizontal: true, vertical: false)
+                ScrollView(.horizontal) {
+                    skeletonSourceChips
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .scrollIndicators(.never)
+            }
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 160), spacing: 10, alignment: .top)],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                ForEach(0..<UsageStatsRefreshPresentation.loadingSkeletonMetricTileCount, id: \.self) { index in
+                    skeletonMetricTile(index: index)
+                }
+            }
+            skeletonChartCard
+        }
+        .onAppear { loadingPulse = true }
+        .onDisappear { loadingPulse = false }
+        .animation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true), value: loadingPulse)
+    }
+
+    private var loadingStatusRow: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(L("正在刷新用量…"))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppStyle.textSecondary)
+            skeletonCapsule(width: 76, height: 8)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 2)
+    }
+
+    private var skeletonSourceChips: some View {
+        HStack(spacing: 8) {
+            skeletonCapsule(width: 84, height: 22)
+            skeletonCapsule(width: 104, height: 22)
+            skeletonCapsule(width: 96, height: 22)
+        }
+    }
+
+    private func skeletonMetricTile(index: Int) -> some View {
+        let topWidths: [CGFloat] = [88, 112, 96]
+        let middleWidths: [CGFloat] = [56, 74, 64]
+        let bottomWidths: [CGFloat] = [112, 92, 126]
+        return VStack(alignment: .leading, spacing: 7) {
+            skeletonCapsule(width: topWidths[index % topWidths.count], height: 20)
+            skeletonCapsule(width: middleWidths[index % middleWidths.count], height: 10)
+            skeletonCapsule(width: bottomWidths[index % bottomWidths.count], height: 8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(AppStyle.hoverFill.opacity(0.18)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppStyle.textPrimary.opacity(0.045), lineWidth: 1))
+    }
+
+    private var skeletonChartCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                skeletonCapsule(width: 72, height: 12)
+                skeletonCapsule(width: 58, height: 8)
+                skeletonCapsule(width: 68, height: 8)
+                Spacer(minLength: 0)
+            }
+            ZStack(alignment: .bottomLeading) {
+                VStack(spacing: 0) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        Rectangle()
+                            .fill(AppStyle.textPrimary.opacity(0.035))
+                            .frame(height: 1)
+                        Spacer(minLength: 0)
+                    }
+                }
+                HStack(alignment: .bottom, spacing: 6) {
+                    ForEach(0..<UsageStatsRefreshPresentation.loadingSkeletonChartBarCount, id: \.self) { index in
+                        skeletonChartBar(index: index)
+                    }
+                }
+            }
+            .frame(height: Self.dailyChartHeight, alignment: .bottom)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(AppStyle.hoverFill.opacity(0.16)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppStyle.textPrimary.opacity(0.05), lineWidth: 1))
+    }
+
+    private func skeletonChartBar(index: Int) -> some View {
+        let heights: [CGFloat] = [32, 58, 44, 72, 38, 64]
+        let sources = UsageSource.allCases
+        let color = Self.color(for: sources[index % sources.count])
+        let pulseScale: CGFloat = loadingPulse ? 1 : 0.74
+        return RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .fill(color.opacity(loadingPulse ? 0.36 : 0.18))
+            .frame(height: heights[index % heights.count] * pulseScale)
+            .frame(maxWidth: .infinity, alignment: .bottom)
+    }
+
+    private func skeletonCapsule(width: CGFloat? = nil, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: min(height / 2, 8), style: .continuous)
+            .fill(AppStyle.hoverFill.opacity(UsageStatsRefreshPresentation.skeletonFillOpacity(isPulsing: loadingPulse)))
+            .overlay {
+                GeometryReader { geo in
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            Color.white.opacity(AppStyle.theme.isDark ? 0.05 : 0.12),
+                            .clear,
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: max(28, geo.size.width * 0.48))
+                    .offset(x: loadingPulse ? geo.size.width : -geo.size.width)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: min(height / 2, 8), style: .continuous))
+            }
+            .frame(width: width, height: height)
+    }
+
     private var emptyRow: some View {
         ToolEmptyState(
             icon: "chart.bar.xaxis",
@@ -1342,13 +1561,15 @@ struct UsageStatsView: View {
 
     private func reload() {
         let days = daysBack
+        loading = true
+        reportRevealProgress = 0
+        chartRevealProgress = 0
         // 先显示缓存（秒开），再后台重扫更新。
         if let cached = UsageReportStore.load(daysBack: days) {
             report = cached
         } else {
             report = nil
         }
-        loading = true
         Task {
             let result = await Task.detached(priority: .userInitiated) { () -> UsageReport in
                 await CostUsageFetcher().loadReportOrFallback(daysBack: days)
@@ -1356,8 +1577,19 @@ struct UsageStatsView: View {
             UsageReportStore.save(result, daysBack: days)
             await MainActor.run {
                 if daysBack == days {
+                    reportRevealProgress = 0
+                    chartRevealProgress = 0
                     report = result
-                    loading = false
+                    reportRevealID += 1
+                    withAnimation(UsageStatsRefreshPresentation.revealAnimation) {
+                        loading = false
+                        reportRevealProgress = 1
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        withAnimation(UsageStatsRefreshPresentation.barRevealAnimation) {
+                            chartRevealProgress = 1
+                        }
+                    }
                 }
             }
         }

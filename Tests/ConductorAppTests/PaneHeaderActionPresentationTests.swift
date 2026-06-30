@@ -20,6 +20,17 @@ final class PaneHeaderActionPresentationTests: XCTestCase {
         XCTAssertTrue(actions.allSatisfy { $0.deckLayer == .pane })
     }
 
+    func testAllPaneHeaderActionsExposeCommandIDsForShortcutSettings() {
+        let actions = PaneHeaderActionPresentation.primaryActions + PaneHeaderActionPresentation.moreActions
+        let commandIDs = actions.compactMap(PaneHeaderActionPresentation.commandID)
+
+        XCTAssertEqual(commandIDs.count, actions.count)
+        XCTAssertEqual(Set(commandIDs).count, actions.count)
+        XCTAssertEqual(PaneHeaderActionPresentation.commandID(for: .splitRight), "splitRight")
+        XCTAssertEqual(PaneHeaderActionPresentation.commandID(for: .copy), "copyPane")
+        XCTAssertEqual(PaneHeaderActionPresentation.commandID(for: .commandLog), "openPaneCommandLog")
+    }
+
     @MainActor
     func testPaneContextMenuRefreshesAfterLanguageChange() {
         let originalLanguage = AppLanguage.current

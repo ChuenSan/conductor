@@ -2,6 +2,8 @@ import AppKit
 
 @MainActor
 enum WindowChromePolicy {
+    static let titlebarButtonAvoidanceWidth: CGFloat = 88
+
     static func applyMainWindowChrome(to window: NSWindow) {
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
@@ -10,5 +12,10 @@ enum WindowChromePolicy {
         // 终端区由其 AppKit 容器画实色覆盖，保持可读。
         window.isOpaque = false
         window.backgroundColor = .clear
+    }
+
+    static func tabBarLeadingInset(sidebarCollapsed: Bool, sidebarWidth: CGFloat) -> CGFloat {
+        guard sidebarCollapsed else { return 0 }
+        return max(0, titlebarButtonAvoidanceWidth - sidebarWidth)
     }
 }

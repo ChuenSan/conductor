@@ -61,7 +61,7 @@ public enum T3ChatUsageFetcher {
         let client = BrowserCookieClient()
         let query = BrowserCookieQuery(domains: cookieDomains)
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             return cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
         }
         return nil

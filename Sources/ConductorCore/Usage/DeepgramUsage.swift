@@ -68,12 +68,12 @@ public enum DeepgramUsageFetcher {
         return v.isEmpty ? nil : v
     }
 
-    /// `DEEPGRAM_API_URL` 覆盖：能解析为合法 URL 则用，否则回退默认 base URL。
+    /// `DEEPGRAM_API_URL` 覆盖：只接受 Deepgram 官方 HTTPS host，否则回退默认 base URL。
     static func apiURL(env: [String: String]) -> URL {
-        if let raw = clean(env["DEEPGRAM_API_URL"]), let url = URL(string: raw) {
-            return url
-        }
-        return defaultBaseURL
+        UsageEndpointPolicy.trustedHTTPSURL(
+            from: clean(env["DEEPGRAM_API_URL"]),
+            default: defaultBaseURL,
+            allowedHosts: ["api.deepgram.com"])
     }
 
     public static func fetch(

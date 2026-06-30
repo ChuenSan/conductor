@@ -6,6 +6,7 @@ import SwiftUI
 struct SessionManagerView: View {
     let coordinator: AppCoordinator
     var onClose: () -> Void = {}
+    var showsCloseButton = true
 
     @ObservedObject private var configStore = ConfigStore.shared
     @ObservedObject private var store = SessionManagerStore.shared
@@ -79,13 +80,15 @@ struct SessionManagerView: View {
                     store.refresh(force: true)
                 }
             .disabled(store.isLoading)
-            IconOnlyButton(
-                systemName: "xmark",
-                help: L("关闭"),
-                size: 28,
-                symbolSize: 11,
-                weight: .bold,
-                action: onClose)
+            if showsCloseButton {
+                IconOnlyButton(
+                    systemName: "xmark",
+                    help: L("关闭"),
+                    size: 28,
+                    symbolSize: 11,
+                    weight: .bold,
+                    action: onClose)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)

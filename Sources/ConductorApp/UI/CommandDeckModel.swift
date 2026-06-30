@@ -6,7 +6,6 @@ enum CommandDeckLayer: String, CaseIterable, Equatable {
     case pane
     case agent
     case capability
-    case task
 
     var title: String {
         switch self {
@@ -15,7 +14,6 @@ enum CommandDeckLayer: String, CaseIterable, Equatable {
         case .pane: return L("面板")
         case .agent: return "Agent"
         case .capability: return L("能力")
-        case .task: return L("任务")
         }
     }
 }
@@ -39,6 +37,14 @@ enum CommandDeckCommandScope {
         "splitRight": .pane,
         "splitDown": .pane,
         "closePane": .pane,
+        "copyPane": .pane,
+        "pastePane": .pane,
+        "selectAllPane": .pane,
+        "clearPane": .pane,
+        "copyPaneCwd": .pane,
+        "openPaneInFinder": .pane,
+        "exportPaneText": .pane,
+        "openPaneCommandLog": .pane,
         "focusPaneLeft": .pane,
         "focusPaneRight": .pane,
         "focusPaneUp": .pane,
@@ -54,8 +60,6 @@ enum CommandDeckCommandScope {
 
         "openSnippets": .capability,
         "coCreate": .capability,
-
-        "taskCards": .task,
     ]
 
     static func scope(forCommandID id: String) -> CommandDeckLayer {

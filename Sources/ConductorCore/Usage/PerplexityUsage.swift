@@ -115,7 +115,7 @@ public enum PerplexityUsageFetcher {
         let client = BrowserCookieClient()
         let query = BrowserCookieQuery(domains: cookieDomains)
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             let pairs = cookies.map { (name: $0.name, value: $0.value) }
             if let session = extractSessionCookie(from: pairs) { return session }
         }

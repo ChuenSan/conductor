@@ -8,6 +8,7 @@ enum UpdaterError: Error, CustomStringConvertible {
     case commandFailed(String, Int32, String)
     case mountPointNotFound
     case sourceAppNotFound(URL, String, String)
+    case sourceAppSignatureInvalid(URL, String)
     case appStillRunning(String)
 
     var description: String {
@@ -24,6 +25,8 @@ enum UpdaterError: Error, CustomStringConvertible {
             return "Mounted DMG did not report a mount point"
         case .sourceAppNotFound(let mountPoint, let name, let bundleIdentifier):
             return "Could not find \(name) with bundle id \(bundleIdentifier) in \(mountPoint.path)"
+        case .sourceAppSignatureInvalid(let url, let reason):
+            return "Source app signature verification failed for \(url.path): \(reason)"
         case .appStillRunning(let bundleID):
             return "\(bundleID) is still running"
         }
@@ -77,7 +80,7 @@ struct UpdaterArguments {
 }
 
 @discardableResult
-func run(_ executable: String, _ arguments: [String]) throws -> Data {
+func runWithOutput(_ executable: String, _ arguments: [String]) throws -> (stdout: Data, stderr: Data) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executable)
     process.arguments = arguments
@@ -93,7 +96,12 @@ func run(_ executable: String, _ arguments: [String]) throws -> Data {
         let message = String(data: err, encoding: .utf8) ?? ""
         throw UpdaterError.commandFailed(executable, process.terminationStatus, message)
     }
-    return out
+    return (out, err)
+}
+
+@discardableResult
+func run(_ executable: String, _ arguments: [String]) throws -> Data {
+    try runWithOutput(executable, arguments).stdout
 }
 
 func mountDMG(_ dmgURL: URL) throws -> URL {
@@ -139,6 +147,45 @@ func waitForAppToExit(bundleIdentifier: String, timeout: TimeInterval) throws {
         Thread.sleep(forTimeInterval: 0.5)
     }
     throw UpdaterError.appStillRunning(bundleIdentifier)
+}
+
+func verifySourceAppSignature(sourceAppURL: URL, targetAppURL: URL) throws {
+    do {
+        _ = try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", sourceAppURL.path])
+        let requirement = try designatedRequirement(for: targetAppURL)
+        _ = try run("/usr/bin/codesign", [
+            "--verify",
+            "--deep",
+            "--strict",
+            "--requirement", requirement,
+            sourceAppURL.path,
+        ])
+    } catch let error as UpdaterError {
+        throw error
+    } catch {
+        throw UpdaterError.sourceAppSignatureInvalid(sourceAppURL, error.localizedDescription)
+    }
+}
+
+func designatedRequirement(for appURL: URL) throws -> String {
+    do {
+        let output = try runWithOutput("/usr/bin/codesign", ["-d", "-r-", appURL.path])
+        let text = [
+            String(data: output.stdout, encoding: .utf8),
+            String(data: output.stderr, encoding: .utf8),
+        ].compactMap { $0 }.joined(separator: "\n")
+        for line in text.split(whereSeparator: \.isNewline) {
+            guard let range = line.range(of: "designated =>") else { continue }
+            let requirement = line[range.upperBound...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !requirement.isEmpty { return requirement }
+        }
+        throw UpdaterError.sourceAppSignatureInvalid(appURL, "missing designated requirement")
+    } catch let error as UpdaterError {
+        throw error
+    } catch {
+        throw UpdaterError.sourceAppSignatureInvalid(appURL, error.localizedDescription)
+    }
 }
 
 func replaceApp(sourceAppURL: URL, targetAppURL: URL) throws {
@@ -209,6 +256,7 @@ func install(_ arguments: UpdaterArguments) throws {
         in: mountPoint,
         matching: arguments.targetAppURL.lastPathComponent,
         bundleIdentifier: arguments.bundleIdentifier)
+    try verifySourceAppSignature(sourceAppURL: source, targetAppURL: arguments.targetAppURL)
     try waitForAppToExit(bundleIdentifier: arguments.bundleIdentifier, timeout: 60)
     try replaceApp(sourceAppURL: source, targetAppURL: arguments.targetAppURL)
     clearPendingUpdate(bundleIdentifier: arguments.bundleIdentifier)

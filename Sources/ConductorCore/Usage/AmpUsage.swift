@@ -481,7 +481,7 @@ public enum AmpUsageFetcher {
         let client = BrowserCookieClient()
         let query = BrowserCookieQuery(domains: cookieDomains)
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             let sessionCookies = cookies.filter { $0.name == "session" && !$0.value.isEmpty }
             guard !sessionCookies.isEmpty else { continue }
             return sessionCookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
@@ -514,7 +514,9 @@ public enum AmpUsageFetcher {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = arguments
-        process.environment = environment
+        process.environment = UsageProviderProcessEnvironment.scrubbedChildEnvironment(
+            from: environment,
+            preservingProviderID: "amp")
         let stdout = Pipe()
         let stderr = Pipe()
         process.standardOutput = stdout

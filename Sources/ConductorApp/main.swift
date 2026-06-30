@@ -106,12 +106,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.coordinator?.openTools(.cli)
         }
         appMenu.addItem(capabilityItem)
-        let taskCardsItem = ClosureMenuItem(L("任务卡片"), systemImage: "checklist") { [weak self] in
-            self?.coordinator?.openTaskCards()
-        }
-        taskCardsItem.keyEquivalent = "k"
-        taskCardsItem.keyEquivalentModifierMask = [.command, .shift]
-        appMenu.addItem(taskCardsItem)
         appMenu.addItem(.separator())
         appMenu.addItem(NSMenuItem(title: L("退出 Conductor"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appMenuItem.submenu = appMenu
@@ -137,6 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func installKeyMonitor() {
         // 键位统一走命令注册表查表分发；键位由 config.yaml 可覆盖。
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak coordinator] event in
+            guard !ShortcutRecorderFocusState.shared.isRecording else { return event }
             guard let coordinator,
                   let chord = KeyChord(event: event),
                   coordinator.commandRegistry.dispatch(chord) else { return event }

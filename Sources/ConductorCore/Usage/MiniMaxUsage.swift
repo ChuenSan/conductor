@@ -200,7 +200,7 @@ public enum MiniMaxUsageFetcher {
             guard BrowserCookieAccessGate.shouldAttempt(browser) else { continue }
             let cookies: [HTTPCookie]
             do {
-                cookies = try client.cookies(matching: query, in: browser)
+                cookies = try BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser)
             } catch {
                 BrowserCookieAccessGate.recordIfNeeded(error)
                 continue
@@ -598,8 +598,10 @@ public enum MiniMaxUsageFetcher {
         switch clean(env[requireProviderEndpointOverridesKey])?.lowercased() {
         case "1", "true", "yes", "on":
             return true
-        default:
+        case "0", "false", "no", "off":
             return false
+        default:
+            return true
         }
     }
 

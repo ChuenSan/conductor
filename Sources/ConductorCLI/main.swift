@@ -358,7 +358,6 @@ func usage() -> String {
       conductorctl config account remove --provider ID_OR_ALIAS (--account LABEL|--account-index N) [--format text|json] [--json] [--json-only] [--pretty]
       conductorctl cache clear <--cookies|--cost|--all> [--provider ID_OR_ALIAS] [--format text|json] [--json] [--json-only] [--pretty]
       conductorctl serve [--port 8080] [--refresh-interval 60] [--request-timeout 30]
-      conductorctl taskcards [--json]
       conductorctl raw METHOD '{"key":"value"}'
       conductorctl batch < requests.ndjson
       conductorctl methods
@@ -659,15 +658,6 @@ func main() throws {
         let response = try client.request(method: AutomationMethod.appMethods)
         for item in array(response.result) {
             if let name = item.stringValue { print(name) }
-        }
-
-    case "taskcards", "task-cards":
-        let options = try parseOptions(args)
-        let response = try client.request(method: AutomationMethod.appOpenTaskCards)
-        if options.has("json") {
-            printResult(response, json: true)
-        } else {
-            print("Opened task cards")
         }
 
     case "raw":

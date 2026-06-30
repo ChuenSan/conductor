@@ -1574,7 +1574,7 @@
 "批准计划" = "Approve plan";
 "Agent 有个问题" = "Agent has a question";
 
-/* ===== Recent Agent Tools / Task Cards ===== */
+/* ===== Recent Agent Tools ===== */
 "%ld 个键" = "%ld keys";
 "%ld 个应用" = "%ld apps";
 "安装到" = "Install to";
@@ -1632,15 +1632,12 @@
 "概览" = "Overview";
 "干活中" = "Working";
 "给 Agent 授权访问指定本地目录，适合项目文件浏览和批量读写。" = "Grant Agents access to a local directory for project file browsing and bulk reads/writes.";
-"给这张卡片起个名字" = "Name this card";
 "更新安装包暂不可用（HTTP %ld），请稍后重试。" = "The update package is temporarily unavailable (HTTP %ld). Please try again later.";
 "更新时间" = "Updated";
 "工具审批" = "Tool Approval";
 "构建器" = "Builder";
 "管理" = "Manage";
 "管理应用" = "Manage Apps";
-"还没有任务卡片" = "No task cards yet";
-"还没有可指派的任务" = "No assignable tasks yet";
 "还没有选择安装应用" = "No install apps selected";
 "会安装到 %@" = "Will install to %@";
 "键是 server 名称，值是 command/args/env 或 url —— 直接贴 / 改这段 JSON。" = "Keys are server names; values are command/args/env or url. Paste or edit this JSON directly.";
@@ -1650,7 +1647,6 @@
 "精选 MCP server 模板" = "Curated MCP server templates";
 "可以从配方库安装推荐 hook，也可以用构建器写入自定义命令。" = "Install recommended hooks from the recipe library, or use the builder to write custom commands.";
 "客户端" = "Client";
-"空白任务" = "Blank Task";
 "类别" = "Category";
 "历史样本" = "History Samples";
 "浏览器自动化能力，用于页面检查、点击和截图。" = "Browser automation for page inspection, clicking, and screenshots.";
@@ -1667,19 +1663,11 @@
 "启用工具审批" = "Enable Tool Approval";
 "启用失败：%@" = "Enable failed: %@";
 "启用中" = "Enabled";
-"输入命令或提示词创建一张任务卡片，再把它拖到目标面板。" = "Create a task card from a command or prompt, then drag it to the target pane.";
 "清单" = "Manifest";
 "请先选择要安装到的应用" = "Select the apps to install to first";
 "趋势样本" = "Trend Samples";
 "渠道 ID" = "Channel ID";
 "全部移除" = "Remove All";
-"任务卡片" = "Task Cards";
-"任务启动失败：%@" = "Task launch failed: %@";
-"任务已交给 %@" = "Task sent to %@";
-"任务已在 Shell 中执行" = "Task executed in Shell";
-"拖到某个面板，交给 Shell 或 Agent 执行" = "Drag to a pane and let Shell or an Agent run it";
-"删除任务" = "Delete Task";
-"尚未执行" = "Not run yet";
 "审计和清理已写入的 hooks" = "Audit and clean written hooks";
 "剩 %ld%% · 已用 %ld%%" = "%ld%% left · %ld%% used";
 "事件" = "Event";
@@ -1712,7 +1700,6 @@
 "写下要执行的 shell 命令，或交给 AI 的任务说明…" = "Write a shell command to run, or task instructions for AI…";
 "Conductor 管理的 Hook" = "Conductor hook";
 "新建任务" = "New Task";
-"新建一张卡片，选择工作区和执行方式。" = "Create a card, then choose a workspace and execution mode.";
 "新任务" = "New Task";
 "选择一个 MCP server 查看命令、URL、配置来源和诊断信息。" = "Select an MCP server to view commands, URLs, config sources, and diagnostics.";
 "选择应用" = "Select Apps";
@@ -2064,7 +2051,7 @@
 "更新安装器缺失：%@" = "Update installer is missing: %@";
 "当前 App 缺少 Bundle Identifier，无法自动重启。" = "The current app is missing a Bundle Identifier, so it cannot relaunch automatically.";
 
-/* ===== Terminal workflows / task cards / automation ===== */
+/* ===== Terminal workflows / automation ===== */
 "%@（%ld 标签）" = "%@ (%ld tabs)";
 "%ld 个 server" = "%ld server(s)";
 "%ld 个自动化" = "%ld automation(s)";
@@ -2206,7 +2193,6 @@
 "保存常用布局" = "Save common layouts";
 "Agent 协作" = "Agent Collaboration";
 "让不同 Agent 像团队成员一样排队干活" = "Let Different Agents Queue Work Like Teammates";
-"会话可以续聊，任务可以排队，完成状态会回到通知和任务卡里。你不用盯着每个 pane 等结果。" = "Sessions can be resumed, tasks can be queued, and completion status returns to notifications and task cards. You do not need to watch every pane for results.";
 "续聊历史会话" = "Resume previous sessions";
 "任务队列" = "Task Queue";
 "完成提醒和活动记录" = "Completion reminders and activity history";
@@ -2233,11 +2219,6 @@
 "分屏组织工作" = "Organize work with splits";
 "面板本地控制" = "Pane-local controls";
 "双击放大/还原" = "Double-click to zoom or restore";
-"把任务甩给正确的执行者" = "Assign tasks to the right performer";
-"任务卡片是一段可复用的乐谱。拖到某个面板，就交给那个 Shell 或 Agent 执行。" = "A task card is a reusable score fragment. Drag it to a pane and that Shell or Agent runs it.";
-"拖到面板执行" = "Drag to a pane to run";
-"变量按需填写" = "Fill variables only when needed";
-"当前上下文运行" = "Run in the current context";
 "只看真正需要你指挥的地方" = "Watch only what needs direction";
 "完成、等待、审批和后台运行都会回到状态栏、工作区、标签或伙伴层，提醒你下一步该看哪里。" = "Done, waiting, approvals, and background work return to the status bar, workspaces, tabs, or companion layer so you know where to look next.";
 "跳回相关面板" = "Jump back to the relevant pane";

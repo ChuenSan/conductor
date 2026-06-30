@@ -12,6 +12,15 @@ final class AutomationService {
         self.coordinator = coordinator
     }
 
+    nonisolated static func externalSurfaceResumeTrust(
+        requestedAutoResume: Bool,
+        requestedTrusted: Bool
+    ) -> (autoResume: Bool, trusted: Bool) {
+        _ = requestedAutoResume
+        _ = requestedTrusted
+        return (autoResume: false, trusted: false)
+    }
+
     /// socket 服务器的行处理入口。
     nonisolated func handleLine(_ line: Data) async -> Data {
         let request: AutomationRequest
@@ -75,12 +84,6 @@ final class AutomationService {
             return .object([
                 "module": .string(module.rawValue),
                 "window": .string("agent-tools"),
-            ])
-        case AutomationMethod.appOpenTaskCards:
-            c.openTaskCards()
-            return .object([
-                "window": .string("task-cards"),
-                "panel": c.taskCardsPanel.automationSnapshot(),
             ])
         #if DEBUG
         case "debug-agent-tools-smoke-test":
@@ -269,13 +272,16 @@ final class AutomationService {
                                                   scrollback: params["scrollback"]?.boolValue ?? false)
             return .object(["text": .string(text)])
         case AutomationMethod.paneResumeSet:
+            let trust = Self.externalSurfaceResumeTrust(
+                requestedAutoResume: params["autoResume"]?.boolValue ?? false,
+                requestedTrusted: params["trusted"]?.boolValue ?? false)
             let binding = try c.automationSetSurfaceResume(
                 paneRef: str("pane"),
                 kind: str("kind") ?? "shell",
                 checkpoint: str("checkpoint"),
                 command: try requireStr("command"),
-                autoResume: params["autoResume"]?.boolValue ?? false,
-                trusted: params["trusted"]?.boolValue ?? false)
+                autoResume: trust.autoResume,
+                trusted: trust.trusted)
             return c.automationDescribe(binding: binding)
         case AutomationMethod.paneResumeShow:
             guard let binding = try c.automationShowSurfaceResume(paneRef: str("pane")) else {

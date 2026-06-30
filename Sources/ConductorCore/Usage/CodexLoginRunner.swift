@@ -32,7 +32,9 @@ public enum CodexLoginRunner {
         loginPATH: [String]? = LoginShellPathCache.shared.current
     ) async -> Result {
         await Task(priority: .userInitiated) {
-            var env = environment
+            var env = UsageProviderProcessEnvironment.scrubbedChildEnvironment(
+                from: environment,
+                preservingProviderID: "codex")
             env["PATH"] = PathBuilder.effectivePATH(
                 purposes: [.rpc, .tty, .nodeTooling],
                 env: env,

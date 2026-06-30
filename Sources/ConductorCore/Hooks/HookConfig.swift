@@ -223,10 +223,23 @@ public struct HookConfigDocument: Sendable {
     }
 
     private func write(_ root: [String: Any]) throws {
+        let parent = url.deletingLastPathComponent()
+        let parentExisted = FileManager.default.fileExists(atPath: parent.path)
         try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            at: parent, withIntermediateDirectories: true)
+        if !parentExisted || shouldSecureExistingParent(parent) {
+            try ConfigFileSecurity.secureConfigDirectory(at: parent)
+        }
         let data = try JSONSerialization.data(
             withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         try data.write(to: url)
+        try ConfigFileSecurity.secureConfigFile(at: url)
+    }
+
+    private func shouldSecureExistingParent(_ parent: URL) -> Bool {
+        parent.standardizedFileURL.path == source.configURL
+            .deletingLastPathComponent()
+            .standardizedFileURL
+            .path
     }
 }

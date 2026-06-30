@@ -78,6 +78,24 @@ public enum BrowserCookieAccessGate {
         recordDenied(for: cookieError.browser, now: now)
     }
 
+    public static func cookies(
+        client: BrowserCookieClient,
+        matching query: BrowserCookieQuery,
+        in browser: Browser,
+        now: Date = Date(),
+        logger: ((String) -> Void)? = nil
+    ) throws -> [HTTPCookie] {
+        guard shouldAttempt(browser, now: now) else {
+            throw BrowserCookieStoreAccessSuppressedError()
+        }
+        do {
+            return try client.cookies(matching: query, in: browser, logger: logger)
+        } catch {
+            recordIfNeeded(error, now: now)
+            throw error
+        }
+    }
+
     public static func recordDenied(for browser: Browser, now: Date = Date()) {
         guard browser.usesKeychainForCookieDecryption else { return }
         let blockedUntil = now.addingTimeInterval(cooldownInterval)

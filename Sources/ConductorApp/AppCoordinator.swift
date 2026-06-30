@@ -79,19 +79,19 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var sidebarListMode: SidebarListMode = .workspaces
     /// 主窗口内设置面板展示状态。
     @Published private(set) var settingsPresentation = SettingsPresentationState()
-    /// 主窗口内工具面板展示状态（CLI / 用量 / Skills / Hooks，与设置面板互斥）。
+    /// 管理工作台内能力库展示状态（CLI / 用量 / Skills / Hooks，与设置互斥）。
     @Published private(set) var cliToolsPresentation = SettingsPresentationState()
     /// 首启 / 大版本介绍浮层。
     @Published private(set) var onboardingPresentation = OnboardingPresentationState(pageCount: OnboardingCatalog.pages.count)
-    /// Agent 会话管理面板展示状态（与设置 / 工具面板互斥）。
+    /// 管理工作台内 Agent 会话展示状态（与设置 / 能力库互斥）。
     @Published private(set) var sessionPresentation = SettingsPresentationState()
     /// 会话面板筛选范围（工作区路径或 pane cwd）；nil 表示全部。
     @Published private(set) var sessionScopePath: String?
     /// 会话面板「当前面板续聊」的目标 pane。
     @Published private(set) var sessionTargetPane: PaneID?
-    /// 工具面板当前选中的分段。
+    /// 能力库当前选中的模块。
     @Published var toolsTab: ToolsTab = .cli
-    /// 大型 Agent Tools 管理台展示状态（右侧工具面板只是快速入口，完整管理走这里）。
+    /// 旧独立 Agent Tools 管理台展示状态。
     @Published private(set) var agentToolsManagementPresentation = SettingsPresentationState()
     /// 管理台打开时默认落在哪个模块。
     @Published var agentToolsManagementModule: AgentToolsManagementModule = .overview
@@ -153,10 +153,7 @@ final class AppCoordinator: ObservableObject {
     private lazy var queuePanel = QueuePanelController()
     /// ② pane 命令记录面板（懒创建）。
     private lazy var commandLogPanel = CommandLogPanelController()
-    /// 桌面任务卡片：跨工作区保存可执行 todo。
-    let taskCardStore = TaskCardStore()
     let layoutStore = LayoutStore()
-    lazy var taskCardsPanel = TaskCardsPanelController()
     /// Mission Control 任务总览（懒创建）。
     private lazy var missionControl = MissionControlController()
     weak var window: NSWindow?
@@ -230,6 +227,14 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "splitRight", title: L("向右分屏"), defaultKeybinding: "cmd+d") { [weak self] in self?.split(.vertical) },
             AppCommand(id: "splitDown", title: L("向下分屏"), defaultKeybinding: "cmd+shift+d") { [weak self] in self?.split(.horizontal) },
             AppCommand(id: "closePane", title: L("关闭面板"), defaultKeybinding: "cmd+w") { [weak self] in self?.closeActivePane() },
+            AppCommand(id: "copyPane", title: L("复制（当前面板）"), defaultKeybinding: nil) { [weak self] in self?.performPaneContextAction(.copy) },
+            AppCommand(id: "pastePane", title: L("粘贴（当前面板）"), defaultKeybinding: nil) { [weak self] in self?.performPaneContextAction(.paste) },
+            AppCommand(id: "selectAllPane", title: L("全选（当前面板）"), defaultKeybinding: nil) { [weak self] in self?.performPaneContextAction(.selectAll) },
+            AppCommand(id: "clearPane", title: L("清屏（当前面板）"), defaultKeybinding: nil) { [weak self] in self?.performPaneContextAction(.clear) },
+            AppCommand(id: "copyPaneCwd", title: L("复制当前路径"), defaultKeybinding: nil) { [weak self] in self?.performPaneContextAction(.copyCwd) },
+            AppCommand(id: "openPaneInFinder", title: L("在 Finder 中显示当前路径"), defaultKeybinding: nil) { [weak self] in self?.performPaneContextAction(.openInFinder) },
+            AppCommand(id: "exportPaneText", title: L("导出当前面板输出"), defaultKeybinding: nil) { [weak self] in self?.performPaneContextAction(.exportText) },
+            AppCommand(id: "openPaneCommandLog", title: L("打开当前面板命令记录"), defaultKeybinding: nil) { [weak self] in self?.performPaneContextAction(.commandLog) },
             AppCommand(id: "reopenClosedTab", title: L("恢复最近关闭"), defaultKeybinding: "cmd+shift+t") { [weak self] in self?.reopenClosed() },
             AppCommand(id: "focusPaneLeft", title: L("聚焦左侧面板"), defaultKeybinding: "cmd+alt+left") { [weak self] in self?.focusDirectional(.left) },
             AppCommand(id: "focusPaneRight", title: L("聚焦右侧面板"), defaultKeybinding: "cmd+alt+right") { [weak self] in self?.focusDirectional(.right) },
@@ -244,7 +249,6 @@ final class AppCoordinator: ObservableObject {
             AppCommand(id: "shortcutCheatSheet", title: L("键位速查"), defaultKeybinding: "cmd+/") { [weak self] in self?.openShortcutCheatSheet() },
             AppCommand(id: "missionControl", title: L("任务总览"), defaultKeybinding: "cmd+shift+m", scope: .agent) { [weak self] in self?.openMissionControl() },
             AppCommand(id: "queuePrompt", title: L("任务队列（当前面板）"), defaultKeybinding: "cmd+shift+enter", scope: .agent) { [weak self] in self?.openQueuePanel() },
-            AppCommand(id: "taskCards", title: L("任务卡片"), defaultKeybinding: "cmd+shift+k", scope: .task) { [weak self] in self?.openTaskCards() },
             AppCommand(id: "openSnippets", title: L("命令片段库"), defaultKeybinding: nil, scope: .capability) { [weak self] in self?.openTools(.snippets) },
             AppCommand(id: "coCreate", title: L("共创计划"), defaultKeybinding: nil, scope: .capability) { [weak self] in self?.openTools(.coCreate) },
             AppCommand(id: "equalizeSplits", title: L("均分面板"), defaultKeybinding: "cmd+ctrl+e") { [weak self] in self?.equalizeSplits() },
@@ -490,21 +494,27 @@ final class AppCoordinator: ObservableObject {
         onboardingPresentation.selectPage(index)
     }
 
-    /// 是否有右侧侧栏面板（设置 / CLI 工具 / 会话）正在展示。用于让快捷操作面板让位。
+    /// 是否有管理工作台（设置 / 能力库 / 会话）正在展示。用于让快捷操作面板让位。
     var isSidePanelPresented: Bool {
         settingsPresentation.isPresented || cliToolsPresentation.isPresented
             || sessionPresentation.isPresented
     }
 
+    func closeManagementWorkspace() {
+        settingsPresentation.close()
+        cliToolsPresentation.close()
+        sessionPresentation.close()
+    }
+
     func openCLITools() {
-        // 大型管理对象不在右侧快速面板里，普通入口重新打开时回到 CLI。
+        // 普通能力库入口重新打开时回到 CLI。
         if !ToolsTab.panelTabs.contains(toolsTab) { toolsTab = .cli }
         settingsPresentation.close()
         sessionPresentation.close()
         cliToolsPresentation.open()
     }
 
-    /// 打开工具面板到指定分段（Skills/MCP/Hooks 现也在面板里，不再去全屏管理台）。
+    /// 打开能力库到指定模块。
     func openTools(_ tab: ToolsTab) {
         toolsTab = tab
         settingsPresentation.close()
@@ -512,7 +522,7 @@ final class AppCoordinator: ObservableObject {
         cliToolsPresentation.open()
     }
 
-    /// 旧「全屏管理台」入口：已并入右侧工具面板——打开面板并切到对应 tab，不再开独立窗口。
+    /// 旧「全屏管理台」入口：已并入管理工作台——打开能力库并切到对应 tab。
     func openAgentToolsManagement(_ module: AgentToolsManagementModule = .overview) {
         let tab: ToolsTab
         switch module {
@@ -1418,38 +1428,7 @@ final class AppCoordinator: ObservableObject {
         paneAgents = map
         for (pane, container) in paneContainers {
             container.setAgentLogo(agentLogoImage(for: paneAgents[pane]))
-            container.runnerLabel = taskRunnerLabel(for: pane)
         }
-    }
-
-    /// 任务牌落到某 pane 时显示的「将由谁执行」：跑着 agent 就用它的名字，否则 Shell。
-    func taskRunnerLabel(for pane: PaneID) -> String {
-        guard let agentID = paneAgents[pane] else { return "Shell" }
-        return launchableAgents.first { $0.id == agentID }?.title
-            ?? AgentCatalog.all.first { $0.id == agentID }?.name
-            ?? agentID
-    }
-
-    /// 右键「分配到…」的候选：每个活着的终端 pane + 它的标题与执行者（如「server · Claude」）。
-    func taskDispatchTargets() -> [(pane: PaneID, label: String)] {
-        let includeWorkspaceName = store.workspaces.count > 1
-        let targets: [(pane: PaneID, label: String)] = store.workspaces.flatMap { workspace -> [(pane: PaneID, label: String)] in
-            workspace.tabs.flatMap { tab -> [(pane: PaneID, label: String)] in
-                let tabTitle = tab.customTitle ?? tab.title
-                let includeTabTitle = workspace.tabs.count > 1 || tab.paneCount > 1
-                return tab.rootSplit.leaves().compactMap { pane -> (pane: PaneID, label: String)? in
-                    guard paneExists(pane) else { return nil }
-                    let paneTitle = paneTitles[pane] ?? tabTitle
-                    var parts: [String] = []
-                    if includeWorkspaceName { parts.append(workspace.name) }
-                    if includeTabTitle { parts.append(tabTitle) }
-                    if paneTitle != tabTitle || !includeTabTitle { parts.append(paneTitle) }
-                    let title = parts.isEmpty ? L("终端") : parts.joined(separator: " / ")
-                    return (pane, "\(title) · \(taskRunnerLabel(for: pane))")
-                }
-            }
-        }
-        return targets.sorted { $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
     }
 
     /// 取某 agent 的头条用 logo（已按主题处理单色标）。
@@ -2136,6 +2115,39 @@ final class AppCoordinator: ObservableObject {
 
     // MARK: - 通用动作（右键菜单等共用）
 
+    func performPaneContextAction(_ action: PaneContextAction, pane explicitPane: PaneID? = nil) {
+        guard let pane = explicitPane ?? activeTabModel()?.activePane else { return }
+        markActive(pane)
+
+        let surface = registry.surface(for: pane) as? GhosttySurface
+        switch action {
+        case .copy:
+            surface?.performAction("copy_to_clipboard")
+        case .paste:
+            surface?.performAction("paste_from_clipboard")
+        case .selectAll:
+            surface?.performAction("select_all")
+        case .clear:
+            surface?.performAction("clear_screen")
+        case .splitRight:
+            split(.vertical)
+        case .splitDown:
+            split(.horizontal)
+        case .zoom:
+            toggleZoom()
+        case .copyCwd:
+            copyToClipboard(paneCwds[pane] ?? activeWorkspace()?.path ?? "")
+        case .openInFinder:
+            revealInFinder(paneCwds[pane] ?? activeWorkspace()?.path ?? "")
+        case .exportText:
+            exportScrollback(pane)
+        case .commandLog:
+            openCommandLog(for: pane)
+        case .close:
+            closeActivePane()
+        }
+    }
+
     /// 复制字符串到系统剪贴板（如 pane / 工作区路径）。
     func copyToClipboard(_ string: String) {
         guard !string.isEmpty else { return }
@@ -2644,25 +2656,12 @@ final class AppCoordinator: ObservableObject {
         let container = PaneContainerView(paneID: pane, hostView: surface.hostView, title: paneTitles[pane] ?? L("终端"))
         container.onFocus = { [weak self] p in self?.markActive(p) }
         container.onMove = { [weak self] moving, target, edge in self?.movePane(moving, relativeTo: target, edge: edge) }
-        container.onDropTask = { [weak self] taskID, p in self?.handleTaskDrop(taskID: taskID, onPane: p) }
         container.onContextAction = { [weak self] action in
-            guard let self else { return }
-            markActive(pane)   // 先聚焦此 pane，命令作用于它
-            let surface = registry.surface(for: pane) as? GhosttySurface
-            switch action {
-            case .copy: surface?.performAction("copy_to_clipboard")
-            case .paste: surface?.performAction("paste_from_clipboard")
-            case .selectAll: surface?.performAction("select_all")
-            case .clear: surface?.performAction("clear_screen")
-            case .splitRight: split(.vertical)
-            case .splitDown: split(.horizontal)
-            case .zoom: toggleZoom()
-            case .copyCwd: copyToClipboard(paneCwds[pane] ?? activeWorkspace()?.path ?? "")
-            case .openInFinder: revealInFinder(paneCwds[pane] ?? activeWorkspace()?.path ?? "")
-            case .exportText: exportScrollback(pane)
-            case .commandLog: openCommandLog(for: pane)
-            case .close: closeActivePane()
-            }
+            self?.performPaneContextAction(action, pane: pane)
+        }
+        container.shortcutProvider = { [weak self] action in
+            guard let self else { return nil }
+            return commandRegistry.effectiveKeybinding(for: PaneHeaderActionPresentation.commandID(for: action))
         }
         container.agentItemsProvider = { [weak self] in
             (self?.launchableAgents ?? []).map { agent in
@@ -2729,7 +2728,6 @@ final class AppCoordinator: ObservableObject {
             self?.handleCommandFinished(pane, exitCode: exitCode, durationNanos: durationNanos)
         }
         container.setAgentLogo(agentLogoImage(for: paneAgents[pane]))
-        container.runnerLabel = taskRunnerLabel(for: pane)
         container.setThinkingSince(thinkingStartTimes[pane])   // 已在思考的 pane，新容器直接亮表
         container.setQueuedCount(paneQueues[pane]?.count ?? 0)
         container.setProgress(paneProgress[pane])

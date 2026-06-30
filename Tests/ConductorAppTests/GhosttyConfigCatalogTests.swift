@@ -86,6 +86,21 @@ final class GhosttyConfigCatalogTests: XCTestCase {
     }
 
     @MainActor
+    func testGhosttyConfigTextDisablesClipboardReadByDefault() {
+        let text = GhosttyRuntime.ghosttyConfigText(from: .default)
+        XCTAssertTrue(text.contains("clipboard-read = false"))
+    }
+
+    func testTerminalClipboardReadPayloadRequiresExplicitPermission() {
+        XCTAssertEqual(
+            GhosttySurface.terminalClipboardReadPayload(allowRead: false, pasteboardText: "secret"),
+            "")
+        XCTAssertEqual(
+            GhosttySurface.terminalClipboardReadPayload(allowRead: true, pasteboardText: "visible"),
+            "visible")
+    }
+
+    @MainActor
     func testGhosttyConfigTextIncludesAnsiPalette() {
         let text = GhosttyRuntime.ghosttyConfigText(from: .default)
         let paletteLines = text

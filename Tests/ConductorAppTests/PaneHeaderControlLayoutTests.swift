@@ -18,6 +18,36 @@ final class PaneHeaderControlLayoutTests: XCTestCase {
         XCTAssertEqual(layout.trailingInset, 8)
     }
 
+    func testHoverTipLabelsMatchHeaderActions() {
+        XCTAssertEqual(PaneHeaderHoverTipPresentation.label(for: .splitRight), "向右分屏")
+        XCTAssertEqual(PaneHeaderHoverTipPresentation.label(for: nil), "更多操作")
+    }
+
+    func testHoverTipLabelIncludesEffectiveShortcutWhenBound() {
+        XCTAssertEqual(
+            PaneHeaderHoverTipPresentation.label(for: .splitRight, shortcut: "cmd+d"),
+            "向右分屏  ⌘D"
+        )
+        XCTAssertEqual(
+            PaneHeaderHoverTipPresentation.label(for: .zoom, shortcut: "cmd+enter"),
+            "放大 / 还原  ⌘⏎"
+        )
+    }
+
+    func testHoverTipFrameSitsAboveAnchorAndStaysHorizontallyInsideHeader() {
+        let headerBounds = NSRect(x: 0, y: 0, width: 128, height: 24)
+        let anchor = NSRect(x: 94, y: 2, width: 20, height: 20)
+        let frame = PaneHeaderHoverTipPresentation.frame(
+            for: "向右分屏",
+            anchoredAt: anchor,
+            in: headerBounds
+        )
+
+        XCTAssertGreaterThanOrEqual(frame.minX, headerBounds.minX + 4)
+        XCTAssertLessThanOrEqual(frame.maxX, headerBounds.maxX - 4)
+        XCTAssertGreaterThan(frame.minY, anchor.maxY)
+    }
+
     @MainActor
     func testHeaderControlsDoNotUseSystemButtons() {
         let header = PaneHeaderView(frame: NSRect(x: 0, y: 0, width: 160, height: 24))

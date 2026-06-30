@@ -1541,10 +1541,12 @@ public enum ClaudeUsageFetcher {
     private static func webAPIBaseURL(env: [String: String]) -> URL {
         for key in ["CONDUCTOR_USAGE_CLAUDE_WEB_API_BASE_URL", "CONDUCTOR_CLAUDE_WEB_API_BASE_URL"] {
             guard let raw = env[key]?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !raw.isEmpty,
-                  let url = URL(string: raw)
+                  !raw.isEmpty
             else { continue }
-            return url
+            return UsageEndpointPolicy.trustedHTTPSURL(
+                from: raw,
+                default: webDefaultAPIBaseURL,
+                allowedHosts: ["claude.ai"])
         }
         return webDefaultAPIBaseURL
     }
@@ -1647,7 +1649,7 @@ public enum ClaudeUsageFetcher {
             debugLog.updateStatus(L("正在读取 %@ 的 Claude Cookie…", browser.displayName))
             let cookies: [HTTPCookie]
             do {
-                cookies = try client.cookies(matching: query, in: browser)
+                cookies = try BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser)
             } catch {
                 BrowserCookieAccessGate.recordIfNeeded(error)
                 debugLog.append("failed reading \(browser.displayName) Claude cookies: \(error.localizedDescription)")

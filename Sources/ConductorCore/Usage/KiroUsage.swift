@@ -193,7 +193,9 @@ public enum KiroUsageFetcher {
         process.standardError = stderrPipe
         process.standardInput = FileHandle.nullDevice
 
-        var childEnv = env
+        var childEnv = UsageProviderProcessEnvironment.scrubbedChildEnvironment(
+            from: env,
+            preservingProviderID: "kiro")
         childEnv["TERM"] = "xterm-256color"
         process.environment = childEnv
 

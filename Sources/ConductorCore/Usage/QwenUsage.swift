@@ -335,8 +335,10 @@ public enum QwenUsageFetcher {
         switch clean(env[requireProviderEndpointOverridesKey])?.lowercased() {
         case "1", "true", "yes", "on":
             return true
-        default:
+        case "0", "false", "no", "off":
             return false
+        default:
+            return true
         }
     }
 
@@ -403,7 +405,7 @@ public enum QwenUsageFetcher {
         let client = BrowserCookieClient()
         let query = BrowserCookieQuery(domains: cookieDomains)
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             guard isAuthenticatedSession(cookies: cookies) else { continue }
             return normalizedCookieHeader(cookies)
         }
@@ -522,6 +524,7 @@ public enum QwenUsageFetcher {
     private static func dashboardURL(region: Region, env: [String: String]) -> URL {
         guard let raw = clean(env[hostEnvironmentKey]),
               let base = normalizedHTTPSURL(from: raw),
+              isAllowedEndpoint(base, env: env),
               var components = URLComponents(url: base, resolvingAgainstBaseURL: false),
               let defaultComponents = URLComponents(string: region.referer)
         else {
@@ -536,6 +539,7 @@ public enum QwenUsageFetcher {
     private static func gatewayBaseURL(region: Region, env: [String: String]) -> URL {
         guard let raw = clean(env[hostEnvironmentKey]),
               let base = normalizedHTTPSURL(from: raw),
+              isAllowedEndpoint(base, env: env),
               var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
         else {
             return URL(string: region.gateway)!

@@ -147,7 +147,7 @@ final class ClaudeUsageTests: XCTestCase {
     func testFetchesClaudeUsageFromManualWebCookieSource() async throws {
         ClaudeUsageMockURLProtocol.reset()
         ClaudeUsageMockURLProtocol.enqueue(
-            url: "https://claude.test/api/organizations",
+            url: "https://claude.ai/api/organizations",
             statusCode: 200,
             body: """
             [
@@ -159,7 +159,7 @@ final class ClaudeUsageTests: XCTestCase {
             ]
             """)
         ClaudeUsageMockURLProtocol.enqueue(
-            url: "https://claude.test/api/organizations/org-1/usage",
+            url: "https://claude.ai/api/organizations/org-1/usage",
             statusCode: 200,
             body: """
             {
@@ -187,7 +187,7 @@ final class ClaudeUsageTests: XCTestCase {
             }
             """)
         ClaudeUsageMockURLProtocol.enqueue(
-            url: "https://claude.test/api/account",
+            url: "https://claude.ai/api/account",
             statusCode: 200,
             body: """
             {
@@ -212,7 +212,6 @@ final class ClaudeUsageTests: XCTestCase {
             env: [
                 "CONDUCTOR_USAGE_CLAUDE_SOURCE": "web",
                 "CONDUCTOR_USAGE_CLAUDE_COOKIE": "sessionKey=sk-ant-web-session; other=value",
-                "CONDUCTOR_CLAUDE_WEB_API_BASE_URL": "https://claude.test/api",
                 "CONDUCTOR_CLAUDE_AVOID_KEYCHAIN": "1",
             ],
             session: session)
@@ -234,6 +233,49 @@ final class ClaudeUsageTests: XCTestCase {
             "sessionKey=sk-ant-web-session",
             "sessionKey=sk-ant-web-session",
         ])
+    }
+
+    func testClaudeWebBaseURLRejectsUntrustedHostForSessionCookieRequests() async throws {
+        ClaudeUsageMockURLProtocol.reset()
+        ClaudeUsageMockURLProtocol.enqueue(
+            url: "https://claude.ai/api/organizations",
+            statusCode: 200,
+            body: #"[{"uuid":"org-1","name":"Research","capabilities":["chat"]}]"#)
+        ClaudeUsageMockURLProtocol.enqueue(
+            url: "https://claude.ai/api/organizations/org-1/usage",
+            statusCode: 200,
+            body: """
+            {
+              "five_hour": {
+                "utilization": 33,
+                "resets_at": "2026-06-19T12:00:00Z"
+              }
+            }
+            """)
+        ClaudeUsageMockURLProtocol.enqueue(
+            url: "https://claude.ai/api/account",
+            statusCode: 200,
+            body: #"{"email_address":"web@example.com"}"#)
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ClaudeUsageMockURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        _ = try await ClaudeUsageFetcher.fetch(
+            env: [
+                "CONDUCTOR_USAGE_CLAUDE_SOURCE": "web",
+                "CONDUCTOR_USAGE_CLAUDE_COOKIE": "sessionKey=sk-ant-web-session",
+                "CONDUCTOR_CLAUDE_WEB_API_BASE_URL": "https://evil.example/api",
+                "CONDUCTOR_CLAUDE_AVOID_KEYCHAIN": "1",
+            ],
+            session: session)
+
+        let requests = ClaudeUsageMockURLProtocol.recordedRequests()
+        XCTAssertFalse(requests.contains { $0.url?.host == "evil.example" })
+        XCTAssertTrue(requests.allSatisfy { $0.url?.host == "claude.ai" })
+        XCTAssertTrue(requests.allSatisfy {
+            $0.value(forHTTPHeaderField: "Cookie") == "sessionKey=sk-ant-web-session"
+        })
     }
 
     func testExplicitClaudeWebSourceDoesNotFallbackToOAuthWhenCookieMissing() async throws {

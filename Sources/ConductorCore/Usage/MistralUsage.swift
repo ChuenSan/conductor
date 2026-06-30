@@ -52,7 +52,7 @@ public enum MistralUsageFetcher {
         let client = BrowserCookieClient()
         let query = BrowserCookieQuery(domains: cookieDomains)
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             guard cookies.contains(where: { $0.name.hasPrefix("ory_session_") }) else { continue }
             let header = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
             let csrf = cookies.first { $0.name == "csrftoken" }?.value

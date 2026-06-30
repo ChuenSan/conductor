@@ -1542,6 +1542,7 @@ public final class SkillManagerEngine: @unchecked Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git", "-C", directory.path] + arguments
+        process.environment = UsageProviderProcessEnvironment.scrubbedChildEnvironment()
 
         let stdout = Pipe()
         let stderr = Pipe()
@@ -1589,6 +1590,7 @@ public final class SkillManagerEngine: @unchecked Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
+        process.environment = UsageProviderProcessEnvironment.scrubbedChildEnvironment()
 
         let stdout = Pipe()
         let stderr = Pipe()

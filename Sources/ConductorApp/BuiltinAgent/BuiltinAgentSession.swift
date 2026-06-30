@@ -1,6 +1,11 @@
 import Combine
 import ConductorCore
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// 一个内置 Agent 会话：驱动打包的 `pi --mode rpc` 子进程（非 PTY），把事件归约进 `transcript`，
 /// 把工具审批经 `FeedCenter` 处置后回写。纯编排——协议/分帧/归约/审批映射的逻辑都在 `ConductorCore`。
@@ -61,11 +66,9 @@ final class BuiltinAgentSession: ObservableObject {
         proc.arguments = args
         if let cwd { proc.currentDirectoryURL = URL(fileURLWithPath: cwd) }
 
-        // 凭据已由 UsageCredentials 注入进程 env（pi-ai 从 env 读 key），子进程直接继承。
-        var env = ProcessInfo.processInfo.environment
-        env["CONDUCTOR_BUILTIN_AGENT"] = "1"
-        for (key, value) in extraEnv { env[key] = value }
-        proc.environment = env
+        proc.environment = UsageCredentials.childProcessEnvironment(extra: extraEnv.merging([
+            "CONDUCTOR_BUILTIN_AGENT": "1",
+        ]) { explicit, _ in explicit })
 
         let inPipe = Pipe(), outPipe = Pipe(), errPipe = Pipe()
         proc.standardInput = inPipe
@@ -184,7 +187,9 @@ final class BuiltinAgentSession: ObservableObject {
     private func writeLine(_ line: String) {
         guard let handle = stdinHandle else { return }
         let data = Data((line + "\n").utf8)
-        writeQueue.async { try? handle.write(contentsOf: data) }
+        writeQueue.async {
+            _ = BuiltinAgentPipeWriter.writeIgnoringSIGPIPE(data, to: handle)
+        }
     }
 
     private func cleanup() {
@@ -198,6 +203,45 @@ final class BuiltinAgentSession: ObservableObject {
         stdoutHandle = nil
         stderrHandle = nil
         process = nil
+    }
+}
+
+enum BuiltinAgentPipeWriter {
+    private static let signalLock = NSLock()
+
+    static func writeIgnoringSIGPIPE(_ data: Data, to handle: FileHandle) -> Bool {
+        writeIgnoringSIGPIPE(data, fileDescriptor: handle.fileDescriptor)
+    }
+
+    static func writeIgnoringSIGPIPE(_ data: Data, fileDescriptor fd: Int32) -> Bool {
+        guard !data.isEmpty else { return true }
+
+        #if canImport(Darwin) || canImport(Glibc)
+        signalLock.lock()
+        let previousHandler = signal(SIGPIPE, SIG_IGN)
+        defer {
+            signal(SIGPIPE, previousHandler)
+            signalLock.unlock()
+        }
+        #endif
+
+        var offset = 0
+        return data.withUnsafeBytes { rawBuffer in
+            guard let base = rawBuffer.baseAddress else { return true }
+            while offset < data.count {
+                let pointer = base.advanced(by: offset)
+                let written = write(fd, pointer, data.count - offset)
+                if written > 0 {
+                    offset += written
+                    continue
+                }
+                if written == -1, errno == EINTR {
+                    continue
+                }
+                return false
+            }
+            return true
+        }
     }
 }
 

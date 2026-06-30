@@ -33,5 +33,6 @@ Vendor/GhosttyKit.xcframework/
 
 # Misc
 *.log
+canvas/
 dist/
 .worktrees/

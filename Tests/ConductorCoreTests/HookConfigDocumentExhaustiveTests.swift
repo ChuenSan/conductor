@@ -331,5 +331,17 @@ final class HookConfigDocumentExhaustiveTests: XCTestCase {
         try doc.addCommand(event: "Stop", command: "made-the-dir")
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
         XCTAssertEqual(doc.entries().first?.command, "made-the-dir")
+
+        #if os(macOS) || os(Linux)
+        let directoryAttributes = try FileManager.default.attributesOfItem(
+            atPath: url.deletingLastPathComponent().path)
+        let directoryMode = try XCTUnwrap(
+            directoryAttributes[.posixPermissions] as? NSNumber).intValue & 0o777
+        XCTAssertEqual(directoryMode, 0o700)
+
+        let fileAttributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let fileMode = try XCTUnwrap(fileAttributes[.posixPermissions] as? NSNumber).intValue & 0o777
+        XCTAssertEqual(fileMode, 0o600)
+        #endif
     }
 }

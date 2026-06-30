@@ -6,14 +6,12 @@ enum GlobalToolbarAction: Equatable {
     case update
     case appearance
     case capability
-    case tasks
     case settings
 
     var deckLayer: CommandDeckLayer {
         switch self {
         case .update, .appearance, .settings: return .global
         case .capability: return .capability
-        case .tasks: return .task
         }
     }
 }
@@ -22,7 +20,7 @@ enum GlobalToolbarActionPresentation {
     static let groups: [[GlobalToolbarAction]] = [
         [.update],
         [.appearance],
-        [.capability, .tasks],
+        [.capability],
         [.settings],
     ]
 
@@ -134,7 +132,8 @@ struct TabBarView: View {
         }
         .animation(Motion.snappy, value: activeTab)   // 选中指示器滑动
         .animation(Motion.panel, value: tabs.count)   // 增删 tab 缩放淡入
-        .padding(.horizontal, 10)
+        .padding(.leading, 10 + titlebarLeadingInset)
+        .padding(.trailing, 10)
         .padding(.top, 4)
         .padding(.bottom, 4)
         .frame(maxWidth: .infinity)
@@ -165,13 +164,6 @@ struct TabBarView: View {
                     tint: coordinator.cliToolsPresentation.isPresented ? AppStyle.accent : AppStyle.textSecondary) {
                         coordinator.toggleCLITools()
                     }
-                IconOnlyButton(
-                    systemName: "checklist",
-                    help: L("任务卡片"),
-                    size: GlobalToolbarChromePolicy.buttonSize,
-                    symbolSize: GlobalToolbarChromePolicy.symbolSize) {
-                        coordinator.toggleTaskCards()
-                    }
             }
             GlobalToolbarDivider()
             IconOnlyButton(
@@ -193,6 +185,14 @@ struct TabBarView: View {
                 .strokeBorder(AppStyle.theme.isDark ? Color.white.opacity(0.075) : Color.black.opacity(0.055), lineWidth: 1)
         }
         .shadow(color: Color.black.opacity(AppStyle.theme.isDark ? 0.22 : 0.07), radius: 5, y: 2)
+    }
+
+    private var titlebarLeadingInset: CGFloat {
+        WindowChromePolicy.tabBarLeadingInset(
+            sidebarCollapsed: coordinator.sidebarPresentation.isCollapsed,
+            sidebarWidth: coordinator.sidebarPresentation.isCollapsed
+                ? AppStyle.sidebarCollapsedWidth
+                : PanelWidthStore.shared.sidebar)
     }
 
     private func beginRename(_ tab: ConductorCore.Tab) {

@@ -6,13 +6,16 @@ import SwiftUI
 struct SettingsView: View {
     let coordinator: AppCoordinator
     var onClose: () -> Void = {}
+    var showsCloseButton = true
     @ObservedObject private var configStore = ConfigStore.shared
 
     @State private var shell = ConfigStore.shared.config.terminal.shell ?? ""
     @State private var companionName = ConfigStore.shared.config.companion.name ?? ""
     @State private var selectedSection: SettingsSectionID = .default
-    /// 键位编辑用本地草稿：避免每个按键都落盘，提交（回车）时才生效。
-    @State private var keybindingDrafts: [String: String] = [:]
+    @State private var shortcutSearchQuery = ""
+    @State private var shortcutFilter: ShortcutSettingsFilter = .all
+    @State private var recordingShortcutCommandID: String?
+    @State private var shortcutErrors: [String: String] = [:]
     @State private var languageChoice: String = AppLanguage.current
     @State private var draftAgentTitle = ""
     @State private var draftAgentCommand = ""
@@ -49,6 +52,12 @@ struct SettingsView: View {
         }
         .frame(maxHeight: .infinity)
         .background(.clear)   // 透明：用根底统一磨砂
+        .onChange(of: recordingShortcutCommandID) { _, id in
+            ShortcutRecorderFocusState.shared.isRecording = id != nil
+        }
+        .onDisappear {
+            ShortcutRecorderFocusState.shared.isRecording = false
+        }
     }
 
     private var header: some View {
@@ -57,13 +66,15 @@ struct SettingsView: View {
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(AppStyle.textPrimary)
             Spacer()
-            IconOnlyButton(
-                systemName: "xmark",
-                help: L("关闭设置"),
-                size: 28,
-                symbolSize: 11,
-                weight: .bold,
-                action: onClose)
+            if showsCloseButton {
+                IconOnlyButton(
+                    systemName: "xmark",
+                    help: L("关闭设置"),
+                    size: 28,
+                    symbolSize: 11,
+                    weight: .bold,
+                    action: onClose)
+            }
         }
         .padding(.horizontal, Space.lg)
         .padding(.top, 22)
@@ -354,34 +365,109 @@ struct SettingsView: View {
             })
     }
 
-    // MARK: 快捷键自定义（输入键位串，回车生效；留空回落内置默认）
+    // MARK: 快捷键自定义
 
     private var keybindingsSection: some View {
-        SettingsSection(title: L("快捷键")) {
-            ForEach(Array(coordinator.commandRegistry.commands.enumerated()), id: \.element.id) { idx, cmd in
-                SettingsRow(label: cmd.title, first: idx == 0) {
-                    ThemedTextField(placeholder: cmd.defaultKeybinding ?? L("未设置"),
-                                    text: keybindingDraftBinding(cmd.id)) {
-                        commitKeybinding(cmd.id)
+        let rows = ShortcutSettingsModel.rows(
+            commands: coordinator.commandRegistry.commands,
+            overrides: config.keybindings
+        )
+        let visibleRows = ShortcutSettingsModel.filteredRows(
+            rows,
+            query: shortcutSearchQuery,
+            filter: shortcutFilter
+        )
+        let groups = ShortcutSettingsModel.groupedRows(visibleRows)
+        let counts = ShortcutSettingsModel.filterCounts(for: rows)
+
+        return SettingsSection(title: L("快捷键")) {
+            HStack(alignment: .top, spacing: 14) {
+                ShortcutSettingsFilterRail(
+                    query: $shortcutSearchQuery,
+                    selectedFilter: $shortcutFilter,
+                    counts: counts,
+                    visibleCount: visibleRows.count,
+                    totalCount: rows.count
+                )
+                .frame(width: 178)
+
+                VStack(alignment: .leading, spacing: 15) {
+                    if groups.isEmpty {
+                        ShortcutSettingsEmptyState()
+                    } else {
+                        ForEach(groups, id: \.scope) { group in
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text(group.title)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(AppStyle.textTertiary)
+                                VStack(spacing: 4) {
+                                    ForEach(group.rows) { row in
+                                        ShortcutSettingsCommandRow(
+                                            row: row,
+                                            error: shortcutErrors[row.id],
+                                            isRecording: recordingShortcutCommandID == row.id,
+                                            onBeginRecording: {
+                                                recordingShortcutCommandID = row.id
+                                                shortcutErrors[row.id] = nil
+                                            },
+                                            onCapture: { spec in assignShortcut(spec, to: row.id) },
+                                            onCancelRecording: {
+                                                if recordingShortcutCommandID == row.id {
+                                                    recordingShortcutCommandID = nil
+                                                }
+                                            },
+                                            onReset: { resetShortcut(row.id) },
+                                            onDisable: { disableShortcut(row.id) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .padding(.top, 4)
         }
     }
 
-    private func keybindingDraftBinding(_ id: String) -> Binding<String> {
-        Binding(
-            get: { keybindingDrafts[id] ?? coordinator.commandRegistry.effectiveKeybinding(for: id) ?? "" },
-            set: { keybindingDrafts[id] = $0 })
+    private func assignShortcut(_ shortcut: String, to id: String) {
+        let result = ShortcutSettingsModel.configByAssigningShortcut(
+            commandID: id,
+            shortcut: shortcut,
+            commands: coordinator.commandRegistry.commands,
+            currentKeybindings: configStore.config.keybindings
+        )
+        switch result {
+        case let .success(next):
+            update { $0.keybindings = next }
+            shortcutErrors[id] = nil
+            recordingShortcutCommandID = nil
+        case let .failure(error):
+            shortcutErrors[id] = error.message
+        }
     }
 
-    private func commitKeybinding(_ id: String) {
-        let raw = (keybindingDrafts[id] ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+    private func resetShortcut(_ id: String) {
         update { cfg in
-            if raw.isEmpty { cfg.keybindings.removeValue(forKey: id) }
-            else { cfg.keybindings[id] = raw }
+            cfg.keybindings = ShortcutSettingsModel.configByResettingShortcut(
+                commandID: id,
+                currentKeybindings: cfg.keybindings
+            )
         }
-        keybindingDrafts[id] = nil   // 回落到“有效键位”展示
+        shortcutErrors[id] = nil
+        if recordingShortcutCommandID == id { recordingShortcutCommandID = nil }
+    }
+
+    private func disableShortcut(_ id: String) {
+        update { cfg in
+            cfg.keybindings = ShortcutSettingsModel.configByDisablingShortcut(
+                commandID: id,
+                currentKeybindings: cfg.keybindings
+            )
+        }
+        shortcutErrors[id] = nil
+        if recordingShortcutCommandID == id { recordingShortcutCommandID = nil }
     }
 
     private func agentEnabledBinding(_ id: String) -> Binding<Bool> {
@@ -589,6 +675,222 @@ private struct ConfiguredAgentRow: View {
         }
         .padding(.horizontal, 2)
         .frame(height: 46)
+    }
+}
+
+private struct ShortcutSettingsFilterRail: View {
+    @Binding var query: String
+    @Binding var selectedFilter: ShortcutSettingsFilter
+    let counts: [ShortcutSettingsFilter: Int]
+    let visibleCount: Int
+    let totalCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(AppStyle.textTertiary)
+                TextField(L("搜索命令或按键"), text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppStyle.textPrimary)
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(AppStyle.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("清空搜索"))
+                }
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                    .fill(AppStyle.hoverFill.opacity(0.55))
+            )
+
+            VStack(spacing: 4) {
+                ForEach(ShortcutSettingsFilter.allCases, id: \.self) { filter in
+                    ShortcutSettingsFilterButton(
+                        filter: filter,
+                        count: counts[filter] ?? 0,
+                        selected: selectedFilter == filter
+                    ) {
+                        withAnimation(Motion.snappy) { selectedFilter = filter }
+                    }
+                }
+            }
+
+            Text("\(visibleCount)/\(totalCount)")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(AppStyle.textTertiary)
+                .padding(.leading, 2)
+        }
+    }
+}
+
+private struct ShortcutSettingsFilterButton: View {
+    let filter: ShortcutSettingsFilter
+    let count: Int
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(filter.title)
+                    .font(.system(size: 12, weight: selected ? .semibold : .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text("\(count)")
+                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textTertiary)
+            }
+            .foregroundStyle(selected ? AppStyle.textPrimary : AppStyle.textSecondary)
+            .padding(.horizontal, 9)
+            .frame(height: 29)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                    .fill(selected ? AppStyle.activeFill.opacity(0.78) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ShortcutSettingsCommandRow: View {
+    let row: ShortcutSettingsRow
+    let error: String?
+    let isRecording: Bool
+    let onBeginRecording: () -> Void
+    let onCapture: (String) -> Void
+    let onCancelRecording: () -> Void
+    let onReset: () -> Void
+    let onDisable: () -> Void
+
+    @State private var hovering = false
+
+    private var helperText: String? {
+        if let error { return error }
+        if isRecording { return L("按下快捷键，Esc 取消") }
+        if row.hasConflicts {
+            return L("与 %@ 冲突", row.conflictingCommandTitles.joined(separator: "、"))
+        }
+        return nil
+    }
+
+    private var helperColor: Color {
+        if error != nil || row.hasConflicts { return AppStyle.errorRed }
+        return AppStyle.textTertiary
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(row.title)
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(row.isDisabled ? AppStyle.textTertiary : AppStyle.textPrimary)
+                            .lineLimit(1)
+                        if row.isModified {
+                            ToolBadge(
+                                text: row.isDisabled ? L("已禁用") : L("已修改"),
+                                color: row.isDisabled ? AppStyle.textTertiary : AppStyle.accent,
+                                style: .soft,
+                                height: 17
+                            )
+                        }
+                        if row.hasConflicts {
+                            ToolBadge(text: L("冲突"), color: AppStyle.errorRed, style: .soft, height: 17)
+                        }
+                    }
+                    Text(row.id)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(AppStyle.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 10)
+
+                HStack(spacing: 5) {
+                    if row.isModified {
+                        IconOnlyButton(
+                            systemName: "arrow.uturn.backward",
+                            help: L("恢复默认"),
+                            size: 24,
+                            symbolSize: 10.5,
+                            action: onReset
+                        )
+                    }
+                    if !row.isUnassigned {
+                        IconOnlyButton(
+                            systemName: "slash.circle",
+                            help: L("禁用快捷键"),
+                            size: 24,
+                            symbolSize: 11,
+                            tint: AppStyle.textTertiary,
+                            action: onDisable
+                        )
+                    }
+                    ShortcutRecorderControl(
+                        commandTitle: row.title,
+                        shortcut: row.effectiveKeybinding,
+                        isRecording: isRecording,
+                        onBeginRecording: onBeginRecording,
+                        onCapture: onCapture,
+                        onCancel: onCancelRecording
+                    )
+                    .frame(width: 104, height: 28)
+                }
+                .opacity((hovering || isRecording || row.isModified || row.isUnassigned || row.hasConflicts) ? 1 : 0.82)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                    .fill((hovering || isRecording) ? AppStyle.hoverFill.opacity(0.55) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                    .strokeBorder(row.hasConflicts || error != nil ? AppStyle.errorRed.opacity(0.25) : Color.clear, lineWidth: 1)
+            )
+
+            if let helperText {
+                Text(helperText)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(helperColor)
+                    .lineLimit(1)
+                    .padding(.horizontal, 11)
+            }
+        }
+        .onHover { hovering = $0 }
+        .animation(Motion.hover, value: hovering)
+        .animation(Motion.hover, value: isRecording)
+    }
+}
+
+private struct ShortcutSettingsEmptyState: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "keyboard.badge.ellipsis")
+                .font(.system(size: 13, weight: .semibold))
+            Text(L("没有匹配的快捷键"))
+                .font(.system(size: 12.5, weight: .medium))
+        }
+        .foregroundStyle(AppStyle.textTertiary)
+        .frame(maxWidth: .infinity, minHeight: 90)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                .strokeBorder(AppStyle.separator.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+        )
     }
 }
 

@@ -10,7 +10,7 @@
 #   Scripts/make-dmg.sh arm64          # 只打 arm64
 #   Scripts/make-dmg.sh x86_64         # 只打 x86_64
 #   Scripts/make-dmg.sh universal      # 打单个双架构（universal）DMG
-#   VERSION=1.0.2 Scripts/make-dmg.sh  # 覆盖版本号（默认 1.0.2）
+#   VERSION=1.0.3 Scripts/make-dmg.sh  # 覆盖版本号（默认 1.0.3）
 #
 # 产物：dist/conductor-<version>-<arch>.dmg
 # 依赖：Vendor/GhosttyKit.xcframework（universal 静态库，缺失时先跑 Scripts/prepare-ghosttykit.sh）
@@ -19,7 +19,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-VERSION="${VERSION:-1.0.2}"
+VERSION="${VERSION:-1.0.3}"
 BUNDLE_ID="com.conductor.app"
 APP_NAME="Conductor"
 DIST="$ROOT/dist"

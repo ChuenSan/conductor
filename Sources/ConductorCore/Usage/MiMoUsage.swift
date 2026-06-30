@@ -67,7 +67,7 @@ public enum MiMoUsageFetcher {
         let client = BrowserCookieClient()
         let query = BrowserCookieQuery(domains: cookieDomains)
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             if let header = header(from: cookies) { return header }
         }
         return nil
@@ -154,14 +154,17 @@ public enum MiMoUsageFetcher {
     }
 
     private static func apiBaseURL(env: [String: String]) -> URL {
-        if let raw = env["MIMO_API_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-           let url = URL(string: raw),
-           url.scheme?.isEmpty == false
-        {
-            return url
-        }
-        return URL(string: apiBase)!
+        UsageEndpointPolicy.trustedHTTPSURL(
+            from: env["MIMO_API_URL"],
+            default: URL(string: apiBase)!,
+            allowedHosts: ["platform.xiaomimimo.com"])
     }
+
+    #if DEBUG
+    static func apiBaseURLForTesting(env: [String: String]) -> URL {
+        apiBaseURL(env: env)
+    }
+    #endif
 
     // MARK: - 解析
 

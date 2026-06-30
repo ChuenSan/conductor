@@ -173,7 +173,7 @@ public enum CommandCodeUsageFetcher {
         let client = BrowserCookieClient()
         let query = BrowserCookieQuery(domains: cookieDomains)
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else {
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else {
                 continue
             }
             guard cookies.contains(where: { supportedSessionCookieNames.contains($0.name) }) else {

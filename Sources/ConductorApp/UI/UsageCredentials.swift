@@ -87,6 +87,28 @@ enum UsageCredentials {
         }
     }
 
+    static func childProcessEnvironment(
+        base: [String: String] = ProcessInfo.processInfo.environment,
+        extra: [String: String] = [:]
+    ) -> [String: String] {
+        UsageEnvironmentMutationLock.shared.withLock {
+            var environment = base
+            for name in activeManagedEnvNames {
+                if let original = originalEnvValues[name] {
+                    environment[name] = original
+                } else if originallyMissingEnvNames.contains(name) {
+                    environment.removeValue(forKey: name)
+                } else {
+                    environment.removeValue(forKey: name)
+                }
+            }
+            for (key, value) in extra where !key.isEmpty {
+                environment[key] = value
+            }
+            return environment
+        }
+    }
+
     /// Run a synchronous spawn while app-managed usage credentials are removed from the process env.
     ///
     /// Several usage fetchers still read `ProcessInfo.processInfo.environment`, so `apply(_:)` keeps

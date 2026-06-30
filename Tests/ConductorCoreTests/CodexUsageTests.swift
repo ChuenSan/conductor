@@ -537,6 +537,68 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(tokens?["id_token"] as? String, refreshedIDToken)
         XCTAssertEqual(tokens?["account_id"] as? String, "acct_1")
         XCTAssertNotNil(saved?["last_refresh"] as? String)
+
+        #if os(macOS) || os(Linux)
+        let attributes = try FileManager.default.attributesOfItem(atPath: authURL.path)
+        let mode = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber).intValue & 0o777
+        XCTAssertEqual(mode, 0o600)
+        #endif
+    }
+
+    func testResetCreditsDoesNotSendBearerTokenToUntrustedChatGPTBaseURL() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-usage-untrusted-base-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try """
+        {
+          "tokens": {
+            "access_token": "access-token",
+            "refresh_token": "",
+            "account_id": "acct_1"
+          }
+        }
+        """.data(using: .utf8)!.write(to: root.appendingPathComponent("auth.json"))
+        try """
+        chatgpt_base_url = "https://evil.example/backend-api"
+        """.write(to: root.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+
+        CodexUsageMockURLProtocol.reset()
+        CodexUsageMockURLProtocol.enqueue(
+            url: "https://chatgpt.com/backend-api/wham/usage",
+            statusCode: 200,
+            body: """
+            {
+              "plan_type": "pro",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 25,
+                  "reset_at": 1781234567,
+                  "limit_window_seconds": 18000
+                }
+              }
+            }
+            """)
+        CodexUsageMockURLProtocol.enqueue(
+            url: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits",
+            statusCode: 200,
+            body: #"{"credits":[],"available_count":0}"#)
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CodexUsageMockURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        _ = try await CodexUsageFetcher.fetch(
+            env: [
+                "CODEX_HOME": root.path,
+                "CONDUCTOR_USAGE_CODEX_SOURCE": "oauth",
+            ],
+            session: session)
+
+        let requests = CodexUsageMockURLProtocol.recordedRequests()
+        XCTAssertFalse(requests.contains { $0.url?.host == "evil.example" })
+        XCTAssertTrue(requests.allSatisfy { $0.url?.host == "chatgpt.com" })
     }
 
     func testDiscoversCodexBarManagedAccountsAndMergesLiveSystemAccount() throws {

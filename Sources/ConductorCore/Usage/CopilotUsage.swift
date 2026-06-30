@@ -135,7 +135,7 @@ public enum CopilotUsageFetcher {
         var headers: [String] = []
         var seen = Set<String>()
         for browser in Browser.defaultImportOrder {
-            guard let cookies = try? client.cookies(matching: query, in: browser), !cookies.isEmpty else { continue }
+            guard let cookies = try? BrowserCookieAccessGate.cookies(client: client, matching: query, in: browser), !cookies.isEmpty else { continue }
             guard cookies.contains(where: { sessionCookieNames.contains($0.name) }) else { continue }
             let header = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
             if seen.insert(header).inserted {
